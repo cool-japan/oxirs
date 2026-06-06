@@ -32,7 +32,11 @@ tower = { workspace = true, features = ["timeout", "load-shed", "buffer"] }
 tower-http = { workspace = true, features = ["cors", "trace", "timeout", "compression-gzip", "compression-br", "request-id", "sensitive-headers"] }
 
 # TLS/SSL support
-rustls = { workspace = true, optional = true }
+# `rustls` is non-optional so the process-default Pure Rust crypto provider can be
+# installed at startup (needed by reqwest/OAuth and the metrics push-gateway even
+# when the `tls` feature is off). `oxitls` supplies that provider.
+rustls = { workspace = true }
+oxitls.workspace = true
 tokio-rustls = { workspace = true, optional = true }
 rustls-pemfile = { workspace = true, optional = true }
 axum-server = { version = "0.8", features = ["tls-rustls"], optional = true }
@@ -70,6 +74,13 @@ bcrypt = { version = "0.19", optional = true }
 sha2.workspace = true
 base64.workspace = true
 
+# Pure-Rust cryptography (replaces `ring` per COOLJAPAN Pure Rust policy)
+oxicrypto-core.workspace = true
+oxicrypto-mac.workspace = true
+oxicrypto-hash.workspace = true
+oxicrypto-rand.workspace = true
+ed25519-dalek = { workspace = true, features = ["pkcs8"] }
+
 # SAML 2.0 pure-Rust XML parsing and signature verification (optional)
 quick-xml = { workspace = true, optional = true }
 rsa = { workspace = true, optional = true }
@@ -86,12 +97,19 @@ http-body-util.workspace = true
 prometheus = { workspace = true, optional = true }
 axum-prometheus = { version = "0.10", optional = true }
 metrics.workspace = true
-metrics-exporter-prometheus = "0.18"
+# `push-gateway-no-tls-provider` keeps the push-gateway + scrape endpoint but routes
+# TLS through the process-default (Pure Rust) crypto provider instead of pulling
+# `hyper-rustls/aws-lc-rs` (C/C++). See `oxitls::pure_provider()` install in main.rs.
+metrics-exporter-prometheus = { version = "0.18", default-features = false, features = ["http-listener", "push-gateway-no-tls-provider"] }
 
 # Caching
 lru.workspace = true
 moka.workspace = true
-tantivy = { workspace = true }
+# Tantivy full-text search engine (optional — gated behind `full-text-search`).
+# Pulls C `zstd-sys` transitively, so it is NOT enabled by default per the
+# COOLJAPAN Pure Rust default policy. The default build uses the pure-Rust
+# `SimpleTextIndex` fallback in `src/search/text_index.rs`.
+tantivy = { workspace = true, optional = true }
 
 # Rate limiting and concurrent data structures
 governor.workspace = true
@@ -102,7 +120,7 @@ parking_lot.workspace = true
 rdkafka = { workspace = true, optional = true }
 async-nats = { workspace = true, optional = true }
 bytes = { workspace = true }
-brotli.workspace = true
+oxiarc-brotli.workspace = true  # Pure-Rust Brotli (replaces `brotli` per COOLJAPAN policy)
 num_cpus.workspace = true
 
 # Validation
@@ -128,7 +146,7 @@ base32 = "0.5"
 qrcode = "0.14"
 hmac.workspace = true
 sha1.workspace = true
-flate2.workspace = true
+oxiarc-deflate.workspace = true  # Pure-Rust DEFLATE/gzip/zlib (replaces `flate2` per COOLJAPAN policy)
 
 # OAuth2 and HTTP client
 reqwest = { workspace = true }
@@ -174,7 +192,6 @@ hickory-resolver = "0.26.1"
 # X.509 certificate parsing for client authentication
 x509-parser = "0.18"
 der-parser = "10.0"
-ring.workspace = true
 
 # ACME/Let's Encrypt certificate automation (optional)
 instant-acme = { version = "0.8", optional = true }
@@ -207,17 +224,31 @@ wiremock.workspace = true
 
 [features]
 default = ["metrics", "auth"]
+# fips: marker feature for FIPS 140-2 validated cryptographic operations.
+# NOT included in default — must be explicitly enabled.
+# When this flag is set, application code in the FIPS boundary (TLS
+# termination, JWT signing, OAuth token validation) must only invoke primitives
+# that are FIPS 140-2 validated (AES-GCM, ECDSA P-256/P-384, RSA, HMAC-SHA-2,
+# SHA-2). See docs/policies/fips-boundary.md (RFC-003).
+fips = []
 metrics = ["prometheus", "axum-prometheus"]
 auth = ["jsonwebtoken", "bcrypt"]
 admin-ui = ["askama"]
 tracing = ["tracing-opentelemetry"]
 rate-limit = []
-tls = ["rustls", "tokio-rustls", "rustls-pemfile", "axum-server"]
+tls = ["tokio-rustls", "rustls-pemfile", "axum-server"]
 kafka = ["rdkafka"]
 nats = ["async-nats"]
 hot-reload = ["notify"]
 ldap = ["ldap3"]
 saml = ["dep:quick-xml", "dep:rsa"]  # SAML authentication support via pure-Rust XML parsing
+# Tantivy-backed full-text search (`TantivyTextIndex`). NOT in default: Tantivy
+# pulls C `zstd-sys`, violating the COOLJAPAN Pure Rust default policy. Without
+# this feature the server falls back to the pure-Rust `SimpleTextIndex`.
+# Fuseki has its own Tantivy index and does not depend on oxirs-tdb, so it only
+# needs `dep:tantivy`; the `oxirs-tdb/full-text-search` gate is propagated by the
+# `oxirs` CLI's `text` feature (which depends on both crates).
+full-text-search = ["dep:tantivy"]
 development = ["admin-ui", "tracing"]
 production = ["metrics", "auth", "rate-limit", "tls", "ldap"]
 k8s = ["kube", "k8s-openapi", "schemars"]  # Kubernetes operator support

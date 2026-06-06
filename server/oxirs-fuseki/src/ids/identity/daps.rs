@@ -5,11 +5,11 @@
 
 use crate::ids::types::{IdsError, IdsResult, IdsUri, SecurityProfile};
 use chrono::{DateTime, Duration, Utc};
+use ed25519_dalek::pkcs8::{DecodePrivateKey, EncodePrivateKey};
+use ed25519_dalek::SigningKey;
 use jsonwebtoken::{
     decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation,
 };
-use ring::rand::SystemRandom;
-use ring::signature::{Ed25519KeyPair, KeyPair};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -29,19 +29,17 @@ pub struct DapsClient {
 pub struct DapsCredentials {
     /// Connector ID
     connector_id: IdsUri,
-    /// Ed25519 key pair for signing assertions
-    key_pair: Ed25519KeyPair,
+    /// Ed25519 signing key for signing assertions (Pure-Rust `ed25519-dalek`)
+    key_pair: SigningKey,
 }
 
 impl DapsCredentials {
     /// Create new credentials with generated key pair
     pub fn new(connector_id: IdsUri) -> IdsResult<Self> {
-        let rng = SystemRandom::new();
-        let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rng)
-            .map_err(|e| IdsError::InternalError(format!("Failed to generate key pair: {}", e)))?;
-
-        let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref())
-            .map_err(|e| IdsError::InternalError(format!("Failed to parse key pair: {}", e)))?;
+        // Generate an Ed25519 signing key from a fresh 32-byte CSPRNG seed.
+        let seed = oxicrypto_rand::random_nonce::<32>()
+            .map_err(|e| IdsError::InternalError(format!("Failed to generate key seed: {}", e)))?;
+        let key_pair = SigningKey::from_bytes(&seed);
 
         Ok(Self {
             connector_id,
@@ -49,9 +47,9 @@ impl DapsCredentials {
         })
     }
 
-    /// Create from existing PKCS#8 key
+    /// Create from existing PKCS#8 DER-encoded key
     pub fn from_pkcs8(connector_id: IdsUri, pkcs8_bytes: &[u8]) -> IdsResult<Self> {
-        let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_bytes)
+        let key_pair = SigningKey::from_pkcs8_der(pkcs8_bytes)
             .map_err(|e| IdsError::InternalError(format!("Failed to parse key pair: {}", e)))?;
 
         Ok(Self {
@@ -60,9 +58,17 @@ impl DapsCredentials {
         })
     }
 
-    /// Get public key bytes
-    pub fn public_key(&self) -> &[u8] {
-        self.key_pair.public_key().as_ref()
+    /// Get public key bytes (raw 32-byte Ed25519 public key)
+    pub fn public_key(&self) -> [u8; 32] {
+        self.key_pair.verifying_key().to_bytes()
+    }
+
+    /// Get the PKCS#8 DER encoding of the private key (for JWT EdDSA signing).
+    fn pkcs8_der(&self) -> IdsResult<Vec<u8>> {
+        self.key_pair
+            .to_pkcs8_der()
+            .map(|doc| doc.as_bytes().to_vec())
+            .map_err(|e| IdsError::InternalError(format!("Failed to encode PKCS#8 key: {}", e)))
     }
 }
 
@@ -162,10 +168,10 @@ impl DapsClient {
                 ..Default::default()
             };
 
-            // Use the key pair's private key for signing
-            // Note: jsonwebtoken doesn't directly support ring's Ed25519, so we use a workaround
-            // In production, you'd use PEM-encoded keys
-            let encoding_key = EncodingKey::from_ed_der(credentials.key_pair.public_key().as_ref());
+            // `jsonwebtoken`'s EdDSA `from_ed_der` expects a PKCS#8 DER-encoded
+            // private key; provide it from the `ed25519-dalek` signing key.
+            let pkcs8_der = credentials.pkcs8_der()?;
+            let encoding_key = EncodingKey::from_ed_der(&pkcs8_der);
 
             encode(&header, &claims, &encoding_key).map_err(|e| {
                 IdsError::DapsAuthFailed(format!("Failed to create client assertion: {}", e))
@@ -594,6 +600,39 @@ mod tests {
         assert!(credentials.is_ok());
 
         let creds = credentials.expect("credentials");
-        assert!(!creds.public_key().is_empty());
+        // Raw Ed25519 public keys are always 32 bytes.
+        assert_eq!(creds.public_key().len(), 32);
+    }
+
+    #[test]
+    fn test_credentials_pkcs8_round_trip() {
+        // A freshly generated key must round-trip through PKCS#8 DER and produce
+        // an identical public key, proving `from_pkcs8` interoperates with the
+        // `to_pkcs8_der` encoding used for JWT signing.
+        let connector_id = IdsUri::new("urn:ids:connector:rt").expect("valid URI");
+        let creds = DapsCredentials::new(connector_id.clone()).expect("credentials");
+
+        let pkcs8 = creds.pkcs8_der().expect("pkcs8 der");
+        let restored = DapsCredentials::from_pkcs8(connector_id, &pkcs8).expect("from_pkcs8");
+
+        assert_eq!(creds.public_key(), restored.public_key());
+    }
+
+    #[test]
+    fn test_credentialed_assertion_is_signed_jwt() {
+        // The credentialed (EdDSA) signing path must produce a well-formed,
+        // 3-part JWT without panicking.
+        let connector_id = IdsUri::new("urn:ids:connector:signed").expect("valid URI");
+        let credentials = DapsCredentials::new(connector_id.clone()).expect("credentials");
+        let client = DapsClient::with_credentials("https://daps.example.org", credentials);
+
+        let assertion = client
+            .create_client_assertion(&connector_id)
+            .expect("signed assertion");
+
+        let parts: Vec<&str> = assertion.split('.').collect();
+        assert_eq!(parts.len(), 3, "JWT must have header.payload.signature");
+        // The EdDSA signature segment must be non-empty.
+        assert!(!parts[2].is_empty(), "signature segment must be present");
     }
 }

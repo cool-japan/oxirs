@@ -1,8 +1,8 @@
 # OxiRS Federate - Federated Query Processing
 
-[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.2.3 - Released March 16, 2026
+**Status**: v0.3.1 - Released 2026-06-06
 
 ✨ **Features Complete!** All Release Targets implemented. APIs stable. Ready for promotion.
 
@@ -35,7 +35,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Features complete - APIs stable
 [dependencies]
-oxirs-federate = "0.3.0"
+oxirs-federate = "0.3.1"
 ```
 
 ## Quick Start

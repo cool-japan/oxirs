@@ -1033,7 +1033,10 @@ mod tests {
                 incremental: None,
             },
             output: BatchOutput {
-                path: "/tmp/output".to_string(),
+                path: std::env::temp_dir()
+                    .join(format!("oxirs_batch_out_{}", std::process::id()))
+                    .display()
+                    .to_string(),
                 format: "parquet".to_string(),
                 compression: Some("gzip".to_string()),
                 partitioning: Some(PartitioningStrategy::None),

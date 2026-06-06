@@ -2,7 +2,6 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
 
 /// Compression algorithm
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -66,27 +65,15 @@ impl Compressor {
     }
 
     fn compress_gzip(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(data)
-            .map_err(|e| anyhow!("Gzip compression failed: {}", e))?;
-        encoder
-            .finish()
+        // Pure Rust gzip via oxiarc-deflate. Level 6 mirrors flate2's
+        // `Compression::default()`.
+        oxiarc_deflate::gzip_compress(data, 6)
             .map_err(|e| anyhow!("Gzip compression failed: {}", e))
     }
 
     fn decompress_gzip(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::read::GzDecoder;
-
-        let mut decoder = GzDecoder::new(data);
-        let mut decompressed = Vec::new();
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|e| anyhow!("Gzip decompression failed: {}", e))?;
-        Ok(decompressed)
+        oxiarc_deflate::gzip_decompress(data)
+            .map_err(|e| anyhow!("Gzip decompression failed: {}", e))
     }
 
     /// Calculate compression ratio
@@ -180,6 +167,21 @@ mod tests {
         assert!(compressed.len() < data.len());
 
         let decompressed = compressor.decompress(&compressed).expect("should succeed");
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_gzip_roundtrip_oxiarc_deflate() {
+        // Round-trip test for the oxiarc-deflate gzip codec path.
+        let compressor = Compressor::new(CompressionAlgorithm::Gzip);
+        let data = b"SHACL-AI gzip round-trip via oxiarc-deflate (Pure Rust)".to_vec();
+
+        let compressed = compressor.compress(&data).expect("gzip compress");
+        // Verify the output is a genuine gzip stream (magic bytes 0x1f 0x8b),
+        // confirming the gzip<->gzip format variant is preserved.
+        assert_eq!(&compressed[0..2], &[0x1f, 0x8b]);
+
+        let decompressed = compressor.decompress(&compressed).expect("gzip decompress");
         assert_eq!(decompressed, data);
     }
 

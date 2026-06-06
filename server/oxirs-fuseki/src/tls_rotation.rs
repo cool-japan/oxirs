@@ -1006,8 +1006,8 @@ mod tests {
     #[test]
     fn test_certificate_rotation_creation() {
         let tls_config = TlsConfig {
-            cert_path: PathBuf::from("/tmp/cert.pem"),
-            key_path: PathBuf::from("/tmp/key.pem"),
+            cert_path: std::env::temp_dir().join(format!("oxirs_cert_{}.pem", std::process::id())),
+            key_path: std::env::temp_dir().join(format!("oxirs_key_{}.pem", std::process::id())),
             require_client_cert: false,
             ca_cert_path: None,
         };
@@ -1072,8 +1072,8 @@ mod tests {
     #[test]
     fn test_certificate_rotation_with_san() {
         let tls_config = TlsConfig {
-            cert_path: PathBuf::from("/tmp/cert.pem"),
-            key_path: PathBuf::from("/tmp/key.pem"),
+            cert_path: std::env::temp_dir().join(format!("oxirs_cert_{}.pem", std::process::id())),
+            key_path: std::env::temp_dir().join(format!("oxirs_key_{}.pem", std::process::id())),
             require_client_cert: false,
             ca_cert_path: None,
         };
@@ -1102,8 +1102,8 @@ mod tests {
     #[tokio::test]
     async fn test_rotation_stats_tracking() {
         let tls_config = TlsConfig {
-            cert_path: PathBuf::from("/tmp/cert.pem"),
-            key_path: PathBuf::from("/tmp/key.pem"),
+            cert_path: std::env::temp_dir().join(format!("oxirs_cert_{}.pem", std::process::id())),
+            key_path: std::env::temp_dir().join(format!("oxirs_key_{}.pem", std::process::id())),
             require_client_cert: false,
             ca_cert_path: None,
         };
@@ -1195,8 +1195,8 @@ mod tests {
     #[test]
     fn test_pem_parsing() {
         let tls_config = TlsConfig {
-            cert_path: PathBuf::from("/tmp/cert.pem"),
-            key_path: PathBuf::from("/tmp/key.pem"),
+            cert_path: std::env::temp_dir().join(format!("oxirs_cert_{}.pem", std::process::id())),
+            key_path: std::env::temp_dir().join(format!("oxirs_key_{}.pem", std::process::id())),
             require_client_cert: false,
             ca_cert_path: None,
         };

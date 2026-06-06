@@ -1,7 +1,7 @@
 # OxiRS Interactive Mode Guide
 
-**Version**: 0.1.0
-**Last Updated**: January 7, 2026
+**Version**: 0.3.1
+**Last Updated**: 2026-06-06
 **Status**: Production-Ready
 
 ## Overview
@@ -40,7 +40,7 @@ oxirs interactive --history ~/.oxirs_history
 ### First Steps
 
 ```
-OxiRS Interactive Mode v0.1.0
+OxiRS Interactive Mode v0.3.1
 Type 'help' for commands, 'exit' to quit
 
 oxirs> connect mydata
@@ -670,4 +670,4 @@ oxirs[mydata]> SELECT * WHERE { ?s ?p ?o } | xclip   # Linux
 
 ---
 
-**OxiRS Interactive Mode v0.1.0** - Powerful REPL for RDF and SPARQL
+**OxiRS Interactive Mode v0.3.1** - Powerful REPL for RDF and SPARQL

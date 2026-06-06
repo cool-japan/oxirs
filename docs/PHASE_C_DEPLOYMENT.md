@@ -111,7 +111,7 @@ spec:
     spec:
       containers:
       - name: oxirs
-        image: oxirs:0.1.0
+        image: oxirs:0.3.1
         resources:
           requests:
             cpu: "4"
@@ -244,16 +244,16 @@ ls -lh pkg/oxirs_wasm_bg.wasm
 npm publish
 
 # Users can then use:
-# https://unpkg.com/oxirs-wasm@0.1.0/pkg/oxirs_wasm.js
+# https://unpkg.com/oxirs-wasm@0.3.1/pkg/oxirs_wasm.js
 
 # Option 2: Self-hosted CDN
-aws s3 cp pkg/ s3://cdn.oxirs.io/wasm/0.1.0/ --recursive
+aws s3 cp pkg/ s3://cdn.oxirs.io/wasm/0.3.1/ --recursive
 aws cloudfront create-invalidation --distribution-id E123 --paths "/wasm/*"
 
 # Option 3: GitHub Pages
 cp -r pkg/ docs/wasm/
 git add docs/wasm/
-git commit -m "Deploy WASM v0.1.0"
+git commit -m "Deploy WASM v0.3.1"
 git push origin gh-pages
 ```
 
@@ -262,7 +262,7 @@ git push origin gh-pages
 ```html
 <!-- index.html -->
 <script type="module">
-    import init from 'https://cdn.oxirs.io/wasm/0.1.0/oxirs_wasm.js';
+    import init from 'https://cdn.oxirs.io/wasm/0.3.1/oxirs_wasm.js';
 
     // Service Worker for offline support
     if ('serviceWorker' in navigator) {
@@ -768,9 +768,9 @@ console.error('WASM error:', error);
 ./scripts/backup.sh
 
 # 2. Update Cargo.toml
-cargo add oxirs-graphrag@0.1.0
-cargo add oxirs-did@0.1.0
-cargo add oxirs-wasm@0.1.0
+cargo add oxirs-graphrag@0.3.1
+cargo add oxirs-did@0.3.1
+cargo add oxirs-wasm@0.3.1
 
 # 3. Update configuration
 cat >> oxirs.toml << EOF

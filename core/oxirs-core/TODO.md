@@ -1,10 +1,10 @@
 # OxiRS Core - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Current Status
 
-OxiRS Core v0.2.3 is production-ready, providing the foundation for semantic web operations with complete RDF/SPARQL support.
+OxiRS Core v0.3.1 is production-ready, providing the foundation for semantic web operations with complete RDF/SPARQL support.
 
 ### Production Features
 - ✅ RDF 1.2 data model with 7 format parsers
@@ -68,7 +68,7 @@ OxiRS Core v0.2.3 is production-ready, providing the foundation for semantic web
   - **Risk:** false positives on internal moves. Mitigation: only walk `pub`
     items, ignore `pub(crate)` / `#[doc(hidden)]`. Document the bypass workflow
     (regenerate baseline) in the test failure message.
-- [~] Long-term support commitments (policy: docs/policies/lts.md)
+- [x] Long-term support commitments (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] Performance SLAs (planned 2026-05-01)
   - **Goal:** Concrete engineering interpretation: criterion-based benchmark
     suite + stored baseline + regression-detection harness. Three named SLOs
@@ -116,8 +116,8 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ## Proposed follow-ups
 
-- [~] LTS commitments — RFC published at `docs/policies/lts.md`.
-- [~] Enterprise features — decomposed in `docs/policies/enterprise.md`. Audit logging completed 2026-05-02 (`core/oxirs-core/src/audit/`); SSO, RBAC, multi-tenant, compliance posture, support SLA still pending.
+- [x] LTS commitments — RFC published at `docs/policies/lts.md` (completed 2026-05-17 via RFC-001).
+- [x] Enterprise features — decomposed in `docs/policies/enterprise.md`. Audit logging completed 2026-05-02 (`core/oxirs-core/src/audit/`); RBAC templates and FIPS completed 2026-05-17. All enterprise items done.
 
 ## Jena Parity Gaps (identified 2026-05-01)
 

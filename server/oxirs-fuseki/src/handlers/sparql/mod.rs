@@ -9,6 +9,11 @@ pub mod content_types;
 pub mod core;
 pub mod optimizers;
 pub mod service_delegation;
+pub(crate) mod service_delegation_executor;
+pub(crate) mod service_delegation_manager;
+#[cfg(test)]
+mod service_delegation_tests;
+pub mod service_delegation_types;
 pub mod sparql12_features;
 
 // Re-export main items for backwards compatibility

@@ -785,7 +785,10 @@ mod tests {
         // Create a test dataset
         let dataset_config = crate::config::DatasetConfig {
             name: "test".to_string(),
-            location: "/tmp/test".to_string(),
+            location: std::env::temp_dir()
+                .join(format!("oxirs_batch_test_{}", std::process::id()))
+                .display()
+                .to_string(),
             read_only: false,
             text_index: None,
             shacl_shapes: Vec::new(),
@@ -824,7 +827,10 @@ mod tests {
         // Create a test dataset
         let dataset_config = crate::config::DatasetConfig {
             name: "test".to_string(),
-            location: "/tmp/test".to_string(),
+            location: std::env::temp_dir()
+                .join(format!("oxirs_batch_test_{}", std::process::id()))
+                .display()
+                .to_string(),
             read_only: false,
             text_index: None,
             shacl_shapes: Vec::new(),

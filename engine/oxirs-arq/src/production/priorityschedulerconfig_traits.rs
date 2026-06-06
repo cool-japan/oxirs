@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use super::types::{PrioritySchedulerConfig, QueryPriority};
+use super::types_query::{PrioritySchedulerConfig, QueryPriority};
 
 impl Default for PrioritySchedulerConfig {
     fn default() -> Self {

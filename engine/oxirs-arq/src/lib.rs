@@ -1,9 +1,9 @@
 //! # OxiRS ARQ - SPARQL Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-arq/badge.svg)](https://docs.rs/oxirs-arq)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Advanced SPARQL 1.1/1.2 query engine with optimization, federation support, and custom functions.
@@ -39,6 +39,14 @@
 //! - [`oxirs-core`](https://docs.rs/oxirs-core) - RDF data model
 //! - [`oxirs-fuseki`](https://docs.rs/oxirs-fuseki) - SPARQL HTTP server
 
+// GQL (ISO/IEC 39075:2024) → SPARQL bridge
+pub mod gql;
+pub use gql::{GqlToSparqlTranslator, GqlTranslateError};
+
+// SPARQL-Generate extension (W3C community spec)
+pub mod generate;
+pub use generate::{parse_generate, GenerateError, GenerateExecutor, GenerateResult};
+
 // Core modules
 pub mod adaptive_execution;
 pub mod aggregates_ext;
@@ -49,7 +57,10 @@ pub mod bgp_optimizer;
 pub mod bgp_optimizer_types;
 pub mod buffer_management;
 pub mod builtin;
+pub(crate) mod builtin_datetime;
 pub mod builtin_fixed;
+pub(crate) mod builtin_numeric;
+pub(crate) mod builtin_string;
 pub mod cache;
 pub mod cache_integration;
 pub mod cardinality_estimator;
@@ -71,8 +82,21 @@ pub mod join_algorithms;
 pub mod lateral_join;
 pub mod materialization;
 pub mod materialized_views;
+pub mod materialized_views_manager;
+pub mod materialized_views_scheduler;
+pub mod materialized_views_storage;
+#[cfg(test)]
+mod materialized_views_tests;
+pub mod materialized_views_types;
 pub mod optimizer;
 pub mod parallel;
+pub mod parallel_executor;
+pub mod parallel_executor_engine;
+pub mod parallel_executor_ops;
+pub mod parallel_executor_queue;
+pub mod parallel_planner;
+mod parallel_tests;
+pub mod parallel_types;
 pub mod path;
 pub mod path_extensions;
 pub mod plan_visualizer;
@@ -101,7 +125,17 @@ pub mod term;
 pub mod triple_functions;
 pub mod update;
 pub mod update_graph_management;
+pub mod update_graph_management_ops;
+pub mod update_graph_management_protocol;
+#[cfg(test)]
+mod update_graph_management_tests;
+pub mod update_graph_management_types;
 pub mod update_protocol;
+pub mod update_protocol_executor;
+pub mod update_protocol_parser;
+#[cfg(test)]
+mod update_protocol_tests;
+pub mod update_protocol_types;
 pub mod values_support;
 pub mod vector_query_optimizer;
 pub mod websocket_streaming;
@@ -534,6 +568,12 @@ pub use jit::{
     ProjectCompilerError,
     ProjectSpec,
     VarIndexMap,
+};
+
+// SPARQL 1.2 property path algebra evaluator with inverse/negated-property-set support
+pub mod path_algebra;
+pub use path_algebra::{
+    NpsItem, PathAlgebraError, PathAlgebraEvaluator, PathDirection, PropertyPath,
 };
 
 // W2-S4: per-tenant SLA admission control + federation-aware planning

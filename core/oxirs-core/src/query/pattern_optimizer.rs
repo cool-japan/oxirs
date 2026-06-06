@@ -912,6 +912,8 @@ impl PatternExecutor {
             SubjectPattern::NamedNode(n) => Some(Subject::NamedNode(n.clone())),
             SubjectPattern::BlankNode(b) => Some(Subject::BlankNode(b.clone())),
             SubjectPattern::Variable(_) => None,
+            // QuotedTriple subject patterns cannot be resolved without evaluating variables.
+            SubjectPattern::QuotedTriple(_) => None,
         }
     }
 
@@ -930,6 +932,8 @@ impl PatternExecutor {
             ObjectPattern::BlankNode(b) => Some(Object::BlankNode(b.clone())),
             ObjectPattern::Literal(l) => Some(Object::Literal(l.clone())),
             ObjectPattern::Variable(_) => None,
+            // QuotedTriple object patterns cannot be resolved without evaluating variables.
+            ObjectPattern::QuotedTriple(_) => None,
         }
     }
 }

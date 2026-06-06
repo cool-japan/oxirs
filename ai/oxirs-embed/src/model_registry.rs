@@ -534,7 +534,6 @@ impl ModelServer {
 
     /// Get model for inference
     pub async fn get_model(&self, _version_id: Uuid) -> Result<Arc<Box<dyn EmbeddingModel>>> {
-        // In real implementation, return loaded model
         Err(anyhow!("Model loading not implemented"))
     }
 

@@ -475,8 +475,6 @@ impl StabilityRegistry {
             "High-performance in-memory RDF store with multi-index support (SPO/POS/OSP) and ACID transactions."));
         r.register(ApiStabilityMarker::stable("TDB Persistent Storage", ApiCategory::Storage, "0.1.0",
             "TDB-compatible disk-based RDF storage with B-tree indices, WAL journal, and crash recovery."));
-        r.register(ApiStabilityMarker::stable("RocksDB Backend", ApiCategory::Storage, "0.1.0",
-            "RocksDB-backed persistent storage for high-throughput write workloads with SST compaction."));
         r.register(ApiStabilityMarker::beta("Distributed Cluster Storage", ApiCategory::Storage, "0.2.0",
             "Raft-based distributed storage cluster with automatic sharding, replication, and leader election."));
         r.register(ApiStabilityMarker::beta("Full-Text Search Index", ApiCategory::Storage, "0.2.0",

@@ -1,10 +1,10 @@
 # OxiRS WASM - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
-OxiRS WASM v0.2.3 provides WebAssembly bindings for browser-based RDF and SPARQL processing, enabling semantic web applications directly in the browser.
+OxiRS WASM v0.3.1 provides WebAssembly bindings for browser-based RDF and SPARQL processing, enabling semantic web applications directly in the browser.
 
 ### Features
 - ✅ WASM compilation with wasm-bindgen
@@ -41,7 +41,7 @@ OxiRS WASM v0.2.3 provides WebAssembly bindings for browser-based RDF and SPARQL
 - ✅ 858 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] React/Vue/Svelte integration hooks (completed 2026-04-28)
   - **Goal:** Thin idiomatic TypeScript adapters wrapping existing wasm-bindgen API for each JS framework.
   - **Design:** @oxirs/react (hooks), @oxirs/vue (composables), @oxirs/svelte (stores). Each ≤200 LoC TypeScript. Generated alongside existing JS distribution.

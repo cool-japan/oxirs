@@ -3,13 +3,13 @@
 > Eine Rust-native, modulare Plattform für Semantic Web, SPARQL 1.2, GraphQL und KI-erweiterte Inferenz
 
 [![Lizenz: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.2.3 - Veröffentlicht - 16. März 2026
+**Status**: v0.3.1 - Veröffentlicht - 6. Juni 2026
 
-**Produktionsbereit**: Vollständige SPARQL 1.1/1.2-Implementierung mit **3,8-fach schnellerem Optimizer**, industriellem IoT-Support und KI-gestützten Funktionen. **40.791+ Tests bestanden**, null Warnungen über alle 26 Crates.
+**Produktionsbereit**: Vollständige SPARQL 1.1/1.2-Implementierung mit **3,8-fach schnellerem Optimizer**, industriellem IoT-Support und KI-gestützten Funktionen. **~43.500 Tests bestanden**, null Warnungen über alle 26 Crates.
 
-**v0.2.3 Highlights (16. März 2026)**: 26 neue funktionale Module über 16 Entwicklungsrunden hinzugefügt. Erweiterte SPARQL-Algebra (EXISTS, MINUS, Subquery, Service-Klausel), produktionsreifer Speicher (Sechs-Index-Store, Index-Merger/Rebuilder), KI-Fähigkeiten (Vektorspeicher, Constraint-Inferenz, Konversationsverlauf) und Sicherheitshärtung (Credential-Store, Trust-Chain-Validierung).
+**v0.3.1 Highlights (6. Juni 2026)**: SHACL Advanced Features (rekursive Shapes + qualifizierte Wert-Shapes + eine regelbasierte Reasoning-Engine), genetische Optimierung der Constraint-Reihenfolge, RDF-star-Quoted-Triples im Pattern-Matching und in der Abfrageausführung, induktive GraphSAGE-Embeddings, Graph-Summarizer und Relevanz-Feedback, FIPS-140-2-Feature-Gates (oxirs-fuseki, oxirs-did) sowie RBAC-Policy-Templates. Schließt die COOLJAPAN-Pure-Rust-Migration ab (brotli/snap/flate2 → oxiarc, ring → oxicrypto, reines Rust-TLS über oxitls): Der Standard-`cargo build` linkt nun keine `ring`/`aws-lc-sys`-C/asm-Kryptographie mehr. SciRS2 0.5.0; oxiarc 0.3.3 wird direkt von crates.io bezogen.
 
 ## Vision
 
@@ -58,7 +58,7 @@ OxiRS bietet erstklassige Unterstützung für **Gaia-X Trust Framework** und eur
 
 ```bash
 # CLI-Tool installieren
-cargo install oxirs --version 0.2.3
+cargo install oxirs --version 0.3.1
 
 # Aus Quellcode bauen
 git clone https://github.com/cool-japan/oxirs.git
@@ -176,6 +176,28 @@ Manufacturing-X Digital Twin:
   Update-Rate:          10Hz pro Gerät
   Simulation:           Echtzeit-Physik (SciRS2)
 ```
+
+## Neu in v0.3.1 (6. Juni 2026)
+
+**Wartungs- und Härtungs-Release: SHACL-AF, Pure-Rust-Migration und induktive Embeddings**
+
+OxiRS v0.3.1 vervollständigt die SHACL Advanced Features, schließt die COOLJAPAN-Pure-Rust-Migration ab und ergänzt neue KI- und Sicherheitsfunktionen:
+
+- **SHACL Advanced Features (SHACL-AF)** - Rekursive Shapes, qualifizierte Wert-Shapes und eine regelbasierte Reasoning-Engine (RDFS-/OWL-2-RL-Entailment)
+- **Optimierung der SHACL-Constraint-Reihenfolge** - Genetischer Algorithmus (konfigurierbare Population/Generationen/Turnier/Mutation) zur Anordnung von Shape-Constraints (oxirs-shacl-ai)
+- **RDF-star in der Abfrageausführung** - Quoted Triples fließen nun durch Pattern-Matching, Abfragealgebra, Executor, JIT, Planer und SIMD-Triple-Matching
+- **Induktive GraphSAGE-Embeddings** - k-Hop-Mittelwert-Aggregation (ReLU + L2-Norm), Xavier-Initialisierung, Margin-Ranking-Loss und Unterstützung für ungesehene Entitäten (oxirs-embed)
+- **Graph-Summarizer & Relevanz-Feedback** - Leiden-Community-Detection → Zentralität → natürlichsprachliche Zusammenfassungen nach Prädikathäufigkeit, plus multiplikatives Re-Ranking per Relevanz-Feedback (oxirs-graphrag)
+- **FIPS-140-2-Feature-Gates** - `fips`-Feature für FIPS-validierte Kryptographie in oxirs-fuseki und oxirs-did (RFC-003 FIPS-Boundary-Policy)
+- **RBAC-Policy-Templates** - Integrierte Rollen-Templates DBA / ReadOnly / Auditor über die PolicyTemplateRegistry (oxirs-fuseki)
+- **Pure-Rust-Migration abgeschlossen** - Komprimierung (brotli/snap/flate2 → oxiarc), Kryptographie (ring → oxicrypto) und TLS (reiner Rust-oxitls-Provider); der Standard-`cargo build` linkt keine `ring`-/`aws-lc-sys`-C/asm-Kryptographie mehr
+- **Dependency-Aktualisierung** - SciRS2 0.5.0; oxiarc 0.3.3 wird nun direkt von crates.io bezogen; Refactorings großer Dateien halten jede Quelldatei unter 2.000 Zeilen
+
+**Qualitätsmetriken (v0.3.1):**
+- ✅ **~43.500 Tests bestanden** (100% Erfolgsquote)
+- ✅ **Null Kompilierungswarnungen** über alle 26 Crates
+- ✅ **Pure Rust standardmäßig** - null `ring` / `aws-lc-sys` im Standard-Feature-Build
+- ✅ **Alle `.rs`-Dateien unter 2.000 Zeilen** (proaktive Refactorings angewendet)
 
 ## Neu in v0.2.3 (16. März 2026)
 
@@ -492,10 +514,21 @@ Optionale Features zur Minimierung von Abhängigkeiten:
 | Version | Zieldatum | Meilenstein | Lieferungen | Status |
 |---------|-----------|-------------|-------------|--------|
 | **v0.1.0** | **✅ 7. Jan 2026** | **Initial Production** | Vollständiges SPARQL 1.1/1.2, Industrielles IoT, KI, 13.123 Tests | ✅ Veröffentlicht |
-| **v0.2.3** | **✅ 16. März 2026** | **Tiefe Feature-Erweiterung** | 40.791+ Tests, 26 neue Module, 3,8-fach schnellerer Optimizer, erweiterte SPARQL-Algebra | ✅ Veröffentlicht (aktuell) |
-| **v0.3.0** | **Q2 2026** | **Volltextsuche & Skalierung** | Volltextsuche (Tantivy), 10x Performance, Multi-Region-Clustering | Geplant |
+| **v0.2.3** | **✅ 16. März 2026** | **Tiefe Feature-Erweiterung** | 40.791+ Tests, 26 neue Module, 3,8-fach schnellerer Optimizer, erweiterte SPARQL-Algebra | ✅ Veröffentlicht |
+| **v0.3.1** | **✅ 6. Juni 2026** | **SHACL-AF & Pure-Rust** | SHACL Advanced Features (rekursiv/qualifiziert/Reasoning), genetische Constraint-Optimierung, RDF-star in der Abfrageausführung, GraphSAGE-Embeddings, FIPS-Gates, vollständige Pure-Rust-Migration, ~43.500 Tests | ✅ Veröffentlicht (aktuell) |
 
-### Aktuelle Version: v0.2.3 (16. März 2026)
+### Aktuelle Version: v0.3.1 (6. Juni 2026)
+
+**v0.3.1 Schwerpunkte:**
+- SHACL Advanced Features (SHACL-AF): rekursive Shapes, qualifizierte Wert-Shapes, regelbasierte Reasoning-Engine
+- Optimierung der SHACL-Constraint-Reihenfolge per genetischem Algorithmus (oxirs-shacl-ai)
+- RDF-star-Quoted-Triples im Pattern-Matching und in der Abfrageausführung (Algebra/Executor/JIT/Planer/SIMD)
+- KI: induktive GraphSAGE-Embeddings, Graph-Summarizer, Relevanz-Feedback
+- Sicherheit: FIPS-140-2-Feature-Gates (oxirs-fuseki, oxirs-did), RBAC-Policy-Templates
+- COOLJAPAN-Pure-Rust-Migration abgeschlossen: brotli/snap/flate2 → oxiarc, ring → oxicrypto, reines Rust-TLS über oxitls
+- Dependency-Aktualisierung: SciRS2 0.5.0, oxiarc 0.3.3 von crates.io; Refactorings großer Dateien (gesamter Quellcode < 2.000 Zeilen)
+
+### Vorherige Version: v0.2.3 (16. März 2026)
 
 **v0.2.3 Schwerpunkte (16 abgeschlossene Runden):**
 - Erweiterte SPARQL-Algebra: EXISTS/MINUS-Evaluatoren, Subquery-Builder, Service-Klausel, LATERAL-Join
@@ -506,11 +539,21 @@ Optionale Features zur Minimierung von Abhängigkeiten:
 - Stream-Erweiterungen: Partitionsmanager, Consumer Groups, Schema-Registry, Dead-Letter-Queue
 - Zeitreihen: Kontinuierliche Abfragen, Schreibpuffer, Tag-Index, Aufbewahrungsverwaltung
 
-## Releasenotes (v0.2.3)
+## Releasenotes (v0.3.1)
 
 Vollständige Hinweise in [CHANGELOG.md](CHANGELOG.md).
 
-### Highlights (16. März 2026)
+### Highlights (6. Juni 2026)
+- **~43.500 Tests bestanden** über alle 26 Crates
+- **SHACL Advanced Features** abgeschlossen: rekursive Shapes, qualifizierte Wert-Shapes und eine regelbasierte Reasoning-Engine
+- **Genetische Optimierung der Constraint-Reihenfolge** für SHACL-Shapes (oxirs-shacl-ai)
+- **RDF-star-Quoted-Triples** im Pattern-Matching und in der Abfrageausführung (Algebra, Executor, JIT, Planer, SIMD)
+- **Induktive GraphSAGE-Embeddings**, **Graph-Summarizer** und **Relevanz-Feedback** (oxirs-embed, oxirs-graphrag)
+- **FIPS-140-2-Feature-Gates** (oxirs-fuseki, oxirs-did) und **RBAC-Policy-Templates**
+- **Pure-Rust-Migration abgeschlossen**: brotli/snap/flate2 → oxiarc, ring → oxicrypto, reines Rust-TLS über oxitls; der Standard-Build linkt keine `ring` / `aws-lc-sys` mehr
+- **SciRS2 0.5.0**; oxiarc 0.3.3 wird direkt von crates.io bezogen; Refactorings großer Dateien (gesamter Quellcode < 2.000 Zeilen)
+
+### Vorherige Highlights (v0.2.3 — 16. März 2026)
 - **40.791+ Tests bestanden** über alle 26 Crates
 - **26 neue funktionale Module** über alle 26 Crates in 16 Entwicklungsrunden hinzugefügt
 - **Erweiterte SPARQL-Algebra**: EXISTS-Evaluator, MINUS-Evaluator, Subquery-Builder, Service-Klausel-Handler
@@ -522,7 +565,9 @@ Vollständige Hinweise in [CHANGELOG.md](CHANGELOG.md).
 - **Geospatial**: Konvexe Hülle (Graham Scan), Distanzberechnung, Schnittmengenerkennung, Flächenberechnung
 - **Stream-Verarbeitung**: Partitionsmanager, Consumer Groups, Schema-Registry, Dead-Letter-Queue, Wasserzeichen-Tracking
 
-### Tests pro Crate (v0.2.3)
+### Tests pro Crate (v0.2.3-Baseline)
+
+> Workspace-Gesamtsumme für v0.3.1: **~43.500 Tests bestanden**. Die folgende Aufschlüsselung pro Crate ist die zuletzt veröffentlichte Baseline; die zusätzlichen ~2.700 Tests von v0.3.1 stammen aus GraphSAGE-Embeddings, dem Graph-Summarizer, Relevanz-Feedback, SHACL-AF (rekursiv/qualifiziert/Reasoning), Datalog, Manchester-Syntax und verwandten Modulen.
 
 | Crate | Tests |
 |-------|-------|
@@ -612,4 +657,4 @@ Details siehe [LICENSE](LICENSE).
 
 *"Rust macht Speichersicherheit zur Selbstverständlichkeit; OxiRS macht Knowledge-Graph-Engineering zur Selbstverständlichkeit."*
 
-**v0.2.3 - Veröffentlicht - 16. März 2026**
+**v0.3.1 - Veröffentlicht - 6. Juni 2026**

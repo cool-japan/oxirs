@@ -232,7 +232,8 @@ mod tests {
 
     #[test]
     fn test_config_reload_manager_creation() {
-        let config_path = PathBuf::from("/tmp/test-config.toml");
+        let config_path =
+            std::env::temp_dir().join(format!("oxirs_test_config_{}.toml", std::process::id()));
         let config = ServerConfig::default();
         let config_arc = Arc::new(RwLock::new(config));
 

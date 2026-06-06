@@ -377,13 +377,17 @@ mod tests {
 
     #[test]
     fn test_analytics_config_with_export() {
+        let export_path = std::env::temp_dir()
+            .join("oxirs_graph_metrics.json")
+            .to_string_lossy()
+            .into_owned();
         let config = AnalyticsConfig {
             operation: AnalyticsOperation::PageRank,
-            export_path: Some("/tmp/metrics.json".to_string()),
+            export_path: Some(export_path.clone()),
             enable_benchmarking: true,
             ..Default::default()
         };
-        assert_eq!(config.export_path, Some("/tmp/metrics.json".to_string()));
+        assert_eq!(config.export_path, Some(export_path));
         assert!(config.enable_benchmarking);
     }
 }

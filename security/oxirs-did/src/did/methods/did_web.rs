@@ -27,6 +27,14 @@ impl Default for DidWebMethod {
 #[cfg(feature = "did-web")]
 impl DidWebMethod {
     pub fn new() -> Self {
+        // `reqwest` is built with the `rustls-no-provider` feature, so a
+        // process-default rustls `CryptoProvider` must be installed before any
+        // client is constructed — otherwise `Client::new()` panics. oxirs-core
+        // installs the Pure Rust provider via a pre-`main` ctor, but oxirs-did
+        // references no other oxirs-core symbol, so the linker would drop that
+        // dependency (and its ctor) from `did-web`-enabled test binaries.
+        // Calling this is idempotent and also forces oxirs-core to be linked.
+        oxirs_core::ensure_crypto_provider();
         Self {
             client: reqwest::Client::new(),
             timeout_secs: 30,

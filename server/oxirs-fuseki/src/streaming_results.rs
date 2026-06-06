@@ -278,37 +278,21 @@ impl StreamingProducer {
         })
     }
 
-    /// Compress data using gzip
+    /// Compress data using gzip (Pure-Rust `oxiarc-deflate`)
     fn compress_gzip(&self, data: &[u8]) -> FusekiResult<Bytes> {
-        use flate2::write::GzEncoder;
-        use flate2::Compression as GzCompression;
-        use std::io::Write;
-
-        let mut encoder = GzEncoder::new(
-            Vec::new(),
-            GzCompression::new(self.config.compression_level),
-        );
-
-        encoder
-            .write_all(data)
+        // gzip levels are 0-9; clamp the configured u32 to a valid u8 level.
+        let level = self.config.compression_level.min(9) as u8;
+        let compressed = oxiarc_deflate::gzip_compress(data, level)
             .map_err(|e| FusekiError::server_error(format!("Gzip compression failed: {}", e)))?;
-
-        let compressed = encoder
-            .finish()
-            .map_err(|e| FusekiError::server_error(format!("Gzip finalization failed: {}", e)))?;
 
         Ok(Bytes::from(compressed))
     }
 
-    /// Compress data using brotli
+    /// Compress data using brotli (Pure-Rust `oxiarc-brotli`)
     fn compress_brotli(&self, data: &[u8]) -> FusekiResult<Bytes> {
-        let mut compressed = Vec::new();
-        let params = brotli::enc::BrotliEncoderParams {
-            quality: self.config.compression_level as i32,
-            ..Default::default()
-        };
-
-        brotli::BrotliCompress(&mut std::io::Cursor::new(data), &mut compressed, &params)
+        // Brotli quality is 0-11; clamp the configured level to that range.
+        let quality = self.config.compression_level.min(11);
+        let compressed = oxiarc_brotli::compress(data, quality)
             .map_err(|e| FusekiError::server_error(format!("Brotli compression failed: {}", e)))?;
 
         Ok(Bytes::from(compressed))

@@ -785,7 +785,7 @@ impl OxiRSMonitoringDashboard {
         loop {
             ticker.tick().await;
             
-            let cutoff_time = Utc::now() - chrono::Duration::from_std(retention_period).unwrap();
+            let cutoff_time = Utc::now() - chrono::Duration::from_std(retention_period).expect("retention_period fits within chrono::Duration range");
             
             // Clean up historical data
             {

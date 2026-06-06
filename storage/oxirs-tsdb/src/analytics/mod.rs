@@ -13,6 +13,10 @@
 
 pub mod anomaly;
 pub mod arrow_export;
+pub(crate) mod arrow_export_builder;
+#[cfg(test)]
+mod arrow_export_tests;
+pub mod arrow_export_types;
 pub mod arrow_ipc;
 pub mod forecasting;
 pub mod gpu_aggregations;

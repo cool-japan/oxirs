@@ -286,9 +286,10 @@ async fn test_mvcc_concurrent_readers() {
 
 #[tokio::test]
 async fn test_mvcc_storage_integration() {
+    let base_dir = tempfile::tempdir().expect("tempdir");
     let storage = MVCCStorage::new(
         1,
-        "/tmp/mvcc_storage_test".to_string(),
+        base_dir.path().to_string_lossy().into_owned(),
         CompactionStrategy::default(),
     );
     storage.start().await.unwrap();
@@ -338,9 +339,10 @@ async fn test_mvcc_storage_integration() {
 
 #[tokio::test]
 async fn test_mvcc_storage_rollback() {
+    let base_dir = tempfile::tempdir().expect("tempdir");
     let storage = MVCCStorage::new(
         1,
-        "/tmp/mvcc_storage_rollback".to_string(),
+        base_dir.path().to_string_lossy().into_owned(),
         CompactionStrategy::None,
     );
     storage.start().await.unwrap();

@@ -447,13 +447,8 @@ impl EventStore {
     /// Compress data
     fn compress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
         if self.config.enable_compression {
-            use flate2::write::GzEncoder;
-            use flate2::Compression;
-            use std::io::Write;
-
-            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-            encoder.write_all(data)?;
-            Ok(encoder.finish()?)
+            oxiarc_deflate::gzip_compress(data, 6)
+                .map_err(|e| anyhow::anyhow!("Gzip compression failed: {e}"))
         } else {
             Ok(data.to_vec())
         }
@@ -462,13 +457,8 @@ impl EventStore {
     /// Decompress data
     fn decompress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
         if self.config.enable_compression {
-            use flate2::read::GzDecoder;
-            use std::io::Read;
-
-            let mut decoder = GzDecoder::new(data);
-            let mut decompressed = Vec::new();
-            decoder.read_to_end(&mut decompressed)?;
-            Ok(decompressed)
+            oxiarc_deflate::gzip_decompress(data)
+                .map_err(|e| anyhow::anyhow!("Gzip decompression failed: {e}"))
         } else {
             Ok(data.to_vec())
         }

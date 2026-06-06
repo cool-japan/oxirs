@@ -13,6 +13,9 @@
 //! - `advanced_pattern_analysis`: ML-driven pattern analysis with sophisticated optimization
 
 pub mod advanced_pattern_analysis;
+pub mod advanced_pattern_analysis_analyzer;
+pub mod advanced_pattern_analysis_consciousness;
+pub mod advanced_pattern_analysis_quantum;
 pub mod core;
 pub mod cost_estimation;
 pub mod graph_analysis;

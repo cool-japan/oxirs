@@ -1,9 +1,9 @@
 //! # OxiRS GeoSPARQL
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-geosparql/badge.svg)](https://docs.rs/oxirs-geosparql)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
@@ -66,6 +66,11 @@ pub mod performance;
 pub mod reasoning;
 pub mod sparql_integration;
 pub mod validation;
+pub mod validation_algorithms;
+pub mod validation_core;
+#[cfg(test)]
+mod validation_tests;
+pub mod validation_topology;
 pub mod vocabulary;
 
 // Geometry serialization to WKT, GeoJSON, and GML (v1.1.0 round 6)

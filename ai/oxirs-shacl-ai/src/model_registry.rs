@@ -819,7 +819,8 @@ mod tests {
                 .with_parameters(ModelParameters {
                     num_parameters: 1000,
                     parameter_shapes: vec![vec![10, 10]],
-                    storage_path: PathBuf::from("/tmp/model"),
+                    storage_path: std::env::temp_dir()
+                        .join(format!("oxirs_model_{}", std::process::id())),
                     checksum: "abc123".to_string(),
                 })
                 .with_config(serde_json::json!({}))

@@ -1,6 +1,6 @@
 # OxiRS TSDB - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
@@ -109,4 +109,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TSDB v0.2.3 - Time-series database for IoT-scale workloads*
+*OxiRS TSDB v0.3.1 - Time-series database for IoT-scale workloads*

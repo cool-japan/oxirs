@@ -187,10 +187,12 @@ fn derive_key_from_keyfile(keyfile: &Path) -> Result<Key<Aes256Gcm>, Box<dyn std
 
     // Keyfile must be exactly 32 bytes for AES-256
     if key_data.len() != 32 {
-        // If not exactly 32 bytes, hash it to get 32 bytes
-        use ring::digest;
-        let hash = digest::digest(&digest::SHA256, &key_data);
-        let key = Key::<Aes256Gcm>::from_slice(hash.as_ref());
+        // If not exactly 32 bytes, hash it to get 32 bytes (SHA-256 one-shot via
+        // OxiCrypto, Pure Rust). Yields the same 32-byte key as the previous
+        // `ring::digest` implementation. `hash_fixed` is an inherent method on
+        // `Sha256`, so the `Hash` trait does not need to be in scope.
+        let hash: [u8; 32] = oxicrypto_hash::Sha256.hash_fixed(&key_data);
+        let key = Key::<Aes256Gcm>::from_slice(&hash);
         Ok(*key)
     } else {
         let key = Key::<Aes256Gcm>::from_slice(&key_data);

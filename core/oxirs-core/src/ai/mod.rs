@@ -16,6 +16,11 @@ pub mod relation_extraction;
 pub mod temporal_reasoning;
 pub mod training;
 pub mod vector_store;
+pub mod vector_store_index;
+pub mod vector_store_search;
+#[cfg(test)]
+mod vector_store_tests;
+pub mod vector_store_types;
 
 use crate::model::Triple;
 use anyhow::{anyhow, Result};

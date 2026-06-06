@@ -1,10 +1,10 @@
 # OxiRS GraphQL - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Current Status
 
-OxiRS GraphQL v0.2.3 is production-ready, providing a modern GraphQL interface for RDF data with automatic schema generation and AI-powered capabilities.
+OxiRS GraphQL v0.3.1 is production-ready, providing a modern GraphQL interface for RDF data with automatic schema generation and AI-powered capabilities.
 
 ### Production Features
 - ✅ **GraphQL Server** - Full GraphQL specification compliance
@@ -43,13 +43,13 @@ OxiRS GraphQL v0.2.3 is production-ready, providing a modern GraphQL interface f
 - ✅ 2081 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] Complete GraphQL specification compliance (completed 2026-04-28)
   - **Implemented:** All 25 GraphQL June 2018 spec validation rules in `src/validation_spec.rs` (SpecValidator)
   - **Parser fix:** Fragment spread `...Name` parsing (peek_keyword word-boundary bug fixed)
   - **Files:** src/validation.rs (+SpecRule enum), src/validation_spec.rs (new, 880 lines), tests/spec_conformance.rs (new, 46 tests)
   - **Results:** 2141 tests passing, zero clippy warnings, zero fmt issues
-- [~] Enterprise support (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Enterprise support (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing

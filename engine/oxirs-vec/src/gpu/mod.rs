@@ -22,6 +22,10 @@ pub mod config;
 pub mod device;
 pub mod index;
 pub mod index_builder;
+pub mod index_builder_phases;
+#[cfg(test)]
+mod index_builder_tests;
+pub mod index_builder_types;
 pub mod kernels;
 pub mod load_balancer;
 pub mod memory_pool;

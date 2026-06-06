@@ -194,6 +194,9 @@ impl UnifiedTermPattern {
             SubjectPattern::NamedNode(nn) => UnifiedTermPattern::NamedNode(nn.clone()),
             SubjectPattern::BlankNode(bn) => UnifiedTermPattern::BlankNode(bn.clone()),
             SubjectPattern::Variable(var) => UnifiedTermPattern::Variable(var.clone()),
+            // Quoted-triple patterns are represented as wildcards at the unified level;
+            // fine-grained inner-triple matching is handled by the RDF-star evaluator.
+            SubjectPattern::QuotedTriple(_) => UnifiedTermPattern::Wildcard,
         }
     }
 
@@ -212,6 +215,8 @@ impl UnifiedTermPattern {
             ObjectPattern::BlankNode(bn) => UnifiedTermPattern::BlankNode(bn.clone()),
             ObjectPattern::Literal(lit) => UnifiedTermPattern::Literal(lit.clone()),
             ObjectPattern::Variable(var) => UnifiedTermPattern::Variable(var.clone()),
+            // Quoted-triple patterns are represented as wildcards at the unified level.
+            ObjectPattern::QuotedTriple(_) => UnifiedTermPattern::Wildcard,
         }
     }
 

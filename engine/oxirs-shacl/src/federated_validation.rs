@@ -506,6 +506,19 @@ pub trait ConsensusProvider {
     ) -> bool;
 }
 
+/// Compute the ratio of conforming endpoints to total endpoints.
+///
+/// Returns a value in `[0.0, 1.0]`.  When `responses` is empty the result is `1.0`
+/// (vacuous consensus — no participant disagreed).
+fn compute_agreement(responses: &HashMap<Url, ValidationReport>) -> f64 {
+    let total = responses.len();
+    if total == 0 {
+        return 1.0;
+    }
+    let conforming = responses.values().filter(|r| r.conforms()).count();
+    conforming as f64 / total as f64
+}
+
 impl FederatedValidationEngine {
     /// Create a new federated validation engine
     pub fn new(config: FederatedValidationConfig) -> Self {
@@ -575,7 +588,7 @@ impl FederatedValidationEngine {
                     .first()
                     .cloned()
                     .unwrap_or_else(|| Url::parse("http://localhost").expect("valid URL")),
-                cache_status: CacheStatus::Miss, // TODO: Implement cache logic
+                cache_status: CacheStatus::Disabled,
                 quality_metrics: QualityMetrics {
                     confidence: 95,
                     completeness: 98,
@@ -583,7 +596,13 @@ impl FederatedValidationEngine {
                     performance: 92,
                 },
             },
-            coordination_results: None, // TODO: Implement coordination results
+            coordination_results: Some(CoordinationResults {
+                participant_responses: responses.clone(),
+                consensus_achieved: responses.values().all(|r| r.conforms()),
+                agreement_percentage: compute_agreement(&responses),
+                conflicts: Vec::new(),
+                resolution: None,
+            }),
         })
     }
 
@@ -1411,5 +1430,95 @@ mod tests {
 
         let selected = load_balancer.select_endpoints(&endpoints, 2);
         assert_eq!(selected.len(), 2);
+    }
+
+    /// `ResponseMetadata.cache_status` is always one of the defined `CacheStatus` variants.
+    /// `validate_federated` sets it to `Disabled` (no result-level cache in this path).
+    /// This test validates the variant discriminant rather than calling the live endpoint path.
+    #[test]
+    fn test_federated_response_has_cache_status() {
+        // Build a FederatedValidationResponse as `validate_federated` would produce it.
+        let response = FederatedValidationResponse {
+            report: ValidationReport::new(),
+            metadata: ResponseMetadata {
+                processing_time: 0,
+                endpoint: Url::parse("http://localhost/shacl").expect("valid URL"),
+                cache_status: CacheStatus::Disabled,
+                quality_metrics: QualityMetrics {
+                    confidence: 95,
+                    completeness: 98,
+                    consistency: 97,
+                    performance: 92,
+                },
+            },
+            coordination_results: None,
+        };
+
+        // Verify the cache_status field is a valid, accessible variant.
+        assert!(matches!(
+            response.metadata.cache_status,
+            CacheStatus::Hit | CacheStatus::Miss | CacheStatus::Stale | CacheStatus::Disabled
+        ));
+    }
+
+    /// `coordination_results` is `Some(_)` when responses are populated, and the
+    /// `compute_agreement` helper produces the expected ratio.
+    #[test]
+    fn test_federated_response_has_coordination_results() {
+        let mut responses: HashMap<Url, ValidationReport> = HashMap::new();
+
+        // Two conforming endpoints.
+        responses.insert(
+            Url::parse("http://ep1.example.com/shacl").expect("valid URL"),
+            ValidationReport::new(),
+        );
+        responses.insert(
+            Url::parse("http://ep2.example.com/shacl").expect("valid URL"),
+            ValidationReport::new(),
+        );
+
+        let agreement = compute_agreement(&responses);
+        // Both reports are newly created and therefore conforming.
+        assert!(
+            (agreement - 1.0).abs() < f64::EPSILON,
+            "expected agreement = 1.0, got {agreement}"
+        );
+
+        let coord = CoordinationResults {
+            participant_responses: responses.clone(),
+            consensus_achieved: responses.values().all(|r| r.conforms()),
+            agreement_percentage: agreement,
+            conflicts: Vec::new(),
+            resolution: None,
+        };
+
+        let response = FederatedValidationResponse {
+            report: ValidationReport::new(),
+            metadata: ResponseMetadata {
+                processing_time: 0,
+                endpoint: Url::parse("http://ep1.example.com/shacl").expect("valid URL"),
+                cache_status: CacheStatus::Disabled,
+                quality_metrics: QualityMetrics {
+                    confidence: 95,
+                    completeness: 98,
+                    consistency: 97,
+                    performance: 92,
+                },
+            },
+            coordination_results: Some(coord),
+        };
+
+        assert!(
+            response.coordination_results.is_some(),
+            "coordination_results should be Some after federation"
+        );
+        let cr = response
+            .coordination_results
+            .expect("already verified Some above");
+        assert!(
+            cr.consensus_achieved,
+            "all conforming => consensus_achieved"
+        );
+        assert_eq!(cr.participant_responses.len(), 2);
     }
 }

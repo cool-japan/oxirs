@@ -1,9 +1,9 @@
 //! # OxiRS Federation - Federated Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-federate/badge.svg)](https://docs.rs/oxirs-federate)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Federated query processing capabilities for SPARQL and GraphQL with service discovery,
@@ -106,6 +106,10 @@ pub mod memory_efficient_datasets;
 pub mod metadata;
 pub mod ml_model_serving;
 pub mod ml_optimizer;
+pub mod ml_optimizer_model;
+pub mod ml_optimizer_planner;
+mod ml_optimizer_tests;
+pub mod ml_optimizer_types;
 pub mod ml_query_router;
 pub mod monitoring;
 pub mod multi_level_federation;
@@ -113,6 +117,11 @@ pub mod nats_federation;
 pub mod network_optimizer;
 pub mod optimization_cache;
 pub mod performance_analyzer;
+pub mod performance_analyzer_collector;
+pub mod performance_analyzer_reporter;
+#[cfg(test)]
+mod performance_analyzer_tests;
+pub mod performance_analyzer_types;
 pub mod performance_benchmarks;
 pub mod planner;
 pub mod privacy;
@@ -131,9 +140,13 @@ pub mod semantic_enhancer;
 pub mod semantic_reasoner;
 pub mod service;
 pub mod service_client;
+pub mod service_core;
 pub mod service_executor;
 pub mod service_optimizer;
 pub mod service_registry;
+#[cfg(test)]
+mod service_tests;
+pub mod service_types;
 pub mod simd_optimized_joins;
 pub mod source_selection;
 pub mod streaming;
@@ -180,6 +193,9 @@ pub mod result_streamer;
 // trees; pairs with `cost_model::FederationCostModel` for plan comparison
 // and `cache::endpoint_cache::EndpointCache` for stable subresult caching.
 pub mod optimizer;
+
+// v0.3.1: Adaptive routing engine with EWMA statistics, cost model, and greedy planner
+pub mod adaptive_routing;
 
 // Minimal imports to ensure compilation - only core types
 // Re-enabled specific non-duplicate exports after fixing ServiceRegistry conflicts

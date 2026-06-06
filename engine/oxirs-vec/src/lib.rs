@@ -1,9 +1,9 @@
 //! # OxiRS Vector Search
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-vec/badge.svg)](https://docs.rs/oxirs-vec)
 //!
-//! **Status**: Production Release (v0.3.0) - **Production-Ready with Complete Documentation**
+//! **Status**: Production Release (v0.3.1) - **Production-Ready with Complete Documentation**
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing and 100 KB of documentation.
 //!
 //! Vector index abstractions for semantic similarity and AI-augmented SPARQL querying.
@@ -109,14 +109,25 @@ pub mod adaptive_recall_tuner;
 pub mod advanced_analytics;
 pub mod advanced_benchmarking;
 pub mod advanced_caching;
+pub mod advanced_caching_eviction;
+pub mod advanced_caching_multilevel;
+pub mod advanced_caching_worker;
 pub mod advanced_metrics;
 pub mod advanced_result_merging;
 pub mod automl_optimization;
+pub mod bench_metrics;
+pub mod bench_runner;
+pub mod bench_tests;
 pub mod benchmarking;
 pub mod cache_friendly_index;
 pub mod clustering;
 pub mod compaction;
 pub mod compression;
+pub mod compression_codecs;
+pub mod compression_io;
+#[cfg(test)]
+pub mod compression_tests;
+pub mod compression_types;
 #[cfg(feature = "content-processing")]
 pub mod content_processing;
 pub mod crash_recovery;
@@ -155,6 +166,13 @@ pub mod hybrid_search;
 pub mod index;
 pub mod ivf;
 pub mod joint_embedding_spaces;
+pub mod joint_embedding_spaces_align;
+pub mod joint_embedding_spaces_aligner;
+pub mod joint_embedding_spaces_eval;
+#[cfg(test)]
+pub mod joint_embedding_spaces_tests;
+pub mod joint_embedding_spaces_transfer;
+pub mod joint_embedding_spaces_types;
 pub mod kg_embeddings;
 pub mod learned_index;
 pub mod lsh;
@@ -183,6 +201,9 @@ pub mod real_time_embedding_pipeline;
 pub mod real_time_updates;
 pub mod reranking;
 pub mod result_fusion;
+pub mod rta_aggregators;
+pub mod rta_engine;
+pub mod rta_tests;
 pub mod similarity;
 pub mod sparql_integration;
 pub mod sparql_service_endpoint;
@@ -190,10 +211,24 @@ pub mod sparse;
 pub mod sq;
 pub mod storage_optimizations;
 pub mod store_integration;
+pub(crate) mod store_integration_adapters;
+pub(crate) mod store_integration_sync;
+#[cfg(test)]
+mod store_integration_tests;
+pub mod store_integration_types;
 pub mod structured_vectors;
 pub mod tensorflow;
 pub mod tiering;
 pub mod tree_indices;
+pub mod tree_indices_balltree;
+pub mod tree_indices_covertree;
+pub mod tree_indices_kdtree;
+pub mod tree_indices_rptree;
+#[cfg(test)]
+mod tree_indices_tests;
+pub mod tree_indices_types;
+pub mod tree_indices_unified;
+pub mod tree_indices_vptree;
 pub mod validation;
 pub mod wal;
 pub mod word2vec;

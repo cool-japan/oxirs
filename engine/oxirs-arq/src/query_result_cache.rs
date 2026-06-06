@@ -439,24 +439,13 @@ impl QueryResultCache {
 
     /// Compress query results
     fn compress_results(&self, results: &[u8]) -> Result<Vec<u8>> {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-        use std::io::Write;
-
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
-        encoder.write_all(results)?;
-        Ok(encoder.finish()?)
+        // Gzip (RFC 1952) compression at the "fast" level (1) via Pure-Rust oxiarc-deflate.
+        Ok(oxiarc_deflate::gzip_compress(results, 1)?)
     }
 
     /// Decompress query results
     fn decompress_results(&self, compressed: &[u8]) -> Result<Vec<u8>> {
-        use flate2::read::GzDecoder;
-        use std::io::Read;
-
-        let mut decoder = GzDecoder::new(compressed);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
-        Ok(decompressed)
+        Ok(oxiarc_deflate::gzip_decompress(compressed)?)
     }
 }
 
@@ -524,6 +513,47 @@ mod tests {
         assert_eq!(stats.puts, 1);
         assert_eq!(stats.hits, 1);
         assert_eq!(stats.misses, 0);
+    }
+
+    #[test]
+    fn test_gzip_compress_decompress_roundtrip() {
+        // Verifies the oxiarc-deflate gzip codec path used by the result cache
+        // round-trips losslessly (gzip -> gzip, RFC 1952).
+        let cache = QueryResultCache::new(CacheConfig::default());
+
+        // Repetitive payload so compression actually shrinks it.
+        let original: Vec<u8> = b"oxirs-arq result cache gzip payload "
+            .iter()
+            .cycle()
+            .take(4096)
+            .copied()
+            .collect();
+
+        let compressed = cache
+            .compress_results(&original)
+            .expect("gzip compression failed");
+        // Gzip magic header (RFC 1952): 0x1f 0x8b.
+        assert_eq!(&compressed[..2], &[0x1f, 0x8b]);
+        assert!(compressed.len() < original.len());
+
+        let decompressed = cache
+            .decompress_results(&compressed)
+            .expect("gzip decompression failed");
+        assert_eq!(decompressed, original);
+    }
+
+    #[test]
+    fn test_gzip_roundtrip_empty_and_small() {
+        let cache = QueryResultCache::new(CacheConfig::default());
+        for original in [Vec::new(), vec![42u8], b"hello".to_vec()] {
+            let compressed = cache
+                .compress_results(&original)
+                .expect("gzip compression failed");
+            let decompressed = cache
+                .decompress_results(&compressed)
+                .expect("gzip decompression failed");
+            assert_eq!(decompressed, original);
+        }
     }
 
     #[test]
@@ -666,7 +696,7 @@ mod tests {
             cache.get(&hash);
         }
 
-        let entries = cache.entries.read().unwrap();
+        let entries = cache.entries.read().unwrap_or_else(|e| e.into_inner());
         let entry = entries.get(&hash).unwrap();
         assert_eq!(entry.access_count, 5);
     }

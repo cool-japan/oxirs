@@ -1,9 +1,9 @@
 //! # OxiRS Stream - Ultra-High Performance RDF Streaming Platform
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-stream/badge.svg)](https://docs.rs/oxirs-stream)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Real-time streaming support with Kafka/NATS/Redis I/O, RDF Patch, SPARQL Update delta,
@@ -385,6 +385,10 @@ pub mod bridge;
 pub mod circuit_breaker;
 pub mod config;
 pub mod connection_pool;
+pub mod connection_pool_health;
+pub mod connection_pool_manager;
+mod connection_pool_tests;
+pub mod connection_pool_types;
 pub mod consciousness_streaming;
 pub mod consumer;
 pub mod cqels;
@@ -422,6 +426,10 @@ pub mod rsp;
 pub mod schema_registry;
 pub mod security;
 pub mod serialization;
+pub mod serialization_decoder;
+pub mod serialization_encoder;
+pub mod serialization_tests;
+pub mod serialization_types;
 pub mod sparql_streaming;
 pub mod state;
 pub mod store_integration;
@@ -449,6 +457,9 @@ pub mod numa_processing;
 pub mod out_of_order;
 pub mod performance_profiler;
 pub mod stream_sql;
+pub mod stream_sql_ast;
+pub mod stream_sql_executor;
+pub mod stream_sql_tests;
 pub mod testing_framework;
 
 // New v0.3.0 modules for ML, versioning, and migration
@@ -611,6 +622,9 @@ pub mod event_filter;
 
 // Visual pipeline designer and debugger (SVG/JSON/YAML/DOT/Mermaid export)
 pub mod visual_designer;
+pub mod visual_designer_engine;
+pub mod visual_designer_tests;
+pub mod visual_designer_types;
 
 // W2-S6: per-stream SLA admission control + load-shedder coordination.
 pub mod sla;
@@ -635,3 +649,12 @@ pub use aggregation::{
     ExactlyOnceAggregator, ExactlyOnceAggregatorConfig, ExactlyOnceAggregatorStats,
     PartitionAggregateState, PartitionAggregateValue,
 };
+
+// Neuromorphic stream analytics (brain-inspired spiking neural networks)
+pub mod neuromorphic_analytics;
+pub mod neuromorphic_analytics_engine;
+pub mod neuromorphic_analytics_learning;
+pub mod neuromorphic_analytics_network;
+pub mod neuromorphic_analytics_patterns;
+mod neuromorphic_analytics_tests;
+pub mod neuromorphic_analytics_types;

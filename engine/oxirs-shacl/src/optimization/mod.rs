@@ -8,6 +8,10 @@ pub mod advanced_batch;
 pub mod advanced_performance;
 pub mod constraint_ordering;
 pub mod core;
+pub(crate) mod core_engine;
+pub(crate) mod core_strategies;
+#[cfg(test)]
+pub(crate) mod core_tests;
 #[cfg(feature = "gpu")]
 pub mod gpu_accelerated;
 #[cfg(feature = "gpu")]

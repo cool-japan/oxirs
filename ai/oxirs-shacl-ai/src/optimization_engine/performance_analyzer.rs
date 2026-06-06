@@ -173,11 +173,39 @@ impl PerformanceAnalyzer {
 
         // Create a simplified performance profile
         // In a real implementation, this would involve actual profiling
+        // Run actual bottleneck detection and convert the results to the
+        // `PerformanceBottleneck` type expected by `PerformanceProfile`.
+        let detected = self.detect_bottlenecks(shape).await.unwrap_or_default();
+        let bottlenecks = detected
+            .into_iter()
+            .map(|b| {
+                use crate::shape_management::optimization::{
+                    BottleneckSeverity, PerformanceBottleneck,
+                };
+                let severity = if b.severity >= 0.8 {
+                    BottleneckSeverity::Critical
+                } else if b.severity >= 0.6 {
+                    BottleneckSeverity::High
+                } else if b.severity >= 0.3 {
+                    BottleneckSeverity::Medium
+                } else {
+                    BottleneckSeverity::Low
+                };
+                PerformanceBottleneck {
+                    bottleneck_type: format!("{:?}", b.bottleneck_type),
+                    description: b.suggested_remediation.clone(),
+                    severity,
+                    estimated_impact: b.severity,
+                    resolution_suggestions: vec![b.suggested_remediation],
+                }
+            })
+            .collect();
+
         Ok(PerformanceProfile {
             validation_time_ms: estimated_execution_time,
             memory_usage_kb: estimated_memory_usage * 1024.0, // Convert MB to KB
             complexity_score: self.calculate_optimization_score(shape),
-            bottlenecks: Vec::new(), // TODO: Convert DetectedBottleneck to PerformanceBottleneck
+            bottlenecks,
             optimization_suggestions: Vec::new(),
         })
     }

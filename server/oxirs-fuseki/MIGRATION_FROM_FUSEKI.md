@@ -60,7 +60,7 @@ If you're running Fuseki with default settings:
 # Install OxiRS Fuseki
 cargo install oxirs-fuseki
 # OR use Docker
-docker pull ghcr.io/cool-japan/oxirs-fuseki:0.1.0
+docker pull ghcr.io/cool-japan/oxirs-fuseki:0.3.1
 
 # Run with default settings
 oxirs-fuseki --port 3030
@@ -582,7 +582,7 @@ CMD ["java", "-jar", "/opt/fuseki-server.jar"]
 
 **OxiRS Fuseki**:
 ```dockerfile
-FROM ghcr.io/cool-japan/oxirs-fuseki:0.1.0
+FROM ghcr.io/cool-japan/oxirs-fuseki:0.3.1
 # That's it! 12MB vs 500MB+ Java image
 ```
 
@@ -607,7 +607,7 @@ services:
 version: '3.8'
 services:
   oxirs-fuseki:
-    image: ghcr.io/cool-japan/oxirs-fuseki:0.1.0
+    image: ghcr.io/cool-japan/oxirs-fuseki:0.3.1
     ports:
       - "3030:3030"
     volumes:

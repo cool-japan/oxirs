@@ -4,7 +4,7 @@
 //! and optional HSM (Hardware Security Module) integration for cloud providers.
 
 use crate::error::{ClusterError, Result};
-use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use oxicrypto_core::Aead;
 use scirs2_core::metrics::{Counter, Histogram};
 use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
@@ -35,10 +35,18 @@ pub struct EncryptionKey {
 }
 
 impl EncryptionKey {
-    /// Create LessSafeKey from stored material
-    fn get_key(&self) -> std::result::Result<LessSafeKey, ring::error::Unspecified> {
-        let unbound_key = UnboundKey::new(&AES_256_GCM, &self.key_material)?;
-        Ok(LessSafeKey::new(unbound_key))
+    /// Return the 32-byte AES-256 key material after validating its length.
+    ///
+    /// The AEAD primitive ([`oxicrypto_aead::Aes256Gcm`]) is stateless and takes
+    /// the key as a per-call argument, so this simply validates and exposes the
+    /// raw bytes rather than constructing a bound key object.
+    fn key_bytes(&self) -> Result<&[u8]> {
+        if self.key_material.len() != 32 {
+            return Err(ClusterError::Encryption(
+                "Invalid AES-256 key length (expected 32 bytes)".to_string(),
+            ));
+        }
+        Ok(&self.key_material)
     }
 }
 
@@ -427,18 +435,16 @@ impl EncryptionManager {
         nonce_bytes[..8].copy_from_slice(&unique_val.to_le_bytes());
         // Last 4 bytes: counter low bits (guarantees uniqueness even if XOR collides)
         nonce_bytes[8..12].copy_from_slice(&(counter as u32).to_le_bytes());
-        let nonce = Nonce::assume_unique_for_key(nonce_bytes);
 
         // Get the key material
-        let safe_key = key
-            .get_key()
-            .map_err(|_| ClusterError::Encryption("Failed to create key".to_string()))?;
+        let key_bytes = key.key_bytes()?;
 
-        // Encrypt (in-place encryption appends auth tag)
-        let mut ciphertext = plaintext.to_vec();
-        safe_key
-            .seal_in_place_append_tag(nonce, Aad::empty(), &mut ciphertext)
-            .map_err(|_| ClusterError::Encryption("Encryption failed".to_string()))?;
+        // Encrypt with AES-256-GCM (no AAD). The returned vector is
+        // `ciphertext || tag`, preserving the original on-the-wire layout where
+        // the 16-byte GCM tag is appended to the ciphertext.
+        let ciphertext = oxicrypto_aead::Aes256Gcm
+            .seal_to_vec(key_bytes, &nonce_bytes, &[], plaintext)
+            .map_err(|e| ClusterError::Encryption(format!("Encryption failed: {e}")))?;
 
         // Record metrics
         let elapsed = start.elapsed();
@@ -464,21 +470,14 @@ impl EncryptionManager {
         // Find the correct key (current or historical)
         let key = self.find_key(encrypted.key_id).await?;
 
-        let nonce = Nonce::assume_unique_for_key(encrypted.nonce);
-        let mut plaintext = encrypted.ciphertext.clone();
-
         // Get the key material
-        let safe_key = key
-            .get_key()
-            .map_err(|_| ClusterError::Encryption("Failed to create key".to_string()))?;
+        let key_bytes = key.key_bytes()?;
 
-        // Decrypt (in-place decryption removes auth tag)
-        safe_key
-            .open_in_place(nonce, Aad::empty(), &mut plaintext)
-            .map_err(|_| ClusterError::Encryption("Decryption failed".to_string()))?;
-
-        // Remove authentication tag (last 16 bytes for GCM)
-        plaintext.truncate(plaintext.len() - 16);
+        // Decrypt and authenticate. The payload is `ciphertext || tag`; the AEAD
+        // primitive verifies the tag and returns the plaintext (tag stripped).
+        let plaintext = oxicrypto_aead::Aes256Gcm
+            .open_to_vec(key_bytes, &encrypted.nonce, &[], &encrypted.ciphertext)
+            .map_err(|e| ClusterError::Encryption(format!("Decryption failed: {e}")))?;
 
         // Record metrics
         let elapsed = start.elapsed();
@@ -552,9 +551,9 @@ impl EncryptionManager {
         let mut rng = Random::seed(seed);
         rng.fill_bytes(&mut key_bytes);
 
-        // Verify key can be created
-        let _test_key = UnboundKey::new(&AES_256_GCM, &key_bytes)
-            .map_err(|_| ClusterError::Encryption("Key creation failed".to_string()))?;
+        // AES-256 requires a 32-byte key; `key_bytes` is sized [u8; 32] so this
+        // is statically guaranteed, but assert it explicitly for safety.
+        debug_assert_eq!(key_bytes.len(), 32);
 
         let now = SystemTime::now();
         Ok(EncryptionKey {
@@ -680,6 +679,32 @@ mod tests {
 
         assert_ne!(encrypted.ciphertext, plaintext);
         assert_eq!(encrypted.nonce.len(), 12);
+
+        let decrypted = manager
+            .decrypt(&encrypted)
+            .await
+            .expect("Decryption failed");
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[tokio::test]
+    async fn test_encrypt_decrypt_wire_layout_round_trip() {
+        // Verifies the on-the-wire layout after the oxicrypto migration:
+        // `ciphertext` holds `actual_ciphertext || 16-byte GCM tag`, and the
+        // 12-byte nonce is carried separately. An encrypt->decrypt cycle must
+        // recover the exact plaintext.
+        let config = EncryptionConfig::default();
+        let manager = EncryptionManager::new(config).expect("Failed to create manager");
+
+        let plaintext = b"oxicrypto AES-256-GCM round-trip payload";
+        let encrypted = manager.encrypt(plaintext).await.expect("Encryption failed");
+
+        // Nonce is exactly 96 bits.
+        assert_eq!(encrypted.nonce.len(), 12);
+        // Ciphertext length == plaintext length + 16-byte AEAD tag.
+        assert_eq!(encrypted.ciphertext.len(), plaintext.len() + 16);
+        // Ciphertext differs from plaintext.
+        assert_ne!(&encrypted.ciphertext[..plaintext.len()], &plaintext[..]);
 
         let decrypted = manager
             .decrypt(&encrypted)

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use oxirs_core::{model::Term, Store};
 
-use crate::{Result, ShaclError, Shape, ShapeId};
+use crate::{validation::ValidationEngine, Result, ShaclError, Shape, ShapeId, ValidationConfig};
 
 /// Conditional constraint structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +70,8 @@ pub enum ConditionalResult {
 pub struct ConditionalEvaluator {
     /// Cache of evaluated conditions
     condition_cache: std::collections::HashMap<String, bool>,
+    /// Number of cache hits served from `condition_cache`
+    cache_hits: usize,
 }
 
 impl ConditionalEvaluator {
@@ -77,11 +79,15 @@ impl ConditionalEvaluator {
     pub fn new() -> Self {
         Self {
             condition_cache: std::collections::HashMap::new(),
+            cache_hits: 0,
         }
     }
 
-    /// Evaluate a conditional constraint for a focus node
-    #[allow(unused_variables)]
+    /// Evaluate a conditional constraint for a focus node.
+    ///
+    /// This drives `sh:if` / `sh:then` / `sh:else`: the `if_shape` is validated
+    /// against the focus node, and the appropriate branch is selected based on
+    /// real conformance. Results are memoized per (if-shape, focus-node) pair.
     pub fn evaluate_conditional(
         &mut self,
         conditional: &ConditionalConstraint,
@@ -92,13 +98,8 @@ impl ConditionalEvaluator {
         // Check cache first
         let cache_key = self.cache_key(conditional, focus_node);
         if let Some(&cached) = self.condition_cache.get(&cache_key) {
-            return Ok(if cached {
-                ConditionalResult::ThenBranch
-            } else if conditional.has_else() {
-                ConditionalResult::ElseBranch
-            } else {
-                ConditionalResult::NoBranch
-            });
+            self.cache_hits += 1;
+            return Ok(Self::branch_for(conditional, cached));
         }
 
         // Evaluate the condition (if shape)
@@ -112,18 +113,33 @@ impl ConditionalEvaluator {
         // Cache the result
         self.condition_cache.insert(cache_key, condition_satisfied);
 
-        // Determine which branch to take
+        Ok(Self::branch_for(conditional, condition_satisfied))
+    }
+
+    /// Map a condition result to the branch that SHACL prescribes.
+    ///
+    /// When the condition holds, the `sh:then` branch applies. When it does not,
+    /// the `sh:else` branch applies if present, otherwise no branch is taken.
+    fn branch_for(
+        conditional: &ConditionalConstraint,
+        condition_satisfied: bool,
+    ) -> ConditionalResult {
         if condition_satisfied {
-            Ok(ConditionalResult::ThenBranch)
+            ConditionalResult::ThenBranch
         } else if conditional.has_else() {
-            Ok(ConditionalResult::ElseBranch)
+            ConditionalResult::ElseBranch
         } else {
-            Ok(ConditionalResult::NoBranch)
+            ConditionalResult::NoBranch
         }
     }
 
-    /// Evaluate the condition shape (stub)
-    #[allow(unused_variables)]
+    /// Evaluate the `sh:if` condition shape against a focus node.
+    ///
+    /// Resolves the shape from the registry and validates the focus node against
+    /// it using a dedicated [`ValidationEngine`] (the registry's shapes are copied
+    /// into a temporary [`IndexMap`] so nested `sh:property` / `sh:node` references
+    /// resolve correctly). The condition is *satisfied* iff the produced report
+    /// conforms.
     fn evaluate_condition_shape(
         &self,
         shape_id: &ShapeId,
@@ -131,9 +147,27 @@ impl ConditionalEvaluator {
         store: &dyn Store,
         shape_registry: &ShapeRegistry,
     ) -> Result<bool> {
-        // TODO: Implement full shape validation
-        // For now, return true (condition satisfied)
-        Ok(true)
+        let condition_shape = shape_registry.get(shape_id).ok_or_else(|| {
+            ShaclError::ShapeValidation(format!("Conditional if-shape not found: {shape_id}"))
+        })?;
+
+        // Build a temporary shapes map from the whole registry so that any shapes
+        // referenced by the condition shape (sh:property, sh:node, ...) resolve.
+        let mut temp_shapes = indexmap::IndexMap::new();
+        for shape in shape_registry.all_shapes() {
+            temp_shapes.insert(shape.id.clone(), shape.clone());
+        }
+
+        let config = ValidationConfig::default();
+        let mut validator = ValidationEngine::new(&temp_shapes, config);
+
+        match validator.validate_node_against_shape(store, condition_shape, focus_node, None) {
+            Ok(report) => Ok(report.conforms()),
+            Err(e) => {
+                tracing::warn!("Conditional if-shape validation error: {e}");
+                Ok(false)
+            }
+        }
     }
 
     /// Generate a cache key for a conditional evaluation
@@ -144,13 +178,14 @@ impl ConditionalEvaluator {
     /// Clear the condition cache
     pub fn clear_cache(&mut self) {
         self.condition_cache.clear();
+        self.cache_hits = 0;
     }
 
     /// Get cache statistics
     pub fn cache_stats(&self) -> ConditionalCacheStats {
         ConditionalCacheStats {
             entries: self.condition_cache.len(),
-            hits: 0, // TODO: Track hits
+            hits: self.cache_hits,
         }
     }
 }
@@ -263,6 +298,177 @@ impl Default for ConditionalBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constraints::value_constraints::ClassConstraint;
+    use crate::{Constraint, ConstraintComponentId};
+    use oxirs_core::{
+        model::{GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject},
+        ConcreteStore,
+    };
+
+    const EX: &str = "http://example.org/";
+    const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+    fn iri(local: &str) -> NamedNode {
+        NamedNode::new(format!("{EX}{local}")).expect("valid IRI")
+    }
+
+    fn term(local: &str) -> Term {
+        Term::NamedNode(iri(local))
+    }
+
+    fn insert_type(store: &ConcreteStore, subject: &str, type_local: &str) {
+        let quad = Quad::new(
+            Subject::from(iri(subject)),
+            Predicate::from(NamedNode::new(RDF_TYPE).expect("rdf:type")),
+            Object::from(iri(type_local)),
+            GraphName::DefaultGraph,
+        );
+        store.insert_quad(quad).expect("insert type triple");
+    }
+
+    fn insert_name(store: &ConcreteStore, subject: &str, name: &str) {
+        let quad = Quad::new(
+            Subject::from(iri(subject)),
+            Predicate::from(iri("name")),
+            Object::from(Literal::new(name)),
+            GraphName::DefaultGraph,
+        );
+        store.insert_quad(quad).expect("insert name triple");
+    }
+
+    /// Build a node shape requiring `sh:class :Person`.
+    fn person_class_shape(id: &str) -> Shape {
+        let mut shape = Shape::node_shape(ShapeId::new(id));
+        let constraint = Constraint::Class(ClassConstraint {
+            class_iri: iri("Person"),
+        });
+        shape.add_constraint(
+            ConstraintComponentId::new("sh:ClassConstraintComponent"),
+            constraint,
+        );
+        shape
+    }
+
+    #[test]
+    fn test_if_true_selects_then_branch() {
+        let store = ConcreteStore::new().expect("store");
+        insert_type(&store, "alice", "Person");
+
+        let mut registry = ShapeRegistry::new();
+        registry.register(person_class_shape("ifPersonShape"));
+
+        let conditional = ConditionalConstraint::new(ShapeId::new("ifPersonShape"))
+            .with_then(ShapeId::new("thenShape"))
+            .with_else(ShapeId::new("elseShape"));
+
+        let mut evaluator = ConditionalEvaluator::new();
+        let result = evaluator
+            .evaluate_conditional(&conditional, &term("alice"), &store, &registry)
+            .expect("evaluate");
+        assert_eq!(
+            result,
+            ConditionalResult::ThenBranch,
+            "if-shape conforms => then branch"
+        );
+    }
+
+    #[test]
+    fn test_if_false_selects_else_branch() {
+        let store = ConcreteStore::new().expect("store");
+        // bob has no rdf:type Person => if-shape does NOT conform.
+        insert_name(&store, "bob", "Bob");
+
+        let mut registry = ShapeRegistry::new();
+        registry.register(person_class_shape("ifPersonShape"));
+
+        let conditional = ConditionalConstraint::new(ShapeId::new("ifPersonShape"))
+            .with_then(ShapeId::new("thenShape"))
+            .with_else(ShapeId::new("elseShape"));
+
+        let mut evaluator = ConditionalEvaluator::new();
+        let result = evaluator
+            .evaluate_conditional(&conditional, &term("bob"), &store, &registry)
+            .expect("evaluate");
+        assert_eq!(
+            result,
+            ConditionalResult::ElseBranch,
+            "if-shape fails => else branch"
+        );
+    }
+
+    #[test]
+    fn test_if_false_no_else_yields_no_branch() {
+        let store = ConcreteStore::new().expect("store");
+        insert_name(&store, "carol", "Carol");
+
+        let mut registry = ShapeRegistry::new();
+        registry.register(person_class_shape("ifPersonShape"));
+
+        // No else branch configured.
+        let conditional = ConditionalConstraint::new(ShapeId::new("ifPersonShape"))
+            .with_then(ShapeId::new("thenShape"));
+
+        let mut evaluator = ConditionalEvaluator::new();
+        let result = evaluator
+            .evaluate_conditional(&conditional, &term("carol"), &store, &registry)
+            .expect("evaluate");
+        assert_eq!(
+            result,
+            ConditionalResult::NoBranch,
+            "if-shape fails and no else => no branch"
+        );
+    }
+
+    #[test]
+    fn test_cache_hit_increments_stats() {
+        let store = ConcreteStore::new().expect("store");
+        insert_type(&store, "alice", "Person");
+
+        let mut registry = ShapeRegistry::new();
+        registry.register(person_class_shape("ifPersonShape"));
+
+        let conditional = ConditionalConstraint::new(ShapeId::new("ifPersonShape"))
+            .with_then(ShapeId::new("thenShape"));
+
+        let mut evaluator = ConditionalEvaluator::new();
+
+        // First evaluation: cache miss, populates the cache.
+        let _ = evaluator
+            .evaluate_conditional(&conditional, &term("alice"), &store, &registry)
+            .expect("evaluate");
+        assert_eq!(evaluator.cache_stats().hits, 0, "first call is a miss");
+        assert_eq!(evaluator.cache_stats().entries, 1);
+
+        // Second identical evaluation: served from cache => hit count increments.
+        let result = evaluator
+            .evaluate_conditional(&conditional, &term("alice"), &store, &registry)
+            .expect("evaluate");
+        assert_eq!(result, ConditionalResult::ThenBranch);
+        assert_eq!(
+            evaluator.cache_stats().hits,
+            1,
+            "second identical call must be a cache hit"
+        );
+
+        // A third identical call increments again.
+        let _ = evaluator
+            .evaluate_conditional(&conditional, &term("alice"), &store, &registry)
+            .expect("evaluate");
+        assert_eq!(evaluator.cache_stats().hits, 2);
+    }
+
+    #[test]
+    fn test_missing_if_shape_errors() {
+        let store = ConcreteStore::new().expect("store");
+        let registry = ShapeRegistry::new(); // empty: if-shape unresolvable
+
+        let conditional = ConditionalConstraint::new(ShapeId::new("missingShape"))
+            .with_then(ShapeId::new("thenShape"));
+
+        let mut evaluator = ConditionalEvaluator::new();
+        let result = evaluator.evaluate_conditional(&conditional, &term("x"), &store, &registry);
+        assert!(result.is_err(), "unresolvable if-shape must error");
+    }
 
     #[test]
     fn test_conditional_constraint_creation() {

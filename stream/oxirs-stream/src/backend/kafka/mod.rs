@@ -4,8 +4,15 @@
 //! organized into specialized sub-modules for better maintainability.
 
 pub mod backend;
+pub mod backend_consumer;
+pub mod backend_producer;
+pub mod backend_trait;
+pub mod backend_types;
 pub mod config;
 pub mod message;
+
+#[cfg(test)]
+mod backend_tests;
 
 // Re-export commonly used types
 pub use backend::{

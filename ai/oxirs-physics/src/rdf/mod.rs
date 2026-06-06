@@ -62,6 +62,10 @@
 
 pub mod literal_parser;
 pub mod physics_rdf;
+pub mod physics_rdf_mapper;
+pub mod physics_rdf_serializer;
+mod physics_rdf_tests;
+pub mod physics_rdf_types;
 pub mod sparql_builder;
 
 // Re-export frequently used types so consumers can import from `oxirs_physics::rdf`.

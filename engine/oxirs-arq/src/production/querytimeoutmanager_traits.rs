@@ -13,7 +13,8 @@ use std::sync::atomic::AtomicU64;
 use std::sync::RwLock;
 use std::time::Duration;
 
-use super::types::{QueryTimeoutManager, TimeoutAction};
+use super::types_monitor::TimeoutAction;
+use super::types_query::QueryTimeoutManager;
 
 impl Default for QueryTimeoutManager {
     fn default() -> Self {

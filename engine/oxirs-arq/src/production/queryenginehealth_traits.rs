@@ -8,7 +8,7 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use super::types::QueryEngineHealth;
+use super::types_monitor::QueryEngineHealth;
 
 impl Default for QueryEngineHealth {
     fn default() -> Self {

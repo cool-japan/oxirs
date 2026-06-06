@@ -18,7 +18,7 @@
 pub mod matrix;
 pub mod report;
 
-pub use matrix::{FeatureCategory, FeatureEntry, ImplStatus, ParityMatrix};
+pub use matrix::{FeatureCategory, FeatureEntry, FeatureStatus, ImplStatus, ParityMatrix};
 pub use report::generate_report;
 
 /// Load the hand-curated ESMF SDK 2.x feature catalog that is embedded at
@@ -30,7 +30,7 @@ pub use report::generate_report;
 /// unless the source file is corrupted).
 pub fn load_catalog() -> Result<ParityMatrix, Box<dyn std::error::Error>> {
     let toml_str = include_str!("esmf_catalog.toml");
-    matrix::parse_catalog(toml_str)
+    Ok(matrix::ParityMatrix::from_toml(toml_str)?)
 }
 
 #[cfg(test)]
@@ -51,5 +51,13 @@ mod tests {
         let matrix = load_catalog().expect("catalog");
         let report = generate_report(&matrix);
         assert!(report.len() > 100, "report should be non-trivial");
+    }
+
+    #[test]
+    fn test_overall_coverage_positive() {
+        let matrix = load_catalog().expect("catalog");
+        let cov = matrix.overall_coverage();
+        assert!(cov > 0.0, "coverage should be positive");
+        assert!(cov <= 100.0, "coverage must be at most 100%");
     }
 }

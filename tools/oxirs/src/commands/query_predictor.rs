@@ -21,10 +21,25 @@
 //! - `scirs2_core::validation` for input validation
 
 use super::CommandResult;
+use crate::cli::error::{CliError, CliErrorKind};
 use crate::cli::CliContext;
 use colored::Colorize;
 use scirs2_core::ndarray_ext::{Array1, Array2};
+use serde::Deserialize;
 use std::collections::HashMap;
+
+/// A single training record for the query performance predictor.
+///
+/// Training data files (JSON arrays) must contain objects with these fields:
+/// - `query`: the SPARQL query string
+/// - `latency_ms`: actual measured execution time in milliseconds
+#[derive(Debug, Clone, Deserialize)]
+pub struct TrainingRecord {
+    /// SPARQL query string
+    pub query: String,
+    /// Measured execution latency in milliseconds
+    pub latency_ms: f64,
+}
 
 /// Query features extracted for ML prediction
 #[derive(Debug, Clone)]
@@ -333,6 +348,23 @@ impl QueryPerformancePredictor {
         Ok(())
     }
 
+    /// Ingest a batch of training records and re-train the model.
+    ///
+    /// Each record's SPARQL query is run through feature extraction, then the
+    /// model is retrained on the combined dataset (existing + new records).
+    ///
+    /// Returns an error if training fails after ingestion.
+    pub fn ingest_training_records(
+        &mut self,
+        records: Vec<TrainingRecord>,
+    ) -> Result<(), CliError> {
+        for record in records {
+            let features = QueryFeatures::extract_from_query(&record.query);
+            self.add_training_data(features, record.latency_ms);
+        }
+        self.train().map_err(CliError::from)
+    }
+
     /// Predict query performance with confidence intervals
     pub fn predict(&mut self, query: &str) -> Result<PerformancePrediction, String> {
         // Check if model is trained
@@ -615,6 +647,42 @@ fn calculate_correlation(x: &Array1<f64>, y: &Array1<f64>) -> f64 {
     numerator / ((x_var * y_var).sqrt())
 }
 
+/// Load training records from a JSON file.
+///
+/// The file must contain a JSON array of objects, each with `query` (string)
+/// and `latency_ms` (number) fields.
+fn load_training_json(path: &std::path::Path) -> Result<Vec<TrainingRecord>, CliError> {
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        CliError::new(CliErrorKind::IoError(e))
+            .with_context(format!("Failed to read training file: {}", path.display()))
+            .with_suggestion("Ensure the file exists and is readable")
+    })?;
+    serde_json::from_str::<Vec<TrainingRecord>>(&content).map_err(|e| {
+        CliError::serialization_error(e.to_string())
+            .with_context(format!("Failed to parse JSON training file: {}", path.display()))
+            .with_suggestion(
+                "Ensure the file is a JSON array of {\"query\": \"...\", \"latency_ms\": ...} objects",
+            )
+    })
+}
+
+/// Dispatch training-data loading by file extension.
+///
+/// Supported extensions: `.json`
+/// Returns an error for any other extension.
+fn dispatch_training_load(path: &std::path::Path) -> Result<Vec<TrainingRecord>, CliError> {
+    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    match extension {
+        "json" => load_training_json(path),
+        other => Err(CliError::unknown_format(format!(
+            "Unsupported training data format: '{}'. Expected .json",
+            other
+        ))
+        .with_suggestion("Provide a JSON file (*.json) containing an array of training records")
+        .with_suggestion("Each record must have: \"query\" (string) and \"latency_ms\" (number)")),
+    }
+}
+
 /// Command handler for query performance prediction
 pub async fn predict_query_performance_cmd(
     query: String,
@@ -628,8 +696,11 @@ pub async fn predict_query_performance_cmd(
     // Load training data if provided
     if let Some(train_file) = train_data {
         ctx.info(&format!("Loading training data from: {}", train_file));
-        // TODO: Implement training data loading from file
-        ctx.warn("Training data loading not yet implemented - using heuristic model");
+        let path = std::path::Path::new(&train_file);
+        let records = dispatch_training_load(path)?;
+        let count = records.len();
+        predictor.ingest_training_records(records)?;
+        ctx.info(&format!("Loaded {} training records into predictor", count));
     }
 
     // Make prediction
@@ -790,5 +861,53 @@ mod tests {
 
         // Confidence should be between 0 and 1
         assert!(prediction.confidence >= 0.0 && prediction.confidence <= 1.0);
+    }
+
+    #[test]
+    fn test_load_training_json() {
+        let mut tmp = std::env::temp_dir();
+        tmp.push("oxirs_test_training.json");
+        let json = r#"[{"query":"SELECT * WHERE { ?s ?p ?o }","latency_ms":42.0}]"#;
+        std::fs::write(&tmp, json).expect("write tmp");
+        let records = load_training_json(&tmp).expect("json load");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].latency_ms, 42.0);
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_load_training_unsupported_extension_errors() {
+        let mut tmp = std::env::temp_dir();
+        tmp.push("oxirs_test_training.txt");
+        std::fs::write(&tmp, "data").expect("write tmp");
+        let result = dispatch_training_load(&tmp);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let msg = err.user_message();
+        assert!(
+            msg.contains("Unsupported") || msg.contains("Unknown format"),
+            "unexpected error message: {msg}"
+        );
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_ingest_training_records_trains_model() {
+        let mut predictor = QueryPerformancePredictor::new();
+        // Build enough records that train() won't warn but will succeed
+        let records: Vec<TrainingRecord> = (0..15)
+            .map(|i| TrainingRecord {
+                query: format!("SELECT ?s WHERE {{ ?s ?p {} }}", i),
+                latency_ms: 10.0 + i as f64 * 5.0,
+            })
+            .collect();
+        let result = predictor.ingest_training_records(records);
+        assert!(
+            result.is_ok(),
+            "ingest_training_records should succeed: {:?}",
+            result.err()
+        );
+        // Model should now be trained (coefficients present)
+        assert!(predictor.coefficients.is_some());
     }
 }

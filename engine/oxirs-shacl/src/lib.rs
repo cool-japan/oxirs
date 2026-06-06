@@ -1,9 +1,9 @@
 //! # OxiRS SHACL - RDF Validation Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl/badge.svg)](https://docs.rs/oxirs-shacl)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SHACL (Shapes Constraint Language) validation engine for RDF data.
@@ -106,6 +106,11 @@ pub mod integration;
 pub mod iri_resolver;
 #[cfg(feature = "lsp")]
 pub mod lsp;
+pub mod node_expr_builtins;
+pub mod node_expr_evaluator;
+#[cfg(test)]
+mod node_expr_tests;
+pub mod node_expr_types;
 pub mod node_expressions;
 pub mod optimization;
 pub mod paths;

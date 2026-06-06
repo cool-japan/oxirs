@@ -521,7 +521,7 @@ GET /$/server
 **Response**:
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.3.1",
   "build_date": "2026-01-07",
   "uptime_seconds": 86400,
   "rust_version": "1.75.0"

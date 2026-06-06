@@ -48,6 +48,12 @@ reqwest.workspace = true
 # Graph algorithms
 petgraph.workspace = true
 
+# Hashing (for FeedbackSession TripleId)
+seahash.workspace = true
+
+# Parallel computation
+rayon.workspace = true
+
 # Optional: streaming support
 oxirs-stream = { workspace = true, optional = true }
 

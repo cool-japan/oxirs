@@ -100,7 +100,7 @@ impl ConnectionPool {
     }
 
     /// Return a connection to the pool
-    pub(super) fn return_connection(&self, store: Arc<StarStore>) {
+    pub(crate) fn return_connection(&self, store: Arc<StarStore>) {
         let mut available = self
             .available_connections
             .lock()

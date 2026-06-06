@@ -2,8 +2,8 @@
 
 **OxiRS IDS Connector - Production Operations Guide**
 
-Version: 0.1.0
-Last Updated: 2026-01-06
+Version: 0.3.1
+Last Updated: 2026-06-06
 Status: Production Ready
 
 ## Table of Contents
@@ -95,7 +95,7 @@ spec:
     spec:
       containers:
       - name: oxirs-fuseki
-        image: oxirs-fuseki:ids-0.1.0
+        image: oxirs-fuseki:ids-0.3.1
         ports:
         - containerPort: 3030
           name: http
@@ -281,7 +281,7 @@ prometheus_port = 9090
 enabled = true
 endpoint = "http://otel-collector:4317"
 service_name = "oxirs-fuseki-ids-prod"
-service_version = "0.1.0"
+service_version = "0.3.1"
 
 [logging]
 level = "info"

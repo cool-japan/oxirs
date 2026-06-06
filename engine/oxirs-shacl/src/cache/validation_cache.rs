@@ -60,9 +60,14 @@ impl CachedValidationResult {
         self.accessed_triples.insert(triple.into());
     }
 
-    /// Returns `true` if this entry has exceeded its TTL.
+    /// Returns `true` once this entry has reached or exceeded its TTL.
+    ///
+    /// Uses `>=` so an entry created with a zero TTL is immediately stale
+    /// regardless of monotonic-clock granularity: an `elapsed()` of exactly
+    /// zero (possible right after creation on a coarse/fast clock) must still
+    /// count as expired, matching [`remaining_ttl`](Self::remaining_ttl).
     pub fn is_stale(&self) -> bool {
-        self.cached_at.elapsed() > self.ttl
+        self.cached_at.elapsed() >= self.ttl
     }
 
     /// Remaining lifetime of this entry, or `Duration::ZERO` if already stale.

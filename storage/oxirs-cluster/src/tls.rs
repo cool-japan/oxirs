@@ -4,7 +4,6 @@
 //! including certificate management, key rotation, and encryption at rest.
 
 use anyhow::{anyhow, Result};
-use ring::rand::SecureRandom;
 use rustls::{ClientConfig, ServerConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -178,6 +177,11 @@ impl TlsManager {
             return Ok(());
         }
 
+        // Install the Pure Rust crypto provider as the process default before any
+        // rustls `ClientConfig`/`ServerConfig` is built (idempotent — a prior
+        // install by another component is fine).
+        let _ = rustls::crypto::CryptoProvider::install_default((*oxitls::pure_provider()).clone());
+
         // Create certificate directory if it doesn't exist
         tokio::fs::create_dir_all(&self.config.cert_dir).await?;
 
@@ -221,16 +225,17 @@ impl TlsManager {
 
     /// Generate a new certificate for the node
     pub async fn generate_certificate(&self, node_id: OxirsNodeId) -> Result<(Vec<u8>, Vec<u8>)> {
-        let subject_alt_names = vec![
-            format!("node-{node_id}"),
-            "localhost".to_string(),
-            "127.0.0.1".to_string(),
-        ];
+        let node_san = format!("node-{node_id}");
+        let subject_alt_names: [&str; 3] = [node_san.as_str(), "localhost", "127.0.0.1"];
 
-        let certified_key = rcgen::generate_simple_self_signed(subject_alt_names)?;
-        let cert_der = certified_key.cert.der().to_vec();
-        // rcgen API change: key_pair → signing_key (available fields: cert, signing_key)
-        let key_der = certified_key.signing_key.serialize_der();
+        // Pure Rust self-signed certificate generation via oxitls-rcgen (Ed25519:
+        // fast, no slow RSA keygen, no `ring`). Returns PKCS#8-wrapped key DER.
+        let certified_key = oxitls_rcgen::generate_self_signed_ed25519(&subject_alt_names)
+            .map_err(|e| {
+                anyhow!("failed to generate self-signed certificate for {node_san}: {e}")
+            })?;
+        let cert_der = certified_key.cert_der.clone();
+        let key_der = certified_key.pkcs8_der.clone();
 
         Ok((cert_der, key_der))
     }
@@ -534,15 +539,33 @@ pub struct EncryptionManager {
     nonce_counter: Arc<RwLock<u64>>,
 }
 
+/// Generate a cryptographically random 32-byte AES-256 key.
+///
+/// Uses the OxiCrypto CSPRNG ([`oxicrypto_rand::random_nonce`]). If the system
+/// entropy source were to fail (astronomically rare), this falls back to a
+/// `scirs2_core` RNG seeded from high-resolution time so that key generation
+/// never panics and never yields an all-zero key.
+fn random_key_32() -> [u8; 32] {
+    match oxicrypto_rand::random_nonce::<32>() {
+        Ok(key) => key,
+        Err(_) => {
+            use scirs2_core::random::{Random, Rng};
+            let seed = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos() as u64);
+            let mut key = [0u8; 32];
+            let mut rng = Random::seed(seed);
+            rng.fill_bytes(&mut key);
+            key
+        }
+    }
+}
+
 impl EncryptionManager {
     /// Create new encryption manager with random key
     pub fn new() -> Self {
-        let rng = ring::rand::SystemRandom::new();
-        let mut key = [0u8; 32];
-        rng.fill(&mut key).expect("random fill should succeed");
-
         Self {
-            key,
+            key: random_key_32(),
             nonce_counter: Arc::new(RwLock::new(0)),
         }
     }
@@ -605,8 +628,7 @@ impl EncryptionManager {
 
     /// Generate new encryption key
     pub fn rotate_key(&mut self) {
-        let rng = ring::rand::SystemRandom::new();
-        rng.fill(&mut self.key).expect("random fill should succeed");
+        self.key = random_key_32();
     }
 
     /// Export key for backup (use with caution)
@@ -628,8 +650,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_tls_manager_initialization() {
-        // Install default crypto provider for rustls
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        // Install the Pure Rust crypto provider for rustls (idempotent).
+        let _ = rustls::crypto::CryptoProvider::install_default((*oxitls::pure_provider()).clone());
 
         let temp_dir = TempDir::new().unwrap();
         let config = TlsConfig {
@@ -655,8 +677,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_certificate_generation() {
-        // Install default crypto provider for rustls
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        // Install the Pure Rust crypto provider for rustls (idempotent).
+        let _ = rustls::crypto::CryptoProvider::install_default((*oxitls::pure_provider()).clone());
 
         let temp_dir = TempDir::new().unwrap();
         let config = TlsConfig {
@@ -674,8 +696,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_encryption_manager() {
-        // Install default crypto provider for rustls
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        // Install the Pure Rust crypto provider for rustls (idempotent).
+        let _ = rustls::crypto::CryptoProvider::install_default((*oxitls::pure_provider()).clone());
 
         let encryption_manager = EncryptionManager::new();
         let data = b"Hello, World!";
@@ -689,8 +711,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_certificate_info() {
-        // Install default crypto provider for rustls
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        // Install the Pure Rust crypto provider for rustls (idempotent).
+        let _ = rustls::crypto::CryptoProvider::install_default((*oxitls::pure_provider()).clone());
 
         let cert_info = CertificateInfo {
             subject: "test".to_string(),

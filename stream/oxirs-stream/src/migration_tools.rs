@@ -861,22 +861,63 @@ where
         F: Fn(V) -> V2 + Send + Sync + Clone + 'static,
         V2: Clone + Send + Sync + 'static,
     {
-        // Implementation would go here
-        todo!()
+        KStreamCompat {
+            inner: self.inner.map(move |(k, v)| (k, f(v))),
+        }
     }
 
     pub fn filter<F>(self, predicate: F) -> Self
     where
         F: Fn(&K, &V) -> bool + Send + Sync + Clone + 'static,
     {
-        // Implementation would go here
-        todo!()
+        Self {
+            inner: self.inner.filter(move |(k, v)| predicate(k, v)),
+        }
     }
 }
 
-/// KTable-like wrapper
+/// KTable-like wrapper for changelog streams and materialized views
 pub struct KTableCompat<K, V> {
     store: StateStore<K, V>,
+}
+
+impl<K, V> KTableCompat<K, V>
+where
+    K: Clone + Send + Sync + 'static,
+    V: Clone + Send + Sync + 'static,
+{
+    pub fn new(store: StateStore<K, V>) -> Self {
+        Self { store }
+    }
+
+    pub fn map_values<F, V2>(self, f: F) -> KTableCompat<K, V2>
+    where
+        F: Fn(V) -> V2 + Send + Sync + Clone + 'static,
+        V2: Clone + Send + Sync + 'static,
+    {
+        KTableCompat {
+            store: self.store.map_values(f),
+        }
+    }
+
+    pub fn filter<F>(self, predicate: F) -> Self
+    where
+        F: Fn(&K, &V) -> bool + Send + Sync + Clone + 'static,
+    {
+        Self {
+            store: self.store.filter(predicate),
+        }
+    }
+
+    pub fn group_by<F, K2>(self, key_selector: F) -> KTableCompat<K2, Vec<V>>
+    where
+        K2: Clone + Send + Sync + 'static,
+        F: Fn(&K, &V) -> K2 + Send + Sync + Clone + 'static,
+    {
+        KTableCompat {
+            store: self.store.group_by(key_selector),
+        }
+    }
 }
 "#
             .to_string(),
@@ -902,8 +943,9 @@ where
         K: Clone + Send + Sync + 'static,
         F: Fn(&T) -> K + Send + Sync + Clone + 'static,
     {
-        // Implementation would go here
-        todo!()
+        KeyedStreamCompat {
+            inner: self.inner.key_by(key_selector),
+        }
     }
 }
 
@@ -1010,6 +1052,22 @@ impl QuickStart {
 mod tests {
     use super::*;
 
+    /// Collision-safe temp "source" path for migration tests (no FS access).
+    fn mig_src() -> String {
+        std::env::temp_dir()
+            .join(format!("oxirs_mig_src_{}", std::process::id()))
+            .display()
+            .to_string()
+    }
+
+    /// Collision-safe temp "output" path for migration tests (no FS access).
+    fn mig_out() -> String {
+        std::env::temp_dir()
+            .join(format!("oxirs_mig_out_{}", std::process::id()))
+            .display()
+            .to_string()
+    }
+
     #[tokio::test]
     async fn test_migration_tool_creation() {
         let config = MigrationConfig::default();
@@ -1022,7 +1080,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_kafka_streams_mappings() {
-        let mut tool = QuickStart::from_kafka_streams("/tmp/source", "/tmp/output");
+        let mut tool = QuickStart::from_kafka_streams(mig_src().as_str(), mig_out().as_str());
         tool.load_default_mappings().await;
 
         let concept_mappings = tool.get_concept_mappings().await;
@@ -1032,7 +1090,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_flink_mappings() {
-        let mut tool = QuickStart::from_flink("/tmp/source", "/tmp/output");
+        let mut tool = QuickStart::from_flink(mig_src().as_str(), mig_out().as_str());
         tool.load_default_mappings().await; // Load mappings
 
         let concept_mappings = tool.get_concept_mappings().await;
@@ -1064,7 +1122,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_guide() {
-        let tool = QuickStart::from_kafka_streams("/tmp/source", "/tmp/output");
+        let tool = QuickStart::from_kafka_streams(mig_src().as_str(), mig_out().as_str());
 
         let guide = tool.generate_guide().await;
         assert!(guide.contains("Migration Guide"));
@@ -1074,8 +1132,9 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_empty_directory() {
         let config = MigrationConfig {
-            source_dir: PathBuf::from("/tmp/nonexistent"),
-            output_dir: PathBuf::from("/tmp/output"),
+            source_dir: std::env::temp_dir()
+                .join(format!("oxirs_mig_nonexistent_{}", std::process::id())),
+            output_dir: std::env::temp_dir().join(format!("oxirs_mig_out_{}", std::process::id())),
             ..Default::default()
         };
 
@@ -1088,7 +1147,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_api_mappings() {
-        let mut tool = QuickStart::from_kafka_streams("/tmp/source", "/tmp/output");
+        let mut tool = QuickStart::from_kafka_streams(mig_src().as_str(), mig_out().as_str());
         tool.load_default_mappings().await; // Load mappings
 
         let api_mappings = tool.get_api_mappings().await;
@@ -1108,7 +1167,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_spark_mappings() {
-        let mut tool = QuickStart::from_spark("/tmp/source", "/tmp/output");
+        let mut tool = QuickStart::from_spark(mig_src().as_str(), mig_out().as_str());
         tool.load_default_mappings().await;
 
         let mappings = tool.get_concept_mappings().await;
@@ -1123,5 +1182,65 @@ mod tests {
 
         let stats = tool.get_stats().await;
         assert_eq!(stats.total_migrations, 0);
+    }
+
+    #[tokio::test]
+    async fn test_kafka_wrapper_has_no_todo_stubs() {
+        let tool = MigrationTool::new(MigrationConfig {
+            source_platform: SourcePlatform::KafkaStreams,
+            ..Default::default()
+        });
+        let wrapper = tool.generate_compatibility_wrapper().await;
+        assert!(
+            !wrapper.contains("todo!()"),
+            "Kafka Streams compatibility wrapper must not contain todo!() stubs; \
+             found unimplemented body in generated template"
+        );
+        assert!(
+            wrapper.contains("KStreamCompat"),
+            "wrapper must include KStreamCompat"
+        );
+        assert!(
+            wrapper.contains("KTableCompat"),
+            "wrapper must include KTableCompat"
+        );
+        assert!(
+            wrapper.contains("map_values"),
+            "wrapper must include map_values method"
+        );
+        assert!(
+            wrapper.contains("filter"),
+            "wrapper must include filter method"
+        );
+        assert!(
+            wrapper.contains("group_by"),
+            "wrapper must include group_by method"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_flink_wrapper_has_no_todo_stubs() {
+        let tool = MigrationTool::new(MigrationConfig {
+            source_platform: SourcePlatform::Flink,
+            ..Default::default()
+        });
+        let wrapper = tool.generate_compatibility_wrapper().await;
+        assert!(
+            !wrapper.contains("todo!()"),
+            "Flink compatibility wrapper must not contain todo!() stubs; \
+             found unimplemented body in generated template"
+        );
+        assert!(
+            wrapper.contains("DataStreamCompat"),
+            "wrapper must include DataStreamCompat"
+        );
+        assert!(
+            wrapper.contains("key_by"),
+            "wrapper must include key_by method"
+        );
+        assert!(
+            wrapper.contains("KeyedStreamCompat"),
+            "wrapper must include KeyedStreamCompat"
+        );
     }
 }

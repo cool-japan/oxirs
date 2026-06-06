@@ -611,15 +611,10 @@ impl DistributedCache {
             })?;
 
         if self.config.compression && serialized.len() > 1024 {
-            // Compress large values using gzip
-            let mut encoder =
-                flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
-            use std::io::Write;
-            encoder.write_all(&serialized).map_err(|e| {
+            // Compress large values using gzip (RFC 1952) at the "fast" level (1)
+            // via Pure-Rust oxiarc-deflate.
+            let compressed = oxiarc_deflate::gzip_compress(&serialized, 1).map_err(|e| {
                 DistributedCacheError::Compression(format!("Compression failed: {}", e))
-            })?;
-            let compressed = encoder.finish().map_err(|e| {
-                DistributedCacheError::Compression(format!("Compression finish failed: {}", e))
             })?;
 
             // Update compression ratio metric
@@ -641,14 +636,10 @@ impl DistributedCache {
 
     fn deserialize_value(&self, data: &[u8]) -> Result<CacheValue> {
         let decompressed = if self.config.compression && data.len() > 1024 {
-            // Try to decompress
-            use std::io::Read;
-            let mut decoder = flate2::read::GzDecoder::new(data);
-            let mut decompressed = Vec::new();
-            decoder.read_to_end(&mut decompressed).map_err(|e| {
+            // Try to decompress (gzip / RFC 1952) via Pure-Rust oxiarc-deflate.
+            oxiarc_deflate::gzip_decompress(data).map_err(|e| {
                 DistributedCacheError::Decompression(format!("Decompression failed: {}", e))
-            })?;
-            decompressed
+            })?
         } else {
             data.to_vec()
         };

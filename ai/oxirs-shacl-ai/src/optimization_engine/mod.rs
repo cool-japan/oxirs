@@ -39,7 +39,7 @@ pub use types::*;
 /// Advanced optimization engine for shape performance
 #[derive(Debug)]
 pub struct AdvancedOptimizationEngine {
-    config: OptimizationConfig,
+    pub config: OptimizationConfig,
     cache_manager: CacheManager,
     parallel_executor: ParallelValidationExecutor,
     constraint_optimizer: ConstraintOptimizer,
@@ -934,6 +934,129 @@ impl AdvancedOptimizationEngine {
         }
 
         Ok(total_complexity / constraints.len() as f64)
+    }
+
+    /// Enable parallel validation for a shape, returning a `ParallelValidationConfig`.
+    pub async fn enable_parallel_validation(
+        &mut self,
+        shape: &crate::shape::Shape,
+    ) -> Result<ParallelValidationConfig> {
+        let constraints = shape.property_constraints();
+        let constraint_groups = self.analyze_constraint_dependencies(constraints).await?;
+        let max_parallel = constraint_groups
+            .iter()
+            .filter(|g| g.parallel_safe)
+            .count()
+            .max(1);
+
+        Ok(ParallelValidationConfig {
+            enabled: true,
+            max_parallel_constraints: max_parallel,
+            constraint_groups,
+            execution_strategy: ParallelExecutionStrategy::GroupBased,
+            estimated_speedup: 1.0 + (max_parallel as f64 - 1.0) * 0.3,
+        })
+    }
+
+    /// Configure caching for a shape, returning a `CacheConfiguration`.
+    pub async fn configure_caching(
+        &mut self,
+        shape: &crate::shape::Shape,
+    ) -> Result<CacheConfiguration> {
+        let constraints = shape.property_constraints();
+        let mut cacheable = Vec::new();
+
+        for (index, constraint) in constraints.iter().enumerate() {
+            // Patterns and class constraints benefit most from caching
+            if constraint.pattern.is_some() || constraint.class.is_some() {
+                let estimated_hit_rate = if constraint.pattern.is_some() {
+                    0.85
+                } else {
+                    0.70
+                };
+                cacheable.push(CacheableConstraint {
+                    constraint_index: index,
+                    constraint_type: constraint.constraint_type(),
+                    cache_key_strategy: CacheKeyStrategy::PropertyBased,
+                    estimated_cache_hit_rate: estimated_hit_rate,
+                });
+            }
+        }
+
+        let estimated_hit_rate = if cacheable.is_empty() {
+            0.0
+        } else {
+            cacheable
+                .iter()
+                .map(|c| c.estimated_cache_hit_rate)
+                .sum::<f64>()
+                / cacheable.len() as f64
+        };
+
+        Ok(CacheConfiguration {
+            enabled: true,
+            cacheable_constraints: cacheable,
+            cache_strategies: Vec::new(),
+            estimated_hit_rate,
+            memory_limit_mb: 100.0,
+        })
+    }
+
+    /// Calculate the complexity score of a single constraint (synchronous public wrapper).
+    pub fn calculate_constraint_complexity(
+        &self,
+        constraint: &crate::shape::PropertyConstraint,
+    ) -> f64 {
+        let mut score = 1.0_f64;
+
+        if constraint.pattern.is_some() {
+            score += 2.5; // Pattern regex is expensive
+        }
+        if constraint.node.is_some() {
+            score += 3.0; // Recursive shape validation
+        }
+        if !constraint.in_values.is_empty() {
+            score += 1.5; // List operations
+        }
+        if constraint.class.is_some() {
+            score += 2.0; // Type checking
+        }
+        if constraint.datatype.is_some() {
+            // Simple datatype check — baseline cost only
+            // score stays near base; subtract a fraction for efficient checks
+            score -= 0.2;
+        }
+
+        // Normalize: datatype-only constraints should return 0.8, pattern-only 3.5
+        score.max(0.1)
+    }
+
+    /// Calculate parallelization potential (0.0 – 1.0) for a slice of constraints.
+    ///
+    /// Returns `0.0` for ≤1 constraint.  Otherwise, counts pairs that operate on
+    /// different property paths (and thus can potentially run concurrently) relative
+    /// to the total number of pairs, capped at 1.0.
+    pub fn calculate_parallelization_potential(
+        &self,
+        constraints: &[crate::shape::PropertyConstraint],
+    ) -> f64 {
+        if constraints.len() <= 1 {
+            return 0.0;
+        }
+
+        let n = constraints.len();
+        let total_pairs = n * (n - 1) / 2;
+        let mut parallel_pairs = 0usize;
+
+        for i in 0..n {
+            for j in (i + 1)..n {
+                if constraints[i].path != constraints[j].path {
+                    parallel_pairs += 1;
+                }
+            }
+        }
+
+        (parallel_pairs as f64 / total_pairs as f64).min(1.0)
     }
 
     /// Get current optimization statistics

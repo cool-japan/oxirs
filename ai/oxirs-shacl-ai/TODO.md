@@ -1,6 +1,6 @@
 # OxiRS SHACL-AI - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
@@ -97,8 +97,8 @@
 - ✅ 1589 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive ML certification suite (completed 2026-05-02)
   - **Design:** New module `ai/oxirs-shacl-ai/src/certification/` with three files:
     - `mod.rs` — public surface re-exports
@@ -239,6 +239,6 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ## Proposed follow-ups
 
-- [~] Long-term support guarantees — RFC published at `docs/policies/lts.md`.
-- [~] Enterprise features — decomposed in `docs/policies/enterprise.md`.
+- [x] Long-term support guarantees — RFC published at `docs/policies/lts.md`. (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features — decomposed in `docs/policies/enterprise.md`. (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive ML certification suite — Resolved: ML prediction accuracy vs. deterministic SHACL engine (completed 2026-05-02). See v0.3.0 item above for full design.

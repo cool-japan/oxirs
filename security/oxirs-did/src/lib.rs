@@ -1,8 +1,8 @@
 //! # OxiRS DID
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //!
 //! W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) implementation
 //! for OxiRS, enabling signed RDF graphs and trust layer for data sovereignty.
@@ -87,6 +87,11 @@ pub mod key_manager;
 
 // v1.1.0 round 11: Linked Data Proof purpose validation (authentication, assertion, key agreement, capability)
 pub mod proof_purpose;
+pub(crate) mod proof_purpose_registry;
+#[cfg(test)]
+mod proof_purpose_tests;
+pub mod proof_purpose_types;
+pub(crate) mod proof_purpose_verifier;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

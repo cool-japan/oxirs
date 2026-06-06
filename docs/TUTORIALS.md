@@ -1,7 +1,7 @@
 # OxiRS Tutorials
 
-**Version**: v0.1.0
-**Date**: January 7, 2026
+**Version**: v0.3.1
+**Date**: June 6, 2026
 **Audience**: Developers, Data Engineers, Semantic Web Practitioners
 
 ---
@@ -39,14 +39,14 @@ docker --version
 #### Option A: Install Pre-built Binary (Fastest)
 ```bash
 # Download latest release
-curl -L https://github.com/cool-japan/oxirs/releases/download/v0.1.0/oxirs-linux-x86_64.tar.gz | tar xz
+curl -L https://github.com/cool-japan/oxirs/releases/download/v0.3.1/oxirs-linux-x86_64.tar.gz | tar xz
 
 # Move to PATH
 sudo mv oxirs-fuseki /usr/local/bin/
 
 # Verify installation
 oxirs-fuseki --version
-# oxirs-fuseki 0.1.0
+# oxirs-fuseki 0.3.1
 ```
 
 #### Option B: Build from Source
@@ -65,13 +65,13 @@ cargo build --release -p oxirs-fuseki
 #### Option C: Docker (Recommended for Production)
 ```bash
 # Pull image
-docker pull ghcr.io/cool-japan/oxirs-fuseki:v0.1.0
+docker pull ghcr.io/cool-japan/oxirs-fuseki:v0.3.1
 
 # Run container
 docker run -d \
   -p 3030:3030 \
   --name oxirs \
-  ghcr.io/cool-japan/oxirs-fuseki:v0.1.0
+  ghcr.io/cool-japan/oxirs-fuseki:v0.3.1
 
 # Verify
 curl http://localhost:3030/$/ping
@@ -103,7 +103,7 @@ EOF
 oxirs-fuseki --config oxirs.toml
 
 # Server starts
-# INFO  oxirs_fuseki: Starting OxiRS Fuseki Server v0.1.0
+# INFO  oxirs_fuseki: Starting OxiRS Fuseki Server v0.3.1
 # INFO  oxirs_fuseki: Listening on http://0.0.0.0:3030
 # INFO  oxirs_fuseki: Dataset 'my_dataset' ready
 ```
@@ -840,7 +840,7 @@ CMD ["oxirs-fuseki", "--config", "/etc/oxirs/oxirs.toml"]
 
 ```bash
 # Build image
-docker build -t oxirs-fuseki:v0.1.0 .
+docker build -t oxirs-fuseki:v0.3.1 .
 
 # Run production container
 docker run -d \
@@ -851,7 +851,7 @@ docker run -d \
   --restart unless-stopped \
   --memory 16g \
   --cpus 8 \
-  oxirs-fuseki:v0.1.0
+  oxirs-fuseki:v0.3.1
 ```
 
 ### Kubernetes Deployment
@@ -1282,6 +1282,6 @@ processor.stream_updates(|update| {
 
 ---
 
-*Tutorials - January 7, 2026*
-*Version: v0.1.0*
+*Tutorials - June 6, 2026*
+*Version: v0.3.1*
 *Happy SPARQL querying! 🚀*

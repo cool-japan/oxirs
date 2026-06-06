@@ -56,7 +56,7 @@ base64.workspace = true
 url = { workspace = true, features = ["serde"] }
 tokio-stream.workspace = true
 libm = "0.2"  # For erf function
-flate2 = { workspace = true }
+oxiarc-deflate = { workspace = true }
 oxiarc-zstd = { workspace = true }
 oxiarc-lz4 = { workspace = true }
 sha2.workspace = true

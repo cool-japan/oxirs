@@ -251,26 +251,25 @@ impl SecretManager {
     }
 
     /// Derive encryption key from password
+    ///
+    /// Uses PBKDF2-HMAC-SHA256 with 100,000 iterations and a fixed salt. These
+    /// parameters (algorithm, iteration count, salt, and 32-byte output length)
+    /// are kept identical to the previous `ring::pbkdf2` implementation so that
+    /// keys derived before the OxiCrypto migration still decrypt existing
+    /// on-disk secrets.
     fn derive_key(&self, password: &str) -> CliResult<Vec<u8>> {
-        use ring::pbkdf2;
-
         let salt = b"oxirs-secret-salt"; // In production, use a random salt stored separately
         let mut key = vec![0u8; 32];
 
-        pbkdf2::derive(
-            pbkdf2::PBKDF2_HMAC_SHA256,
-            std::num::NonZeroU32::new(100_000).expect("100_000 is non-zero"),
-            salt,
-            password.as_bytes(),
-            &mut key,
-        );
+        oxicrypto_kdf::pbkdf2_sha256(password.as_bytes(), salt, 100_000, &mut key)
+            .map_err(|e| CliError::config_error(format!("Key derivation failed: {e}")))?;
 
         Ok(key)
     }
 
     /// Encrypt and store a secret
     fn store_encrypted_secret(&self, name: &str, secret: &SecretValue) -> CliResult<()> {
-        use ring::aead;
+        use oxicrypto_core::Aead;
 
         let key = self
             .key
@@ -281,15 +280,14 @@ impl SecretManager {
         let plaintext = serde_json::to_vec(secret)
             .map_err(|e| CliError::config_error(format!("Cannot serialize secret: {e}")))?;
 
-        // Encrypt using AES-GCM
-        let key = aead::UnboundKey::new(&aead::AES_256_GCM, key)
-            .map_err(|_| CliError::config_error("Invalid encryption key"))?;
-        let key = aead::LessSafeKey::new(key);
-
-        let nonce = aead::Nonce::assume_unique_for_key([0u8; 12]); // In production, use random nonce
-        let mut ciphertext = plaintext.clone();
-
-        key.seal_in_place_append_tag(nonce, aead::Aad::empty(), &mut ciphertext)
+        // Encrypt using AES-256-GCM (OxiCrypto, Pure Rust).
+        //
+        // On-disk layout is unchanged from the previous `ring` implementation:
+        // `seal_to_vec` returns `ciphertext || tag` (16-byte GCM tag appended),
+        // a fixed all-zero 12-byte nonce is used, and the AAD is empty.
+        let nonce = [0u8; 12]; // In production, use random nonce
+        let ciphertext = oxicrypto_aead::Aes256Gcm
+            .seal_to_vec(key, &nonce, &[], &plaintext)
             .map_err(|_| CliError::config_error("Encryption failed"))?;
 
         // Write to file
@@ -314,7 +312,7 @@ impl SecretManager {
 
     /// Load and decrypt a secret
     fn load_encrypted_secret(&self, name: &str) -> CliResult<SecretValue> {
-        use ring::aead;
+        use oxicrypto_core::Aead;
 
         let key = self
             .key
@@ -330,19 +328,18 @@ impl SecretManager {
         file.read_to_end(&mut ciphertext)
             .map_err(|e| CliError::config_error(format!("Cannot read secret: {e}")))?;
 
-        // Decrypt using AES-GCM
-        let key = aead::UnboundKey::new(&aead::AES_256_GCM, key)
-            .map_err(|_| CliError::config_error("Invalid decryption key"))?;
-        let key = aead::LessSafeKey::new(key);
-
-        let nonce = aead::Nonce::assume_unique_for_key([0u8; 12]);
-
-        let plaintext = key
-            .open_in_place(nonce, aead::Aad::empty(), &mut ciphertext)
+        // Decrypt using AES-256-GCM (OxiCrypto, Pure Rust).
+        //
+        // The file holds `ciphertext || tag`; `open_to_vec` verifies the
+        // appended 16-byte GCM tag and returns the plaintext. The fixed all-zero
+        // 12-byte nonce and empty AAD mirror `store_encrypted_secret`.
+        let nonce = [0u8; 12];
+        let plaintext = oxicrypto_aead::Aes256Gcm
+            .open_to_vec(key, &nonce, &[], &ciphertext)
             .map_err(|_| CliError::config_error("Decryption failed - wrong password?"))?;
 
         // Deserialize secret
-        serde_json::from_slice(plaintext)
+        serde_json::from_slice(&plaintext)
             .map_err(|e| CliError::config_error(format!("Cannot deserialize secret: {e}")))
     }
 
@@ -611,6 +608,112 @@ mod tests {
         // List secrets
         let secrets = manager.list_secrets().expect("failed to list secrets");
         assert!(secrets.iter().any(|s| s.name == "test-key"));
+    }
+
+    #[test]
+    fn test_pbkdf2_derive_is_deterministic_and_correct_length() {
+        // The migrated PBKDF2-SHA256 derivation must be stable for a given
+        // password (same salt/iterations) and produce a 32-byte key, matching
+        // the legacy `ring::pbkdf2` parameters so old secrets still decrypt.
+        let dir = tempdir().expect("failed to create temp dir");
+        let manager = SecretManager::with_dir(dir.path().to_path_buf())
+            .expect("failed to create SecretManager");
+
+        let key_a = manager
+            .derive_key("correct horse battery staple")
+            .expect("derive_key failed");
+        let key_b = manager
+            .derive_key("correct horse battery staple")
+            .expect("derive_key failed");
+        let key_other = manager
+            .derive_key("a different password")
+            .expect("derive_key failed");
+
+        assert_eq!(key_a.len(), 32, "derived key must be 32 bytes for AES-256");
+        assert_eq!(key_a, key_b, "PBKDF2 derivation must be deterministic");
+        assert_ne!(
+            key_a, key_other,
+            "different passwords must derive different keys"
+        );
+
+        // Cross-check against the leaf crate directly with identical parameters.
+        let mut expected = vec![0u8; 32];
+        oxicrypto_kdf::pbkdf2_sha256(
+            b"correct horse battery staple",
+            b"oxirs-secret-salt",
+            100_000,
+            &mut expected,
+        )
+        .expect("pbkdf2_sha256 failed");
+        assert_eq!(
+            key_a, expected,
+            "derive_key must match raw pbkdf2_sha256 output"
+        );
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_round_trip_on_disk() {
+        // Prove the migrated AES-256-GCM seal/open paths produce and consume the
+        // same on-disk format (nonce-implicit, ciphertext || 16-byte tag).
+        let dir = tempdir().expect("failed to create temp dir");
+        let mut manager = SecretManager::with_dir(dir.path().to_path_buf())
+            .expect("failed to create SecretManager");
+        manager
+            .unlock("round-trip-password")
+            .expect("unlock failed");
+
+        manager
+            .set_secret(
+                "db-password",
+                "s3cr3t-value-with-unicode-\u{1F600}",
+                Some("integration secret".to_string()),
+            )
+            .expect("set_secret failed");
+
+        // The encrypted file must contain at least the GCM tag (16 bytes) more
+        // than the empty payload and must not contain the plaintext.
+        let secret_path = dir.path().join("db-password.secret");
+        let raw = std::fs::read(&secret_path).expect("failed to read secret file");
+        assert!(
+            raw.len() >= 16,
+            "ciphertext must include the 16-byte GCM tag"
+        );
+        assert!(
+            !raw.windows(7).any(|w| w == b"s3cr3t-"),
+            "plaintext must not appear in the encrypted file"
+        );
+
+        // Drop the in-memory cache to force a real decrypt-from-disk on read.
+        manager.cache.clear();
+        let value = manager
+            .get_secret("db-password")
+            .expect("get_secret failed");
+        assert_eq!(value, "s3cr3t-value-with-unicode-\u{1F600}");
+    }
+
+    #[test]
+    fn test_decrypt_with_wrong_password_fails() {
+        // A secret written under one password must fail to decrypt under
+        // another (GCM tag verification rejects the tampered/derived key).
+        let dir = tempdir().expect("failed to create temp dir");
+
+        {
+            let mut manager = SecretManager::with_dir(dir.path().to_path_buf())
+                .expect("failed to create SecretManager");
+            manager.unlock("first-password").expect("unlock failed");
+            manager
+                .set_secret("token", "abc123", None)
+                .expect("set_secret failed");
+        }
+
+        let mut manager = SecretManager::with_dir(dir.path().to_path_buf())
+            .expect("failed to create SecretManager");
+        manager.unlock("wrong-password").expect("unlock failed");
+        let result = manager.get_secret("token");
+        assert!(
+            result.is_err(),
+            "decryption with the wrong password must fail"
+        );
     }
 
     #[test]

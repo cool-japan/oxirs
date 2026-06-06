@@ -731,17 +731,10 @@ fn compress_data(data: &[u8], algorithm: CompressionAlgorithm) -> StarResult<Vec
         }
 
         CompressionAlgorithm::Gzip => {
-            use flate2::write::GzEncoder;
-            use flate2::Compression;
-
-            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-            encoder.write_all(data).map_err(|e| {
+            // Default compression level is 6 (matches flate2 Compression::default()).
+            oxiarc_deflate::gzip_compress(data, 6).map_err(|e| {
                 StarError::serialization_error(format!("Gzip compression failed: {}", e))
-            })?;
-
-            encoder
-                .finish()
-                .map_err(|e| StarError::serialization_error(format!("Gzip finish failed: {}", e)))
+            })
         }
     }
 }
@@ -765,17 +758,8 @@ fn decompress_data(data: &[u8], algorithm: CompressionAlgorithm) -> StarResult<V
             Ok(decompressed)
         }
 
-        CompressionAlgorithm::Gzip => {
-            use flate2::read::GzDecoder;
-
-            let mut decoder = GzDecoder::new(data);
-            let mut decompressed = Vec::new();
-            decoder.read_to_end(&mut decompressed).map_err(|e| {
-                StarError::resource_error(format!("Gzip decompression failed: {}", e))
-            })?;
-
-            Ok(decompressed)
-        }
+        CompressionAlgorithm::Gzip => oxiarc_deflate::gzip_decompress(data)
+            .map_err(|e| StarError::resource_error(format!("Gzip decompression failed: {}", e))),
     }
 }
 

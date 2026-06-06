@@ -1,10 +1,10 @@
 # OxiRS TTL - RDF Turtle Family Parser & Serializer
 
-[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Tests](https://img.shields.io/badge/tests-1%2C726%20passing-green)](https://github.com/cool-japan/oxirs)
 [![Compliance](https://img.shields.io/badge/W3C-97%25%20compliant-brightgreen)](https://www.w3.org/TR/turtle/)
 
-**Status**: Production Release (v0.2.3) - March 2026
+**Status**: v0.3.1 - Released 2026-06-06
 
 ✨ **Production-Ready**: API-stable with comprehensive testing (1,726 tests), W3C compliance, and performance optimizations.
 
@@ -44,7 +44,7 @@ ex:greeting "مرحبا"@ar--rtl .  # Right-to-left
 Enable with feature flag:
 ```toml
 [dependencies]
-oxirs-ttl = { version = "0.3.0", features = ["rdf-12"] }
+oxirs-ttl = { version = "0.3.1", features = ["rdf-12"] }
 ```
 
 ### Advanced Features
@@ -65,10 +65,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = "0.3.0"
+oxirs-ttl = "0.3.1"
 
 # With all features
-oxirs-ttl = { version = "0.3.0", features = ["async-tokio", "parallel", "rdf-12"] }
+oxirs-ttl = { version = "0.3.1", features = ["async-tokio", "parallel", "rdf-12"] }
 ```
 
 ## Quick Start

@@ -1,9 +1,9 @@
 //! # OxiRS RDF-Star
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! RDF-star and SPARQL-star implementation providing comprehensive support for quoted triples.
@@ -211,6 +211,11 @@ pub mod backup_restore;
 pub mod bloom_filter;
 pub mod cache;
 pub mod cli;
+pub mod cli_commands;
+pub(crate) mod cli_executor;
+pub(crate) mod cli_output;
+#[cfg(test)]
+mod cli_tests;
 pub mod cluster_scaling;
 pub mod compact_annotation_storage;
 pub mod compatibility;
@@ -240,6 +245,13 @@ pub mod model;
 pub mod monitoring;
 pub mod parallel_query;
 pub mod parser;
+pub mod parser_ast;
+#[cfg(test)]
+mod parser_inline_tests;
+pub mod parser_lexer;
+pub mod parser_rdfstar;
+pub mod parser_statements;
+pub mod parser_tests;
 pub mod production;
 pub mod profiling;
 pub mod property_graph_bridge;
@@ -263,6 +275,11 @@ pub mod sparql_star_extended;
 pub mod storage;
 pub mod storage_integration;
 pub mod store;
+pub mod store_core;
+pub mod store_indexing;
+pub mod store_query;
+#[cfg(test)]
+mod store_tests;
 pub mod streaming_query;
 pub mod temporal_versioning;
 pub mod testing_utilities;
@@ -311,6 +328,9 @@ pub mod star_statistics;
 
 /// RDF-star graph merging with conflict resolution (v1.1.0 round 15).
 pub mod graph_merger;
+
+/// RDF-star annotation syntax module: `{| ... |}` shorthand parsing and expansion.
+pub mod annotation_syntax;
 
 // Re-export main types
 pub use enhanced_errors::{

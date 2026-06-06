@@ -3,6 +3,7 @@
 pub mod ed25519;
 pub mod jws;
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -155,11 +156,16 @@ impl Proof {
                     "Unknown proof value encoding".to_string(),
                 ))
             }
-        } else if let Some(ref _jws) = self.jws {
-            // TODO: Parse JWS
-            Err(crate::DidError::InvalidProof(
-                "JWS parsing not yet implemented".to_string(),
-            ))
+        } else if let Some(ref jws) = self.jws {
+            let parts: Vec<&str> = jws.split('.').collect();
+            if parts.len() != 3 {
+                return Err(crate::DidError::InvalidProof(
+                    "Invalid JWS compact serialization: expected 3 dot-separated parts".to_string(),
+                ));
+            }
+            URL_SAFE_NO_PAD.decode(parts[2]).map_err(|e| {
+                crate::DidError::InvalidProof(format!("Invalid JWS signature base64url: {}", e))
+            })
         } else {
             Err(crate::DidError::InvalidProof("No proof value".to_string()))
         }
@@ -210,5 +216,44 @@ mod tests {
 
         assert_eq!(proof.proof_type, "DataIntegrityProof");
         assert_eq!(proof.cryptosuite, Some("eddsa-rdfc-2022".to_string()));
+    }
+
+    #[test]
+    fn test_jws_proof_signature_extraction() {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+        let sig_bytes: &[u8] = b"test-signature-bytes";
+        let sig_b64 = URL_SAFE_NO_PAD.encode(sig_bytes);
+        let jws = format!("eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ0ZXN0In0.{sig_b64}");
+        let proof = Proof {
+            proof_type: ProofType::JsonWebSignature2020.as_str().to_string(),
+            created: Utc::now(),
+            verification_method: "did:key:z789#key-1".to_string(),
+            proof_purpose: ProofPurpose::AssertionMethod.as_str().to_string(),
+            proof_value: None,
+            jws: Some(jws),
+            challenge: None,
+            domain: None,
+            nonce: None,
+            cryptosuite: None,
+        };
+        let recovered = proof.get_signature_bytes().expect("JWS decode");
+        assert_eq!(recovered, sig_bytes);
+    }
+
+    #[test]
+    fn test_jws_proof_malformed_returns_err() {
+        let proof = Proof {
+            proof_type: ProofType::JsonWebSignature2020.as_str().to_string(),
+            created: Utc::now(),
+            verification_method: "did:key:z789#key-1".to_string(),
+            proof_purpose: ProofPurpose::AssertionMethod.as_str().to_string(),
+            proof_value: None,
+            jws: Some("only.two".to_string()),
+            challenge: None,
+            domain: None,
+            nonce: None,
+            cryptosuite: None,
+        };
+        assert!(proof.get_signature_bytes().is_err());
     }
 }

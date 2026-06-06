@@ -1,27 +1,17 @@
-use rand_distr::Distribution;use std::time::{Duration, Instant};
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
+use std::time::{Duration, Instant};
 
 // Helper function for normal distribution using Box-Muller transform
-fn generate_normal(rng: &mut scirs2_core::random::Random<impl rand::Rng>, mean: f64, std_dev: f64) -> f64 {
+fn generate_normal(rng: &mut StdRng, mean: f64, std_dev: f64) -> f64 {
     use std::f64::consts::PI;
-    static mut SPARE: Option<f64> = None;
-    static mut HAS_SPARE: bool = false;
-
-    unsafe {
-        if HAS_SPARE {
-            HAS_SPARE = false;
-            return SPARE.unwrap() * std_dev + mean;
-        }
-
-        HAS_SPARE = true;
-        let u: f64 = rng.random_range(0.0, 1.0);
-        let v: f64 = rng.random_range(0.0, 1.0);
-        let mag = std_dev * (-2.0 * u.ln()).sqrt();
-        SPARE = Some(mag * (2.0 * PI * v).sin());
-        mag * (2.0 * PI * v).cos() + mean
-    }
+    let u: f64 = rng.random_range(0.0f64..1.0f64);
+    let v: f64 = rng.random_range(0.0f64..1.0f64);
+    let mag = std_dev * (-2.0 * u.ln()).sqrt();
+    mag * (2.0 * PI * v).cos() + mean
 }
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuBenchmarkConfig {
@@ -87,7 +77,9 @@ pub struct GpuBenchmarkSummary {
     pub performance_target_met: bool,
 }
 
-pub async fn run_gpu_acceleration_benchmark(config: GpuBenchmarkConfig) -> Result<GpuBenchmarkSuite> {
+pub async fn run_gpu_acceleration_benchmark(
+    config: GpuBenchmarkConfig,
+) -> Result<GpuBenchmarkSuite> {
     println!("🚀 Starting GPU Acceleration Benchmark Suite...");
 
     let start_time = Instant::now();
@@ -114,14 +106,14 @@ pub async fn run_gpu_acceleration_benchmark(config: GpuBenchmarkConfig) -> Resul
     // Run benchmarks for each configuration
     for &embedding_size in &config.embedding_sizes {
         for &batch_size in &config.batch_sizes {
-            println!("📊 Testing embedding_size={}, batch_size={}", embedding_size, batch_size);
+            println!(
+                "📊 Testing embedding_size={}, batch_size={}",
+                embedding_size, batch_size
+            );
 
-            let result = run_single_gpu_benchmark(
-                &config,
-                embedding_size,
-                batch_size,
-                gpu_available,
-            ).await?;
+            let result =
+                run_single_gpu_benchmark(&config, embedding_size, batch_size, gpu_available)
+                    .await?;
 
             results.push(result);
         }
@@ -140,6 +132,7 @@ pub async fn run_gpu_acceleration_benchmark(config: GpuBenchmarkConfig) -> Resul
     })
 }
 
+#[allow(unreachable_code)]
 async fn test_gpu_availability() -> Result<(bool, Option<String>)> {
     // This would integrate with the actual GPU acceleration module
     // For now, simulate GPU detection logic
@@ -230,9 +223,8 @@ async fn run_single_gpu_benchmark(
         Some(average_duration(&gpu_durations))
     };
 
-    let speedup_factor = gpu_duration.map(|gpu_dur| {
-        cpu_duration.as_secs_f64() / gpu_dur.as_secs_f64()
-    });
+    let speedup_factor =
+        gpu_duration.map(|gpu_dur| cpu_duration.as_secs_f64() / gpu_dur.as_secs_f64());
 
     // Test adaptive switching threshold
     let adaptive_switch_threshold = if config.test_adaptive_switching {
@@ -257,9 +249,7 @@ async fn run_single_gpu_benchmark(
 }
 
 fn generate_test_embeddings(size: usize, dimensions: usize) -> Vec<Vec<f32>> {
-    use scirs2_core::random::Random;
-
-    let mut rng = Random::seed(42);
+    let mut rng = StdRng::seed_from_u64(42);
 
     (0..size)
         .map(|_| {
@@ -271,9 +261,7 @@ fn generate_test_embeddings(size: usize, dimensions: usize) -> Vec<Vec<f32>> {
 }
 
 fn generate_test_queries(batch_size: usize, dimensions: usize) -> Vec<Vec<f32>> {
-    use scirs2_core::random::Random;
-
-    let mut rng = Random::seed(123);
+    let mut rng = StdRng::seed_from_u64(123);
 
     (0..batch_size)
         .map(|_| {
@@ -378,12 +366,9 @@ fn average_duration(durations: &[Duration]) -> Duration {
 
 fn calculate_gpu_benchmark_summary(
     results: &[GpuBenchmarkResult],
-    config: &GpuBenchmarkConfig,
+    _config: &GpuBenchmarkConfig,
 ) -> GpuBenchmarkSummary {
-    let speedups: Vec<f64> = results
-        .iter()
-        .filter_map(|r| r.speedup_factor)
-        .collect();
+    let speedups: Vec<f64> = results.iter().filter_map(|r| r.speedup_factor).collect();
 
     let average_speedup = if speedups.is_empty() {
         None
@@ -391,17 +376,18 @@ fn calculate_gpu_benchmark_summary(
         Some(speedups.iter().sum::<f64>() / speedups.len() as f64)
     };
 
-    let max_speedup = speedups.iter().copied().max_by(|a, b| a.partial_cmp(b).unwrap());
+    let max_speedup = speedups
+        .iter()
+        .copied()
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     let optimal_switch_threshold = results
         .iter()
         .filter_map(|r| r.adaptive_switch_threshold)
         .min();
 
-    let gpu_memory_efficiency = results
-        .iter()
-        .map(|r| r.memory_usage_mb)
-        .sum::<f64>() / results.len() as f64;
+    let gpu_memory_efficiency =
+        results.iter().map(|r| r.memory_usage_mb).sum::<f64>() / results.len() as f64;
 
     let tests_passed = results.iter().filter(|r| r.test_passed).count();
     let tests_failed = results.len() - tests_passed;
@@ -424,12 +410,14 @@ fn calculate_gpu_benchmark_summary(
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct CpuComputationResult {
     similarities: Vec<Vec<f32>>,
     memory_usage_mb: f64,
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct GpuComputationResult {
     similarities: Vec<Vec<f32>>,
     memory_usage_mb: f64,
@@ -444,7 +432,10 @@ pub mod report {
         let mut report = String::new();
 
         report.push_str("# GPU Acceleration Benchmark Report\n\n");
-        report.push_str(&format!("**Test Duration**: {:.2}s\n", suite.total_duration.as_secs_f64()));
+        report.push_str(&format!(
+            "**Test Duration**: {:.2}s\n",
+            suite.total_duration.as_secs_f64()
+        ));
         report.push_str(&format!("**GPU Available**: {}\n", suite.gpu_available));
 
         if let Some(backend) = &suite.gpu_backend {
@@ -462,9 +453,19 @@ pub mod report {
             report.push_str(&format!("- **Maximum Speedup**: {:.2}x\n", max_speedup));
         }
 
-        report.push_str(&format!("- **Tests Passed**: {}/{}\n", summary.tests_passed, summary.tests_passed + summary.tests_failed));
-        report.push_str(&format!("- **Performance Target Met**: {}\n", summary.performance_target_met));
-        report.push_str(&format!("- **GPU Memory Efficiency**: {:.2} MB avg\n", summary.gpu_memory_efficiency));
+        report.push_str(&format!(
+            "- **Tests Passed**: {}/{}\n",
+            summary.tests_passed,
+            summary.tests_passed + summary.tests_failed
+        ));
+        report.push_str(&format!(
+            "- **Performance Target Met**: {}\n",
+            summary.performance_target_met
+        ));
+        report.push_str(&format!(
+            "- **GPU Memory Efficiency**: {:.2} MB avg\n",
+            summary.gpu_memory_efficiency
+        ));
 
         report.push_str("\n## Detailed Results\n\n");
         report.push_str("| Embedding Size | Batch Size | CPU Time (ms) | GPU Time (ms) | Speedup | GPU Util% | Status |\n");
@@ -473,19 +474,19 @@ pub mod report {
         for result in &suite.results {
             let cpu_ms = result.cpu_duration.as_millis();
             let gpu_ms = result.gpu_duration.map(|d| d.as_millis()).unwrap_or(0);
-            let speedup = result.speedup_factor.map(|s| format!("{:.2}x", s)).unwrap_or("-".to_string());
-            let gpu_util = result.gpu_utilization_percent.map(|u| format!("{:.1}%", u)).unwrap_or("-".to_string());
+            let speedup = result
+                .speedup_factor
+                .map(|s| format!("{:.2}x", s))
+                .unwrap_or("-".to_string());
+            let gpu_util = result
+                .gpu_utilization_percent
+                .map(|u| format!("{:.1}%", u))
+                .unwrap_or("-".to_string());
             let status = if result.test_passed { "✅" } else { "❌" };
 
             report.push_str(&format!(
                 "| {} | {} | {} | {} | {} | {} | {} |\n",
-                result.embedding_size,
-                result.batch_size,
-                cpu_ms,
-                gpu_ms,
-                speedup,
-                gpu_util,
-                status
+                result.embedding_size, result.batch_size, cpu_ms, gpu_ms, speedup, gpu_util, status
             ));
         }
 

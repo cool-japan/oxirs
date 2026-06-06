@@ -7,9 +7,9 @@ use super::policy::{OdrlPolicy, Permission};
 use super::types::{IdsError, IdsResult, IdsUri, Party, SecurityProfile};
 use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
-use ring::digest::{Context as DigestContext, SHA256};
-use ring::rand::SystemRandom;
-use ring::signature::{self, Ed25519KeyPair, KeyPair};
+use ed25519_dalek::pkcs8::DecodePrivateKey;
+use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use oxicrypto_hash::Sha256;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -114,8 +114,8 @@ pub struct DigitalSignature {
 
 /// Contract Signer for creating and verifying digital signatures
 pub struct ContractSigner {
-    /// Ed25519 key pair for signing
-    key_pair: Ed25519KeyPair,
+    /// Ed25519 signing key (Pure-Rust `ed25519-dalek`)
+    key_pair: SigningKey,
     /// Signer identity
     signer_id: IdsUri,
 }
@@ -123,12 +123,10 @@ pub struct ContractSigner {
 impl ContractSigner {
     /// Create a new contract signer with a generated key pair
     pub fn new(signer_id: IdsUri) -> IdsResult<Self> {
-        let rng = SystemRandom::new();
-        let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rng)
-            .map_err(|e| IdsError::InternalError(format!("Failed to generate key pair: {}", e)))?;
-
-        let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref())
-            .map_err(|e| IdsError::InternalError(format!("Failed to parse key pair: {}", e)))?;
+        // Generate an Ed25519 signing key from a fresh 32-byte CSPRNG seed.
+        let seed = oxicrypto_rand::random_nonce::<32>()
+            .map_err(|e| IdsError::InternalError(format!("Failed to generate key seed: {}", e)))?;
+        let key_pair = SigningKey::from_bytes(&seed);
 
         Ok(Self {
             key_pair,
@@ -138,7 +136,7 @@ impl ContractSigner {
 
     /// Create a contract signer from an existing PKCS#8 encoded private key
     pub fn from_pkcs8(signer_id: IdsUri, pkcs8_bytes: &[u8]) -> IdsResult<Self> {
-        let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_bytes)
+        let key_pair = SigningKey::from_pkcs8_der(pkcs8_bytes)
             .map_err(|e| IdsError::InternalError(format!("Failed to parse key pair: {}", e)))?;
 
         Ok(Self {
@@ -147,9 +145,9 @@ impl ContractSigner {
         })
     }
 
-    /// Get the public key bytes
-    pub fn public_key(&self) -> &[u8] {
-        self.key_pair.public_key().as_ref()
+    /// Get the public key bytes (raw 32-byte Ed25519 public key)
+    pub fn public_key(&self) -> [u8; 32] {
+        self.key_pair.verifying_key().to_bytes()
     }
 
     /// Get the public key as base64
@@ -163,9 +161,7 @@ impl ContractSigner {
             IdsError::SerializationError(format!("Failed to serialize contract: {}", e))
         })?;
 
-        let mut context = DigestContext::new(&SHA256);
-        context.update(contract_json.as_bytes());
-        Ok(context.finish().as_ref().to_vec())
+        Ok(Sha256.hash_fixed(contract_json.as_bytes()).to_vec())
     }
 
     /// Sign a contract
@@ -176,7 +172,7 @@ impl ContractSigner {
         Ok(DigitalSignature {
             signer: self.signer_id.clone(),
             algorithm: "Ed25519".to_string(),
-            signature: base64::engine::general_purpose::STANDARD.encode(sig.as_ref()),
+            signature: base64::engine::general_purpose::STANDARD.encode(sig.to_bytes()),
             signed_at: Utc::now(),
             certificate_chain: None,
         })
@@ -201,12 +197,21 @@ impl ContractSigner {
             .decode(&signature.signature)
             .map_err(|e| IdsError::InternalError(format!("Invalid signature encoding: {}", e)))?;
 
-        let public_key = signature::UnparsedPublicKey::new(&signature::ED25519, public_key);
+        // Parse the raw 32-byte Ed25519 public key and 64-byte signature.
+        let public_key = match <[u8; 32]>::try_from(public_key)
+            .ok()
+            .and_then(|pk| VerifyingKey::from_bytes(&pk).ok())
+        {
+            Some(pk) => pk,
+            None => return Ok(false),
+        };
 
-        match public_key.verify(&hash, &sig_bytes) {
-            Ok(()) => Ok(true),
-            Err(_) => Ok(false),
-        }
+        let signature = match <[u8; 64]>::try_from(sig_bytes.as_slice()) {
+            Ok(sig) => ed25519_dalek::Signature::from_bytes(&sig),
+            Err(_) => return Ok(false),
+        };
+
+        Ok(public_key.verify(&hash, &signature).is_ok())
     }
 }
 
@@ -1164,8 +1169,9 @@ mod tests {
 
         // Verify the signature before adding it to the contract
         // (the hash is computed from the contract without signatures)
-        let is_valid = ContractSigner::verify_signature(&contract, &signature, signer.public_key())
-            .expect("verify signature");
+        let is_valid =
+            ContractSigner::verify_signature(&contract, &signature, &signer.public_key())
+                .expect("verify signature");
 
         assert!(is_valid);
         assert_eq!(signature.algorithm, "Ed25519");
@@ -1219,8 +1225,9 @@ mod tests {
         contract.contract_type = "ids:TamperedContract".to_string();
 
         // Verification should fail for tampered contract
-        let is_valid = ContractSigner::verify_signature(&contract, &signature, signer.public_key())
-            .expect("verify signature");
+        let is_valid =
+            ContractSigner::verify_signature(&contract, &signature, &signer.public_key())
+                .expect("verify signature");
 
         assert!(!is_valid, "Tampered contract should fail verification");
     }

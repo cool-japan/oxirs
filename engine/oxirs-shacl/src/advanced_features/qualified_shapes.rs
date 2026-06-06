@@ -8,7 +8,10 @@
 //!
 //! Based on the W3C SHACL specification for qualified value shapes.
 
-use crate::{PropertyPath, Result, ShaclError, Shape, ShapeId};
+use crate::{
+    validation::ValidationEngine, PropertyPath, Result, ShaclError, Shape, ShapeId,
+    ValidationConfig,
+};
 use oxirs_core::{model::Term, Store};
 use serde::{Deserialize, Serialize};
 
@@ -103,9 +106,7 @@ impl QualifiedValueShapeConstraint {
         let mut non_conforming_values = Vec::new();
 
         for value in values {
-            // TODO: Validate value against shape
-            // For now, we'll use a simple placeholder
-            let conforms = self.value_conforms_to_shape(value, &shape, store)?;
+            let conforms = self.value_conforms_to_shape(value, &shape, store, shape_registry)?;
 
             if conforms {
                 conforming_values.push(value.clone());
@@ -150,18 +151,75 @@ impl QualifiedValueShapeConstraint {
         ))
     }
 
-    /// Check if a value conforms to a shape (placeholder)
+    /// Check whether a value node conforms to the qualified shape.
+    ///
+    /// The value is validated against `shape` using a [`ValidationEngine`]. So
+    /// that any shapes referenced from `shape` (via `sh:node`, `sh:property`,
+    /// nested qualified shapes, ...) resolve, every named shape obtainable from
+    /// `shape_registry` is copied into the temporary shapes map alongside the
+    /// qualified shape itself. The value conforms iff the produced report
+    /// conforms.
     fn value_conforms_to_shape(
         &self,
         value: &Term,
         shape: &Shape,
-        _store: &dyn Store,
+        store: &dyn Store,
+        shape_registry: &dyn ShapeRegistry,
     ) -> Result<bool> {
-        // TODO: Implement full shape validation
-        // This requires integration with the validation engine
         tracing::debug!("Checking conformance of {:?} to shape {}", value, shape.id);
-        Ok(true) // Placeholder
+
+        let mut temp_shapes = indexmap::IndexMap::new();
+        // Pull in every named shape we can resolve so nested references work.
+        // `ShapeRegistry` does not enumerate shapes, but the qualified shape may
+        // itself reference others by id; those are resolved on demand below.
+        temp_shapes.insert(shape.id.clone(), shape.clone());
+        for referenced in collect_referenced_shape_ids(shape) {
+            if let Some(referenced_shape) = shape_registry.get_shape(&referenced) {
+                temp_shapes
+                    .entry(referenced)
+                    .or_insert_with(|| referenced_shape.clone());
+            }
+        }
+
+        let config = ValidationConfig::default();
+        let mut validator = ValidationEngine::new(&temp_shapes, config);
+
+        match validator.validate_node_against_shape(store, shape, value, None) {
+            Ok(report) => Ok(report.conforms()),
+            Err(e) => {
+                tracing::warn!("Qualified value shape validation error: {e}");
+                Ok(false)
+            }
+        }
     }
+}
+
+/// Collect the IDs of every shape referenced from `shape`'s constraints,
+/// property shapes, and `sh:extends` parents.
+///
+/// Used to populate the temporary shapes map for nested validation so that
+/// references such as `sh:node`, `sh:property`, `sh:and`/`sh:or`/`sh:xone`,
+/// `sh:not`, and nested `sh:qualifiedValueShape` resolve correctly.
+fn collect_referenced_shape_ids(shape: &Shape) -> Vec<ShapeId> {
+    use crate::Constraint;
+
+    let mut ids = Vec::new();
+    ids.extend(shape.property_shapes.iter().cloned());
+    ids.extend(shape.extends.iter().cloned());
+
+    for constraint in shape.constraints.values() {
+        match constraint {
+            Constraint::Node(c) => ids.push(c.shape.clone()),
+            Constraint::Not(c) => ids.push(c.shape.clone()),
+            Constraint::And(c) => ids.extend(c.shapes.iter().cloned()),
+            Constraint::Or(c) => ids.extend(c.shapes.iter().cloned()),
+            Constraint::Xone(c) => ids.extend(c.shapes.iter().cloned()),
+            Constraint::QualifiedValueShape(c) => ids.push(c.shape.clone()),
+            _ => {}
+        }
+    }
+
+    ids
 }
 
 /// Result of qualified value shape validation
@@ -486,6 +544,237 @@ impl ComplexValidationResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constraints::value_constraints::ClassConstraint;
+    use crate::{Constraint, ConstraintComponentId, ShapeType};
+    use oxirs_core::{
+        model::{GraphName, NamedNode, Object, Predicate, Quad, Subject},
+        ConcreteStore,
+    };
+    use std::collections::HashMap;
+
+    const EX: &str = "http://example.org/";
+    const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+    fn iri(local: &str) -> NamedNode {
+        NamedNode::new(format!("{EX}{local}")).expect("valid IRI")
+    }
+
+    fn term(local: &str) -> Term {
+        Term::NamedNode(iri(local))
+    }
+
+    fn insert_type(store: &ConcreteStore, subject: &str, type_local: &str) {
+        let quad = Quad::new(
+            Subject::from(iri(subject)),
+            Predicate::from(NamedNode::new(RDF_TYPE).expect("rdf:type")),
+            Object::from(iri(type_local)),
+            GraphName::DefaultGraph,
+        );
+        store.insert_quad(quad).expect("insert type triple");
+    }
+
+    /// Minimal in-memory shape registry backed by a `HashMap`.
+    struct MapRegistry {
+        shapes: HashMap<ShapeId, Shape>,
+    }
+
+    impl MapRegistry {
+        fn new() -> Self {
+            Self {
+                shapes: HashMap::new(),
+            }
+        }
+
+        fn with(mut self, shape: Shape) -> Self {
+            self.shapes.insert(shape.id.clone(), shape);
+            self
+        }
+    }
+
+    impl ShapeRegistry for MapRegistry {
+        fn get_shape(&self, id: &ShapeId) -> Option<&Shape> {
+            self.shapes.get(id)
+        }
+
+        fn are_shapes_disjoint(&self, _shape1: &ShapeId, _shape2: &ShapeId) -> Result<bool> {
+            Ok(true)
+        }
+    }
+
+    /// Node shape requiring `sh:class :Friend`.
+    fn friend_shape(id: &str) -> Shape {
+        let mut shape = Shape::node_shape(ShapeId::new(id));
+        shape.add_constraint(
+            ConstraintComponentId::new("sh:ClassConstraintComponent"),
+            Constraint::Class(ClassConstraint {
+                class_iri: iri("Friend"),
+            }),
+        );
+        shape
+    }
+
+    #[test]
+    fn test_qualified_counts_exact_conforming() {
+        // Two friends + one stranger; only friends conform to the qualified shape.
+        let store = ConcreteStore::new().expect("store");
+        insert_type(&store, "f1", "Friend");
+        insert_type(&store, "f2", "Friend");
+        // s1 has no rdf:type Friend => non-conforming.
+
+        let registry = MapRegistry::new().with(friend_shape("FriendShape"));
+        let constraint = QualifiedValueShapeConstraint::new(QualifiedShape::ShapeRef(
+            ShapeId::new("FriendShape"),
+        ));
+
+        let values = vec![term("f1"), term("f2"), term("s1")];
+        let result = constraint
+            .validate(&term("focus"), None, &values, &store, &registry)
+            .expect("validate");
+
+        assert_eq!(
+            result.conforming_count(),
+            2,
+            "exactly two values conform to FriendShape"
+        );
+        assert_eq!(result.non_conforming_values.len(), 1);
+        assert!(result.is_valid(), "no min/max set => success");
+    }
+
+    #[test]
+    fn test_qualified_min_count_satisfied() {
+        let store = ConcreteStore::new().expect("store");
+        insert_type(&store, "f1", "Friend");
+        insert_type(&store, "f2", "Friend");
+
+        let registry = MapRegistry::new().with(friend_shape("FriendShape"));
+        let constraint = QualifiedValueShapeConstraint::new(QualifiedShape::ShapeRef(
+            ShapeId::new("FriendShape"),
+        ))
+        .with_min_count(2);
+
+        let values = vec![term("f1"), term("f2")];
+        let result = constraint
+            .validate(&term("focus"), None, &values, &store, &registry)
+            .expect("validate");
+        assert!(result.is_valid(), "2 conforming >= min 2 => valid");
+    }
+
+    #[test]
+    fn test_qualified_min_count_violated() {
+        let store = ConcreteStore::new().expect("store");
+        insert_type(&store, "f1", "Friend");
+        // Only one friend; the rest are strangers.
+
+        let registry = MapRegistry::new().with(friend_shape("FriendShape"));
+        let constraint = QualifiedValueShapeConstraint::new(QualifiedShape::ShapeRef(
+            ShapeId::new("FriendShape"),
+        ))
+        .with_min_count(2);
+
+        let values = vec![term("f1"), term("s1"), term("s2")];
+        let result = constraint
+            .validate(&term("focus"), None, &values, &store, &registry)
+            .expect("validate");
+        assert!(!result.is_valid(), "1 conforming < min 2 => violation");
+        assert_eq!(result.conforming_count(), 1);
+    }
+
+    #[test]
+    fn test_qualified_max_count_violated() {
+        let store = ConcreteStore::new().expect("store");
+        insert_type(&store, "f1", "Friend");
+        insert_type(&store, "f2", "Friend");
+        insert_type(&store, "f3", "Friend");
+
+        let registry = MapRegistry::new().with(friend_shape("FriendShape"));
+        let constraint = QualifiedValueShapeConstraint::new(QualifiedShape::ShapeRef(
+            ShapeId::new("FriendShape"),
+        ))
+        .with_max_count(2);
+
+        let values = vec![term("f1"), term("f2"), term("f3")];
+        let result = constraint
+            .validate(&term("focus"), None, &values, &store, &registry)
+            .expect("validate");
+        assert!(!result.is_valid(), "3 conforming > max 2 => violation");
+        assert_eq!(result.conforming_count(), 3);
+    }
+
+    #[test]
+    fn test_qualified_min_max_window_ok() {
+        let store = ConcreteStore::new().expect("store");
+        insert_type(&store, "f1", "Friend");
+        insert_type(&store, "f2", "Friend");
+
+        let registry = MapRegistry::new().with(friend_shape("FriendShape"));
+        let constraint = QualifiedValueShapeConstraint::new(QualifiedShape::ShapeRef(
+            ShapeId::new("FriendShape"),
+        ))
+        .with_min_count(1)
+        .with_max_count(3);
+
+        let values = vec![term("f1"), term("f2"), term("s1")];
+        let result = constraint
+            .validate(&term("focus"), None, &values, &store, &registry)
+            .expect("validate");
+        assert!(result.is_valid(), "2 conforming within [1,3] => valid");
+        assert_eq!(result.conforming_count(), 2);
+    }
+
+    #[test]
+    fn test_qualified_inline_shape_counts() {
+        // Use an inline (boxed) shape rather than a registry reference.
+        let store = ConcreteStore::new().expect("store");
+        insert_type(&store, "f1", "Friend");
+
+        let registry = MapRegistry::new();
+        let inline = friend_shape("InlineFriend");
+        let constraint =
+            QualifiedValueShapeConstraint::new(QualifiedShape::InlineShape(Box::new(inline)))
+                .with_min_count(1);
+
+        let values = vec![term("f1"), term("s1")];
+        let result = constraint
+            .validate(&term("focus"), None, &values, &store, &registry)
+            .expect("validate");
+        assert_eq!(result.conforming_count(), 1, "inline shape conformance");
+        assert!(result.is_valid());
+    }
+
+    #[test]
+    fn test_collect_referenced_shape_ids_covers_variants() {
+        use crate::constraints::logical_constraints::{AndConstraint, NotConstraint};
+        use crate::constraints::shape_constraints::NodeConstraint;
+
+        let mut shape = Shape::new(ShapeId::new("root"), ShapeType::NodeShape);
+        shape.property_shapes.push(ShapeId::new("propRef"));
+        shape.extends.push(ShapeId::new("parent"));
+        shape.add_constraint(
+            ConstraintComponentId::new("sh:NodeConstraintComponent"),
+            Constraint::Node(NodeConstraint::new(ShapeId::new("nodeRef"))),
+        );
+        shape.add_constraint(
+            ConstraintComponentId::new("sh:NotConstraintComponent"),
+            Constraint::Not(NotConstraint::new(ShapeId::new("notRef"))),
+        );
+        shape.add_constraint(
+            ConstraintComponentId::new("sh:AndConstraintComponent"),
+            Constraint::And(AndConstraint::new(vec![
+                ShapeId::new("andRef1"),
+                ShapeId::new("andRef2"),
+            ])),
+        );
+
+        let ids = collect_referenced_shape_ids(&shape);
+        for expected in [
+            "propRef", "parent", "nodeRef", "notRef", "andRef1", "andRef2",
+        ] {
+            assert!(
+                ids.contains(&ShapeId::new(expected)),
+                "missing referenced shape id: {expected}"
+            );
+        }
+    }
 
     #[test]
     fn test_qualified_constraint_creation() {

@@ -49,9 +49,19 @@ pub mod config;
 
 /// Interactive REPL mode
 pub mod interactive;
+pub mod interactive_session;
+mod interactive_tests;
+pub mod interactive_types;
 
 /// SAMM Aspect Model commands (Java ESMF SDK compatible)
 pub mod aspect;
+pub mod aspect_analyzer;
+pub mod aspect_analyzer_formats;
+pub mod aspect_analyzer_runner;
+mod aspect_analyzer_tests;
+pub mod aspect_analyzer_types;
+mod aspect_tests;
+pub mod aspect_types;
 
 /// AAS (Asset Administration Shell) commands (Java ESMF SDK compatible)
 pub mod aas;
@@ -121,6 +131,15 @@ pub mod canbus;
 /// Jena feature parity verification tool
 pub mod jena_parity;
 
+/// Core data types for the Jena parity verifier
+pub mod jena_parity_types;
+
+/// The Jena parity checker engine
+pub mod jena_parity_checker;
+
+#[cfg(test)]
+mod jena_parity_tests;
+
 /// SPARQL query profiler with operator-level timing
 pub mod query_profiler;
 
@@ -156,6 +175,18 @@ pub mod export_command;
 
 /// Multi-format RDF data importer (Turtle, N-Triples, N-Quads, JSON-LD, RDF/XML, TriG, CSV)
 pub mod import_command;
+
+/// Core data types for the multi-format RDF importer
+pub mod import_command_types;
+
+/// Format-specific parsers for the multi-format RDF importer
+pub mod import_command_formats;
+
+/// Import execution, format detection, and shared helpers for the RDF importer
+pub mod import_command_runner;
+
+#[cfg(test)]
+mod import_command_tests;
 
 /// SHACL/RDF validation CLI command (simulated SHACL validation with text/JSON/Turtle output)
 pub mod validate_command;

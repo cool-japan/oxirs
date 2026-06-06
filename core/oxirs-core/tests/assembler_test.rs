@@ -177,19 +177,25 @@ fn test_from_turtle_memory_dataset() {
 
 #[test]
 fn test_from_turtle_tdb2_dataset_with_location() {
-    let ttl = r#"
+    let location = std::env::temp_dir()
+        .join(format!("oxirs_assembler_test_tdb2_{}", std::process::id()))
+        .display()
+        .to_string();
+    let ttl = format!(
+        r#"
         @prefix ja: <http://jena.hpl.hp.com/2005/11/Assembler#> .
         @prefix tdb2: <http://jena.apache.org/2016/tdb#> .
 
         <http://example.org/tdb> a tdb2:DatasetTDB2 ;
-            tdb2:location "/tmp/oxirs_assembler_test_tdb2" .
-    "#;
-    let config = from_turtle(ttl).unwrap();
+            tdb2:location "{location}" .
+    "#
+    );
+    let config = from_turtle(&ttl).unwrap();
     assert_eq!(config.len(), 1);
     let ds = config.find_dataset("http://example.org/tdb").unwrap();
     match &ds.backend {
-        StoreBackend::Tdb2 { location } => {
-            assert_eq!(location.to_str().unwrap(), "/tmp/oxirs_assembler_test_tdb2");
+        StoreBackend::Tdb2 { location: loc } => {
+            assert_eq!(loc.to_str().unwrap(), location);
         }
         other => panic!("expected Tdb2, got {other:?}"),
     }
@@ -218,15 +224,21 @@ fn test_from_turtle_named_graph() {
 
 #[test]
 fn test_from_turtle_multiple_datasets() {
-    let ttl = r#"
+    let location = std::env::temp_dir()
+        .join(format!("oxirs_assembler_test_multi_{}", std::process::id()))
+        .display()
+        .to_string();
+    let ttl = format!(
+        r#"
         @prefix ja: <http://jena.hpl.hp.com/2005/11/Assembler#> .
         @prefix tdb2: <http://jena.apache.org/2016/tdb#> .
 
         <http://example.org/ds1> a ja:MemoryDataset .
         <http://example.org/ds2> a tdb2:DatasetTDB2 ;
-            tdb2:location "/tmp/oxirs_assembler_test_multi" .
-    "#;
-    let config = from_turtle(ttl).unwrap();
+            tdb2:location "{location}" .
+    "#
+    );
+    let config = from_turtle(&ttl).unwrap();
     assert_eq!(config.len(), 2, "two datasets should be found");
     assert!(config.find_dataset("http://example.org/ds1").is_some());
     assert!(config.find_dataset("http://example.org/ds2").is_some());

@@ -601,7 +601,7 @@ impl ComprehensiveBenchmarkSuite {
                 parameters: {
                     let mut params = HashMap::new();
                     params.insert("embedding_model".to_string(), serde_json::Value::String("sentence-transformers".to_string()));
-                    params.insert("similarity_threshold".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(0.8).unwrap()));
+                    params.insert("similarity_threshold".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(0.8).expect("0.8 is a finite, valid JSON number")));
                     params
                 },
             },
@@ -872,7 +872,7 @@ impl ComprehensiveBenchmarkSuite {
         }
 
         let mut times_ms: Vec<f64> = times.iter().map(|d| d.as_millis() as f64).collect();
-        times_ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        times_ms.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let mean_ms = times_ms.iter().sum::<f64>() / times_ms.len() as f64;
         let median_ms = times_ms[times_ms.len() / 2];

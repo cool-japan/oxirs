@@ -15,6 +15,12 @@
 
 pub mod aggregates;
 pub mod construct;
+pub mod construct_engine;
+pub mod construct_parser;
+pub mod construct_serialize;
+#[cfg(test)]
+mod construct_tests;
+pub mod construct_types;
 pub mod filter;
 pub mod jsonld;
 pub mod property_path;

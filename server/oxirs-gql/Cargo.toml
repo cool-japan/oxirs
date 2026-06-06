@@ -47,7 +47,7 @@ num_cpus.workspace = true
 # Distributed caching
 redis.workspace = true
 lru.workspace = true
-flate2.workspace = true
+oxiarc-deflate.workspace = true
 
 # WebSocket support for subscriptions
 tokio-tungstenite.workspace = true

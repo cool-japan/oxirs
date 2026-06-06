@@ -3,8 +3,8 @@
 **OxiRS - Japanese Smart Society Platform**
 **OxiRS - 日本のスマート社会プラットフォーム**
 
-Version: 0.1.0
-Last Updated: 2026-01-06
+Version: 0.3.1
+Last Updated: 2026-06-06
 
 ---
 
@@ -321,7 +321,7 @@ spec:
     spec:
       containers:
       - name: oxirs
-        image: oxirs/fuseki:society5-0.1.0
+        image: oxirs/fuseki:society5-0.3.1
         ports:
         - containerPort: 3030
         env:
@@ -658,7 +658,7 @@ spec:
     spec:
       containers:
       - name: oxirs
-        image: oxirs/fuseki:society5-0.1.0
+        image: oxirs/fuseki:society5-0.3.1
         ports:
         - containerPort: 3030
         env:

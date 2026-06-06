@@ -7,13 +7,8 @@ use crate::error::{FusekiError, FusekiResult};
 use crate::store::{RdfSerializationFormat, Store};
 use crate::store_ext::StoreExt;
 use chrono::{DateTime, Utc};
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::io::Read;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
@@ -439,15 +434,10 @@ impl BackupManager {
             FusekiError::internal(format!("Failed to read data for compression: {}", e))
         })?;
 
-        // Compress using gzip
+        // Compress using gzip (Pure-Rust `oxiarc-deflate`, default level 6)
         let compressed_path = data_file.with_extension("nq.gz");
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(&data)
+        let compressed_data = oxiarc_deflate::gzip_compress(&data, 6)
             .map_err(|e| FusekiError::internal(format!("Failed to compress data: {}", e)))?;
-        let compressed_data = encoder
-            .finish()
-            .map_err(|e| FusekiError::internal(format!("Failed to finalize compression: {}", e)))?;
 
         // Write compressed file
         fs::write(&compressed_path, &compressed_data)
@@ -597,12 +587,13 @@ impl BackupManager {
                 FusekiError::internal(format!("Failed to read compressed backup: {}", e))
             })?;
 
-            let mut decoder = GzDecoder::new(&compressed_data[..]);
-            let mut decompressed = String::new();
-            decoder.read_to_string(&mut decompressed).map_err(|e| {
-                FusekiError::internal(format!("Failed to decompress backup: {}", e))
-            })?;
-            decompressed
+            let decompressed_bytes =
+                oxiarc_deflate::gzip_decompress(&compressed_data).map_err(|e| {
+                    FusekiError::internal(format!("Failed to decompress backup: {}", e))
+                })?;
+            String::from_utf8(decompressed_bytes).map_err(|e| {
+                FusekiError::internal(format!("Decompressed backup is not valid UTF-8: {}", e))
+            })?
         } else if uncompressed_path.exists() {
             // Read uncompressed data
             debug!(

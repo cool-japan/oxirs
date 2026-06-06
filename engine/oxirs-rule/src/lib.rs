@@ -1,9 +1,9 @@
 //! # OxiRS Rule Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-rule/badge.svg)](https://docs.rs/oxirs-rule)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Forward/backward rule engine for RDFS, OWL, and SWRL reasoning with RETE optimization.
@@ -97,10 +97,18 @@ pub mod owl;
 pub mod owl2;
 pub mod owl_dl;
 pub mod owl_el;
+pub mod owl_el_axioms;
+pub mod owl_el_reasoner;
+pub mod owl_el_tests;
 pub mod owl_profiles;
 pub mod owl_ql;
 pub mod owl_rl;
+pub mod owl_rl_reasoner;
+pub mod owl_rl_rules;
+#[cfg(test)]
+pub mod owl_rl_tests;
 pub use owl_ql::{Owl2QLTBox, QueryAtom, QueryRewriter, RewrittenQuery};
+pub mod datalog;
 pub mod n3logic;
 pub mod parallel;
 pub mod pellet_classifier;
@@ -109,6 +117,10 @@ pub mod possibilistic;
 pub mod probabilistic;
 pub mod probabilistic_rdf;
 pub mod problog;
+pub mod problog_inference;
+pub mod problog_solver;
+mod problog_tests;
+pub mod problog_types;
 pub mod production_utils;
 pub mod profiler;
 pub mod quantum_optimizer;
@@ -120,11 +132,22 @@ pub mod rete_enhanced;
 pub mod rif;
 pub mod rule_compression;
 pub mod rule_index;
+pub mod rule_index_store;
+#[cfg(test)]
+pub mod rule_index_tests;
+pub mod rule_index_types;
 pub mod rule_learning;
 pub mod rule_refinement;
 pub mod shacl_integration;
 pub mod simd_ops;
 pub mod skos;
+pub mod skos_inference;
+pub mod skos_mappings;
+pub mod skos_reasoner;
+#[cfg(test)]
+mod skos_tests;
+pub mod skos_types;
+pub mod skos_validation;
 pub mod sparql_integration;
 pub mod statistical_relational;
 pub mod swrl;
@@ -405,6 +428,12 @@ pub mod rule_statistics;
 // Jena Rule Language (.rules) parser and lowering
 pub mod jena_rl;
 pub use jena_rl::{parse_and_lower, parse_jrl, JrlParseError, JrlRuleSet, LoweringError};
+
+// OWL Manchester Syntax parser and emitter (v0.3.1 Track C24)
+pub mod manchester;
+pub use manchester::{
+    emit as manchester_emit, parse as manchester_parse, ManchesterError, ManchesterExpr,
+};
 
 #[cfg(test)]
 mod comprehensive_tests;

@@ -175,13 +175,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_missing_file_returns_error() {
-        let result = run(
-            "/tmp/oxirs_nonexistent_utf8_test_file_xyz.txt".to_string(),
-            true,
-            true,
-            false,
-        )
-        .await;
+        let missing = std::env::temp_dir()
+            .join(format!("oxirs_utf8_nonexistent_{}.txt", std::process::id()))
+            .to_string_lossy()
+            .into_owned();
+        let result = run(missing, true, true, false).await;
         assert!(result.is_err());
     }
 }

@@ -406,7 +406,7 @@ fn benchmark_concurrent_execution(c: &mut Criterion) {
 
                     let result = engine.forward_chain(&facts_clone).unwrap();
 
-                    let mut results_guard = results_clone.lock().unwrap();
+                    let mut results_guard = results_clone.lock().unwrap_or_else(|e| e.into_inner());
                     results_guard.push(result);
                 });
 

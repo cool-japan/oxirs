@@ -6,34 +6,28 @@
 pub mod revolutionary_benchmarking_suite;
 
 pub use revolutionary_benchmarking_suite::{
-    RevolutionaryBenchmarkingSuite,
-    RevolutionaryBenchmarkConfig,
-    RevolutionaryBenchmarkMetrics,
-    QueryPerformanceMetrics,
-    MemoryEfficiencyMetrics,
-    AIReasoningMetrics,
-    QuantumOptimizationMetrics,
-    DistributedCoordinationMetrics,
+    AIReasoningMetrics, BenchmarkResultsAnalyzer, DistributedCoordinationMetrics,
+    MemoryEfficiencyMetrics, QuantumOptimizationMetrics, QueryPerformanceMetrics,
+    RevolutionaryBenchmarkConfig, RevolutionaryBenchmarkMetrics, RevolutionaryBenchmarkingSuite,
     SystemHealthMetrics,
-    BenchmarkResultsAnalyzer,
 };
 
-use scirs2_core::error::Result;
+use scirs2_core::error::CoreResult;
 
 /// Initialize performance validation subsystem
-pub async fn initialize_performance_validation() -> Result<()> {
+pub async fn initialize_performance_validation() -> CoreResult<()> {
     println!("Revolutionary Performance Validation System initialized");
     Ok(())
 }
 
 /// Create a default revolutionary benchmarking suite
-pub async fn create_default_benchmark_suite() -> Result<RevolutionaryBenchmarkingSuite> {
+pub async fn create_default_benchmark_suite() -> CoreResult<RevolutionaryBenchmarkingSuite> {
     let config = RevolutionaryBenchmarkConfig::default();
     RevolutionaryBenchmarkingSuite::new(config).await
 }
 
 /// Run quick performance validation check
-pub async fn quick_validation_check() -> Result<bool> {
+pub async fn quick_validation_check() -> CoreResult<bool> {
     let mut suite = create_default_benchmark_suite().await?;
     let metrics = suite.run_comprehensive_benchmarks().await?;
 

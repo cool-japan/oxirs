@@ -1,6 +1,6 @@
 # OxiRS TTL - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
@@ -73,8 +73,8 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
   - **Files:** `src/parser/{turtle,nquads,trig,ntriples,n3}.rs`, `src/serializer/{turtle,nquads,trig,ntriples}.rs`, `tests/w3c_compliance.rs` (new), `tests/fixtures/w3c-rdf-tests/` (vendored, pinned)
   - **Tests:** unit per-parser positive + negative (escapes, IRI refs, blank scope, prefix declarations, language tags, datatype IRIs); integration W3C corpus per format with `pass_rate >= 0.99`; property parse → serialize → parse round-trip stability over N=1000 generated graphs
   - **Risk:** RDF 1.2 spec settling; some tests may flap. Mitigation: pin to specific test-suite commit; document version in test header.
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing

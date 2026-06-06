@@ -8,7 +8,7 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use super::types::CostEstimatorConfig;
+use super::types_query::CostEstimatorConfig;
 
 impl Default for CostEstimatorConfig {
     fn default() -> Self {

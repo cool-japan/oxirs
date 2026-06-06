@@ -1,10 +1,10 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: v0.2.3 - Released March 16, 2026
+**Status**: v0.3.1 - Released 2026-06-06
 
 ⚡ **Production-Ready**: APIs are stable and tested. Ready for production use with comprehensive documentation.
 
@@ -12,14 +12,13 @@
 
 `oxirs` is the unified command-line tool for the OxiRS ecosystem, providing comprehensive functionality for RDF data management, SPARQL operations, server administration, and development workflows. It's designed to be the Swiss Army knife for semantic web developers and data engineers working with knowledge graphs and semantic data.
 
-## What's New in v0.1.0 (January 7, 2026)
+## What's New in v0.3.1 (2026-06-06)
 
-- **API Stability**: All CLI commands and flags are now stable with semantic versioning guarantees
-- **Enhanced Documentation**: Comprehensive help text, examples, and error messages for all commands
-- **Production Hardening**: Improved error handling, logging, and resource management
-- **Performance Improvements**: Faster query execution, import/export operations, and batch processing
-- **Better User Experience**: Enhanced progress indicators, colored output, and interactive prompts
-- **Security Enhancements**: Input validation, secure credential handling, and audit logging
+- **Fully Pure-Rust build**: `cargo install oxirs` now links zero `ring`/`aws-lc-sys` C/asm crypto — compression via oxiarc, crypto via oxicrypto, and TLS via oxitls (COOLJAPAN Pure-Rust policy)
+- **Tracks the v0.3.1 platform**: validation and query commands run on the v0.3.1 engines, which add SHACL Advanced Features (recursive and qualified shapes plus a rule-based reasoning engine) and RDF-star quoted-triple support
+- **Leaner codebase**: large command modules (import, interactive, aspect, jena-parity) were split so every source file stays under 2,000 lines
+- **Dependency refresh**: SciRS2 0.5.0, with oxiarc 0.3.3 consumed directly from crates.io
+- **Stable CLI**: all commands and flags remain stable under semantic versioning
 
 ## Features
 
@@ -38,10 +37,10 @@
 
 ```bash
 # Install the latest release
-cargo install oxirs --version 0.1.0
+cargo install oxirs --version 0.3.1
 
 # Or install with all optional features
-cargo install oxirs --version 0.1.0 --features all-features
+cargo install oxirs --version 0.3.1 --features all-features
 ```
 
 ### From Source
@@ -719,4 +718,4 @@ RUST_LOG=oxirs_core=debug,oxirs_arq=trace oxirs query mydata query.sparql
 
 ---
 
-**OxiRS CLI v0.1.0** - Production-ready command-line interface for semantic web operations
+**OxiRS CLI v0.3.1** - Production-ready command-line interface for semantic web operations

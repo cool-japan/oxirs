@@ -1,6 +1,6 @@
 # OxiRS Engine Directory - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
@@ -51,7 +51,7 @@ The OxiRS Engine directory contains query processing, validation, and reasoning 
   - **Goal:** Structured catalog of all Jena features with OxiRS implementation status. Top 3 gaps surfaced as concrete TODO items: JenaText SPARQL, Jena Rule Language parser, Jena Assembler vocabulary.
   - **Files:** `engine/oxirs-arq/src/jena_parity/`, `engine/oxirs-arq/tests/jena_parity_test.rs`, `engine/TODO.md`, `engine/oxirs-arq/TODO.md`, `core/oxirs-core/TODO.md`.
 - [x] Enterprise-grade performance (completed 2026-04-29)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing

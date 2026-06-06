@@ -3,13 +3,13 @@
 > A Rust-native, modular platform for Semantic Web, SPARQL 1.2, GraphQL, and AI-augmented reasoning
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.0 - Released - May 3, 2026
+**Status**: v0.3.1 - Released - 2026-06-06
 
-**Production Ready**: Complete SPARQL 1.1/1.2 implementation with **3.8x faster optimizer**, industrial IoT support, and AI-powered features. **40,786 tests passing** with zero warnings across all 26 crates.
+**Production Ready**: Complete SPARQL 1.1/1.2 implementation with **3.8x faster optimizer**, industrial IoT support, and AI-powered features. **~43,500 tests passing** with zero warnings across all 26 crates.
 
-**v0.3.0 Highlights (May 3, 2026)**: 26 new functional modules added across 16 development rounds. Advanced SPARQL algebra (EXISTS, MINUS, subquery, service clause), production-grade storage (six-index store, index merger/rebuilder), AI capabilities (vector store, constraint inference, conversation history), and security hardening (credential store, trust chain validation). Production unwrap() audit complete (zero violations), cloud_integration.rs refactored into module, and security advisories reviewed.
+**v0.3.1 Highlights (2026-06-06)**: SHACL Advanced Features (recursive + qualified value shapes + a rule-based reasoning engine), genetic constraint-order optimization, RDF-star quoted triples in pattern matching and query execution, GraphSAGE inductive embeddings, graph summarizer and relevance feedback, FIPS 140-2 feature gates (oxirs-fuseki, oxirs-did), and RBAC policy templates. Completes the COOLJAPAN Pure-Rust migration (brotli/snap/flate2 → oxiarc, ring → oxicrypto, pure-Rust TLS via oxitls): the default `cargo build` now links zero `ring`/`aws-lc-sys` C/asm crypto. SciRS2 0.5.0; oxiarc 0.3.3 consumed directly from crates.io.
 
 ## Vision
 
@@ -33,6 +33,30 @@ git clone https://github.com/cool-japan/oxirs.git
 cd oxirs
 cargo build --workspace --release
 ```
+
+### What's New in v0.3.1 (2026-06-06)
+
+**Maintenance & Hardening Release: SHACL-AF, Pure-Rust Migration, and Inductive Embeddings**
+
+OxiRS v0.3.1 completes SHACL Advanced Features, finishes the COOLJAPAN Pure-Rust migration, and adds new AI and security capabilities:
+
+- **SHACL Advanced Features (SHACL-AF)** - Recursive shapes, qualified value shapes, and a rule-based reasoning engine (RDFS / OWL 2 RL entailment)
+- **SHACL constraint-order optimization** - Genetic algorithm (configurable population/generations/tournament/mutation) for shape constraint ordering (oxirs-shacl-ai)
+- **RDF-star in query execution** - Quoted triples now flow through pattern matching, query algebra, executor, JIT, planner, and SIMD triple matching
+- **GraphSAGE inductive embeddings** - k-hop mean aggregation (ReLU + L2-norm), Xavier init, margin ranking loss, and unseen-entity support (oxirs-embed)
+- **Graph summarizer & relevance feedback** - Leiden community detection → centrality → predicate-frequency natural-language summaries, plus multiplicative relevance-feedback re-ranking (oxirs-graphrag)
+- **FIPS 140-2 feature gates** - `fips` feature for FIPS-validated cryptography in oxirs-fuseki and oxirs-did (RFC-003 FIPS boundary policy)
+- **RBAC policy templates** - Built-in DBA / ReadOnly / Auditor role templates via PolicyTemplateRegistry (oxirs-fuseki)
+- **Pure-Rust migration complete** - Compression (brotli/snap/flate2 → oxiarc), crypto (ring → oxicrypto), and TLS (pure-Rust oxitls provider); the default `cargo build` links zero `ring` / `aws-lc-sys` C/asm crypto
+- **Dependency refresh** - SciRS2 0.5.0; oxiarc 0.3.3 now consumed directly from crates.io; large-file refactors keep every source file under 2,000 lines
+
+**Quality Metrics (v0.3.1):**
+- ✅ **~43,500 tests passing** (100% pass rate)
+- ✅ **Zero compilation warnings** across all 26 crates
+- ✅ **Pure Rust by default** - zero `ring` / `aws-lc-sys` in the default-feature build
+- ✅ **All `.rs` files under 2,000 lines** (proactive refactors applied)
+
+---
 
 ### What's New in v0.3.0 (May 3, 2026)
 
@@ -235,7 +259,7 @@ oxirs/                  # Cargo workspace root
     └─ benchmarks/       # SP2Bench, WatDiv, LDBC SGS
 ```
 
-## Feature Matrix (v0.3.0)
+## Feature Matrix (v0.3.1)
 
 | Capability | Oxirs crate(s) | Status | Jena / Fuseki parity |
 |------------|----------------|--------|----------------------|
@@ -295,8 +319,8 @@ oxirs/                  # Cargo workspace root
 - ⏳ Planned: Not yet implemented
 - 🔸 Partial/plug-in support in Jena
 
-**Quality Metrics (v0.3.0):**
-- **40,786 tests passing** (100% pass rate, ~115 skipped)
+**Quality Metrics (v0.3.1):**
+- **~43,500 tests passing** (100% pass rate)
 - **Zero compilation warnings** (enforced with `-D warnings`)
 - **95%+ test coverage** across all 26 modules
 - **95%+ documentation coverage**
@@ -304,7 +328,7 @@ oxirs/                  # Cargo workspace root
 - **Production-grade security audit completed**
 - **CUDA GPU support** for AI acceleration
 - **3.8x faster query optimization** via adaptive complexity detection
-- **26 new functional modules** added in v0.3.0 (16 development rounds)
+- **Pure Rust by default** — zero `ring` / `aws-lc-sys` C/asm crypto in the default-feature build
 
 ## Usage Examples
 
@@ -506,9 +530,21 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 |---------|-------------|-----------|--------------|---------|
 | **v0.1.0** | **✅ Jan 7, 2026** | **Initial Production Release** | Complete SPARQL 1.1/1.2, Industrial IoT, AI features, 13,123 tests | ✅ Released |
 | **v0.2.4** | **✅ Mar 16, 2026** | **Deep Feature Expansion** | 40,786 tests, 26 new modules, 3.8x faster optimizer, advanced SPARQL algebra, AI production-grade | ✅ Released |
-| **v0.3.0** | **✅ Q2 2026** | **Full-text Search & Scale** | Full-text search (Tantivy), 10x performance, multi-region clustering, audit/certification/SSO/marketplace | ✅ Released (current) |
+| **v0.3.0** | **✅ May 3, 2026** | **Full-text Search & Scale** | Full-text search (Tantivy), 10x performance, multi-region clustering, audit/certification/SSO/marketplace | ✅ Released |
+| **v0.3.1** | **✅ 2026-06-06** | **SHACL-AF & Pure-Rust** | SHACL Advanced Features (recursive/qualified/reasoning), genetic constraint optimization, RDF-star in query execution, GraphSAGE embeddings, FIPS gates, full Pure-Rust migration, ~43,500 tests | ✅ Released (current) |
 
-### Current Release: v0.3.0 (May 3, 2026)
+### Current Release: v0.3.1 (2026-06-06)
+
+**v0.3.1 Focus Areas:**
+- SHACL Advanced Features (SHACL-AF): recursive shapes, qualified value shapes, rule-based reasoning engine
+- SHACL constraint-order optimization via genetic algorithm (oxirs-shacl-ai)
+- RDF-star quoted triples in pattern matching and query execution (algebra/executor/JIT/planner/SIMD)
+- AI: GraphSAGE inductive embeddings, graph summarizer, relevance feedback
+- Security: FIPS 140-2 feature gates (oxirs-fuseki, oxirs-did), RBAC policy templates
+- COOLJAPAN Pure-Rust migration complete: brotli/snap/flate2 → oxiarc, ring → oxicrypto, pure-Rust TLS via oxitls
+- Dependency refresh: SciRS2 0.5.0, oxiarc 0.3.3 from crates.io; large-file refactors (all source < 2,000 lines)
+
+### Previous Release: v0.3.0 (May 3, 2026)
 
 **v0.3.0 Focus Areas (16 rounds complete):**
 - Advanced SPARQL algebra: EXISTS/MINUS evaluators, subquery builder, service clause, LATERAL join
@@ -545,11 +581,21 @@ See [LICENSE](LICENSE) for details.
 - **Issues & RFCs**: https://github.com/cool-japan/oxirs
 - **Maintainer**: @cool-japan (KitaSan)
 
-## Release Notes (v0.3.0)
+## Release Notes (v0.3.1)
 
 Full notes live in [CHANGELOG.md](CHANGELOG.md).
 
-### Highlights (May 3, 2026)
+### Highlights (2026-06-06)
+- **~43,500 tests passing** across all 26 crates
+- **SHACL Advanced Features** completed: recursive shapes, qualified value shapes, and a rule-based reasoning engine
+- **Genetic constraint-order optimization** for SHACL shapes (oxirs-shacl-ai)
+- **RDF-star quoted triples** in pattern matching and query execution (algebra, executor, JIT, planner, SIMD)
+- **GraphSAGE inductive embeddings**, **graph summarizer**, and **relevance feedback** (oxirs-embed, oxirs-graphrag)
+- **FIPS 140-2 feature gates** (oxirs-fuseki, oxirs-did) and **RBAC policy templates**
+- **Pure-Rust migration complete**: brotli/snap/flate2 → oxiarc, ring → oxicrypto, pure-Rust TLS via oxitls; default build links zero `ring` / `aws-lc-sys`
+- **SciRS2 0.5.0**; oxiarc 0.3.3 consumed directly from crates.io; large-file refactors (all source < 2,000 lines)
+
+### Previous Highlights (v0.3.0 — May 3, 2026)
 - **40,786 tests passing** across all 26 crates
 - **26 new functional modules** added across all 26 crates in 16 development rounds
 - **Advanced SPARQL algebra**: EXISTS evaluator, MINUS evaluator, subquery builder, service clause handler
@@ -561,7 +607,9 @@ Full notes live in [CHANGELOG.md](CHANGELOG.md).
 - **Geospatial**: convex hull (Graham scan), distance calculator, intersection detector, area calculator
 - **Stream processing**: partition manager, consumer groups, schema registry, dead-letter queue, watermark tracking
 
-### Per-Crate Test Counts (v0.3.0)
+### Per-Crate Test Counts (v0.3.1)
+
+> Workspace total for v0.3.1: **~43,500 tests passing**. The per-crate breakdown below is the last published baseline; v0.3.1's additional ~2,700 tests come from GraphSAGE embeddings, the graph summarizer, relevance feedback, SHACL-AF (recursive/qualified/reasoning), Datalog, Manchester syntax, and related modules.
 | Crate | Tests |
 |-------|-------|
 | oxirs-arq | 2688 |
@@ -590,7 +638,7 @@ Full notes live in [CHANGELOG.md](CHANGELOG.md).
 | oxirs-did | 1043 |
 | oxirs-graphrag | 935 |
 | oxirs-wasm | 858 |
-| **Total** | **40,786** |
+| **Baseline subtotal** | **40,786** |
 
 ### Performance Benchmarks
 ```
@@ -620,4 +668,4 @@ Production Impact (100K QPS):
 
 *"Rust makes memory safety table stakes; OxiRS makes knowledge-graph engineering table stakes."*
 
-**v0.3.0 - Released - May 3, 2026**
+**v0.3.1 - Released - 2026-06-06**

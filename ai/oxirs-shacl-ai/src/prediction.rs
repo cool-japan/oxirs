@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use oxirs_core::{model::Term, RdfTerm, Store};
 
-use oxirs_shacl::{Constraint, Shape, ValidationConfig, ValidationReport};
+use oxirs_shacl::{Constraint, Severity, Shape, ValidationConfig, ValidationReport};
 
 use crate::{ModelTrainingResult, Result, ShaclAiError};
 
@@ -825,21 +825,20 @@ impl ValidationPredictor {
         complexity
     }
 
-    /// Count recursive patterns in shapes
+    /// Count recursive patterns in shapes — shapes that reference themselves
+    /// via a `sh:node` (NodeConstraint) constraint.
     fn count_recursive_patterns(&self, shapes: &[Shape]) -> usize {
-        let recursive_count = 0;
+        let mut recursive_count = 0;
 
         for shape in shapes {
-            // Check if shape references itself in constraints
             let shape_id = &shape.id;
 
             for (_, constraint) in &shape.constraints {
-                // TODO: Handle NodeShape constraint type if it exists
-                // if let Constraint::NodeShape(ref referenced_shape_id) = constraint {
-                //     if referenced_shape_id == shape_id {
-                //         recursive_count += 1;
-                //     }
-                // }
+                if let Constraint::Node(node_constraint) = constraint {
+                    if &node_constraint.shape == shape_id {
+                        recursive_count += 1;
+                    }
+                }
             }
         }
 
@@ -1348,29 +1347,18 @@ struct ValidationOutcome {
 
 impl ValidationOutcome {
     fn from_report(report: &ValidationReport) -> Self {
-        // TODO: Access validation results when API is available
-        let results: &[ValidationReport] = &[];
-        let violation_count = results
-            .iter()
-            .filter(|result| {
-                !result.conforms()
-                // TODO: Check severity when API is available
-            })
-            .count() as u32;
+        let violation_count = report.violations_by_severity(Severity::Violation).len() as u32;
 
-        let warning_count = results
-            .iter()
-            .filter(|result| {
-                !result.conforms()
-                // TODO: Check severity when API is available
-            })
-            .count() as u32;
+        let warning_count = report.violations_by_severity(Severity::Warning).len() as u32;
 
+        // Execution time is not tracked in the report structure itself; capture
+        // the wall-clock time at the call site if precision is required.  Using
+        // None here is truthful and avoids fabricating a value.
         Self {
             success: report.conforms(),
             violation_count,
             warning_count,
-            execution_time: Some(Duration::from_millis(0)), // TODO: Get actual execution time
+            execution_time: None,
         }
     }
 }

@@ -1,10 +1,10 @@
 # OxiRS Fuseki - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Current Status
 
-OxiRS Fuseki v0.2.3 is production-ready, providing a complete SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility and modern enhancements.
+OxiRS Fuseki v0.3.1 is production-ready, providing a complete SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility and modern enhancements.
 
 ### Production Features
 - ✅ **SPARQL 1.1/1.2 Protocol** - Full W3C compliance with query and update support
@@ -57,7 +57,11 @@ OxiRS Fuseki v0.2.3 is production-ready, providing a complete SPARQL 1.1/1.2 HTT
   - IdP certificate: PEM X.509, PEM PKCS#8, raw base64-DER all supported
   - `saml = ["dep:quick-xml", "dep:rsa"]` feature declared in Cargo.toml
   - 18 new integration tests in `tests/saml_test.rs`; 14 unit tests in `src/auth/saml.rs` — all passing
-  - [~] Enterprise support features — other enterprise items remain (LDAP HA, cluster auth, audit log export)
+  - [x] RBAC policy templates (DBA, ReadOnly, Auditor) — `src/auth/policy_templates.rs` (completed 2026-05-17)
+  - [x] FIPS 140-2 feature gate — `fips = []` in Cargo.toml, boundary doc RFC-003 (completed 2026-05-17)
+  - [~] LDAP HA (high-availability LDAP failover/replica) — not yet implemented
+  - [~] Cluster auth (cross-node authentication tokens) — not yet implemented
+  - [~] Audit log export endpoint (HTTP API to stream `JsonLineAuditLogger` output) — not yet implemented
 - [x] Complete Jena/Fuseki parity verification (completed 2026-04-30)
   - **Goal:** Verify wire-level / behavioral parity with Apache Jena Fuseki HTTP server over a defined request matrix and fix any gaps surfaced.
   - **Design:** Build parity matrix in `tests/jena_fuseki_parity.rs`. Endpoints: `/dataset/sparql` (query), `/dataset/update` (update), `/dataset/data` (graph store protocol), `/dataset/upload` (file upload), `$/datasets` (admin), `$/server`, `$/stats`, `$/ping`. Request matrix: 30+ representative requests covering protocol + error paths. For each: Content-Type, Accept negotiation, status codes, response shape (JSON Results, XML Results, Turtle, N-Triples, etc.). Reference outputs: pinned reference responses under `tests/fixtures/jena-fuseki-ref/` captured ahead of time from a Jena Fuseki snapshot (vendored). Gaps closed in `src/{handlers,protocol,content_negotiation}.rs`.
@@ -72,7 +76,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Fuseki v0.2.3 - Production-ready SPARQL server*
+*OxiRS Fuseki v0.3.1 - Production-ready SPARQL server*
 
 ## Proposed follow-ups
 

@@ -33,11 +33,11 @@ base64.workspace = true
 hex.workspace = true
 k256.workspace = true
 p256.workspace = true
-ring.workspace = true
 bls12_381_plus.workspace = true
-# rsa is only used for RSA key *generation* (keygen feature).
-# All signing and verification use ring (constant-time, RUSTSEC-2023-0071 free).
-rsa = { workspace = true, optional = true }
+# rsa provides the pure-Rust RS256 (RSASSA-PKCS1-v1_5) signing and verification
+# path (replaces the former `ring` dependency). Key generation lives behind the
+# `keygen` feature, but the crate itself is always required for sign/verify.
+rsa.workspace = true
 
 # Multiformat encoding
 multibase.workspace = true
@@ -75,9 +75,16 @@ tempfile.workspace = true
 
 [features]
 default = ["did-key", "vc-data-model-2", "did-ethr", "did-ion", "bbs-plus", "zkp"]
-# keygen: enables RSA key-pair generation (uses the `rsa` crate; not needed for
-# signing/verification which always go through ring).
-keygen = ["dep:rsa"]
+# fips: marker feature for FIPS 140-2 validated cryptographic operations.
+# NOT included in default — must be explicitly enabled.
+# When this flag is set, application code in the FIPS boundary (DID key
+# generation, signature verification, VC signing) must only invoke primitives
+# that are FIPS 140-2 validated (AES-GCM, ECDSA P-256/P-384, RSA, HMAC-SHA-2,
+# SHA-2). See docs/policies/fips-boundary.md (RFC-003).
+fips = []
+# keygen: enables RSA key-pair generation. Signing/verification use the `rsa`
+# crate unconditionally; this flag only gates the (slow) keygen helpers.
+keygen = []
 did-key = []
 did-web = ["reqwest"]
 did-ebsi = ["reqwest"]

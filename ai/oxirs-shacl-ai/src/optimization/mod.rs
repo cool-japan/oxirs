@@ -5,6 +5,8 @@
 
 pub mod config;
 pub mod engine;
+mod engine_analysis;
+pub(super) mod genetic;
 pub mod types;
 
 #[cfg(test)]

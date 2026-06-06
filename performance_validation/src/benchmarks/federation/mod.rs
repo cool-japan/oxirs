@@ -1,9 +1,9 @@
-use rand_distr::Distribution;use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use scirs2_core::random::Random;
-use rand_distr::Uniform;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationBenchmarkConfig {
@@ -20,9 +20,9 @@ pub struct FederationBenchmarkConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum QueryComplexity {
-    Simple,    // Single endpoint, basic patterns
-    Medium,    // 2-3 endpoints, joins
-    Complex,   // 4+ endpoints, complex joins and unions
+    Simple,      // Single endpoint, basic patterns
+    Medium,      // 2-3 endpoints, joins
+    Complex,     // 4+ endpoints, complex joins and unions
     VeryComplex, // Advanced patterns, nested queries
 }
 
@@ -104,7 +104,9 @@ pub struct FederationBenchmarkSummary {
     pub worst_scenario: String,
 }
 
-pub async fn run_federation_benchmark(config: FederationBenchmarkConfig) -> Result<FederationBenchmarkSuite> {
+pub async fn run_federation_benchmark(
+    config: FederationBenchmarkConfig,
+) -> Result<FederationBenchmarkSuite> {
     println!("🌐 Starting Federation Optimization Benchmark Suite...");
 
     let start_time = Instant::now();
@@ -118,8 +120,10 @@ pub async fn run_federation_benchmark(config: FederationBenchmarkConfig) -> Resu
     for &endpoint_count in &config.endpoint_counts {
         for query_complexity in &config.query_complexities {
             for &concurrent_queries in &config.concurrent_queries {
-                println!("📊 Testing endpoints={}, complexity={:?}, concurrent={}",
-                         endpoint_count, query_complexity, concurrent_queries);
+                println!(
+                    "📊 Testing endpoints={}, complexity={:?}, concurrent={}",
+                    endpoint_count, query_complexity, concurrent_queries
+                );
 
                 let result = run_single_federation_benchmark(
                     &config,
@@ -127,7 +131,8 @@ pub async fn run_federation_benchmark(config: FederationBenchmarkConfig) -> Resu
                     endpoint_count,
                     query_complexity,
                     concurrent_queries,
-                ).await?;
+                )
+                .await?;
 
                 results.push(result);
             }
@@ -146,6 +151,7 @@ pub async fn run_federation_benchmark(config: FederationBenchmarkConfig) -> Resu
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct FederationEnvironment {
     endpoints: Vec<MockEndpoint>,
     ml_optimizer_enabled: bool,
@@ -154,6 +160,7 @@ struct FederationEnvironment {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct MockEndpoint {
     id: String,
     capabilities: EndpointCapabilities,
@@ -162,6 +169,7 @@ struct MockEndpoint {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct EndpointCapabilities {
     supports_joins: bool,
     supports_aggregations: bool,
@@ -170,6 +178,7 @@ struct EndpointCapabilities {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct PerformanceProfile {
     average_latency_ms: u64,
     throughput_queries_per_sec: f64,
@@ -177,37 +186,36 @@ struct PerformanceProfile {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct NetworkSimulator {
     latency_range: (u64, u64),
     packet_loss_rate: f64,
     bandwidth_limit_mbps: f64,
 }
 
-async fn setup_federation_environment(config: &FederationBenchmarkConfig) -> Result<FederationEnvironment> {
+async fn setup_federation_environment(
+    config: &FederationBenchmarkConfig,
+) -> Result<FederationEnvironment> {
     let mut endpoints = Vec::new();
-    let mut rng = Random::seed(42);
-    let uniform_latency = Uniform::new(
-        config.network_simulation.latency_range_ms.0 as f64,
-        config.network_simulation.latency_range_ms.1 as f64,
-    );
+    let mut rng = StdRng::seed_from_u64(42);
 
     // Create mock endpoints with varying capabilities
     for i in 0..10 {
         let endpoint = MockEndpoint {
             id: format!("endpoint_{}", i),
             capabilities: EndpointCapabilities {
-                supports_joins: rng.random_bool(),
-                supports_aggregations: rng.random_bool(),
+                supports_joins: rng.random_bool(0.5),
+                supports_aggregations: rng.random_bool(0.5),
                 supports_filters: true,
                 max_concurrent_queries: rng.random_range(1..20),
             },
             performance_profile: PerformanceProfile {
                 average_latency_ms: rng.random_range(
-                    config.network_simulation.latency_range_ms.0 as f64,
-                    config.network_simulation.latency_range_ms.1 as f64,
-                ) as u64,
-                throughput_queries_per_sec: rng.random_range(10.0, 100.0),
-                reliability_percent: rng.random_range(85.0, 99.9),
+                    config.network_simulation.latency_range_ms.0
+                        ..(config.network_simulation.latency_range_ms.1 + 1),
+                ),
+                throughput_queries_per_sec: rng.random_range(10.0f64..100.0f64),
+                reliability_percent: rng.random_range(85.0f64..99.9f64),
             },
             data_size: rng.random_range(1000..1000000),
         };
@@ -265,7 +273,8 @@ async fn run_single_federation_benchmark(
 
     for _ in 0..config.iterations {
         let plan_start = Instant::now();
-        let execution_plan = create_optimized_execution_plan(&test_query, env, endpoint_count).await?;
+        let execution_plan =
+            create_optimized_execution_plan(&test_query, env, endpoint_count).await?;
         let planning_duration = plan_start.elapsed();
 
         let exec_start = Instant::now();
@@ -289,16 +298,21 @@ async fn run_single_federation_benchmark(
     // Calculate averages
     let baseline_duration = average_duration(&baseline_durations);
     let optimized_duration = average_duration(&optimized_durations);
-    let improvement_percent = ((baseline_duration.as_secs_f64() - optimized_duration.as_secs_f64())
-        / baseline_duration.as_secs_f64()) * 100.0;
+    let improvement_percent = ((baseline_duration.as_secs_f64()
+        - optimized_duration.as_secs_f64())
+        / baseline_duration.as_secs_f64())
+        * 100.0;
 
     let planning_duration = average_duration(&planning_durations);
     let execution_duration = average_duration(&execution_durations);
 
-    let source_selection_accuracy = source_selection_scores.iter().sum::<f64>() / source_selection_scores.len() as f64;
-    let join_order_optimality = join_order_scores.iter().sum::<f64>() / join_order_scores.len() as f64;
+    let source_selection_accuracy =
+        source_selection_scores.iter().sum::<f64>() / source_selection_scores.len() as f64;
+    let join_order_optimality =
+        join_order_scores.iter().sum::<f64>() / join_order_scores.len() as f64;
     let cache_hit_rate = cache_hit_rates.iter().sum::<f64>() / cache_hit_rates.len() as f64;
-    let network_requests_count = (network_request_counts.iter().sum::<usize>() as f64 / network_request_counts.len() as f64) as usize;
+    let network_requests_count = (network_request_counts.iter().sum::<usize>() as f64
+        / network_request_counts.len() as f64) as usize;
     let data_transfer_mb = data_transfers.iter().sum::<f64>() / data_transfers.len() as f64;
 
     let ml_prediction_accuracy = if ml_accuracies.is_empty() {
@@ -328,6 +342,7 @@ async fn run_single_federation_benchmark(
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct TestQuery {
     complexity: String,
     endpoint_requirements: Vec<String>,
@@ -336,6 +351,7 @@ struct TestQuery {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct JoinPattern {
     left_endpoint: String,
     right_endpoint: String,
@@ -344,7 +360,7 @@ struct JoinPattern {
 }
 
 fn generate_test_query(complexity: &QueryComplexity, endpoint_count: usize) -> TestQuery {
-    let mut rng = Random::seed(123);
+    let mut rng = StdRng::seed_from_u64(123);
 
     let (complexity_str, join_count) = match complexity {
         QueryComplexity::Simple => ("simple", 0),
@@ -373,7 +389,7 @@ fn generate_test_query(complexity: &QueryComplexity, endpoint_count: usize) -> T
     TestQuery {
         complexity: complexity_str.to_string(),
         endpoint_requirements,
-        estimated_selectivity: rng.random_range(0.01, 0.8),
+        estimated_selectivity: rng.random_range(0.01f64..0.8f64),
         join_patterns,
     }
 }
@@ -381,7 +397,7 @@ fn generate_test_query(complexity: &QueryComplexity, endpoint_count: usize) -> T
 async fn execute_baseline_query(
     query: &TestQuery,
     env: &FederationEnvironment,
-    endpoint_count: usize,
+    _endpoint_count: usize,
 ) -> Result<QueryExecutionResult> {
     // Simulate baseline query execution (no optimization)
     let mut total_latency = 0u64;
@@ -393,7 +409,8 @@ async fn execute_baseline_query(
             // Simulate network request
             total_latency += endpoint.performance_profile.average_latency_ms;
             network_requests += 1;
-            data_transfer += (endpoint.data_size as f64 * query.estimated_selectivity) / (1024.0 * 1024.0);
+            data_transfer +=
+                (endpoint.data_size as f64 * query.estimated_selectivity) / (1024.0 * 1024.0);
         }
     }
 
@@ -409,8 +426,8 @@ async fn execute_baseline_query(
     Ok(QueryExecutionResult {
         total_duration: Duration::from_millis(total_latency),
         source_selection_accuracy: 0.6, // Baseline accuracy
-        join_order_optimality: 0.5, // Poor join ordering
-        cache_hit_rate: 0.1, // Low cache usage
+        join_order_optimality: 0.5,     // Poor join ordering
+        cache_hit_rate: 0.1,            // Low cache usage
         network_requests,
         data_transfer_mb: data_transfer,
         ml_prediction_accuracy: 0.0, // No ML in baseline
@@ -437,6 +454,7 @@ struct OptimizedExecutionPlan {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct CachingStrategy {
     cache_intermediate_results: bool,
     cache_endpoint_responses: bool,
@@ -444,6 +462,7 @@ struct CachingStrategy {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct MLPredictions {
     selectivity_predictions: HashMap<String, f64>,
     join_cardinality_predictions: HashMap<String, usize>,
@@ -451,6 +470,7 @@ struct MLPredictions {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Scirs2Optimizations {
     optimized_random_sampling: bool,
     improved_join_algorithms: bool,
@@ -462,7 +482,7 @@ async fn create_optimized_execution_plan(
     env: &FederationEnvironment,
     endpoint_count: usize,
 ) -> Result<OptimizedExecutionPlan> {
-    let mut rng = Random::seed(456);
+    let mut rng = StdRng::seed_from_u64(456);
 
     // ML-driven source selection
     let mut selected_endpoints = Vec::new();
@@ -497,8 +517,9 @@ async fn create_optimized_execution_plan(
     let mut endpoint_performance_predictions = HashMap::new();
 
     for endpoint_id in &selected_endpoints {
-        selectivity_predictions.insert(endpoint_id.clone(), rng.random_range(0.05, 0.9));
-        endpoint_performance_predictions.insert(endpoint_id.clone(), rng.random_range(0.7, 0.95));
+        selectivity_predictions.insert(endpoint_id.clone(), rng.random_range(0.05f64..0.9f64));
+        endpoint_performance_predictions
+            .insert(endpoint_id.clone(), rng.random_range(0.7f64..0.95f64));
     }
 
     for join in &optimized_join_order {
@@ -528,8 +549,8 @@ async fn create_optimized_execution_plan(
     })
 }
 
-fn shuffle_joins_optimally<R: rand::Rng>(joins: &mut [JoinPattern], rng: &mut Random<R>) {
-    // Use scirs2's Fisher-Yates shuffle for optimal join ordering
+fn shuffle_joins_optimally(joins: &mut [JoinPattern], rng: &mut StdRng) {
+    // Fisher-Yates shuffle for optimal join ordering
     for i in (1..joins.len()).rev() {
         let j = rng.random_range(0..i + 1);
         if i != j {
@@ -539,6 +560,7 @@ fn shuffle_joins_optimally<R: rand::Rng>(joins: &mut [JoinPattern], rng: &mut Ra
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct QueryExecutionResult {
     total_duration: Duration,
     source_selection_accuracy: f64,
@@ -558,22 +580,39 @@ async fn execute_optimized_query_with_plan(
     let mut data_transfer = 0.0;
 
     // Execute with optimization benefits
-    let optimization_factor = if plan.scirs2_optimizations.optimized_random_sampling { 0.7 } else { 1.0 };
-    let ml_factor = if !plan.ml_predictions.selectivity_predictions.is_empty() { 0.8 } else { 1.0 };
-    let cache_factor = if plan.caching_strategy.cache_intermediate_results { 0.6 } else { 1.0 };
+    let optimization_factor = if plan.scirs2_optimizations.optimized_random_sampling {
+        0.7
+    } else {
+        1.0
+    };
+    let ml_factor = if !plan.ml_predictions.selectivity_predictions.is_empty() {
+        0.8
+    } else {
+        1.0
+    };
+    let cache_factor = if plan.caching_strategy.cache_intermediate_results {
+        0.6
+    } else {
+        1.0
+    };
 
     for endpoint_id in &plan.selected_endpoints {
         if let Some(endpoint) = env.endpoints.iter().find(|e| e.id == *endpoint_id) {
             let optimized_latency = (endpoint.performance_profile.average_latency_ms as f64
-                * optimization_factor * ml_factor * cache_factor) as u64;
+                * optimization_factor
+                * ml_factor
+                * cache_factor) as u64;
             total_latency += optimized_latency;
             network_requests += 1;
 
             // Reduced data transfer due to better selectivity prediction
-            let predicted_selectivity = plan.ml_predictions.selectivity_predictions
+            let predicted_selectivity = plan
+                .ml_predictions
+                .selectivity_predictions
                 .get(endpoint_id)
                 .unwrap_or(&0.5);
-            data_transfer += (endpoint.data_size as f64 * predicted_selectivity) / (1024.0 * 1024.0);
+            data_transfer +=
+                (endpoint.data_size as f64 * predicted_selectivity) / (1024.0 * 1024.0);
         }
     }
 
@@ -587,14 +626,16 @@ async fn execute_optimized_query_with_plan(
         total_latency += optimized_join_time;
 
         let join_key = format!("{}_{}", join.left_endpoint, join.right_endpoint);
-        let predicted_cardinality = plan.ml_predictions.join_cardinality_predictions
+        let predicted_cardinality = plan
+            .ml_predictions
+            .join_cardinality_predictions
             .get(&join_key)
             .unwrap_or(&join.estimated_cardinality);
         data_transfer += *predicted_cardinality as f64 / (1024.0 * 1024.0);
     }
 
     // Simulate parallel execution benefits
-    total_latency = total_latency / plan.parallelization_factor as u64;
+    total_latency /= plan.parallelization_factor as u64;
 
     // Simulate actual work
     tokio::time::sleep(Duration::from_millis(total_latency / 10)).await;
@@ -627,36 +668,47 @@ fn average_duration(durations: &[Duration]) -> Duration {
 
 fn calculate_federation_benchmark_summary(
     results: &[FederationBenchmarkResult],
-    config: &FederationBenchmarkConfig,
+    _config: &FederationBenchmarkConfig,
 ) -> FederationBenchmarkSummary {
     let improvements: Vec<f64> = results.iter().map(|r| r.improvement_percent).collect();
 
     let average_improvement_percent = improvements.iter().sum::<f64>() / improvements.len() as f64;
-    let max_improvement_percent = improvements.iter().copied().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
+    let max_improvement_percent = improvements
+        .iter()
+        .copied()
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or(0.0);
 
-    let planning_times_baseline: Vec<f64> = results.iter()
+    let planning_times_baseline: Vec<f64> = results
+        .iter()
         .map(|r| r.baseline_duration.as_secs_f64() * 0.3) // Assume 30% is planning
         .collect();
-    let planning_times_optimized: Vec<f64> = results.iter()
+    let planning_times_optimized: Vec<f64> = results
+        .iter()
         .map(|r| r.planning_duration.as_secs_f64())
         .collect();
 
-    let planning_time_reduction = ((planning_times_baseline.iter().sum::<f64>() -
-        planning_times_optimized.iter().sum::<f64>()) /
-        planning_times_baseline.iter().sum::<f64>()) * 100.0;
+    let planning_time_reduction = ((planning_times_baseline.iter().sum::<f64>()
+        - planning_times_optimized.iter().sum::<f64>())
+        / planning_times_baseline.iter().sum::<f64>())
+        * 100.0;
 
-    let execution_times_baseline: Vec<f64> = results.iter()
+    let execution_times_baseline: Vec<f64> = results
+        .iter()
         .map(|r| r.baseline_duration.as_secs_f64() * 0.7) // Assume 70% is execution
         .collect();
-    let execution_times_optimized: Vec<f64> = results.iter()
+    let execution_times_optimized: Vec<f64> = results
+        .iter()
         .map(|r| r.execution_duration.as_secs_f64())
         .collect();
 
-    let execution_time_reduction = ((execution_times_baseline.iter().sum::<f64>() -
-        execution_times_optimized.iter().sum::<f64>()) /
-        execution_times_baseline.iter().sum::<f64>()) * 100.0;
+    let execution_time_reduction = ((execution_times_baseline.iter().sum::<f64>()
+        - execution_times_optimized.iter().sum::<f64>())
+        / execution_times_baseline.iter().sum::<f64>())
+        * 100.0;
 
-    let ml_accuracies: Vec<f64> = results.iter()
+    let ml_accuracies: Vec<f64> = results
+        .iter()
         .filter_map(|r| r.ml_prediction_accuracy)
         .collect();
     let ml_optimization_effectiveness = if ml_accuracies.is_empty() {
@@ -665,29 +717,50 @@ fn calculate_federation_benchmark_summary(
         ml_accuracies.iter().sum::<f64>() / ml_accuracies.len() as f64 * 100.0
     };
 
-    let scirs2_results: Vec<&FederationBenchmarkResult> = results.iter()
+    let scirs2_results: Vec<&FederationBenchmarkResult> = results
+        .iter()
         .filter(|r| r.scirs2_optimizations_used)
         .collect();
     let scirs2_optimization_effectiveness = if scirs2_results.is_empty() {
         0.0
     } else {
-        scirs2_results.iter().map(|r| r.improvement_percent).sum::<f64>() / scirs2_results.len() as f64
+        scirs2_results
+            .iter()
+            .map(|r| r.improvement_percent)
+            .sum::<f64>()
+            / scirs2_results.len() as f64
     };
 
     let tests_meeting_target = results.iter().filter(|r| r.performance_target_met).count();
 
-    let best_result = results.iter()
-        .max_by(|a, b| a.improvement_percent.partial_cmp(&b.improvement_percent).unwrap());
-    let worst_result = results.iter()
-        .min_by(|a, b| a.improvement_percent.partial_cmp(&b.improvement_percent).unwrap());
+    let best_result = results.iter().max_by(|a, b| {
+        a.improvement_percent
+            .partial_cmp(&b.improvement_percent)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let worst_result = results.iter().min_by(|a, b| {
+        a.improvement_percent
+            .partial_cmp(&b.improvement_percent)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
-    let best_scenario = best_result.map(|r|
-        format!("{} endpoints, {}, {} concurrent", r.endpoint_count, r.query_complexity, r.concurrent_queries)
-    ).unwrap_or_default();
+    let best_scenario = best_result
+        .map(|r| {
+            format!(
+                "{} endpoints, {}, {} concurrent",
+                r.endpoint_count, r.query_complexity, r.concurrent_queries
+            )
+        })
+        .unwrap_or_default();
 
-    let worst_scenario = worst_result.map(|r|
-        format!("{} endpoints, {}, {} concurrent", r.endpoint_count, r.query_complexity, r.concurrent_queries)
-    ).unwrap_or_default();
+    let worst_scenario = worst_result
+        .map(|r| {
+            format!(
+                "{} endpoints, {}, {} concurrent",
+                r.endpoint_count, r.query_complexity, r.concurrent_queries
+            )
+        })
+        .unwrap_or_default();
 
     FederationBenchmarkSummary {
         average_improvement_percent,
@@ -707,21 +780,47 @@ pub mod report {
     use super::*;
     use std::fs;
 
-    pub fn generate_federation_benchmark_report(suite: &FederationBenchmarkSuite) -> Result<String> {
+    pub fn generate_federation_benchmark_report(
+        suite: &FederationBenchmarkSuite,
+    ) -> Result<String> {
         let mut report = String::new();
 
         report.push_str("# Federation Optimization Benchmark Report\n\n");
-        report.push_str(&format!("**Test Duration**: {:.2}s\n", suite.total_duration.as_secs_f64()));
+        report.push_str(&format!(
+            "**Test Duration**: {:.2}s\n",
+            suite.total_duration.as_secs_f64()
+        ));
 
         report.push_str("\n## Summary\n\n");
         let summary = &suite.summary;
-        report.push_str(&format!("- **Average Improvement**: {:.1}%\n", summary.average_improvement_percent));
-        report.push_str(&format!("- **Maximum Improvement**: {:.1}%\n", summary.max_improvement_percent));
-        report.push_str(&format!("- **Planning Time Reduction**: {:.1}%\n", summary.planning_time_reduction));
-        report.push_str(&format!("- **Execution Time Reduction**: {:.1}%\n", summary.execution_time_reduction));
-        report.push_str(&format!("- **ML Optimization Effectiveness**: {:.1}%\n", summary.ml_optimization_effectiveness));
-        report.push_str(&format!("- **scirs2 Optimization Effectiveness**: {:.1}%\n", summary.scirs2_optimization_effectiveness));
-        report.push_str(&format!("- **Tests Meeting Target**: {}/{}\n", summary.tests_meeting_target, summary.total_tests));
+        report.push_str(&format!(
+            "- **Average Improvement**: {:.1}%\n",
+            summary.average_improvement_percent
+        ));
+        report.push_str(&format!(
+            "- **Maximum Improvement**: {:.1}%\n",
+            summary.max_improvement_percent
+        ));
+        report.push_str(&format!(
+            "- **Planning Time Reduction**: {:.1}%\n",
+            summary.planning_time_reduction
+        ));
+        report.push_str(&format!(
+            "- **Execution Time Reduction**: {:.1}%\n",
+            summary.execution_time_reduction
+        ));
+        report.push_str(&format!(
+            "- **ML Optimization Effectiveness**: {:.1}%\n",
+            summary.ml_optimization_effectiveness
+        ));
+        report.push_str(&format!(
+            "- **scirs2 Optimization Effectiveness**: {:.1}%\n",
+            summary.scirs2_optimization_effectiveness
+        ));
+        report.push_str(&format!(
+            "- **Tests Meeting Target**: {}/{}\n",
+            summary.tests_meeting_target, summary.total_tests
+        ));
         report.push_str(&format!("- **Best Scenario**: {}\n", summary.best_scenario));
 
         report.push_str("\n## Detailed Results\n\n");
@@ -731,7 +830,11 @@ pub mod report {
         for result in &suite.results {
             let baseline_ms = result.baseline_duration.as_millis();
             let optimized_ms = result.optimized_duration.as_millis();
-            let target_met = if result.performance_target_met { "✅" } else { "❌" };
+            let target_met = if result.performance_target_met {
+                "✅"
+            } else {
+                "❌"
+            };
 
             report.push_str(&format!(
                 "| {} | {} | {} | {} | {} | {:.1}% | {:.1}% | {:.1}% | {:.1}% | {} |\n",
@@ -751,7 +854,10 @@ pub mod report {
         Ok(report)
     }
 
-    pub fn save_federation_benchmark_report(suite: &FederationBenchmarkSuite, output_path: &str) -> Result<()> {
+    pub fn save_federation_benchmark_report(
+        suite: &FederationBenchmarkSuite,
+        output_path: &str,
+    ) -> Result<()> {
         let report = generate_federation_benchmark_report(suite)?;
         fs::write(output_path, report)?;
         println!("📊 Federation benchmark report saved to: {}", output_path);

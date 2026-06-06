@@ -7,8 +7,6 @@ use super::StarSerializer;
 use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::parser::StarFormat;
 use crate::{StarConfig, StarError, StarResult};
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use oxiarc_zstd::ZstdStreamEncoder as ZstdEncoder;
 use std::io::{BufWriter, Write};
 use tracing::{debug, span, Level};
@@ -54,6 +52,59 @@ impl<W: Write> Write for Lz4BufferWriter<W> {
 }
 
 impl<W: Write> Drop for Lz4BufferWriter<W> {
+    fn drop(&mut self) {
+        let _ = self.flush_compressed();
+    }
+}
+
+/// A buffering writer that accumulates data and compresses it as a single
+/// gzip stream via `oxiarc_deflate` when flushed or dropped.
+///
+/// `oxiarc_deflate::GzipStreamEncoder` requires an explicit `finish()` call to
+/// emit the gzip trailer and does not write it on drop, so the buffer-and-
+/// compress approach (mirroring `Lz4BufferWriter`) is used to guarantee a
+/// complete, valid gzip stream behind a `Box<dyn Write>`.
+struct GzipBufferWriter<W: Write> {
+    inner: Option<W>,
+    buffer: Vec<u8>,
+    level: u8,
+}
+
+impl<W: Write> GzipBufferWriter<W> {
+    fn new(writer: W, level: u8) -> Self {
+        Self {
+            inner: Some(writer),
+            buffer: Vec::new(),
+            level,
+        }
+    }
+
+    fn flush_compressed(&mut self) -> std::io::Result<()> {
+        if self.buffer.is_empty() {
+            return Ok(());
+        }
+        if let Some(ref mut writer) = self.inner {
+            let compressed = oxiarc_deflate::gzip_compress(&self.buffer, self.level)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            writer.write_all(&compressed)?;
+            self.buffer.clear();
+        }
+        Ok(())
+    }
+}
+
+impl<W: Write> Write for GzipBufferWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.buffer.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.flush_compressed()
+    }
+}
+
+impl<W: Write> Drop for GzipBufferWriter<W> {
     fn drop(&mut self) {
         let _ = self.flush_compressed();
     }
@@ -156,8 +207,8 @@ impl StarSerializer {
             CompressionType::None => Ok(Box::new(writer)),
             CompressionType::Gzip => {
                 debug!("Creating Gzip compressed writer");
-                let encoder = GzEncoder::new(writer, Compression::default());
-                Ok(Box::new(encoder))
+                // Level 6 matches the previous flate2 Compression::default().
+                Ok(Box::new(GzipBufferWriter::new(writer, 6)))
             }
             CompressionType::Zstd => {
                 debug!("Creating Zstd compressed writer");
@@ -968,5 +1019,36 @@ impl StarSerializer {
                 var.name
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Round-trip test for the migrated gzip streaming-writer path
+    /// (`GzipBufferWriter`). Verifies the buffered writer emits a valid gzip
+    /// stream that decodes back to the original input, preserving the gzip
+    /// format variant.
+    #[test]
+    fn test_gzip_buffer_writer_roundtrip() {
+        let mut buf: Vec<u8> = Vec::new();
+        {
+            let mut writer = GzipBufferWriter::new(&mut buf, 6);
+            writer
+                .write_all(b"<http://example.org/s> <http://example.org/p> \"streamed\" .\n")
+                .expect("write should succeed");
+            writer.flush().expect("flush should succeed");
+        }
+
+        // Output must be a valid gzip stream (magic bytes 0x1f 0x8b).
+        assert_eq!(&buf[..2], &[0x1f, 0x8b]);
+
+        let decompressed =
+            oxiarc_deflate::gzip_decompress(&buf).expect("gzip decompress should succeed");
+        assert_eq!(
+            decompressed.as_slice(),
+            b"<http://example.org/s> <http://example.org/p> \"streamed\" .\n"
+        );
     }
 }

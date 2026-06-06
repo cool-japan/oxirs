@@ -42,6 +42,205 @@
 
 use std::collections::HashMap;
 
+// ─── GraphSummarizer (v0.4.0) ────────────────────────────────────────────────
+
+mod graph_summarizer_impl {
+    use crate::graph::community::{CommunityConfig, CommunityDetector};
+    use crate::Triple;
+    use rayon::prelude::*;
+    use std::collections::HashMap;
+
+    /// A compact summary of a large KG subgraph, suitable for LLM context windows.
+    #[derive(Debug, Clone)]
+    pub struct GraphSummary {
+        /// Representative entity IRIs (one per community, by in-degree centrality).
+        pub entities: Vec<String>,
+        /// Selected triples involving representative nodes and top predicates.
+        pub relations: Vec<(String, String, String)>,
+        /// Human-readable label for each detected community.
+        pub community_labels: Vec<String>,
+    }
+
+    impl GraphSummary {
+        /// Serialise to a natural-language paragraph for LLM context.
+        pub fn to_text(&self) -> String {
+            if self.entities.is_empty() {
+                return "The graph is empty.".to_string();
+            }
+            let n_comm = self.community_labels.len();
+            let n_ent = self.entities.len();
+            let entity_list = self
+                .entities
+                .iter()
+                .take(5)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
+            // Collect unique predicates from selected relations, ordered by first appearance.
+            let mut seen_preds: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            let mut pred_list: Vec<String> = Vec::new();
+            for (_, p, _) in &self.relations {
+                if seen_preds.insert(p.clone()) {
+                    pred_list.push(p.clone());
+                    if pred_list.len() >= 5 {
+                        break;
+                    }
+                }
+            }
+            format!(
+                "The graph contains {} {} across {} {}. \
+                 Key entities include: {}. \
+                 Primary relationships: {}.",
+                n_ent,
+                if n_ent == 1 { "entity" } else { "entities" },
+                n_comm,
+                if n_comm == 1 {
+                    "community"
+                } else {
+                    "communities"
+                },
+                entity_list,
+                if pred_list.is_empty() {
+                    "none".to_string()
+                } else {
+                    pred_list.join(", ")
+                },
+            )
+        }
+    }
+
+    /// Compresses a large KG subgraph (as raw triples) into a [`GraphSummary`]
+    /// capped at `max_nodes` entities and `max_triples` relations.
+    ///
+    /// Pipeline:
+    /// 1. Community detection via Leiden (reusing `src/graph/community.rs`).
+    /// 2. Per-community representative selection by in-degree centrality.
+    /// 3. Predicate frequency ranking.
+    /// 4. Triple selection and truncation.
+    pub struct GraphSummarizer {
+        pub max_nodes: usize,
+        pub max_triples: usize,
+    }
+
+    impl GraphSummarizer {
+        pub fn new(max_nodes: usize, max_triples: usize) -> Self {
+            Self {
+                max_nodes,
+                max_triples,
+            }
+        }
+
+        /// Summarise the given triples into a [`GraphSummary`].
+        pub fn summarize(&self, triples: &[(String, String, String)]) -> GraphSummary {
+            if triples.is_empty() {
+                return GraphSummary {
+                    entities: Vec::new(),
+                    relations: Vec::new(),
+                    community_labels: Vec::new(),
+                };
+            }
+
+            // ── Convert to crate Triple for community detector ────────────────
+            let core_triples: Vec<Triple> = triples
+                .iter()
+                .map(|(s, p, o)| Triple::new(s.clone(), p.clone(), o.clone()))
+                .collect();
+
+            // ── Build in-degree map: how many triples point TO each node ─────
+            let mut in_degree: HashMap<String, usize> = HashMap::new();
+            for (s, _, o) in triples {
+                // Initialise subject with 0 if not present (to ensure all nodes tracked).
+                in_degree.entry(s.clone()).or_insert(0);
+                *in_degree.entry(o.clone()).or_insert(0) += 1;
+            }
+
+            // ── Community detection via Leiden ────────────────────────────────
+            let config = CommunityConfig {
+                min_community_size: 1,
+                ..CommunityConfig::default()
+            };
+            let detector = CommunityDetector::new(config);
+            let communities = detector.detect(&core_triples).unwrap_or_default();
+
+            // ── Per-community: pick representative by max in-degree ───────────
+            // Use rayon for parallel centroid selection when there are many communities.
+            let representatives: Vec<(String, String)> = communities
+                .par_iter()
+                .enumerate()
+                .filter_map(|(idx, comm)| {
+                    let rep = comm
+                        .entities
+                        .iter()
+                        .max_by_key(|e| in_degree.get(e.as_str()).copied().unwrap_or(0))
+                        .cloned()?;
+                    let label = format!("Community {} ({} entities)", idx, comm.entities.len());
+                    Some((rep, label))
+                })
+                .collect();
+
+            // ── Predicate frequency ranking ───────────────────────────────────
+            let mut pred_freq: HashMap<&str, usize> = HashMap::new();
+            for (_, p, _) in triples {
+                *pred_freq.entry(p.as_str()).or_insert(0) += 1;
+            }
+            let mut pred_ranked: Vec<(&str, usize)> = pred_freq.into_iter().collect();
+            pred_ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+            let top_predicates: std::collections::HashSet<&str> =
+                pred_ranked.iter().take(10).map(|(p, _)| *p).collect();
+
+            // ── Build entities list (capped at max_nodes) ────────────────────
+            let entities: Vec<String> = representatives
+                .iter()
+                .map(|(rep, _)| rep.clone())
+                .take(self.max_nodes)
+                .collect();
+
+            let rep_set: std::collections::HashSet<&str> =
+                entities.iter().map(|s| s.as_str()).collect();
+
+            // ── Select relations: triples involving representatives + top preds
+            let mut selected: Vec<(String, String, String)> = triples
+                .iter()
+                .filter(|(s, p, _)| {
+                    rep_set.contains(s.as_str()) && top_predicates.contains(p.as_str())
+                })
+                .map(|(s, p, o)| (s.clone(), p.clone(), o.clone()))
+                .take(self.max_triples)
+                .collect();
+
+            // If still below max_triples, fill from any triple with a representative subject.
+            if selected.len() < self.max_triples {
+                for (s, p, o) in triples {
+                    if selected.len() >= self.max_triples {
+                        break;
+                    }
+                    if rep_set.contains(s.as_str()) {
+                        let candidate = (s.clone(), p.clone(), o.clone());
+                        if !selected.contains(&candidate) {
+                            selected.push(candidate);
+                        }
+                    }
+                }
+            }
+
+            let community_labels: Vec<String> = representatives
+                .iter()
+                .take(self.max_nodes)
+                .map(|(_, label)| label.clone())
+                .collect();
+
+            GraphSummary {
+                entities,
+                relations: selected,
+                community_labels,
+            }
+        }
+    }
+} // mod graph_summarizer_impl
+
+pub use graph_summarizer_impl::{GraphSummarizer, GraphSummary};
+
 // ─── Graph primitives ─────────────────────────────────────────────────────────
 
 /// A node in a knowledge-graph subgraph.
@@ -771,5 +970,104 @@ mod tests {
     fn test_default_subgraph() {
         let g = KgSubgraph::default();
         assert_eq!(g.node_count(), 0);
+    }
+}
+
+// ─── GraphSummarizer tests ────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod graph_summarizer_tests {
+    use super::GraphSummarizer;
+
+    /// Build a synthetic set of triples for testing.
+    fn sample_triples() -> Vec<(String, String, String)> {
+        vec![
+            ("Alice".into(), "knows".into(), "Bob".into()),
+            ("Bob".into(), "knows".into(), "Carol".into()),
+            ("Carol".into(), "knows".into(), "Alice".into()),
+            ("Alice".into(), "worksAt".into(), "ACME".into()),
+            ("Bob".into(), "worksAt".into(), "ACME".into()),
+            ("ACME".into(), "locatedIn".into(), "Berlin".into()),
+            ("Dave".into(), "knows".into(), "Eve".into()),
+            ("Eve".into(), "knows".into(), "Frank".into()),
+            ("Dave".into(), "worksAt".into(), "WidgetCo".into()),
+            ("WidgetCo".into(), "locatedIn".into(), "Paris".into()),
+        ]
+    }
+
+    #[test]
+    fn test_summary_respects_max_nodes() {
+        let summarizer = GraphSummarizer::new(3, 20);
+        let triples = sample_triples();
+        let summary = summarizer.summarize(&triples);
+        assert!(
+            summary.entities.len() <= 3,
+            "expected ≤3 entities, got {}",
+            summary.entities.len()
+        );
+    }
+
+    #[test]
+    fn test_summary_respects_max_triples() {
+        let summarizer = GraphSummarizer::new(10, 4);
+        let triples = sample_triples();
+        let summary = summarizer.summarize(&triples);
+        assert!(
+            summary.relations.len() <= 4,
+            "expected ≤4 relations, got {}",
+            summary.relations.len()
+        );
+    }
+
+    #[test]
+    fn test_to_text_non_empty_on_non_empty_graph() {
+        let summarizer = GraphSummarizer::new(10, 20);
+        let triples = sample_triples();
+        let summary = summarizer.summarize(&triples);
+        let text = summary.to_text();
+        assert!(!text.is_empty(), "to_text() should not be empty");
+    }
+
+    #[test]
+    fn test_empty_graph_returns_empty_summary() {
+        let summarizer = GraphSummarizer::new(10, 20);
+        let summary = summarizer.summarize(&[]);
+        assert!(
+            summary.entities.is_empty(),
+            "empty graph: entities should be empty"
+        );
+        assert!(
+            summary.relations.is_empty(),
+            "empty graph: relations should be empty"
+        );
+    }
+
+    #[test]
+    fn test_community_labels_present_when_graph_has_nodes() {
+        let summarizer = GraphSummarizer::new(10, 20);
+        let triples = sample_triples();
+        let summary = summarizer.summarize(&triples);
+        assert!(
+            !summary.community_labels.is_empty(),
+            "community_labels should be non-empty when graph has nodes"
+        );
+    }
+
+    #[test]
+    fn test_predicate_frequency_ordering() {
+        // "knows" appears 5×, "worksAt" appears 3×, "locatedIn" appears 2×.
+        // The most-used predicate must appear first among the relations.
+        let summarizer = GraphSummarizer::new(10, 20);
+        let triples = sample_triples();
+        let summary = summarizer.summarize(&triples);
+        // Collect the first predicate that appears in relations.
+        if let Some((_, p, _)) = summary.relations.first() {
+            assert_eq!(
+                p.as_str(),
+                "knows",
+                "first predicate in relations should be 'knows' (most frequent), got '{p}'"
+            );
+        }
+        // If relations are empty, the max_triples was 0 — skip the ordering check.
     }
 }

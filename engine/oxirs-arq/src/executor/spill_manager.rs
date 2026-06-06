@@ -331,24 +331,19 @@ impl SpillManager {
 
     /// Compress solution data
     fn compress_solution(&self, data: &Solution) -> Result<Vec<u8>> {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-
+        // Gzip (RFC 1952) compression via Pure-Rust oxiarc-deflate.
+        // Level 6 is the balanced default.
         let serializable = SerializableSolution::from(data);
         let json_data = serde_json::to_vec(&serializable)?;
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(&json_data)?;
-        let compressed = encoder.finish()?;
+        let compressed = oxiarc_deflate::gzip_compress(&json_data, 6)?;
         Ok(compressed)
     }
 
     /// Decompress solution data
     fn decompress_solution(&self, compressed: &[u8]) -> Result<Solution> {
-        use flate2::read::GzDecoder;
-
-        let decoder = GzDecoder::new(compressed);
-        let mut reader = BufReader::new(decoder);
-        let serializable: SerializableSolution = serde_json::from_reader(&mut reader)?;
+        // Gzip (RFC 1952) decompression via Pure-Rust oxiarc-deflate.
+        let json_data = oxiarc_deflate::gzip_decompress(compressed)?;
+        let serializable: SerializableSolution = serde_json::from_slice(&json_data)?;
         Ok(Solution::from(serializable))
     }
 
@@ -397,11 +392,11 @@ impl SpillIterator {
         let mut reader = BufReader::new(file);
 
         let data = if self.spill.compressed {
-            use flate2::read::GzDecoder;
-            let decoder = GzDecoder::new(reader);
-            let mut decompressed_reader = BufReader::new(decoder);
-            let serializable: SerializableSolution =
-                serde_json::from_reader(&mut decompressed_reader)?;
+            // Gzip (RFC 1952) decompression via Pure-Rust oxiarc-deflate.
+            let mut compressed = Vec::new();
+            reader.read_to_end(&mut compressed)?;
+            let json_data = oxiarc_deflate::gzip_decompress(&compressed)?;
+            let serializable: SerializableSolution = serde_json::from_slice(&json_data)?;
             Solution::from(serializable)
         } else {
             let serializable: SerializableSolution = serde_json::from_reader(&mut reader)?;

@@ -7,6 +7,11 @@
 
 pub mod factory;
 pub mod parser;
+pub(crate) mod parser_shaclc;
+#[cfg(test)]
+mod parser_tests;
+pub(crate) mod parser_ttl;
+pub mod parser_types;
 pub mod types;
 pub mod validator;
 

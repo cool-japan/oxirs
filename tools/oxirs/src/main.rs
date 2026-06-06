@@ -7,6 +7,10 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install the Pure Rust crypto provider as the rustls process default before
+    // any TLS-backed work (reqwest, embedded Fuseki server). Idempotent.
+    let _ = rustls::crypto::CryptoProvider::install_default((*oxitls::pure_provider()).clone());
+
     // Get command-line arguments
     let args: Vec<String> = env::args().collect();
 

@@ -2,8 +2,8 @@
 
 **OxiRS IDS Connector - Technical Architecture Documentation**
 
-Version: 0.1.0
-Last Updated: 2026-01-06
+Version: 0.3.1
+Last Updated: 2026-06-06
 Status: Production Ready
 
 ## Table of Contents

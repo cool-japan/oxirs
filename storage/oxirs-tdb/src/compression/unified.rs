@@ -247,44 +247,24 @@ impl UnifiedCompression {
     }
 
     fn compress_brotli(&self, data: &[u8], level: u32) -> Result<Vec<u8>> {
-        let mut output = Vec::new();
-        let mut compressor = brotli::CompressorWriter::new(&mut output, 4096, level, 22);
-
-        use std::io::Write;
-        compressor
-            .write_all(data)
-            .map_err(|e| TdbError::Other(format!("Brotli compression failed: {}", e)))?;
-        compressor
-            .flush()
-            .map_err(|e| TdbError::Other(format!("Brotli flush failed: {}", e)))?;
-        drop(compressor);
-
-        Ok(output)
+        // Quality = `level`, default lgwin (22) matches the previous streaming
+        // window size. The on-disk payload is a standard Brotli stream.
+        oxiarc_brotli::compress(data, level)
+            .map_err(|e| TdbError::Other(format!("Brotli compression failed: {}", e)))
     }
 
     fn decompress_brotli(&self, data: &[u8]) -> Result<Vec<u8>> {
-        let mut output = Vec::new();
-        let mut decompressor = brotli::Decompressor::new(data, 4096);
-
-        use std::io::Read;
-        decompressor
-            .read_to_end(&mut output)
-            .map_err(|e| TdbError::Other(format!("Brotli decompression failed: {}", e)))?;
-
-        Ok(output)
+        oxiarc_brotli::decompress(data)
+            .map_err(|e| TdbError::Other(format!("Brotli decompression failed: {}", e)))
     }
 
     fn compress_snappy(&self, data: &[u8]) -> Result<Vec<u8>> {
-        let mut encoder = snap::raw::Encoder::new();
-        encoder
-            .compress_vec(data)
-            .map_err(|e| TdbError::Other(format!("Snappy compression failed: {}", e)))
+        // Raw Snappy block format (no framing), matching the previous behavior.
+        Ok(oxiarc_snappy::compress(data))
     }
 
     fn decompress_snappy(&self, data: &[u8]) -> Result<Vec<u8>> {
-        let mut decoder = snap::raw::Decoder::new();
-        decoder
-            .decompress_vec(data)
+        oxiarc_snappy::decompress(data)
             .map_err(|e| TdbError::Other(format!("Snappy decompression failed: {}", e)))
     }
 
@@ -396,6 +376,48 @@ mod tests {
             .decompress(&compressed, CompressionAlgorithm::Snappy)
             .unwrap();
 
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_brotli_roundtrip() {
+        let compression = UnifiedCompression::new();
+        let data = b"Brotli excels at compressing text and structured web content. ".repeat(20);
+
+        let compressed = compression
+            .compress_with(
+                &data,
+                CompressionAlgorithm::Brotli,
+                CompressionLevel::DEFAULT,
+            )
+            .unwrap();
+
+        let decompressed = compression
+            .decompress(&compressed, CompressionAlgorithm::Brotli)
+            .unwrap();
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_brotli_roundtrip_incompressible() {
+        // Random/incompressible data must round-trip losslessly through the
+        // standard Brotli on-disk format (no stored fallback).
+        use scirs2_core::random::rng;
+        use scirs2_core::RngExt;
+        let mut r = rng();
+        let data: Vec<u8> = (0..1500).map(|_| r.random_range(0..256) as u8).collect();
+
+        let compression = UnifiedCompression::new();
+        let compressed = compression
+            .compress_with(
+                &data,
+                CompressionAlgorithm::Brotli,
+                CompressionLevel::DEFAULT,
+            )
+            .unwrap();
+        let decompressed = compression
+            .decompress(&compressed, CompressionAlgorithm::Brotli)
+            .unwrap();
         assert_eq!(decompressed, data);
     }
 

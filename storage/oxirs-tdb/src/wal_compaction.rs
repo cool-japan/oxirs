@@ -922,7 +922,7 @@ mod tests {
             snapshot_id: 1,
             lsn: 100,
             timestamp: 1000,
-            path: PathBuf::from("/tmp/snap-1"),
+            path: std::env::temp_dir().join("oxirs_tdb_snap-1"),
             size_bytes: 1024,
         });
         assert_eq!(engine.snapshot_count(), 1);
@@ -950,7 +950,7 @@ mod tests {
                 snapshot_id: i,
                 lsn: i * 100,
                 timestamp: i * 1000,
-                path: PathBuf::from(format!("/tmp/snap-{i}")),
+                path: std::env::temp_dir().join(format!("oxirs_tdb_snap-{i}")),
                 size_bytes: 1024,
             });
         }
@@ -966,7 +966,7 @@ mod tests {
             snapshot_id: 1,
             lsn: 100,
             timestamp: 1000,
-            path: PathBuf::from("/tmp/snap-1"),
+            path: std::env::temp_dir().join("oxirs_tdb_snap-1"),
             size_bytes: 1024,
         });
 
@@ -1055,7 +1055,7 @@ mod tests {
             snapshot_id: 1,
             lsn: 50,
             timestamp: 1000,
-            path: PathBuf::from("/tmp/snap"),
+            path: std::env::temp_dir().join("oxirs_tdb_snap"),
             size_bytes: 0,
         });
 
@@ -1092,7 +1092,7 @@ mod tests {
                 snapshot_id: 1,
                 lsn: 50,
                 timestamp: 1000,
-                path: PathBuf::from("/tmp/snap"),
+                path: std::env::temp_dir().join("oxirs_tdb_snap"),
                 size_bytes: 0,
             }),
             segments_to_replay: vec![],

@@ -433,7 +433,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_parse_state_creation() {
-        let state = ParseState::new("/tmp/test.ttl");
+        let state = ParseState::new(
+            std::env::temp_dir().join(format!("oxirs_test_{}.ttl", std::process::id())),
+        );
         assert_eq!(state.byte_offset, 0);
         assert_eq!(state.properties_parsed, 0);
         assert!(state.partial_aspect.is_none());
@@ -482,13 +484,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_incremental_parser_creation() {
-        let parser = IncrementalParser::new("/tmp/test.ttl");
+        let parser = IncrementalParser::new(
+            std::env::temp_dir().join(format!("oxirs_test_{}.ttl", std::process::id())),
+        );
         assert_eq!(parser.state().byte_offset, 0);
     }
 
     #[tokio::test]
     async fn test_incremental_parser_with_chunk_size() {
-        let parser = IncrementalParser::new("/tmp/test.ttl").with_chunk_size(1024);
+        let parser = IncrementalParser::new(
+            std::env::temp_dir().join(format!("oxirs_test_{}.ttl", std::process::id())),
+        )
+        .with_chunk_size(1024);
         assert_eq!(parser.chunk_size, 1024);
     }
 

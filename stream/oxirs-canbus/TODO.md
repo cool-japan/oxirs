@@ -1,10 +1,10 @@
 # OxiRS CAN Bus - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
-OxiRS CAN Bus v0.2.3 provides automotive CAN bus integration with J1939 protocol support, DBC file parsing, and RDF mapping for vehicle telematics and industrial automation.
+OxiRS CAN Bus v0.3.1 provides automotive CAN bus integration with J1939 protocol support, DBC file parsing, and RDF mapping for vehicle telematics and industrial automation.
 
 ### Features
 - ✅ SocketCAN integration (Linux)
@@ -41,8 +41,8 @@ OxiRS CAN Bus v0.2.3 provides automotive CAN bus integration with J1939 protocol
 - ✅ 1125 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise integration features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise integration features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] GUI tools and web interface — Tauri 2.x J1939 CAN bus monitor, desktop/ui/canbus.html (completed 2026-05-02)
 - [x] Automotive digital-twin support — J1939 ↔ DTDL bridge (completed 2026-05-01)
   - **Goal:** Bridge SAE-J1939 PGN telemetry (decoded by `oxirs-canbus`) to the DTDL digital-twin property model in `oxirs-physics`. Bidirectional: J1939 PGN → DTDL property write, AND DTDL command → J1939 request/response. Facade pattern: `J1939SourceFacade` + `DtdlSinkFacade` traits, plus mocks for test isolation.
@@ -60,7 +60,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS CAN Bus v0.2.3 - Automotive telematics for semantic web*
+*OxiRS CAN Bus v0.3.1 - Automotive telematics for semantic web*
 
 ## Proposed follow-ups
 

@@ -8,7 +8,7 @@ Modbus TCP and RTU protocol support for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.2.3) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.3.1) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 
@@ -33,7 +33,7 @@ Modbus TCP and RTU protocol support for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-modbus = "0.3.0"
+oxirs-modbus = "0.3.1"
 ```
 
 ### Basic Modbus TCP Example

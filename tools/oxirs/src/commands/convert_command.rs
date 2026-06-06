@@ -273,6 +273,16 @@ mod tests {
         format!("{:x}", t)
     }
 
+    /// Build a temp-dir output path string. `execute` only simulates the
+    /// conversion (it never writes the output file), so the path is purely a
+    /// placeholder; the name still carries the desired extension.
+    fn convert_out_path(name: &str) -> String {
+        std::env::temp_dir()
+            .join(format!("oxirs_convert_{}", name))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     // ===== detect_format =====
 
     #[test]
@@ -360,8 +370,9 @@ mod tests {
 
     #[test]
     fn test_detect_path_with_dir() {
+        let path = std::env::temp_dir().join("some/path/data.ttl");
         assert_eq!(
-            ConvertCommand::detect_format("/tmp/some/path/data.ttl"),
+            ConvertCommand::detect_format(&path.to_string_lossy()),
             Some(RdfFormat::Turtle)
         );
     }
@@ -541,7 +552,7 @@ mod tests {
         let cmd = ConvertCommand::new();
         let args = ConvertArgs {
             input_file: "/nonexistent/file.ttl".to_string(),
-            output_file: "/tmp/output.nt".to_string(),
+            output_file: convert_out_path("output.nt"),
             from_format: None,
             to_format: RdfFormat::NTriples,
             pretty: false,
@@ -584,7 +595,7 @@ mod tests {
         let cmd = ConvertCommand::new();
         let args = ConvertArgs {
             input_file: input.to_str().unwrap_or_default().to_string(),
-            output_file: "/tmp/out.nt".to_string(),
+            output_file: convert_out_path("out.nt"),
             from_format: Some(RdfFormat::Turtle),
             to_format: RdfFormat::NTriples,
             pretty: true, // pretty is set
@@ -608,7 +619,7 @@ mod tests {
         let cmd = ConvertCommand::new();
         let args = ConvertArgs {
             input_file: input.to_str().unwrap_or_default().to_string(),
-            output_file: "/tmp/out.ttl".to_string(),
+            output_file: convert_out_path("out.ttl"),
             from_format: Some(RdfFormat::NTriples),
             to_format: RdfFormat::Turtle,
             pretty: false,
@@ -626,7 +637,7 @@ mod tests {
         let cmd = ConvertCommand::new();
         let args = ConvertArgs {
             input_file: input.to_str().unwrap_or_default().to_string(),
-            output_file: "/tmp/out.nt".to_string(),
+            output_file: convert_out_path("out.nt"),
             from_format: None, // auto-detect
             to_format: RdfFormat::NTriples,
             pretty: false,
@@ -647,7 +658,7 @@ mod tests {
         let cmd = ConvertCommand::new();
         let args = ConvertArgs {
             input_file: input.to_str().unwrap_or_default().to_string(),
-            output_file: "/tmp/out.nt".to_string(),
+            output_file: convert_out_path("out.nt"),
             from_format: None, // auto-detect will fail on .xyz
             to_format: RdfFormat::NTriples,
             pretty: false,
@@ -661,7 +672,12 @@ mod tests {
 
     #[test]
     fn test_convert_error_display_file_not_found() {
-        let e = ConvertError::FileNotFound("/tmp/x".to_string());
+        let e = ConvertError::FileNotFound(
+            std::env::temp_dir()
+                .join("oxirs_convert_x")
+                .to_string_lossy()
+                .into_owned(),
+        );
         let s = e.to_string();
         assert!(s.contains("file not found"));
     }

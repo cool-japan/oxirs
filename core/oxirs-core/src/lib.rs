@@ -1,9 +1,9 @@
 //! # OxiRS Core - RDF and SPARQL Foundation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stabilizing. Production-ready for RDF/SPARQL core operations.
 //!
 //! ## Overview
@@ -238,7 +238,6 @@
 //! - `parallel` - Enable parallel processing with rayon (default)
 //! - `simd` - Enable SIMD optimizations for x86_64
 //! - `async` - Enable async I/O support
-//! - `rocksdb` - Enable RocksDB storage backend
 //! - `rdf-star` - Enable RDF-star (quoted triples) support
 //! - `sparql-12` - Enable SPARQL 1.2 features
 //!
@@ -278,8 +277,17 @@ pub mod ai;
 pub mod api_surface; // Programmatic public-API surface tracking and stability enforcement
 pub mod assembler; // Jena Assembler vocabulary — RDF-based dataset/model configuration using ja:
 pub mod audit; // SOC2/GDPR-compliant structured audit trail (enterprise compliance)
+pub mod canon; // W3C RDF Dataset Normalization (URDNA2015) — canonical blank node naming
 pub mod concurrent;
+pub mod config;
+pub mod config_parser;
+pub mod config_types;
+pub mod config_types_core;
+pub mod config_types_network;
+pub mod config_types_storage;
+pub mod config_validation;
 pub mod consciousness; // Consciousness-inspired computing for intuitive query optimization
+pub mod crypto_provider; // Installs the Pure Rust rustls CryptoProvider as the process default (binaries + tests)
 pub mod distributed;
 pub mod federation;
 pub mod format;
@@ -287,25 +295,24 @@ pub mod graph;
 pub mod indexing;
 pub mod interning;
 pub mod io;
+pub mod jsonld; // Re-enabled after fixing StringInterner method calls
 pub mod model;
 pub mod molecular;
 pub mod optimization;
+pub mod oxigraph_compat;
 pub mod parser;
 pub mod perf_sla; // Performance SLA harness: SloTarget, BenchmarkResult, assert_meets_slo
 pub mod production;
 pub mod quantum;
 pub mod query;
 pub mod rdf_store;
+pub mod rdfxml;
 pub mod serializer;
 pub mod sparql; // SPARQL query processing modules
 pub mod storage;
 pub mod store;
 pub mod transaction;
-pub mod vocab;
-// pub mod config;
-pub mod jsonld; // Re-enabled after fixing StringInterner method calls
-pub mod oxigraph_compat;
-pub mod rdfxml; // Oxigraph compatibility layer
+pub mod vocab; // Oxigraph compatibility layer
 
 // Core abstractions for OxiRS ecosystem
 pub mod error;
@@ -333,6 +340,12 @@ pub mod views; // Incremental view maintenance (new: DeltaChange-based API with 
 // Re-export core types for convenience
 pub use model::*;
 pub use rdf_store::{ConcreteStore, RdfStore, Store};
+
+// Re-export URDNA2015 canonicalization API
+pub use canon::{canonicalize, Canonicalizer, QuadTerm as CanonQuadTerm, RdfQuad as CanonRdfQuad};
+
+// Re-export the Pure Rust crypto provider installer for ergonomic access.
+pub use crypto_provider::ensure_crypto_provider;
 pub use transaction::{
     AcidTransaction, IsolationLevel, TransactionId, TransactionManager, TransactionState,
 };
@@ -388,13 +401,6 @@ impl From<oxicode::Error> for OxirsError {
 impl From<serde_json::Error> for OxirsError {
     fn from(err: serde_json::Error) -> Self {
         OxirsError::Serialize(err.to_string())
-    }
-}
-
-#[cfg(feature = "rocksdb")]
-impl From<rocksdb::Error> for OxirsError {
-    fn from(err: rocksdb::Error) -> Self {
-        OxirsError::Store(err.to_string())
     }
 }
 

@@ -864,7 +864,7 @@ impl Default for BatchProcessor {
 /// SIMD-accelerated string operations for RDF processing
 pub mod simd {
     #[cfg(feature = "simd")]
-    use wide::{u8x32, CmpEq};
+    use wide::u8x32;
 
     /// Fast IRI validation using SIMD operations
     #[cfg(feature = "simd")]

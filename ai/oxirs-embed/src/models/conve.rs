@@ -802,8 +802,11 @@ impl EmbeddingModel for ConvE {
     }
 
     async fn encode(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        // TODO: Implement text encoding
-        Err(anyhow!("Text encoding not implemented for ConvE"))
+        // ConvE is a structural KG embedding model and does not support raw
+        // text encoding.  Use a dedicated text-embedding model for that task.
+        Err(anyhow!(
+            "Knowledge graph embedding model does not support text encoding"
+        ))
     }
 }
 

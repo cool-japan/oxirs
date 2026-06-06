@@ -9,9 +9,6 @@ use crate::model::StarGraph;
 use crate::parser::{StarFormat, StarParser};
 use crate::serializer::StarSerializer;
 use chrono::{DateTime, Utc};
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use scirs2_core::random::rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -261,15 +258,15 @@ impl BackupManager {
 
         let original_size = serialized.len() as u64;
 
-        // Compress
-        let file = File::create(&backup_path)?;
-        let mut encoder = GzEncoder::new(
-            BufWriter::new(file),
-            Compression::new(self.config.compression_level),
-        );
-
-        encoder.write_all(serialized.as_bytes())?;
-        encoder.finish()?;
+        // Compress (gzip). oxiarc-deflate uses levels 0-9 (u8); clamp the
+        // configured level accordingly.
+        let level = self.config.compression_level.min(9) as u8;
+        let compressed = oxiarc_deflate::gzip_compress(serialized.as_bytes(), level)
+            .map_err(|e| BackupError::CompressionError(e.to_string()))?;
+        let mut writer = BufWriter::new(File::create(&backup_path)?);
+        writer.write_all(&compressed)?;
+        writer.flush()?;
+        drop(writer);
 
         // Get compressed size
         let compressed_size = std::fs::metadata(&backup_path)?.len();
@@ -345,11 +342,13 @@ impl BackupManager {
             )));
         }
 
-        // Decompress
-        let file = File::open(&backup_path)?;
-        let decoder = GzDecoder::new(BufReader::new(file));
-        let mut decompressed = String::new();
-        BufReader::new(decoder).read_to_string(&mut decompressed)?;
+        // Decompress (gzip)
+        let mut compressed = Vec::new();
+        BufReader::new(File::open(&backup_path)?).read_to_end(&mut compressed)?;
+        let decompressed_bytes = oxiarc_deflate::gzip_decompress(&compressed)
+            .map_err(|e| BackupError::CompressionError(e.to_string()))?;
+        let decompressed = String::from_utf8(decompressed_bytes)
+            .map_err(|e| BackupError::RestoreFailed(format!("Invalid UTF-8 in backup: {e}")))?;
 
         // Parse
         let parser = StarParser::new();

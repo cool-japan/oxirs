@@ -344,6 +344,9 @@ impl SimdTripleMatcher {
             Some(SubjectPattern::Variable(_)) => 0.0, // Variable matches anything
             Some(SubjectPattern::NamedNode(nn)) => self.hash_term(nn.as_str()),
             Some(SubjectPattern::BlankNode(bn)) => self.hash_term(bn.as_str()),
+            // Quoted triples are treated as wildcards for SIMD hash matching;
+            // inner-triple filtering is done in a subsequent non-SIMD pass.
+            Some(SubjectPattern::QuotedTriple(_)) => 0.0,
         };
 
         let predicate_mask = match &pattern.predicate {
@@ -358,6 +361,8 @@ impl SimdTripleMatcher {
             Some(ObjectPattern::NamedNode(nn)) => self.hash_term(nn.as_str()),
             Some(ObjectPattern::BlankNode(bn)) => self.hash_term(bn.as_str()),
             Some(ObjectPattern::Literal(lit)) => self.hash_term(lit.value()),
+            // Quoted triples are treated as wildcards for SIMD hash matching.
+            Some(ObjectPattern::QuotedTriple(_)) => 0.0,
         };
 
         [subject_mask, predicate_mask, object_mask]

@@ -210,7 +210,7 @@ mod tests {
     fn test_resolve_both_is_error() {
         let result = resolve_query_string(
             Some("SELECT ?s WHERE { ?s ?p ?o }".to_string()),
-            Some(PathBuf::from("/tmp/q.sparql")),
+            Some(std::env::temp_dir().join("oxirs_rsparql_both.sparql")),
         );
         assert!(result.is_err());
     }

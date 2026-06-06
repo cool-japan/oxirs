@@ -76,6 +76,8 @@ pub enum SubjectPattern {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
     Variable(Variable),
+    /// RDF-star: a quoted triple used as a subject
+    QuotedTriple(Box<crate::query::algebra::AlgebraTriplePattern>),
 }
 
 impl SubjectPattern {
@@ -85,6 +87,7 @@ impl SubjectPattern {
             SubjectPattern::NamedNode(nn) => nn.as_str(),
             SubjectPattern::BlankNode(bn) => bn.as_str(),
             SubjectPattern::Variable(v) => v.as_str(),
+            SubjectPattern::QuotedTriple(_) => "<<quoted-triple>>",
         }
     }
 
@@ -93,6 +96,9 @@ impl SubjectPattern {
             (SubjectPattern::NamedNode(pn), Subject::NamedNode(sn)) => pn == sn,
             (SubjectPattern::BlankNode(pb), Subject::BlankNode(sb)) => pb == sb,
             (SubjectPattern::Variable(_), _) => true,
+            // A quoted-triple pattern matches any quoted-triple subject (variable binding
+            // refinement is handled by the query evaluator, not at the pattern level).
+            (SubjectPattern::QuotedTriple(_), Subject::QuotedTriple(_)) => true,
             _ => false,
         }
     }
@@ -132,6 +138,8 @@ pub enum ObjectPattern {
     BlankNode(BlankNode),
     Literal(Literal),
     Variable(Variable),
+    /// RDF-star: a quoted triple used as an object
+    QuotedTriple(Box<crate::query::algebra::AlgebraTriplePattern>),
 }
 
 impl ObjectPattern {
@@ -142,6 +150,7 @@ impl ObjectPattern {
             ObjectPattern::BlankNode(bn) => bn.as_str(),
             ObjectPattern::Literal(l) => l.value(),
             ObjectPattern::Variable(v) => v.as_str(),
+            ObjectPattern::QuotedTriple(_) => "<<quoted-triple>>",
         }
     }
 
@@ -151,50 +160,78 @@ impl ObjectPattern {
             (ObjectPattern::BlankNode(pb), Object::BlankNode(ob)) => pb == ob,
             (ObjectPattern::Literal(pl), Object::Literal(ol)) => pl == ol,
             (ObjectPattern::Variable(_), _) => true,
+            // A quoted-triple pattern matches any quoted-triple object.
+            (ObjectPattern::QuotedTriple(_), Object::QuotedTriple(_)) => true,
             _ => false,
         }
     }
 }
 
-// Add From implementations for TermPattern conversions
+// TryFrom implementations for converting TermPattern to positional patterns.
+// Using TryFrom rather than From because certain TermPattern variants are semantically
+// invalid for particular positions (e.g., Literal cannot be a subject in RDF).
 use crate::query::algebra::TermPattern;
 
-impl From<TermPattern> for SubjectPattern {
-    fn from(term: TermPattern) -> Self {
+/// Error type for invalid TermPattern-to-positional-pattern conversions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidPatternConversion {
+    pub reason: &'static str,
+}
+
+impl std::fmt::Display for InvalidPatternConversion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Invalid pattern conversion: {}", self.reason)
+    }
+}
+
+impl std::error::Error for InvalidPatternConversion {}
+
+impl TryFrom<TermPattern> for SubjectPattern {
+    type Error = InvalidPatternConversion;
+
+    fn try_from(term: TermPattern) -> Result<Self, Self::Error> {
         match term {
-            TermPattern::NamedNode(n) => SubjectPattern::NamedNode(n),
-            TermPattern::BlankNode(b) => SubjectPattern::BlankNode(b),
-            TermPattern::Variable(v) => SubjectPattern::Variable(v),
-            TermPattern::Literal(_) => panic!("Literals cannot be subjects"),
-            TermPattern::QuotedTriple(_) => {
-                panic!("RDF-star quoted triples as subjects not yet fully implemented")
-            }
+            TermPattern::NamedNode(n) => Ok(SubjectPattern::NamedNode(n)),
+            TermPattern::BlankNode(b) => Ok(SubjectPattern::BlankNode(b)),
+            TermPattern::Variable(v) => Ok(SubjectPattern::Variable(v)),
+            TermPattern::QuotedTriple(qt) => Ok(SubjectPattern::QuotedTriple(qt)),
+            TermPattern::Literal(_) => Err(InvalidPatternConversion {
+                reason: "Literals cannot be used as subjects in RDF",
+            }),
         }
     }
 }
 
-impl From<TermPattern> for PredicatePattern {
-    fn from(term: TermPattern) -> Self {
+impl TryFrom<TermPattern> for PredicatePattern {
+    type Error = InvalidPatternConversion;
+
+    fn try_from(term: TermPattern) -> Result<Self, Self::Error> {
         match term {
-            TermPattern::NamedNode(n) => PredicatePattern::NamedNode(n),
-            TermPattern::Variable(v) => PredicatePattern::Variable(v),
-            TermPattern::BlankNode(_) => panic!("Blank nodes cannot be predicates"),
-            TermPattern::Literal(_) => panic!("Literals cannot be predicates"),
-            TermPattern::QuotedTriple(_) => panic!("Quoted triples cannot be predicates"),
+            TermPattern::NamedNode(n) => Ok(PredicatePattern::NamedNode(n)),
+            TermPattern::Variable(v) => Ok(PredicatePattern::Variable(v)),
+            TermPattern::BlankNode(_) => Err(InvalidPatternConversion {
+                reason: "Blank nodes cannot be used as predicates in RDF",
+            }),
+            TermPattern::Literal(_) => Err(InvalidPatternConversion {
+                reason: "Literals cannot be used as predicates in RDF",
+            }),
+            TermPattern::QuotedTriple(_) => Err(InvalidPatternConversion {
+                reason: "Quoted triples cannot be used as predicates in RDF",
+            }),
         }
     }
 }
 
-impl From<TermPattern> for ObjectPattern {
-    fn from(term: TermPattern) -> Self {
+impl TryFrom<TermPattern> for ObjectPattern {
+    type Error = InvalidPatternConversion;
+
+    fn try_from(term: TermPattern) -> Result<Self, Self::Error> {
         match term {
-            TermPattern::NamedNode(n) => ObjectPattern::NamedNode(n),
-            TermPattern::BlankNode(b) => ObjectPattern::BlankNode(b),
-            TermPattern::Literal(l) => ObjectPattern::Literal(l),
-            TermPattern::Variable(v) => ObjectPattern::Variable(v),
-            TermPattern::QuotedTriple(_) => {
-                panic!("RDF-star quoted triples as objects not yet fully implemented")
-            }
+            TermPattern::NamedNode(n) => Ok(ObjectPattern::NamedNode(n)),
+            TermPattern::BlankNode(b) => Ok(ObjectPattern::BlankNode(b)),
+            TermPattern::Literal(l) => Ok(ObjectPattern::Literal(l)),
+            TermPattern::Variable(v) => Ok(ObjectPattern::Variable(v)),
+            TermPattern::QuotedTriple(qt) => Ok(ObjectPattern::QuotedTriple(qt)),
         }
     }
 }
@@ -208,6 +245,29 @@ impl TryFrom<&SubjectPattern> for Subject {
             SubjectPattern::NamedNode(n) => Ok(Subject::NamedNode(n.clone())),
             SubjectPattern::BlankNode(b) => Ok(Subject::BlankNode(b.clone())),
             SubjectPattern::Variable(_) => Err(()),
+            SubjectPattern::QuotedTriple(qt) => {
+                // Convert AlgebraTriplePattern to a concrete QuotedTriple if possible.
+                // This requires all sub-terms to be ground (non-variable).
+                use crate::model::star::QuotedTriple;
+                let inner_subj = match &qt.subject {
+                    TermPattern::NamedNode(n) => Subject::NamedNode(n.clone()),
+                    TermPattern::BlankNode(b) => Subject::BlankNode(b.clone()),
+                    _ => return Err(()),
+                };
+                let inner_pred = match &qt.predicate {
+                    TermPattern::NamedNode(n) => Predicate::NamedNode(n.clone()),
+                    _ => return Err(()),
+                };
+                let inner_obj = match &qt.object {
+                    TermPattern::NamedNode(n) => Object::NamedNode(n.clone()),
+                    TermPattern::BlankNode(b) => Object::BlankNode(b.clone()),
+                    TermPattern::Literal(l) => Object::Literal(l.clone()),
+                    _ => return Err(()),
+                };
+                Ok(Subject::QuotedTriple(Box::new(QuotedTriple::new(
+                    Triple::new(inner_subj, inner_pred, inner_obj),
+                ))))
+            }
         }
     }
 }
@@ -232,6 +292,28 @@ impl TryFrom<&ObjectPattern> for Object {
             ObjectPattern::BlankNode(b) => Ok(Object::BlankNode(b.clone())),
             ObjectPattern::Literal(l) => Ok(Object::Literal(l.clone())),
             ObjectPattern::Variable(_) => Err(()),
+            ObjectPattern::QuotedTriple(qt) => {
+                // Convert AlgebraTriplePattern to a concrete QuotedTriple if all terms are ground.
+                use crate::model::star::QuotedTriple;
+                let inner_subj = match &qt.subject {
+                    TermPattern::NamedNode(n) => Subject::NamedNode(n.clone()),
+                    TermPattern::BlankNode(b) => Subject::BlankNode(b.clone()),
+                    _ => return Err(()),
+                };
+                let inner_pred = match &qt.predicate {
+                    TermPattern::NamedNode(n) => Predicate::NamedNode(n.clone()),
+                    _ => return Err(()),
+                };
+                let inner_obj = match &qt.object {
+                    TermPattern::NamedNode(n) => Object::NamedNode(n.clone()),
+                    TermPattern::BlankNode(b) => Object::BlankNode(b.clone()),
+                    TermPattern::Literal(l) => Object::Literal(l.clone()),
+                    _ => return Err(()),
+                };
+                Ok(Object::QuotedTriple(Box::new(QuotedTriple::new(
+                    Triple::new(inner_subj, inner_pred, inner_obj),
+                ))))
+            }
         }
     }
 }

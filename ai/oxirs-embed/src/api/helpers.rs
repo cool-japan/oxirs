@@ -182,13 +182,12 @@ pub async fn get_production_model_from_state(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[tokio::test]
     async fn test_get_production_model_empty_registry() {
-        let registry = Arc::new(ModelRegistry::new(PathBuf::from(
-            "/tmp/oxirs_test_registry",
-        )));
+        let registry = Arc::new(ModelRegistry::new(
+            std::env::temp_dir().join(format!("oxirs_test_registry_{}", std::process::id())),
+        ));
         let result = get_production_model(&registry).await;
         assert!(result.is_err());
         let msg = result.err().map(|e| e.to_string()).unwrap_or_default();

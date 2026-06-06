@@ -600,7 +600,7 @@ mod tests {
 
         engine.add_rule(rule)?;
 
-        let rules = engine.rules.read().unwrap();
+        let rules = engine.rules.read().unwrap_or_else(|e| e.into_inner());
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].id, "test_rule");
 

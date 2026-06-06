@@ -1,0 +1,352 @@
+##############################################################################
+# ESMF SDK 2.x Feature Parity Catalog for oxirs-samm
+#
+# This is the hand-curated reference copy. The embedded version used at
+# compile time lives at src/parity/esmf_catalog.toml and is kept in sync.
+#
+# Each entry covers one documented ESMF SDK 2.x feature.
+# Fields:
+#   name           - human-readable feature name (unique per category)
+#   description    - one-sentence scope note
+#   status         - "done" | "partial" | "missing"
+#   oxirs_module   - Rust module in this crate (omit if status == "missing")
+#   notes          - additional caveats or ESMF reference URL
+##############################################################################
+
+# ──────────────────────────────────────────────────────────────────────────
+# Aspect Modeling
+# ──────────────────────────────────────────────────────────────────────────
+
+[[aspect_modeling]]
+name = "Aspect definition"
+description = "Core Aspect element with properties, operations and events."
+status = "done"
+oxirs_module = "oxirs_samm::metamodel::aspect"
+notes = "Fully modelled; see metamodel::aspect."
+
+[[aspect_modeling]]
+name = "Property (mandatory and optional)"
+description = "Property with optional flag, characteristic binding and example values."
+status = "done"
+oxirs_module = "oxirs_samm::metamodel::property"
+notes = "Includes optional properties and characteristic binding."
+
+[[aspect_modeling]]
+name = "Operation"
+description = "Operation with typed input and output parameters."
+status = "done"
+oxirs_module = "oxirs_samm::metamodel::operation"
+notes = "Full input/output parameter typing."
+
+[[aspect_modeling]]
+name = "Event"
+description = "Aspect Event element with parameter list for change notification."
+status = "done"
+oxirs_module = "oxirs_samm::event_model"
+notes = "Event element with parameter list; lifecycle hooks are partial."
+
+[[aspect_modeling]]
+name = "Characteristic definition (Trait)"
+description = "Characteristic trait hierarchy including Measurement, Enumeration, Collection."
+status = "done"
+oxirs_module = "oxirs_samm::metamodel::characteristic"
+notes = "Full trait hierarchy."
+
+[[aspect_modeling]]
+name = "Entity (complex structured type)"
+description = "Entity with extends-hierarchy and nested property lists."
+status = "done"
+oxirs_module = "oxirs_samm::metamodel::entity"
+notes = "Entity with extends-hierarchy and nested property lists."
+
+[[aspect_modeling]]
+name = "Either characteristic"
+description = "samm-c:Either union-type characteristic for two-variant properties."
+status = "done"
+oxirs_module = "oxirs_samm::metamodel::characteristic"
+notes = "CharacteristicKind::Either with parser, serializer, and schema generation."
+
+[[aspect_modeling]]
+name = "Abstract entity / entity inheritance"
+description = "Single-level and multi-level abstract entity chains."
+status = "partial"
+notes = "Single-level inheritance supported; multi-level abstract chains not fully validated."
+
+[[aspect_modeling]]
+name = "Constraint types (Range, Length, RegularExpression, Encoding, FixedPoint)"
+description = "Named constraint variants on characteristics."
+status = "partial"
+oxirs_module = "oxirs_samm::constraint_validator"
+notes = "Range, Length, and RegularExpression implemented; FixedPoint and Encoding partial."
+
+[[aspect_modeling]]
+name = "Extension model elements (user-defined)"
+description = "User-defined extension properties attached to any model element."
+status = "partial"
+oxirs_module = "oxirs_samm::metamodel::extension"
+notes = "Extension attachment works; query-side projection of extension values is missing."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Validation
+# ──────────────────────────────────────────────────────────────────────────
+
+[[validation]]
+name = "Turtle model syntactic validation"
+description = "Validates Turtle file syntax via the integrated oxttl parser."
+status = "done"
+oxirs_module = "oxirs_samm::validator"
+notes = "Full Turtle syntax validation."
+
+[[validation]]
+name = "SAMM SHACL shape validation"
+description = "Validates aspect models against SAMM SHACL shapes."
+status = "done"
+oxirs_module = "oxirs_samm::validator::shacl_validator"
+notes = "Via oxirs-shacl integration."
+
+[[validation]]
+name = "Semantic violation detection (cyclic dependencies)"
+description = "Cycle detection, required-property checks, and cardinality validation."
+status = "done"
+oxirs_module = "oxirs_samm::aspect_validator"
+notes = "Cycle detection and cardinality validation included."
+
+[[validation]]
+name = "Batch validation with progress reporting"
+description = "Parallel batch validation with progress events."
+status = "done"
+oxirs_module = "oxirs_samm::validation::batch"
+notes = "Parallel batch validation with optional GPU acceleration."
+
+[[validation]]
+name = "Cross-model reference validation"
+description = "External URN references across independently loaded model files."
+status = "missing"
+notes = "External URN references across independently loaded files not yet validated."
+
+[[validation]]
+name = "Violation report serialization (JSON/XML)"
+description = "Structured machine-readable serialization of validation violations."
+status = "partial"
+oxirs_module = "oxirs_samm::validator"
+notes = "Text output available; JSON/XML serialization of violation objects is missing."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Code Generation
+# ──────────────────────────────────────────────────────────────────────────
+
+[[code_generation]]
+name = "Java POJO generation"
+description = "Generates Java POJO classes with Lombok annotations from aspect models."
+status = "done"
+oxirs_module = "oxirs_samm::generators::java"
+notes = "Lombok annotations included."
+
+[[code_generation]]
+name = "TypeScript interface generation"
+description = "Generates TypeScript interfaces including optional field handling."
+status = "done"
+oxirs_module = "oxirs_samm::generators::typescript"
+notes = "Optional field handling included."
+
+[[code_generation]]
+name = "Python dataclass generation"
+description = "Generates Python 3.10+ dataclasses with type hints."
+status = "done"
+oxirs_module = "oxirs_samm::generators::python"
+notes = "Python 3.10+ dataclasses with type hints."
+
+[[code_generation]]
+name = "JSON Schema generation"
+description = "Emits JSON Schema draft-07 from aspect models."
+status = "done"
+oxirs_module = "oxirs_samm::codegen::json_schema"
+notes = "Emits JSON Schema draft-07; additional drafts not yet supported."
+
+[[code_generation]]
+name = "Static payload example generation"
+description = "Generates sample JSON payloads from characteristic types."
+status = "done"
+oxirs_module = "oxirs_samm::generators::payload"
+notes = "Generates sample JSON payloads."
+
+[[code_generation]]
+name = "Scala case-class generation"
+description = "Generates Scala 3 case classes from aspect models."
+status = "done"
+oxirs_module = "oxirs_samm::generators::scala"
+notes = "Scala 2 compatibility not guaranteed."
+
+[[code_generation]]
+name = "SQL DDL generation"
+description = "Generates PostgreSQL and SQLite DDL from entity types."
+status = "done"
+oxirs_module = "oxirs_samm::generators::sql"
+notes = "Oracle/MSSQL dialects missing."
+
+[[code_generation]]
+name = "Rust struct generation"
+description = "Generates idiomatic Rust structs from aspect entities."
+status = "partial"
+oxirs_module = "oxirs_samm::generators"
+notes = "Basic struct generation via templates; derive macros and serde attributes incomplete."
+
+[[code_generation]]
+name = "GraphQL schema generation"
+description = "Generates GraphQL SDL schema from aspect models."
+status = "partial"
+oxirs_module = "oxirs_samm::generators::graphql"
+notes = "Basic type generation done; subscriptions and custom scalars missing."
+
+[[code_generation]]
+name = "Multi-file generation (one file per entity)"
+description = "Code generator mode producing one source file per model entity."
+status = "done"
+oxirs_module = "oxirs_samm::generators::multifile"
+notes = "Supported for all language backends that emit one-class-per-file."
+
+# ──────────────────────────────────────────────────────────────────────────
+# OpenAPI Emission
+# ──────────────────────────────────────────────────────────────────────────
+
+[[open_api_emission]]
+name = "OpenAPI 3.0 schema generation"
+description = "Generates OpenAPI 3.0.x YAML/JSON specs from aspect models."
+status = "done"
+oxirs_module = "oxirs_samm::codegen::openapi"
+notes = "YAML and JSON output."
+
+[[open_api_emission]]
+name = "OpenAPI 3.1 schema generation"
+description = "OpenAPI 3.1.0 with JSON Schema 2020-12 dialect."
+status = "done"
+oxirs_module = "oxirs_samm::codegen::openapi"
+notes = "jsonSchemaDialect field, type arrays for optional properties, const for enumerations."
+
+[[open_api_emission]]
+name = "Pagination extension in OpenAPI output"
+description = "SAMM x-samm-pagination extension blocks in emitted OpenAPI spec."
+status = "missing"
+notes = "SAMM pagination extension (x-samm-pagination) blocks not emitted."
+
+[[open_api_emission]]
+name = "Semantic version header in OpenAPI output"
+description = "Aspect model version emitted as info.version in the OpenAPI spec."
+status = "partial"
+oxirs_module = "oxirs_samm::codegen::openapi"
+notes = "Version field emitted; pre-release and build metadata not preserved."
+
+[[open_api_emission]]
+name = "AsyncAPI spec generation"
+description = "Generates AsyncAPI 2.x documents from Aspect Events."
+status = "missing"
+notes = "AsyncAPI output not yet implemented; only synchronous OpenAPI supported."
+
+# ──────────────────────────────────────────────────────────────────────────
+# JSON-LD Profiles
+# ──────────────────────────────────────────────────────────────────────────
+
+[[json_ld_profiles]]
+name = "JSON-LD context generation"
+description = "Emits a JSON-LD 1.1 @context document mapping aspect properties to IRIs."
+status = "done"
+oxirs_module = "oxirs_samm::generators::jsonld"
+notes = "JSON-LD 1.1 @context document."
+
+[[json_ld_profiles]]
+name = "JSON-LD serialisation (RDF graph → JSON-LD)"
+description = "Serialises a parsed RDF graph back to JSON-LD format."
+status = "done"
+oxirs_module = "oxirs_samm::serializer::jsonld"
+notes = "Round-trip tested for simple flat graphs."
+
+[[json_ld_profiles]]
+name = "JSON-LD compaction / framing"
+description = "JSON-LD compaction algorithm and framing API."
+status = "missing"
+notes = "JSON-LD compaction and framing API not implemented."
+
+[[json_ld_profiles]]
+name = "RDF/JSON-LD lossless round-trip"
+description = "Lossless parse-then-serialise round-trip for nested JSON-LD graphs."
+status = "partial"
+notes = "Serialization implemented; lossless round-trip from parsed RDF back to JSON-LD is untested."
+
+[[json_ld_profiles]]
+name = "JSON-LD 1.0 profile support"
+description = "Compatibility mode producing JSON-LD 1.0 @context documents."
+status = "missing"
+notes = "Only JSON-LD 1.1 emitted; 1.0 backward-compat profiles not supported."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Model Resolution
+# ──────────────────────────────────────────────────────────────────────────
+
+[[model_resolution]]
+name = "file: URI and local filesystem model loading"
+description = "Resolves urn:samm: identifiers to local .ttl files via configurable base path."
+status = "done"
+oxirs_module = "oxirs_samm::parser::resolver"
+notes = "Configurable base path."
+
+[[model_resolution]]
+name = "Model version migration (SAMM 1.x to 2.x)"
+description = "Automated migration from BAMM 1.x / SAMM 2.x older minor versions."
+status = "done"
+oxirs_module = "oxirs_samm::migration"
+notes = "Automated migration included."
+
+[[model_resolution]]
+name = "External HTTP model fetching"
+description = "HTTP fetch of remote SAMM model files via URN-to-URL mapping."
+status = "partial"
+notes = "HTTP fetch via reqwest implemented; caching and ETags not yet wired."
+
+[[model_resolution]]
+name = "Git-backed model repository loading"
+description = "Loading SAMM models directly from a Git repository URL."
+status = "missing"
+notes = "No Git transport adapter exists; planned for a future release."
+
+[[model_resolution]]
+name = "Model discovery by namespace scan"
+description = "Automatic discovery of all .ttl files under a namespace directory."
+status = "done"
+oxirs_module = "oxirs_samm::parser::resolver"
+notes = "Namespace directory scanning included in resolver."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Command-Line Tooling
+# ──────────────────────────────────────────────────────────────────────────
+
+[[command_line_tooling]]
+name = "generate command (Java / TypeScript / Python)"
+description = "samm generate CLI sub-command wiring existing code generators."
+status = "done"
+oxirs_module = "oxirs_samm::cli::generate"
+notes = "Implemented in src/cli/generate.rs; samm binary at src/bin/samm.rs."
+
+[[command_line_tooling]]
+name = "validate command"
+description = "samm validate CLI sub-command for model validation."
+status = "partial"
+notes = "Basic validation output available; structured JSON violation reports not yet emitted."
+
+[[command_line_tooling]]
+name = "aspect command (list / describe)"
+description = "samm aspect CLI sub-command for listing and describing model properties."
+status = "missing"
+notes = "Introspection sub-command for listing properties / operations not implemented."
+
+[[command_line_tooling]]
+name = "parity-report command"
+description = "samm parity-report CLI binary emitting the ESMF feature parity report."
+status = "done"
+oxirs_module = "oxirs_samm::parity"
+notes = "src/bin/parity_report.rs emits the markdown report to stdout."
+
+[[command_line_tooling]]
+name = "package command (zip / export)"
+description = "samm package CLI sub-command for exporting models as AASX bundles."
+status = "missing"
+notes = "AASX export via CLI not implemented; only library API available."

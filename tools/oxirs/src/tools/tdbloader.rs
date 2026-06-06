@@ -227,7 +227,12 @@ fn parse_rdf_for_loading(content: &str, format: &str) -> ToolResult<(Vec<LoadTri
             }
         }
         _ => {
-            return Err(format!("Loading format '{format}' not yet implemented").into());
+            return Err(format!(
+                "Loading format '{}' is not supported. \
+                 Supported formats: ntriples, nquads, turtle",
+                format
+            )
+            .into());
         }
     }
 

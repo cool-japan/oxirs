@@ -6,9 +6,9 @@
 use crate::ids::types::{IdsError, IdsResult, IdsUri};
 use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
-use ring::digest::{Context as DigestContext, SHA256};
-use ring::rand::SystemRandom;
-use ring::signature::{self, Ed25519KeyPair, KeyPair};
+use ed25519_dalek::pkcs8::DecodePrivateKey;
+use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use oxicrypto_hash::Sha256;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -223,8 +223,8 @@ impl VerifiableCredentialBuilder {
 
 /// Credential Issuer for creating and signing credentials
 pub struct CredentialIssuer {
-    /// Ed25519 key pair
-    key_pair: Ed25519KeyPair,
+    /// Ed25519 signing key (Pure-Rust `ed25519-dalek`)
+    key_pair: SigningKey,
     /// Issuer DID/URI
     issuer_id: IdsUri,
     /// Verification method ID
@@ -234,12 +234,10 @@ pub struct CredentialIssuer {
 impl CredentialIssuer {
     /// Create a new credential issuer with generated keys
     pub fn new(issuer_id: IdsUri) -> IdsResult<Self> {
-        let rng = SystemRandom::new();
-        let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rng)
-            .map_err(|e| IdsError::InternalError(format!("Failed to generate key pair: {}", e)))?;
-
-        let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref())
-            .map_err(|e| IdsError::InternalError(format!("Failed to parse key pair: {}", e)))?;
+        // Generate an Ed25519 signing key from a fresh 32-byte CSPRNG seed.
+        let seed = oxicrypto_rand::random_nonce::<32>()
+            .map_err(|e| IdsError::InternalError(format!("Failed to generate key seed: {}", e)))?;
+        let key_pair = SigningKey::from_bytes(&seed);
 
         let verification_method = format!("{}#key-1", issuer_id.as_str());
 
@@ -250,9 +248,9 @@ impl CredentialIssuer {
         })
     }
 
-    /// Create from existing PKCS#8 key
+    /// Create from existing PKCS#8 DER-encoded key
     pub fn from_pkcs8(issuer_id: IdsUri, pkcs8_bytes: &[u8]) -> IdsResult<Self> {
-        let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_bytes)
+        let key_pair = SigningKey::from_pkcs8_der(pkcs8_bytes)
             .map_err(|e| IdsError::InternalError(format!("Failed to parse key pair: {}", e)))?;
 
         let verification_method = format!("{}#key-1", issuer_id.as_str());
@@ -269,9 +267,9 @@ impl CredentialIssuer {
         &self.issuer_id
     }
 
-    /// Get public key bytes
-    pub fn public_key(&self) -> &[u8] {
-        self.key_pair.public_key().as_ref()
+    /// Get public key bytes (raw 32-byte Ed25519 public key)
+    pub fn public_key(&self) -> [u8; 32] {
+        self.key_pair.verifying_key().to_bytes()
     }
 
     /// Get public key as base64
@@ -289,9 +287,7 @@ impl CredentialIssuer {
             IdsError::SerializationError(format!("Failed to serialize credential: {}", e))
         })?;
 
-        let mut context = DigestContext::new(&SHA256);
-        context.update(json.as_bytes());
-        Ok(context.finish().as_ref().to_vec())
+        Ok(Sha256.hash_fixed(json.as_bytes()).to_vec())
     }
 
     /// Issue a credential (creates proof and returns signed credential)
@@ -304,7 +300,7 @@ impl CredentialIssuer {
             created: Utc::now(),
             verification_method: self.verification_method.clone(),
             proof_purpose: ProofPurpose::AssertionMethod.as_str().to_string(),
-            proof_value: base64::engine::general_purpose::STANDARD.encode(sig.as_ref()),
+            proof_value: base64::engine::general_purpose::STANDARD.encode(sig.to_bytes()),
         };
 
         credential.proof = Some(proof);
@@ -343,9 +339,19 @@ impl CredentialVerifier {
         // Compute hash
         let hash = CredentialIssuer::compute_credential_hash(credential)?;
 
-        // Verify signature
-        let public_key = signature::UnparsedPublicKey::new(&signature::ED25519, public_key);
-        let signature_valid = public_key.verify(&hash, &sig_bytes).is_ok();
+        // Verify signature (raw 32-byte Ed25519 public key, 64-byte signature)
+        let signature_valid = match (
+            <[u8; 32]>::try_from(public_key)
+                .ok()
+                .and_then(|pk| VerifyingKey::from_bytes(&pk).ok()),
+            <[u8; 64]>::try_from(sig_bytes.as_slice()).ok(),
+        ) {
+            (Some(verifying_key), Some(sig_bytes)) => {
+                let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+                verifying_key.verify(&hash, &signature).is_ok()
+            }
+            _ => false,
+        };
 
         // Check expiration
         let not_expired = !credential.is_expired();
@@ -505,7 +511,7 @@ mod tests {
         );
 
         // Verify credential
-        let result = CredentialVerifier::verify(&signed_credential, issuer.public_key())
+        let result = CredentialVerifier::verify(&signed_credential, &issuer.public_key())
             .expect("verify credential");
 
         assert!(
@@ -541,7 +547,7 @@ mod tests {
             .insert("role".to_string(), serde_json::json!("admin"));
 
         // Verification should fail
-        let result = CredentialVerifier::verify(&signed_credential, issuer.public_key())
+        let result = CredentialVerifier::verify(&signed_credential, &issuer.public_key())
             .expect("verify credential");
 
         assert!(
@@ -571,7 +577,7 @@ mod tests {
 
         assert!(signed_credential.is_expired());
 
-        let result = CredentialVerifier::verify(&signed_credential, issuer.public_key())
+        let result = CredentialVerifier::verify(&signed_credential, &issuer.public_key())
             .expect("verify credential");
 
         assert!(!result.valid);
@@ -601,7 +607,7 @@ mod tests {
 
         let result = CredentialVerifier::verify_with_claims(
             &signed_credential,
-            issuer.public_key(),
+            &issuer.public_key(),
             &expected_claims,
         )
         .expect("verify with claims");
@@ -614,7 +620,7 @@ mod tests {
 
         let result = CredentialVerifier::verify_with_claims(
             &signed_credential,
-            issuer.public_key(),
+            &issuer.public_key(),
             &wrong_claims,
         )
         .expect("verify with claims");

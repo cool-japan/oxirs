@@ -27,6 +27,8 @@ json-event-parser = { version = "0.2", features = ["async-tokio"] }
 quick-xml = { workspace = true, features = ["async-tokio"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+toml.workspace = true
+indexmap.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -73,7 +75,6 @@ uuid.workspace = true
 urlencoding.workspace = true
 
 # Storage engine dependencies
-rocksdb = { workspace = true, optional = true }
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 lru.workspace = true
 glob = "0.3"
@@ -90,6 +91,14 @@ oxiarc-zstd.workspace = true
 # Cryptographic dependencies
 blake3.workspace = true
 hex.workspace = true
+
+# TLS CryptoProvider: install OxiTLS's Pure Rust rustls provider as the process
+# default (via ctor, pre-main) so every binary AND test process that links
+# oxirs-core has TLS working without aws-lc-sys/ring. reqwest uses
+# `rustls-no-provider`, which requires a process-default provider at runtime.
+oxitls.workspace = true
+rustls.workspace = true
+ctor.workspace = true
 
 # BiMap for term interning
 bimap = "0.6"
@@ -144,7 +153,6 @@ sparql-12 = []
 # arrow = []
 # parquet = []
 # columnar = ["datafusion", "arrow", "parquet"]
-rocksdb = ["dep:rocksdb"]
 
 [[bin]]
 name = "api_snapshot"

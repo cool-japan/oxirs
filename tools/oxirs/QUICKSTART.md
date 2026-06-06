@@ -1,12 +1,12 @@
 # OxiRS Quick Start Guide
 
-## v0.1.0 Release - Production-Ready
+## v0.3.1 Release - Production-Ready
 
 ### Installation
 
 ```bash
 # Install from crates.io
-cargo install oxirs --version 0.1.0
+cargo install oxirs --version 0.3.1
 
 # Or build from source
 git clone https://github.com/cool-japan/oxirs
@@ -167,7 +167,7 @@ Edit `oxirs.toml` to configure:
 
 ### Performance
 
-#### Benchmark Results (v0.1.0)
+#### Benchmark Results (v0.3.1)
 
 | Operation | Dataset Size | Throughput | Improvement |
 |-----------|--------------|------------|-------------|
@@ -177,7 +177,7 @@ Edit `oxirs.toml` to configure:
 | N-Triples Parsing | 10,000 quads | 1.1 Melem/s | +30% |
 | Format Conversion | 10,000 quads | 920 Kelem/s | +29% |
 
-Performance improvements in v0.1.0:
+Performance improvements in v0.3.1:
 - Optimized memory allocation for parsing and serialization
 - SIMD-accelerated operations for string processing
 - Parallel batch operations with work-stealing
@@ -279,7 +279,7 @@ oxirs serve --config oxirs.toml --port 3031
 
 ### Features
 
-#### v0.1.0 Highlights
+#### v0.3.1 Highlights
 
 ✅ **Production-Ready**
 - API stability with semantic versioning guarantees
@@ -317,7 +317,7 @@ oxirs serve --config oxirs.toml --port 3031
 - Health endpoints for monitoring
 - Prometheus-compatible metrics
 
-### What's New in v0.1.0
+### What's New in v0.3.1
 
 **API Stability**:
 - All commands and flags are now stable
@@ -351,4 +351,4 @@ See [CHANGELOG.md](../../CHANGELOG.md) for detailed release notes.
 
 ---
 
-**OxiRS v0.1.0** - Production-ready SPARQL 1.2 server with AI augmentation and stable APIs
+**OxiRS v0.3.1** - Production-ready SPARQL 1.2 server with AI augmentation and stable APIs

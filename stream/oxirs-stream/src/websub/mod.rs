@@ -984,7 +984,7 @@ mod tests {
         let ev = make_event(ChangeType::TripleAdded);
         bus.publish(ev).unwrap();
 
-        let events = handle.lock().unwrap();
+        let events = handle.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(events.len(), 1);
     }
 
@@ -998,8 +998,8 @@ mod tests {
 
         bus.publish(make_event(ChangeType::GraphCreated)).unwrap();
 
-        assert_eq!(handle1.lock().unwrap().len(), 1);
-        assert_eq!(handle2.lock().unwrap().len(), 1);
+        assert_eq!(handle1.lock().unwrap_or_else(|e| e.into_inner()).len(), 1);
+        assert_eq!(handle2.lock().unwrap_or_else(|e| e.into_inner()).len(), 1);
     }
 
     #[test]
@@ -1018,7 +1018,7 @@ mod tests {
         let expected_id = ev.change_id.clone();
         bus.publish(ev).unwrap();
 
-        let events = handle.lock().unwrap();
+        let events = handle.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(events[0].change_id, expected_id);
     }
 
@@ -1051,7 +1051,7 @@ mod tests {
         let (sub, handle) = InMemorySubscriber::new();
         sub.on_change(&make_event(ChangeType::GraphDropped))
             .unwrap();
-        assert_eq!(handle.lock().unwrap().len(), 1);
+        assert_eq!(handle.lock().unwrap_or_else(|e| e.into_inner()).len(), 1);
     }
 
     #[test]
@@ -1088,7 +1088,7 @@ mod tests {
         );
         bus.publish(ev).unwrap();
 
-        let guard = handle.lock().unwrap();
+        let guard = handle.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(guard.len(), 1);
         assert!(guard[0].has_delta());
     }
@@ -1108,7 +1108,7 @@ mod tests {
         );
         bus.publish(ev).unwrap();
 
-        let guard = handle.lock().unwrap();
+        let guard = handle.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(guard.len(), 1);
         if let ChangeType::BulkUpdate { triple_count } = guard[0].change_type {
             assert_eq!(triple_count, 9999);
@@ -1125,7 +1125,7 @@ mod tests {
 
         bus.publish(make_event(ChangeType::GraphCleared)).unwrap();
 
-        let guard = handle.lock().unwrap();
+        let guard = handle.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(guard[0].change_type, ChangeType::GraphCleared);
     }
 

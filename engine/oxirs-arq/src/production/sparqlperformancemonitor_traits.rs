@@ -8,7 +8,7 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use super::types::SparqlPerformanceMonitor;
+use super::types_monitor::SparqlPerformanceMonitor;
 
 impl Default for SparqlPerformanceMonitor {
     fn default() -> Self {

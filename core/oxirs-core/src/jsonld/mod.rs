@@ -4,13 +4,34 @@
 //! ported from Oxigraph's oxjsonld implementation with ultra-high performance
 //! streaming enhancements.
 
+pub mod compaction;
 mod context;
+mod context_core;
+mod context_types;
 mod error;
 mod expansion;
+pub(crate) mod expansion_algorithm;
+pub mod expansion_algorithm_ctx;
+pub mod expansion_algorithm_step;
+mod expansion_algorithm_tests;
+pub mod expansion_algorithm_types;
+pub(crate) mod expansion_algorithm_value;
+pub(crate) mod expansion_context;
+#[allow(unused_imports)]
+mod expansion_tests;
+pub mod flattening;
+pub mod framing;
+pub mod framing_embed;
+pub mod framing_match;
+mod framing_tests;
 mod from_rdf;
 mod profile;
 mod streaming;
 pub mod to_rdf;
+mod to_rdf_converter;
+mod to_rdf_parser;
+mod to_rdf_readers;
+mod to_rdf_tests;
 
 pub use context::{JsonLdLoadDocumentOptions, JsonLdRemoteDocument};
 pub use error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError, TextPosition};

@@ -237,8 +237,12 @@ impl SecretManager {
                     .ok_or_else(|| anyhow!("Secret {name} not found"))
             }
             _ => {
-                // Vault and AWS implementations would go here
-                return Err(anyhow!("Secret backend not implemented"));
+                // Vault and AWS Secrets Manager integrations require external service connections.
+                // These backends are not supported in this build configuration.
+                return Err(anyhow!(
+                    "Secret backend requires an external service connection (Vault/AWS) \
+                     that is not available in this configuration"
+                ));
             }
         }?;
 

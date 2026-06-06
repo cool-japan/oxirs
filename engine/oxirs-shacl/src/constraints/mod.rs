@@ -9,6 +9,11 @@ pub mod comparison_constraints;
 pub mod constraint_context;
 pub mod constraint_types;
 pub mod expression_constraint;
+pub mod expression_constraint_component;
+pub mod expression_constraint_evaluator;
+#[cfg(test)]
+mod expression_constraint_tests;
+pub mod expression_constraint_types;
 pub mod logical_constraints;
 pub mod qualified_combinations;
 pub mod range_constraints;

@@ -3,13 +3,13 @@
 > Plateforme modulaire native Rust pour le Web Sémantique, SPARQL 1.2, GraphQL et raisonnement augmenté par IA
 
 [![Licence: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Statut**: v0.2.3 - Publié - 16 mars 2026
+**Statut**: v0.3.1 - Publié - 6 juin 2026
 
-**Prêt pour la Production**: Implémentation complète de SPARQL 1.1/1.2 avec **optimiseur 3,8× plus rapide**, support IoT industriel et fonctionnalités IA. **40 791+ tests réussis**, zéro avertissement sur les 26 crates.
+**Prêt pour la Production**: Implémentation complète de SPARQL 1.1/1.2 avec **optimiseur 3,8× plus rapide**, support IoT industriel et fonctionnalités IA. **~43 500 tests réussis**, zéro avertissement sur les 26 crates.
 
-**Points Forts v0.2.3 (16 mars 2026)**: 26 nouveaux modules fonctionnels ajoutés sur 16 rounds de développement. Algèbre SPARQL avancée (EXISTS, MINUS, sous-requêtes, clause SERVICE), stockage renforcé (store six-index, fusion/reconstruction d'index), capacités IA (store vectoriel, inférence de contraintes, historique de conversation) et renforcement de la sécurité (store d'identifiants, validation de chaîne de confiance).
+**Points Forts v0.3.1 (6 juin 2026)**: Fonctionnalités Avancées de SHACL (formes récursives + formes de valeurs qualifiées + moteur de raisonnement à base de règles), optimisation génétique de l'ordre des contraintes, triplets cités RDF-star dans la correspondance de motifs et l'exécution des requêtes, embeddings inductifs GraphSAGE, synthèse de graphe et retour de pertinence, fonctionnalités Cargo FIPS 140-2 (oxirs-fuseki, oxirs-did) et modèles de politiques RBAC. Achève la migration Pure Rust COOLJAPAN (brotli/snap/flate2 → oxiarc, ring → oxicrypto, TLS Pure Rust via oxitls): le build `cargo build` par défaut ne lie désormais aucun crypto C/asm `ring`/`aws-lc-sys`. SciRS2 0.5.0; oxiarc 0.3.3 consommé directement depuis crates.io.
 
 ## Vision
 
@@ -58,7 +58,7 @@ OxiRS offre un support de premier ordre pour le **Gaia-X Trust Framework** et le
 
 ```bash
 # Installer l'outil CLI
-cargo install oxirs --version 0.2.3
+cargo install oxirs --version 0.3.1
 
 # Compiler depuis les sources
 git clone https://github.com/cool-japan/oxirs.git
@@ -199,6 +199,28 @@ Manufacturing-X Digital Twin:
   Fréquence de mise à jour: 10Hz par dispositif
   Simulation:           Physique temps réel (SciRS2)
 ```
+
+## Nouveautés dans v0.3.1 (6 juin 2026)
+
+**Version de Maintenance et de Renforcement: SHACL-AF, Migration Pure Rust et Embeddings Inductifs**
+
+OxiRS v0.3.1 finalise les Fonctionnalités Avancées de SHACL, achève la migration Pure Rust COOLJAPAN et ajoute de nouvelles capacités d'IA et de sécurité:
+
+- **Fonctionnalités Avancées de SHACL (SHACL-AF)** - Formes récursives, formes de valeurs qualifiées et moteur de raisonnement à base de règles (implication RDFS / OWL 2 RL)
+- **Optimisation de l'ordre des contraintes SHACL** - Algorithme génétique (population/générations/tournoi/mutation configurables) pour l'ordonnancement des contraintes de formes (oxirs-shacl-ai)
+- **RDF-star dans l'exécution des requêtes** - Les triplets cités traversent désormais la correspondance de motifs, l'algèbre de requêtes, l'exécuteur, le JIT, le planificateur et la correspondance de triplets SIMD
+- **Embeddings inductifs GraphSAGE** - Agrégation par moyenne sur k sauts (ReLU + normalisation L2), initialisation Xavier, perte de classement à marge et prise en charge des entités inédites (oxirs-embed)
+- **Synthèse de graphe et retour de pertinence** - Détection de communautés Leiden → centralité → résumés en langage naturel basés sur la fréquence des prédicats, plus reclassement multiplicatif par retour de pertinence (oxirs-graphrag)
+- **Fonctionnalités Cargo FIPS 140-2** - Fonctionnalité `fips` pour la cryptographie validée FIPS dans oxirs-fuseki et oxirs-did (politique de frontière FIPS RFC-003)
+- **Modèles de politiques RBAC** - Modèles de rôles DBA / ReadOnly / Auditor intégrés via PolicyTemplateRegistry (oxirs-fuseki)
+- **Migration Pure Rust complète** - Compression (brotli/snap/flate2 → oxiarc), cryptographie (ring → oxicrypto) et TLS (fournisseur Pure Rust oxitls); le build `cargo build` par défaut ne lie aucun crypto C/asm `ring` / `aws-lc-sys`
+- **Mise à jour des dépendances** - SciRS2 0.5.0; oxiarc 0.3.3 désormais consommé directement depuis crates.io; les refactorisations de gros fichiers maintiennent chaque fichier source sous les 2 000 lignes
+
+**Métriques de Qualité (v0.3.1):**
+- ✅ **~43 500 tests réussis** (100% de réussite)
+- ✅ **Zéro avertissement de compilation** sur les 26 crates
+- ✅ **Pure Rust par défaut** - zéro `ring` / `aws-lc-sys` dans le build à fonctionnalités par défaut
+- ✅ **Tous les fichiers `.rs` sous les 2 000 lignes** (refactorisations proactives appliquées)
 
 ## Nouveautés dans v0.2.3 (16 mars 2026)
 
@@ -468,10 +490,22 @@ Fonctionnalités optionnelles pour minimiser les dépendances:
 | Version | Date Cible | Jalon | Livrables | Statut |
 |---------|-----------|-------|-----------|--------|
 | **v0.1.0** | **7 jan 2026** | **Production Initiale** | SPARQL 1.1/1.2 complet, IoT industriel, IA, 13 123 tests | Publié |
-| **v0.2.3** | **16 mars 2026** | **Expansion Majeure des Fonctionnalités** | 40 791+ tests, 26 nouveaux modules, optimiseur 3,8×, algèbre SPARQL avancée | Publié (actuel) |
-| **v0.3.0** | **T2 2026** | **Recherche Plein Texte & Échelle** | Recherche plein texte (Tantivy), performance 10×, clustering multi-région | Prévu |
+| **v0.2.3** | **16 mars 2026** | **Expansion Majeure des Fonctionnalités** | 40 791+ tests, 26 nouveaux modules, optimiseur 3,8×, algèbre SPARQL avancée | Publié |
+| **v0.3.0** | **3 mai 2026** | **Recherche Plein Texte & Échelle** | Recherche plein texte (Tantivy), performance 10×, clustering multi-région, audit/certification/SSO/marketplace | Publié |
+| **v0.3.1** | **6 juin 2026** | **SHACL-AF & Pure Rust** | Fonctionnalités avancées SHACL (récursives/qualifiées/raisonnement), optimisation génétique des contraintes, RDF-star dans l'exécution des requêtes, embeddings GraphSAGE, fonctionnalités FIPS 140-2, migration Pure Rust complète, ~43 500 tests | Publié (actuel) |
 
-### Version Actuelle: v0.2.3 (16 mars 2026)
+### Version Actuelle: v0.3.1 (6 juin 2026)
+
+**Axes de Développement v0.3.1:**
+- Fonctionnalités Avancées de SHACL (SHACL-AF): formes récursives, formes de valeurs qualifiées, moteur de raisonnement à base de règles
+- Optimisation de l'ordre des contraintes SHACL via algorithme génétique (oxirs-shacl-ai)
+- Triplets cités RDF-star dans la correspondance de motifs et l'exécution des requêtes (algèbre/exécuteur/JIT/planificateur/SIMD)
+- IA: embeddings inductifs GraphSAGE, synthèse de graphe, retour de pertinence
+- Sécurité: fonctionnalités Cargo FIPS 140-2 (oxirs-fuseki, oxirs-did), modèles de politiques RBAC
+- Migration Pure Rust COOLJAPAN complète: brotli/snap/flate2 → oxiarc, ring → oxicrypto, TLS Pure Rust via oxitls
+- Mise à jour des dépendances: SciRS2 0.5.0, oxiarc 0.3.3 depuis crates.io; refactorisations de gros fichiers (tout le code source < 2 000 lignes)
+
+### Version Précédente: v0.2.3 (16 mars 2026)
 
 **Axes de Développement v0.2.3 (16 rounds terminés):**
 - Algèbre SPARQL avancée: évaluateurs EXISTS/MINUS, constructeur de sous-requêtes, clause SERVICE, jointure LATERAL
@@ -520,4 +554,4 @@ Voir [LICENSE](LICENSE) pour les détails.
 
 *"Rust rend la sécurité de la mémoire incontournable; OxiRS rend l'ingénierie des graphes de connaissances incontournable."*
 
-**v0.2.3 - Publié (actuel) - 16 mars 2026**
+**v0.3.1 - Publié - 6 juin 2026**

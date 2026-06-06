@@ -1077,7 +1077,10 @@ mod tests {
             heartbeat_interval: 50,
             compaction: CompactionConfig::default(),
             snapshot: SnapshotConfig::default(),
-            storage_path: "/tmp/raft_test".to_string(),
+            storage_path: std::env::temp_dir()
+                .join(format!("oxirs_raft_test_{}", std::process::id()))
+                .display()
+                .to_string(),
         };
 
         let node = RaftNode::new(config)

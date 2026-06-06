@@ -230,6 +230,7 @@ impl From<crate::model::pattern::TriplePattern> for Option<AlgebraTriplePattern>
             SubjectPattern::NamedNode(n) => TermPattern::NamedNode(n),
             SubjectPattern::BlankNode(b) => TermPattern::BlankNode(b),
             SubjectPattern::Variable(v) => TermPattern::Variable(v),
+            SubjectPattern::QuotedTriple(qt) => TermPattern::QuotedTriple(qt),
         };
 
         let predicate = match pattern.predicate? {
@@ -242,6 +243,7 @@ impl From<crate::model::pattern::TriplePattern> for Option<AlgebraTriplePattern>
             ObjectPattern::BlankNode(b) => TermPattern::BlankNode(b),
             ObjectPattern::Literal(l) => TermPattern::Literal(l),
             ObjectPattern::Variable(v) => TermPattern::Variable(v),
+            ObjectPattern::QuotedTriple(qt) => TermPattern::QuotedTriple(qt),
         };
 
         Some(AlgebraTriplePattern::new(subject, predicate, object))

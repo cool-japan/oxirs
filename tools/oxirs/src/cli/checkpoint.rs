@@ -172,6 +172,16 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    /// Logical source-file identifier used in checkpoint tests. It is only
+    /// hashed (via md5) to derive the checkpoint filename and is never opened,
+    /// so a temp-dir-based identifier keeps tests off hardcoded `/tmp` paths.
+    fn test_file_key() -> String {
+        std::env::temp_dir()
+            .join("oxirs_checkpoint_test.ttl")
+            .to_string_lossy()
+            .into_owned()
+    }
+
     fn create_test_manager() -> (CheckpointManager, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let mut manager = CheckpointManager::new().unwrap();
@@ -187,7 +197,7 @@ mod tests {
         let checkpoint = Checkpoint {
             operation: "import".to_string(),
             dataset: "testdb".to_string(),
-            file_path: "/tmp/test.ttl".to_string(),
+            file_path: test_file_key(),
             processed_count: 1000,
             last_offset: 5000,
             timestamp: chrono::Local::now().to_rfc3339(),
@@ -200,7 +210,7 @@ mod tests {
         manager.save(&checkpoint).unwrap();
 
         // Load checkpoint
-        let loaded = manager.load("import", "testdb", "/tmp/test.ttl").unwrap();
+        let loaded = manager.load("import", "testdb", &test_file_key()).unwrap();
         assert!(loaded.is_some());
 
         let loaded = loaded.unwrap();
@@ -212,12 +222,12 @@ mod tests {
     fn test_checkpoint_exists() {
         let (manager, _temp_dir) = create_test_manager();
 
-        assert!(!manager.exists("import", "testdb", "/tmp/test.ttl"));
+        assert!(!manager.exists("import", "testdb", &test_file_key()));
 
         let checkpoint = Checkpoint {
             operation: "import".to_string(),
             dataset: "testdb".to_string(),
-            file_path: "/tmp/test.ttl".to_string(),
+            file_path: test_file_key(),
             processed_count: 1000,
             last_offset: 5000,
             timestamp: chrono::Local::now().to_rfc3339(),
@@ -227,7 +237,7 @@ mod tests {
         };
 
         manager.save(&checkpoint).unwrap();
-        assert!(manager.exists("import", "testdb", "/tmp/test.ttl"));
+        assert!(manager.exists("import", "testdb", &test_file_key()));
     }
 
     #[test]
@@ -237,7 +247,7 @@ mod tests {
         let checkpoint = Checkpoint {
             operation: "import".to_string(),
             dataset: "testdb".to_string(),
-            file_path: "/tmp/test.ttl".to_string(),
+            file_path: test_file_key(),
             processed_count: 1000,
             last_offset: 5000,
             timestamp: chrono::Local::now().to_rfc3339(),
@@ -247,10 +257,12 @@ mod tests {
         };
 
         manager.save(&checkpoint).unwrap();
-        assert!(manager.exists("import", "testdb", "/tmp/test.ttl"));
+        assert!(manager.exists("import", "testdb", &test_file_key()));
 
-        manager.delete("import", "testdb", "/tmp/test.ttl").unwrap();
-        assert!(!manager.exists("import", "testdb", "/tmp/test.ttl"));
+        manager
+            .delete("import", "testdb", &test_file_key())
+            .unwrap();
+        assert!(!manager.exists("import", "testdb", &test_file_key()));
     }
 
     #[test]
@@ -260,7 +272,7 @@ mod tests {
         let checkpoint = Checkpoint {
             operation: "import".to_string(),
             dataset: "testdb".to_string(),
-            file_path: "/tmp/test.ttl".to_string(),
+            file_path: test_file_key(),
             processed_count: 1000,
             last_offset: 5000,
             timestamp: chrono::Local::now().to_rfc3339(),

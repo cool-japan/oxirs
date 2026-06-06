@@ -483,32 +483,17 @@ pub mod serialization {
     pub fn compress_data(data: &[u8], compression: CompressionType) -> Result<Vec<u8>> {
         match compression {
             CompressionType::None => Ok(data.to_vec()),
-            CompressionType::Gzip => {
-                use flate2::write::GzEncoder;
-                use flate2::Compression;
-                use std::io::Write;
-
-                let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(data)?;
-                Ok(encoder.finish()?)
-            }
+            CompressionType::Gzip => oxiarc_deflate::gzip_compress(data, 6)
+                .map_err(|e| anyhow!("Gzip compression failed: {e}")),
             CompressionType::Lz4 => {
                 oxiarc_lz4::compress(data).map_err(|e| anyhow!("LZ4 compression failed: {e}"))
             }
             CompressionType::Zstd => {
                 oxiarc_zstd::compress(data).map_err(|e| anyhow!("Zstd compression failed: {e}"))
             }
-            CompressionType::Snappy => Ok(snap::raw::Encoder::new().compress_vec(data)?),
-            CompressionType::Brotli => {
-                use brotli::CompressorWriter;
-                use std::io::Write;
-                let mut compressed = Vec::new();
-                {
-                    let mut compressor = CompressorWriter::new(&mut compressed, 4096, 6, 22);
-                    compressor.write_all(data)?;
-                } // Compressor is dropped here, flushing data to compressed
-                Ok(compressed)
-            }
+            CompressionType::Snappy => Ok(oxiarc_snappy::compress(data)),
+            CompressionType::Brotli => oxiarc_brotli::compress(data, 6)
+                .map_err(|e| anyhow!("Brotli compression failed: {e}")),
         }
     }
 
@@ -516,30 +501,17 @@ pub mod serialization {
     pub fn decompress_data(data: &[u8], compression: CompressionType) -> Result<Vec<u8>> {
         match compression {
             CompressionType::None => Ok(data.to_vec()),
-            CompressionType::Gzip => {
-                use flate2::read::GzDecoder;
-                use std::io::Read;
-
-                let mut decoder = GzDecoder::new(data);
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
-                Ok(decompressed)
-            }
+            CompressionType::Gzip => oxiarc_deflate::gzip_decompress(data)
+                .map_err(|e| anyhow!("Gzip decompression failed: {e}")),
             CompressionType::Lz4 => oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
                 .map_err(|e| anyhow!("LZ4 decompression failed: {e}")),
             CompressionType::Zstd => {
                 oxiarc_zstd::decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {e}"))
             }
-            CompressionType::Snappy => snap::raw::Decoder::new()
-                .decompress_vec(data)
+            CompressionType::Snappy => oxiarc_snappy::decompress(data)
                 .map_err(|e| anyhow!("Snappy decompression failed: {e}")),
-            CompressionType::Brotli => {
-                use std::io::Read;
-                let mut decompressed = Vec::new();
-                let mut decompressor = brotli::Decompressor::new(data, 4096);
-                decompressor.read_to_end(&mut decompressed)?;
-                Ok(decompressed)
-            }
+            CompressionType::Brotli => oxiarc_brotli::decompress(data)
+                .map_err(|e| anyhow!("Brotli decompression failed: {e}")),
         }
     }
 }

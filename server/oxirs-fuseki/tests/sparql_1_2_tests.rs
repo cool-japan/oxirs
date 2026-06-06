@@ -80,7 +80,10 @@ mod property_path_tests {
         assert_eq!(result1.cache_key, result2.cache_key);
 
         // Verify caching works by checking the cache directly
-        let cache = optimizer.path_cache.read().unwrap();
+        let cache = optimizer
+            .path_cache
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         assert!(cache.contains_key(path));
     }
 }

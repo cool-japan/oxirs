@@ -22,7 +22,14 @@ pub mod functions;
 pub mod parameterized_constraints;
 pub mod qualified_shapes;
 pub mod reasoning;
+pub mod reasoning_probabilistic;
+#[cfg(test)]
+mod reasoning_tests;
+pub mod reasoning_types;
+pub mod reasoning_validator;
 pub mod recursive_shapes;
+#[cfg(test)]
+mod recursive_shapes_tests;
 pub mod rules;
 pub mod shape_comparison;
 pub mod shape_evolution;

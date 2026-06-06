@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::RwLock;
 
-use super::types::QueryRateLimiter;
+use super::types_query::QueryRateLimiter;
 
 impl Default for QueryRateLimiter {
     fn default() -> Self {

@@ -16,18 +16,28 @@ use crate::clustering::raft::{AppendEntriesRequest, RequestVoteRequest, RpcMessa
 use crate::error::{FusekiError, FusekiResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ring::{
-    digest::{Context, SHA256},
-    hmac::{self, Key},
-    rand::{self, SecureRandom},
-    signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519},
-};
+use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use oxicrypto_hash::Sha256;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     time::{Duration, Instant},
 };
 use tracing::{info, warn};
+
+/// Compute a SHA-256 digest over the concatenation of the given byte segments.
+///
+/// The previous `ring::digest::Context` API accumulated multiple `update()`
+/// calls; concatenating the same segments and hashing once yields an identical
+/// digest. Uses the Pure-Rust `oxicrypto-hash` SHA-256.
+fn sha256_segments(segments: &[&[u8]]) -> [u8; 32] {
+    let total: usize = segments.iter().map(|s| s.len()).sum();
+    let mut buf = Vec::with_capacity(total);
+    for segment in segments {
+        buf.extend_from_slice(segment);
+    }
+    Sha256.hash_fixed(&buf)
+}
 
 /// Maximum number of Byzantine nodes the system can tolerate
 const MAX_BYZANTINE_NODES: usize = 10;
@@ -76,12 +86,12 @@ pub struct ProofOfWork {
 pub struct NodeIdentity {
     /// Node's unique identifier
     pub node_id: String,
-    /// Ed25519 key pair for signing
-    pub key_pair: Ed25519KeyPair,
-    /// Public key bytes
+    /// Ed25519 signing key (Pure-Rust `ed25519-dalek`)
+    pub key_pair: SigningKey,
+    /// Raw 32-byte Ed25519 public key bytes
     pub public_key: Vec<u8>,
-    /// HMAC key for message authentication
-    pub hmac_key: Key,
+    /// HMAC key bytes for message authentication (reserved for future use)
+    pub hmac_key: [u8; 32],
 }
 
 /// Byzantine behavior evidence
@@ -142,21 +152,17 @@ pub struct BftNodeState {
 impl BftNodeState {
     /// Create new BFT node state
     pub fn new(node_id: String) -> FusekiResult<Self> {
-        // Generate Ed25519 key pair for signing
-        let rng = rand::SystemRandom::new();
-        let key_bytes = Ed25519KeyPair::generate_pkcs8(&rng)
-            .map_err(|e| FusekiError::internal(format!("Failed to generate key pair: {e:?}")))?;
+        // Generate an Ed25519 signing key from a fresh 32-byte CSPRNG seed
+        // (Pure-Rust `oxicrypto-rand` + `ed25519-dalek`).
+        let seed = oxicrypto_rand::random_nonce::<32>()
+            .map_err(|e| FusekiError::internal(format!("Failed to generate key seed: {e:?}")))?;
+        let key_pair = SigningKey::from_bytes(&seed);
 
-        let key_pair = Ed25519KeyPair::from_pkcs8(key_bytes.as_ref())
-            .map_err(|e| FusekiError::internal(format!("Failed to parse key pair: {e:?}")))?;
+        let public_key = key_pair.verifying_key().to_bytes().to_vec();
 
-        let public_key = key_pair.public_key().as_ref().to_vec();
-
-        // Generate HMAC key
-        let mut hmac_key_bytes = [0u8; 32];
-        rng.fill(&mut hmac_key_bytes)
+        // Generate HMAC key bytes (stored for potential future use).
+        let hmac_key = oxicrypto_rand::random_nonce::<32>()
             .map_err(|e| FusekiError::internal(format!("Failed to generate HMAC key: {e:?}")))?;
-        let hmac_key = Key::new(hmac::HMAC_SHA256, &hmac_key_bytes);
 
         let identity = NodeIdentity {
             node_id: node_id.clone(),
@@ -181,10 +187,8 @@ impl BftNodeState {
     pub fn sign_message(&self, message: &RpcMessage) -> FusekiResult<BftMessage> {
         let timestamp = Utc::now();
 
-        // Generate nonce for uniqueness
-        let rng = rand::SystemRandom::new();
-        let mut nonce = [0u8; 16];
-        rng.fill(&mut nonce)
+        // Generate nonce for uniqueness (Pure-Rust CSPRNG)
+        let nonce = oxicrypto_rand::random_nonce::<16>()
             .map_err(|e| FusekiError::internal(format!("Failed to generate nonce: {e:?}")))?;
 
         // Serialize message for signing
@@ -192,18 +196,15 @@ impl BftNodeState {
             .map_err(|e| FusekiError::internal(format!("Failed to serialize message: {e}")))?;
 
         // Create message hash including timestamp and nonce
-        let mut context = Context::new(&SHA256);
-        context.update(&message_bytes);
-        context.update(&timestamp.timestamp().to_le_bytes());
-        context.update(&nonce);
-        let message_digest = context.finish();
+        let timestamp_bytes = timestamp.timestamp().to_le_bytes();
+        let message_digest = sha256_segments(&[&message_bytes, &timestamp_bytes, &nonce]);
 
         // Sign the hash
-        let signature = self.identity.key_pair.sign(message_digest.as_ref());
+        let signature = self.identity.key_pair.sign(&message_digest);
 
         Ok(BftMessage {
             inner: message.clone(),
-            signature: signature.as_ref().to_vec(),
+            signature: signature.to_bytes().to_vec(),
             sender_key_id: self.identity.node_id.clone(),
             timestamp,
             nonce: nonce.to_vec(),
@@ -243,21 +244,46 @@ impl BftNodeState {
             .get(&bft_message.sender_key_id)
             .ok_or_else(|| FusekiError::authentication("Unknown sender"))?;
 
-        let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
+        // Parse the raw 32-byte Ed25519 public key.
+        let public_key = match <[u8; 32]>::try_from(public_key_bytes.as_slice())
+            .ok()
+            .and_then(|pk| VerifyingKey::from_bytes(&pk).ok())
+        {
+            Some(pk) => pk,
+            None => {
+                self.record_byzantine_behavior(
+                    &bft_message.sender_key_id,
+                    ByzantineBehavior::InvalidSignature,
+                    b"Invalid sender public key".to_vec(),
+                );
+                return Ok(false);
+            }
+        };
+
+        // Parse the 64-byte Ed25519 signature.
+        let signature = match <[u8; 64]>::try_from(bft_message.signature.as_slice()) {
+            Ok(sig_bytes) => ed25519_dalek::Signature::from_bytes(&sig_bytes),
+            Err(_) => {
+                self.record_byzantine_behavior(
+                    &bft_message.sender_key_id,
+                    ByzantineBehavior::InvalidSignature,
+                    b"Malformed signature".to_vec(),
+                );
+                return Ok(false);
+            }
+        };
 
         // Recreate message hash
         let message_bytes =
             oxicode::serde::encode_to_vec(&bft_message.inner, oxicode::config::standard())
                 .map_err(|e| FusekiError::internal(format!("Failed to serialize message: {e}")))?;
 
-        let mut context = Context::new(&SHA256);
-        context.update(&message_bytes);
-        context.update(&bft_message.timestamp.timestamp().to_le_bytes());
-        context.update(&bft_message.nonce);
-        let message_digest = context.finish();
+        let timestamp_bytes = bft_message.timestamp.timestamp().to_le_bytes();
+        let message_digest =
+            sha256_segments(&[&message_bytes, &timestamp_bytes, &bft_message.nonce]);
 
         // Verify signature
-        match public_key.verify(message_digest.as_ref(), &bft_message.signature) {
+        match public_key.verify(&message_digest, &signature) {
             Ok(()) => {
                 // Record message as seen
                 self.seen_messages.insert(message_id, bft_message.timestamp);
@@ -417,14 +443,14 @@ impl BftNodeState {
 
     /// Compute unique message identifier
     fn compute_message_id(&self, bft_message: &BftMessage) -> FusekiResult<String> {
-        let mut context = Context::new(&SHA256);
-        context.update(&bft_message.signature);
-        context.update(bft_message.sender_key_id.as_bytes());
-        context.update(&bft_message.timestamp.timestamp().to_le_bytes());
-        context.update(&bft_message.nonce);
-
-        let hash = context.finish();
-        Ok(hex::encode(hash.as_ref()))
+        let timestamp_bytes = bft_message.timestamp.timestamp().to_le_bytes();
+        let hash = sha256_segments(&[
+            &bft_message.signature,
+            bft_message.sender_key_id.as_bytes(),
+            &timestamp_bytes,
+            &bft_message.nonce,
+        ]);
+        Ok(hex::encode(hash))
     }
 
     /// Add a known public key for a node
@@ -468,16 +494,16 @@ impl BftNodeState {
 
         loop {
             // Create hash input
-            let mut context = Context::new(&SHA256);
-            context.update(&term.to_le_bytes());
-            context.update(candidate.as_bytes());
-            context.update(&nonce.to_le_bytes());
-            context.update(self.identity.node_id.as_bytes());
+            let term_bytes = term.to_le_bytes();
+            let nonce_bytes = nonce.to_le_bytes();
+            let hash_bytes = sha256_segments(&[
+                &term_bytes,
+                candidate.as_bytes(),
+                &nonce_bytes,
+                self.identity.node_id.as_bytes(),
+            ]);
 
-            let hash = context.finish();
-            let hash_bytes = hash.as_ref();
-
-            let difficulty = count_leading_zeros(hash_bytes);
+            let difficulty = count_leading_zeros(&hash_bytes);
 
             if difficulty >= POW_DIFFICULTY {
                 let compute_time = start_time.elapsed().as_millis() as u64;
@@ -503,22 +529,22 @@ impl BftNodeState {
     /// Verify proof-of-work
     pub fn verify_proof_of_work(&self, pow: &ProofOfWork, term: u64, candidate: &str) -> bool {
         // Recreate hash
-        let mut context = Context::new(&SHA256);
-        context.update(&term.to_le_bytes());
-        context.update(candidate.as_bytes());
-        context.update(&pow.nonce.to_le_bytes());
-        context.update(self.identity.node_id.as_bytes());
-
-        let hash = context.finish();
-        let hash_bytes = hash.as_ref();
+        let term_bytes = term.to_le_bytes();
+        let nonce_bytes = pow.nonce.to_le_bytes();
+        let hash_bytes = sha256_segments(&[
+            &term_bytes,
+            candidate.as_bytes(),
+            &nonce_bytes,
+            self.identity.node_id.as_bytes(),
+        ]);
 
         // Verify hash matches
-        if hash_bytes != pow.hash.as_slice() {
+        if hash_bytes.as_slice() != pow.hash.as_slice() {
             return false;
         }
 
         // Verify difficulty
-        let actual_difficulty = count_leading_zeros(hash_bytes);
+        let actual_difficulty = count_leading_zeros(&hash_bytes);
         actual_difficulty >= POW_DIFFICULTY && actual_difficulty == pow.difficulty
     }
 }

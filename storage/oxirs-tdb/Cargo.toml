@@ -45,17 +45,20 @@ chrono.workspace = true
 # Async I/O
 tokio = { workspace = true, features = ["fs", "io-util", "rt", "sync"] }
 futures.workspace = true
-tantivy.workspace = true
+# Tantivy full-text search engine (optional — gated behind `full-text-search`).
+# Pulls C `zstd-sys` transitively, so it is NOT enabled by default per the
+# COOLJAPAN Pure Rust default policy.
+tantivy = { workspace = true, optional = true }
 geo.workspace = true
 rstar.workspace = true
 geojson.workspace = true
 wkt.workspace = true
 oxiarc-lz4.workspace = true
 oxiarc-zstd.workspace = true
-snap.workspace = true
-brotli.workspace = true
+oxiarc-snappy.workspace = true
+oxiarc-brotli.workspace = true
 
-flate2.workspace = true
+oxiarc-deflate.workspace = true
 
 # Encryption
 aes-gcm.workspace = true
@@ -73,6 +76,13 @@ libc.workspace = true
 # Optional: io_uring support (Linux only)
 [target.'cfg(target_os = "linux")'.dependencies]
 tokio-uring = { version = "0.5", optional = true }
+
+[features]
+default = []
+# Full-text search over RDF literals via Tantivy. NOT in default: Tantivy pulls
+# C `zstd-sys` (tantivy → tantivy-sstable → zstd → zstd-sys), which violates the
+# COOLJAPAN Pure Rust default policy. Enable explicitly to gain text search.
+full-text-search = ["dep:tantivy"]
 
 [dev-dependencies]
 criterion.workspace = true

@@ -1,10 +1,10 @@
 # OxiRS ARQ - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Current Status
 
-OxiRS ARQ v0.2.3 is production-ready, providing a SPARQL 1.1/1.2 query engine with histogram-based optimization and advanced caching.
+OxiRS ARQ v0.3.1 is production-ready, providing a SPARQL 1.1/1.2 query engine with histogram-based optimization and advanced caching.
 
 ### Production Features
 - ✅ **SPARQL 1.1/1.2 Query Engine** - Full W3C compliance

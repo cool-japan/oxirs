@@ -3,12 +3,76 @@
 //! Support for reading and writing compressed RDF files with gzip compression.
 
 use super::ToolResult;
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, BufWriter, Cursor, Read, Write};
 use std::path::Path;
+
+/// Default gzip compression level used by [`open_writer`] (mirrors the
+/// historical `flate2::Compression::default()` which maps to level 6).
+const GZIP_DEFAULT_LEVEL: u8 = 6;
+
+/// Streaming gzip writer adapter backed by [`oxiarc_deflate`].
+///
+/// `oxiarc-deflate` exposes a one-shot `gzip_compress` API rather than an
+/// incremental encoder, so this adapter buffers all written bytes in memory
+/// and compresses them into the underlying file when [`flush`](Write::flush)
+/// is called (and once more on drop, in case the caller forgot to flush).
+struct GzipBufWriter {
+    inner: File,
+    buffer: Vec<u8>,
+    level: u8,
+    /// Set once the buffered data has been compressed and written so that a
+    /// `flush()` followed by `drop` does not emit the gzip stream twice.
+    finished: bool,
+}
+
+impl GzipBufWriter {
+    fn new(inner: File, level: u8) -> Self {
+        Self {
+            inner,
+            buffer: Vec::new(),
+            level,
+            finished: false,
+        }
+    }
+
+    /// Compress the accumulated buffer and write the gzip stream to the file.
+    fn finish(&mut self) -> io::Result<()> {
+        if self.finished {
+            return Ok(());
+        }
+        let compressed = oxiarc_deflate::gzip_compress(&self.buffer, self.level).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("gzip compression failed: {e}"),
+            )
+        })?;
+        self.inner.write_all(&compressed)?;
+        self.inner.flush()?;
+        self.finished = true;
+        Ok(())
+    }
+}
+
+impl Write for GzipBufWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.buffer.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.finish()
+    }
+}
+
+impl Drop for GzipBufWriter {
+    fn drop(&mut self) {
+        // Best-effort: ensure buffered data is emitted even without an explicit
+        // flush. Errors during drop cannot be propagated, so they are ignored;
+        // callers that need the result must call `flush()` explicitly.
+        let _ = self.finish();
+    }
+}
 
 /// Compression formats supported
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,10 +176,14 @@ pub fn open_reader(path: &Path) -> ToolResult<CompressedReader> {
         CompressionFormat::None => Ok(CompressedReader::None(BufReader::new(file))),
 
         CompressionFormat::Gzip => {
-            // Actual gzip decompression using flate2
-            let decoder = GzDecoder::new(file);
-            let reader = BufReader::new(decoder);
-            Ok(CompressedReader::Gzip(Box::new(reader)))
+            // Pure-Rust gzip decompression via oxiarc-deflate. The crate offers
+            // a one-shot API, so the whole file is read and inflated up front,
+            // then served from an in-memory cursor.
+            let mut compressed = Vec::new();
+            BufReader::new(file).read_to_end(&mut compressed)?;
+            let decompressed = oxiarc_deflate::gzip_decompress(&compressed)
+                .map_err(|e| format!("gzip decompression failed: {e}"))?;
+            Ok(CompressedReader::Gzip(Box::new(Cursor::new(decompressed))))
         }
 
         CompressionFormat::Bzip2 => {
@@ -140,9 +208,10 @@ pub fn open_writer(path: &Path, format: CompressionFormat) -> ToolResult<Compres
         CompressionFormat::None => Ok(CompressedWriter::None(BufWriter::new(file))),
 
         CompressionFormat::Gzip => {
-            // Actual gzip compression using flate2
-            let encoder = GzEncoder::new(file, Compression::default());
-            let writer = BufWriter::new(encoder);
+            // Pure-Rust gzip compression via oxiarc-deflate. The adapter buffers
+            // writes and emits the gzip stream on flush/drop (level 6, matching
+            // the previous flate2 default).
+            let writer = GzipBufWriter::new(file, GZIP_DEFAULT_LEVEL);
             Ok(CompressedWriter::Gzip(Box::new(writer)))
         }
 
@@ -405,5 +474,89 @@ mod tests {
         assert_eq!(CompressionFormat::Bzip2.name(), "bzip2");
         assert_eq!(CompressionFormat::Xz.name(), "xz");
         assert_eq!(CompressionFormat::None.name(), "none");
+    }
+
+    /// Round-trip through the gzip writer/reader (oxiarc-deflate backed) and
+    /// confirm the on-disk bytes are a real gzip stream (magic 0x1f 0x8b) that
+    /// decompresses back to the original payload.
+    #[test]
+    fn test_gzip_writer_reader_round_trip() {
+        use std::env::temp_dir;
+
+        let unique = format!(
+            "{}_{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let path = temp_dir().join(format!("oxirs_gzip_rt_{unique}.ttl.gz"));
+
+        // Use a repetitive payload large enough to exercise the compressor.
+        let payload = "<urn:s> <urn:p> <urn:o> .\n".repeat(2000);
+
+        // Write through the gzip writer.
+        {
+            let mut writer =
+                open_writer(&path, CompressionFormat::Gzip).expect("failed to open gzip writer");
+            writer
+                .write_all(payload.as_bytes())
+                .expect("failed to write payload");
+            writer.flush().expect("failed to flush gzip writer");
+        }
+
+        // The raw file must start with the gzip magic bytes.
+        let raw = std::fs::read(&path).expect("failed to read gzip file");
+        assert!(raw.len() >= 2, "gzip output too small");
+        assert_eq!(&raw[..2], &[0x1f, 0x8b], "missing gzip magic header");
+        assert!(
+            raw.len() < payload.len(),
+            "compressed output ({}) should be smaller than input ({})",
+            raw.len(),
+            payload.len()
+        );
+
+        // Read it back through the gzip reader.
+        let mut reader = open_reader(&path).expect("failed to open gzip reader");
+        let mut decompressed = String::new();
+        reader
+            .read_to_string(&mut decompressed)
+            .expect("failed to read decompressed payload");
+        assert_eq!(decompressed, payload, "round-trip payload mismatch");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Ensure a payload written by the gzip writer can be decompressed directly
+    /// by `oxiarc_deflate::gzip_decompress`, proving format compatibility.
+    #[test]
+    fn test_gzip_writer_oxiarc_format_compatible() {
+        use std::env::temp_dir;
+
+        let unique = format!(
+            "{}_{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let path = temp_dir().join(format!("oxirs_gzip_fmt_{unique}.nt.gz"));
+        let payload = b"hello oxirs gzip format compatibility check\n";
+
+        {
+            let mut writer =
+                open_writer(&path, CompressionFormat::Gzip).expect("failed to open gzip writer");
+            writer.write_all(payload).expect("failed to write payload");
+            writer.flush().expect("failed to flush gzip writer");
+        }
+
+        let raw = std::fs::read(&path).expect("failed to read gzip file");
+        let decompressed =
+            oxiarc_deflate::gzip_decompress(&raw).expect("oxiarc failed to decompress");
+        assert_eq!(decompressed, payload);
+
+        let _ = std::fs::remove_file(&path);
     }
 }

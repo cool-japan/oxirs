@@ -7,6 +7,10 @@
 //! - [`BuckinghamPiAnalyzer`] implementing the Buckingham π theorem.
 
 pub mod checkers;
+pub mod checkers_impl;
+mod checkers_tests;
+pub mod checkers_types;
+pub mod checkers_validator;
 
 pub use checkers::{
     AngularMomentumChecker, ConservationReport, ConservationSuite, ConservationViolationDetail,

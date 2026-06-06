@@ -1,10 +1,10 @@
 # OxiRS GeoSPARQL - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Current Status
 
-OxiRS GeoSPARQL v0.2.3 is production-ready, providing complete OGC GeoSPARQL 1.0/1.1 implementation for spatial data and queries in RDF/SPARQL.
+OxiRS GeoSPARQL v0.3.1 is production-ready, providing complete OGC GeoSPARQL 1.0/1.1 implementation for spatial data and queries in RDF/SPARQL.
 
 ### Production Features
 - ✅ **GeoSPARQL Vocabulary** - Full support for GeoSPARQL ontology and datatypes
@@ -41,8 +41,8 @@ OxiRS GeoSPARQL v0.2.3 is production-ready, providing complete OGC GeoSPARQL 1.0
   - [x] geof:isClosed — endpoints equal predicate for LineString/MultiLineString
   - [x] Register all new functions in sparql_integration.rs
   - [x] tests/ogc_geosparql_1_1_conformance.rs conformance test suite
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing

@@ -1,9 +1,9 @@
 //! # OxiRS Chat
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-chat/badge.svg)](https://docs.rs/oxirs-chat)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Advanced RAG chat API with LLM integration, natural language to SPARQL translation,
@@ -225,6 +225,10 @@ pub mod external_services;
 pub mod memory_compression;
 // pub mod gpu_embedding_cache; // FUTURE: GPU-accelerated embedding cache (requires scirs2-core beta.4+)
 pub mod graph_exploration;
+pub mod graph_exploration_analytics;
+mod graph_exploration_tests;
+pub mod graph_exploration_traversal;
+pub mod graph_exploration_types;
 pub mod health_monitoring;
 pub mod i18n; // NEW: Internationalization and multi-language support
 pub mod knowledge_bases; // NEW: Wikipedia, PubMed, and external knowledge base connectors
@@ -236,6 +240,9 @@ pub mod nlp; // Natural Language Processing (NEW: intent, sentiment, entities, c
 pub mod performance;
 // pub mod performance_profiler; // FUTURE: Advanced performance profiling (requires scirs2-core beta.4+)
 pub mod persistence;
+pub mod persistence_recovery;
+pub mod persistence_storage;
+pub mod persistence_types;
 pub mod query_refinement; // NEW: Query refinement system
 pub mod rag;
 pub mod schema_introspection; // NEW: Automatic schema discovery for better NL2SPARQL
@@ -243,6 +250,9 @@ pub mod schema_introspection; // NEW: Automatic schema discovery for better NL2S
 pub mod export; // Multi-format export (NEW)
 pub mod plugins; // Plugin system (NEW)
 pub mod rich_content;
+pub mod rich_content_renderer;
+pub mod rich_content_tests;
+pub mod rich_content_types;
 pub mod server;
 pub mod session;
 pub mod session_manager;
@@ -254,6 +264,8 @@ pub mod visualization; // NEW: Result visualization helpers
 pub mod voice; // NEW: Voice interface with STT/TTS
 pub mod webhooks; // Webhook support (NEW)
 pub mod workflow;
+pub mod workflow_engine; // Workflow service implementations
+pub mod workflow_types; // Workflow type definitions
 
 // v0.2.0 new modules
 pub mod finetuning;

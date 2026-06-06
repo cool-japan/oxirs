@@ -117,6 +117,8 @@ pub enum Permission {
     ServiceManage,
     ClusterManage,
     FederationManage,
+    /// Read access to audit logs (used by the Auditor policy template)
+    ReadAudit,
 }
 
 /// MFA status information
@@ -235,6 +237,10 @@ pub enum AuthError {
     ConfigurationError(String),
     #[error("Internal error: {0}")]
     InternalError(String),
+    #[error("Duplicate template: {0}")]
+    DuplicateTemplate(String),
+    #[error("Unknown template: {0}")]
+    UnknownTemplate(String),
 }
 
 /// Password strength levels

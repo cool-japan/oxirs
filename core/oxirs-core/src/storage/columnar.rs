@@ -725,15 +725,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_columnar_storage() {
-        let test_dir = format!(
-            "/tmp/oxirs_columnar_test_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("operation should succeed")
-                .as_millis()
-        );
+        let dir = tempfile::tempdir().expect("tempdir");
         let config = ColumnarConfig {
-            path: PathBuf::from(&test_dir),
+            path: dir.path().join("oxirs_columnar_test"),
             ..Default::default()
         };
 
@@ -766,15 +760,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_analytical_queries() {
-        let test_dir = format!(
-            "/tmp/oxirs_columnar_analytics_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("operation should succeed")
-                .as_millis()
-        );
+        let dir = tempfile::tempdir().expect("tempdir");
         let config = ColumnarConfig {
-            path: PathBuf::from(&test_dir),
+            path: dir.path().join("oxirs_columnar_analytics"),
             batch_size: 2,
             ..Default::default()
         };

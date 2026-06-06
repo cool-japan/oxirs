@@ -150,8 +150,14 @@ impl CrossPatternAttention {
         // Convert patterns to embeddings
         let pattern_embeddings = self.patterns_to_embeddings(patterns).await?;
 
-        // Compute multi-head attention
+        // Compute multi-head attention (returns local map)
         let attention_weights = self.compute_multi_head_attention(&pattern_embeddings)?;
+
+        // Persist computed attention weights so update_attention_weights has data to work with.
+        // We merge rather than replace so that successive calls accumulate knowledge.
+        for (key, matrix) in &attention_weights {
+            self.attention_matrices.insert(key.clone(), matrix.clone());
+        }
 
         // Analyze attention patterns
         let attention_patterns = self.analyze_attention_patterns(&attention_weights, patterns)?;
@@ -181,19 +187,88 @@ impl CrossPatternAttention {
         Ok(embeddings)
     }
 
-    /// Convert single pattern to embedding
-    async fn pattern_to_embedding(&self, _pattern: &Pattern) -> Result<Array1<f64>> {
-        // TODO: Implement proper pattern embedding
-        // This would extract features from the pattern structure, constraints, etc.
+    /// Convert a single pattern to a deterministic feature-based embedding.
+    ///
+    /// Rather than random noise the embedding encodes real structural features:
+    /// - Dimensions 0-3: support, confidence, pattern-type index, and a normalised
+    ///   count that is meaningful for each variant (instance count, usage count, etc.)
+    /// - The remaining dimensions are filled with sinusoidal position encodings
+    ///   derived from the pattern id hash, ensuring distinct patterns produce
+    ///   distinct embeddings reproducibly.
+    async fn pattern_to_embedding(&self, pattern: &Pattern) -> Result<Array1<f64>> {
         let embedding_dim = self.config.embedding_dim;
         let mut embedding = Array1::zeros(embedding_dim);
 
-        // Simple placeholder embedding based on pattern properties
-        for i in 0..embedding_dim {
-            embedding[i] = {
-                let mut random = Random::default();
-                random.random::<f64>()
+        if embedding_dim == 0 {
+            return Ok(embedding);
+        }
+
+        // Feature 0: support (already in [0,1])
+        embedding[0] = pattern.support();
+
+        // Feature 1: confidence (already in [0,1])
+        if embedding_dim > 1 {
+            embedding[1] = pattern.confidence();
+        }
+
+        // Feature 2: pattern type encoded as a normalised integer
+        if embedding_dim > 2 {
+            use crate::patterns::PatternType;
+            let type_index: f64 = match pattern.pattern_type() {
+                PatternType::Structural => 0.0,
+                PatternType::Usage => 1.0,
+                PatternType::ShapeComposition => 2.0,
+                PatternType::Temporal => 3.0,
+                PatternType::Anomalous => 4.0,
+                PatternType::Association => 5.0,
+                PatternType::Constraint => 6.0,
+                PatternType::Datatype => 7.0,
+                PatternType::Cardinality => 8.0,
+                PatternType::Range => 9.0,
             };
+            embedding[2] = type_index / 9.0;
+        }
+
+        // Feature 3: normalised variant-specific count
+        if embedding_dim > 3 {
+            let raw_count = match pattern {
+                crate::patterns::Pattern::ClassUsage { instance_count, .. } => {
+                    *instance_count as f64
+                }
+                crate::patterns::Pattern::PropertyUsage { usage_count, .. } => *usage_count as f64,
+                crate::patterns::Pattern::Datatype { usage_count, .. } => *usage_count as f64,
+                crate::patterns::Pattern::Cardinality { avg_count, .. } => *avg_count,
+                crate::patterns::Pattern::Hierarchy { depth, .. } => *depth as f64,
+                crate::patterns::Pattern::ConstraintUsage { usage_count, .. } => {
+                    *usage_count as f64
+                }
+                crate::patterns::Pattern::TargetUsage { usage_count, .. } => *usage_count as f64,
+                crate::patterns::Pattern::PathComplexity { complexity, .. } => *complexity as f64,
+                crate::patterns::Pattern::ShapeComplexity {
+                    constraint_count, ..
+                } => *constraint_count as f64,
+                crate::patterns::Pattern::AssociationRule { lift, .. } => *lift,
+                crate::patterns::Pattern::CardinalityRule { min_count, .. } => {
+                    min_count.unwrap_or(0) as f64
+                }
+            };
+            // Normalise to [0,1] with a soft cap at 1000
+            embedding[3] = (raw_count / 1000.0_f64).min(1.0_f64);
+        }
+
+        // Fill remaining dimensions with sinusoidal encodings seeded by the
+        // pattern id, ensuring deterministic diversity across patterns.
+        if embedding_dim > 4 {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            pattern.id().hash(&mut hasher);
+            let seed = hasher.finish() as f64;
+
+            for i in 4..embedding_dim {
+                let angle = seed / 1e10 + i as f64 / embedding_dim as f64 * std::f64::consts::TAU;
+                embedding[i] = angle.sin() * 0.5 + 0.5; // Map to [0, 1]
+            }
         }
 
         Ok(embedding)
@@ -338,13 +413,59 @@ impl CrossPatternAttention {
         Ok(influences)
     }
 
-    /// Update attention weights based on feedback
+    /// Update stored attention weights based on validation feedback.
+    ///
+    /// For each attention matrix stored under a key that contains `pattern_id` we
+    /// scale every attention value by `(1 + learning_rate * delta)` where `delta`
+    /// is the average feedback value.  This provides a lightweight Hebbian-style
+    /// reinforcement: patterns that received positive feedback have their attention
+    /// weights amplified, making them more likely to dominate in future analyses.
+    ///
+    /// After scaling each row is renormalised to sum to 1 so the matrix remains a
+    /// valid probability distribution.
     pub fn update_attention_weights(
         &mut self,
         pattern_id: &str,
         feedback: &HashMap<String, f64>,
     ) -> Result<()> {
-        // TODO: Implement attention weight updates based on validation feedback
+        if feedback.is_empty() {
+            return Ok(());
+        }
+
+        let learning_rate = 0.01_f64;
+
+        // Compute the mean feedback signal.
+        let avg_feedback: f64 = feedback.values().copied().sum::<f64>() / feedback.len() as f64;
+        let scale = 1.0 + learning_rate * avg_feedback;
+
+        // Find all matrices associated with this pattern id and apply the update.
+        for (key, matrix) in self.attention_matrices.iter_mut() {
+            if !key.contains(pattern_id) {
+                continue;
+            }
+
+            let num_rows = matrix.nrows();
+            let num_cols = matrix.ncols();
+
+            for i in 0..num_rows {
+                let mut row_sum = 0.0_f64;
+
+                // Scale and clamp each element.
+                for j in 0..num_cols {
+                    let new_val = (matrix[[i, j]] * scale).max(0.0_f64);
+                    matrix[[i, j]] = new_val;
+                    row_sum += new_val;
+                }
+
+                // Renormalise so the row still sums to 1.
+                if row_sum > f64::EPSILON {
+                    for j in 0..num_cols {
+                        matrix[[i, j]] /= row_sum;
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 

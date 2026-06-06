@@ -519,7 +519,7 @@ curl http://localhost:8080/health
 
 # Readiness probe
 curl http://localhost:8080/ready
-# Response: {"ready": true, "version": "0.2.3-0.1.0"}
+# Response: {"ready": true, "version": "0.3.1"}
 ```
 
 ---
@@ -762,5 +762,5 @@ For production support inquiries:
 
 ---
 
-**Last Updated**: 2026-01-06
-**Version**: 0.2.3-0.1.0
+**Last Updated**: 2026-06-06
+**Version**: 0.3.1

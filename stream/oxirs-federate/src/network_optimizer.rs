@@ -4,14 +4,11 @@
 //! compression, encoding, and bandwidth optimization for federated query processing.
 
 use anyhow::{anyhow, Result};
-use brotli::{enc::BrotliEncoderParams, CompressorWriter, Decompressor};
 use bytes::Bytes;
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use oxiarc_zstd::{decode_all, encode_all};
 use rmp_serde::to_vec;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{Read, Write};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -405,32 +402,28 @@ impl NetworkOptimizer {
     // Private helper methods
 
     async fn compress_gzip(&self, data: &[u8]) -> Result<Bytes> {
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(data)?;
-        let compressed = encoder.finish()?;
+        // flate2 `Compression::default()` mapped to level 6 (Pure Rust oxiarc-deflate).
+        let compressed = oxiarc_deflate::gzip_compress(data, 6)
+            .map_err(|e| anyhow!("Gzip compression failed: {}", e))?;
         Ok(Bytes::from(compressed))
     }
 
     async fn decompress_gzip(&self, data: &[u8]) -> Result<Bytes> {
-        let mut decoder = GzDecoder::new(data);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
+        let decompressed = oxiarc_deflate::gzip_decompress(data)
+            .map_err(|e| anyhow!("Gzip decompression failed: {}", e))?;
         Ok(Bytes::from(decompressed))
     }
 
     async fn compress_brotli(&self, data: &[u8]) -> Result<Bytes> {
-        let mut output = Vec::new();
-        let params = BrotliEncoderParams::default();
-        let mut writer = CompressorWriter::with_params(&mut output, 4096, &params);
-        writer.write_all(data)?;
-        drop(writer);
+        // brotli `BrotliEncoderParams::default()` quality is 11 (max); preserve it.
+        let output = oxiarc_brotli::compress(data, 11)
+            .map_err(|e| anyhow!("Brotli compression failed: {}", e))?;
         Ok(Bytes::from(output))
     }
 
     async fn decompress_brotli(&self, data: &[u8]) -> Result<Bytes> {
-        let mut decompressor = Decompressor::new(data, 4096);
-        let mut output = Vec::new();
-        decompressor.read_to_end(&mut output)?;
+        let output = oxiarc_brotli::decompress(data)
+            .map_err(|e| anyhow!("Brotli decompression failed: {}", e))?;
         Ok(Bytes::from(output))
     }
 
@@ -664,5 +657,54 @@ mod tests {
         let stats = optimizer.get_statistics().await;
         assert_eq!(stats.total_requests, 5);
         assert!(stats.total_bytes_original > 0);
+    }
+
+    /// Round-trip the migrated Pure Rust oxiarc paths (gzip + brotli) through
+    /// the public compress/decompress API, including an incompressible buffer,
+    /// to guarantee wire-format fidelity after the brotli/flate2 migration.
+    #[tokio::test]
+    async fn test_gzip_brotli_roundtrip() {
+        let compressible = b"Federated query result payload. ".repeat(40);
+        // xorshift64 PRNG: incompressible byte stream, no external crates.
+        let mut random: Vec<u8> = Vec::with_capacity(2048);
+        let mut state: u64 = 0x1234_5678_9ABC_DEF0;
+        for _ in 0..2048 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            random.push((state & 0xFF) as u8);
+        }
+
+        for algorithm in [CompressionAlgorithm::Gzip, CompressionAlgorithm::Brotli] {
+            let label = format!("{algorithm:?}");
+            let config = NetworkOptimizerConfig {
+                compression_algorithm: algorithm,
+                compression_threshold: 1, // force compression for both buffers
+                ..Default::default()
+            };
+            let optimizer = NetworkOptimizer::with_config(config);
+
+            for payload in [compressible.as_slice(), random.as_slice()] {
+                let compressed = optimizer
+                    .compress_data(payload, EncodingFormat::Json)
+                    .await
+                    .expect("compression should succeed");
+                assert!(
+                    !matches!(compressed.algorithm, CompressionAlgorithm::None),
+                    "{label} should actually compress"
+                );
+
+                let decompressed = optimizer
+                    .decompress_data(&compressed)
+                    .await
+                    .expect("decompression should succeed");
+                assert_eq!(
+                    decompressed.as_ref(),
+                    payload,
+                    "round-trip mismatch for {label} (len {})",
+                    payload.len()
+                );
+            }
+        }
     }
 }

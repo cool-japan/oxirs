@@ -95,7 +95,7 @@ mod tests {
     fn test_resolve_both_is_error() {
         let result = resolve_update_string(
             Some("INSERT DATA {}".to_string()),
-            Some(PathBuf::from("/tmp/x.sparql")),
+            Some(std::env::temp_dir().join("oxirs_rupdate_both.sparql")),
         );
         assert!(result.is_err());
     }

@@ -548,10 +548,18 @@ impl StorePresets {
 mod tests {
     use super::*;
     use std::env;
+    use std::path::PathBuf;
+
+    /// Temp directory path used as the store base path in tests. The path is
+    /// only stored on the params struct (never written to), so a shared temp
+    /// path is sufficient and collision-safe.
+    fn test_store_path() -> PathBuf {
+        env::temp_dir().join("oxirs_tdb_store_params_test")
+    }
 
     #[test]
     fn test_store_params_new() {
-        let params = StoreParams::new("/tmp/test");
+        let params = StoreParams::new(test_store_path());
         assert_eq!(params.page_size, 4096);
         assert_eq!(params.buffer_pool_size, 1000);
         assert!(params.enable_spo_index);
@@ -559,7 +567,7 @@ mod tests {
 
     #[test]
     fn test_store_params_validation() {
-        let params = StoreParams::new("/tmp/test");
+        let params = StoreParams::new(test_store_path());
         assert!(params.validate().is_ok());
 
         let mut invalid_params = params.clone();
@@ -573,7 +581,7 @@ mod tests {
 
     #[test]
     fn test_builder_basic() {
-        let params = StoreParamsBuilder::new("/tmp/test")
+        let params = StoreParamsBuilder::new(test_store_path())
             .page_size(8192)
             .buffer_pool_size(2000)
             .build()
@@ -585,7 +593,7 @@ mod tests {
 
     #[test]
     fn test_builder_compression() {
-        let params = StoreParamsBuilder::new("/tmp/test")
+        let params = StoreParamsBuilder::new(test_store_path())
             .with_compression(CompressionAlgorithm::Zstd, 5)
             .build()
             .unwrap();
@@ -597,7 +605,7 @@ mod tests {
 
     #[test]
     fn test_builder_bloom_filters() {
-        let params = StoreParamsBuilder::new("/tmp/test")
+        let params = StoreParamsBuilder::new(test_store_path())
             .with_bloom_filters(true, 0.001, 5_000_000)
             .build()
             .unwrap();
@@ -609,7 +617,9 @@ mod tests {
 
     #[test]
     fn test_presets_development() {
-        let params = StorePresets::development("/tmp/test").build().unwrap();
+        let params = StorePresets::development(test_store_path())
+            .build()
+            .unwrap();
         assert_eq!(params.buffer_pool_size, 100);
         assert_eq!(params.compression_algorithm, CompressionAlgorithm::None);
         assert!(!params.enable_statistics);
@@ -617,7 +627,7 @@ mod tests {
 
     #[test]
     fn test_presets_production() {
-        let params = StorePresets::production("/tmp/test").build().unwrap();
+        let params = StorePresets::production(test_store_path()).build().unwrap();
         assert_eq!(params.buffer_pool_size, 10000);
         assert!(params.enable_diagnostics);
         assert!(params.enable_backup_encryption);
@@ -625,7 +635,9 @@ mod tests {
 
     #[test]
     fn test_presets_performance() {
-        let params = StorePresets::performance("/tmp/test").build().unwrap();
+        let params = StorePresets::performance(test_store_path())
+            .build()
+            .unwrap();
         assert_eq!(params.buffer_pool_size, 50000);
         assert!(params.enable_direct_io);
         assert!(params.enable_gpu_acceleration);
@@ -651,7 +663,7 @@ mod tests {
 
     #[test]
     fn test_replication_config() {
-        let params = StoreParamsBuilder::new("/tmp/test")
+        let params = StoreParamsBuilder::new(test_store_path())
             .with_replication(ReplicationMode::MasterSlave)
             .build()
             .unwrap();
@@ -662,7 +674,7 @@ mod tests {
 
     #[test]
     fn test_connection_pool_validation() {
-        let result = StoreParamsBuilder::new("/tmp/test")
+        let result = StoreParamsBuilder::new(test_store_path())
             .with_connection_pool(10, 5, 30) // min > max (invalid)
             .build();
 

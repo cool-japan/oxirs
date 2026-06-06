@@ -1,10 +1,10 @@
 # OxiRS DID - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
-OxiRS DID v0.2.3 provides W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) support for secure, decentralized identity management in semantic web applications.
+OxiRS DID v0.3.1 provides W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) support for secure, decentralized identity management in semantic web applications.
 
 ### Features
 - ✅ W3C DID Core specification compliance
@@ -48,8 +48,8 @@ OxiRS DID v0.2.3 provides W3C Decentralized Identifiers (DID) and Verifiable Cre
   - **Files:** tests/w3c_compliance.rs (new), src/vc/jwt_vc.rs (new), src/vc/sd_jwt.rs (new)
   - **Tests:** All W3C DID Core MUST assertions; VC Data Model 2.0 test vectors; JWT-VC round-trip; SD-JWT disclosure correctness
   - **Risk:** W3C test suite coverage may reveal undiscovered compliance gaps; treat as bug-discovery phase
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise security features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise security features — FIPS 140-2 feature gate (`fips = []` in Cargo.toml, RFC-003 boundary doc) completed 2026-05-17; full decomposition in `docs/policies/enterprise.md`
 - [x] Hardware Security Module (HSM) support (planned 2026-04-17)
   - **Goal:** Replace mock KMS backends with real PKCS#11, AWS KMS, GCP Cloud KMS, and Azure Key Vault implementations behind feature gates; add cryptographic operation audit logging
   - **Design:** PKCS#11 via pkcs11 crate (pure Rust FFI); Pkcs11Signer implementing DIDSigner trait; supports YubiHSM, Thales, SoftHSM2; AwsKmsSigner via aws-sdk-kms; GcpKmsSigner via google-cloud-kms; AzureKvSigner via azure_security_keyvault; all behind feature = ["hsm", "aws-kms", "gcp-kms", "azure-kms"]; AuditLog appends every sign/verify with timestamp, key_id, operation type

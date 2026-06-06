@@ -40,7 +40,7 @@ impl TestSuiteCoordinator {
                 let resource_start = self.resource_tracker.snapshot();
 
                 let result = {
-                    let mut module_guard = module.lock().unwrap();
+                    let mut module_guard = module.lock().unwrap_or_else(|e| e.into_inner());
                     module_guard.run_tests_parallel(config)
                 };
 
@@ -50,7 +50,7 @@ impl TestSuiteCoordinator {
                 // Record performance metrics
                 if let Ok(mut monitor) = self.performance_monitor.lock() {
                     let module_name = {
-                        let module_guard = module.lock().unwrap();
+                        let module_guard = module.lock().unwrap_or_else(|e| e.into_inner());
                         module_guard.name().to_string()
                     };
                     monitor.record_operation(&module_name, execution_time, result.is_ok());
@@ -75,7 +75,7 @@ impl TestSuiteCoordinator {
             let resource_start = self.resource_tracker.snapshot();
 
             let result = {
-                let mut module_guard = module.lock().unwrap();
+                let mut module_guard = module.lock().unwrap_or_else(|e| e.into_inner());
                 module_guard.run_tests_sequential(config)
             };
 
@@ -85,7 +85,7 @@ impl TestSuiteCoordinator {
             // Record performance metrics
             if let Ok(mut monitor) = self.performance_monitor.lock() {
                 let module_name = {
-                    let module_guard = module.lock().unwrap();
+                    let module_guard = module.lock().unwrap_or_else(|e| e.into_inner());
                     module_guard.name().to_string()
                 };
                 monitor.record_operation(&module_name, execution_time, result.is_ok());

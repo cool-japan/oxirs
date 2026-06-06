@@ -2,10 +2,74 @@
 //!
 //! This module provides a comprehensive collection of distance metrics
 //! including specialized metrics for different data types and use cases.
+//!
+//! # Custom Metrics
+//!
+//! User-defined distance metrics can be registered globally and referenced by
+//! their numeric `id` via [`ExtendedDistanceMetric::Custom`]:
+//!
+//! ```
+//! use oxirs_vec::distance_metrics::{register_custom_metric, ExtendedDistanceMetric};
+//! use oxirs_vec::Vector;
+//!
+//! // Register a simple inverted-cosine metric as ID 0
+//! register_custom_metric(0, |a, b| {
+//!     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+//!     let na: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+//!     let nb: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+//!     if na == 0.0 || nb == 0.0 { Ok(1.0) } else { Ok(1.0 - dot / (na * nb)) }
+//! });
+//!
+//! let a = Vector::new(vec![1.0, 0.0]);
+//! let b = Vector::new(vec![1.0, 0.0]);
+//! let d = ExtendedDistanceMetric::Custom(0).distance(&a, &b).unwrap();
+//! assert!(d < 0.01);
+//! ```
 
 use crate::Vector;
 use anyhow::Result;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+/// The type of a user-supplied custom distance function.
+///
+/// Receives two float slices of equal length and returns a non-negative distance.
+pub type CustomMetricFn = fn(&[f32], &[f32]) -> Result<f32>;
+
+/// Global registry of user-defined distance metrics, keyed by `u32` ID.
+static CUSTOM_METRIC_REGISTRY: OnceLock<RwLock<HashMap<u32, CustomMetricFn>>> = OnceLock::new();
+
+fn custom_metric_registry() -> &'static RwLock<HashMap<u32, CustomMetricFn>> {
+    CUSTOM_METRIC_REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+/// Register a custom distance metric.
+///
+/// The `id` must match the value stored in [`ExtendedDistanceMetric::Custom`].
+/// Registering the same `id` twice silently replaces the previous function.
+///
+/// # Example
+///
+/// ```
+/// use oxirs_vec::distance_metrics::register_custom_metric;
+///
+/// register_custom_metric(42, |a, b| {
+///     let sum: f32 = a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum();
+///     Ok(sum)
+/// });
+/// ```
+pub fn register_custom_metric(id: u32, f: CustomMetricFn) {
+    custom_metric_registry().write().insert(id, f);
+}
+
+/// Remove a previously registered custom metric.
+///
+/// Returns `true` if the metric existed and was removed, `false` otherwise.
+pub fn unregister_custom_metric(id: u32) -> bool {
+    custom_metric_registry().write().remove(&id).is_some()
+}
 
 /// Extended distance metric types
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -85,9 +149,15 @@ impl ExtendedDistanceMetric {
             ExtendedDistanceMetric::NormalizedCompressionDistance => Self::ncd(&a_f32, &b_f32),
             ExtendedDistanceMetric::Mahalanobis => Self::mahalanobis_distance(&a_f32, &b_f32),
             ExtendedDistanceMetric::BrayCurtis => Self::bray_curtis_distance(&a_f32, &b_f32),
-            ExtendedDistanceMetric::Custom(_id) => {
-                // Custom metrics would be looked up from a registry
-                Err(anyhow::anyhow!("Custom metrics not implemented"))
+            ExtendedDistanceMetric::Custom(id) => {
+                let registry = custom_metric_registry().read();
+                match registry.get(id) {
+                    Some(metric_fn) => metric_fn(&a_f32, &b_f32),
+                    None => Err(anyhow::anyhow!(
+                        "Custom metric id={id} not found — register it first with \
+                         oxirs_vec::distance_metrics::register_custom_metric()"
+                    )),
+                }
             }
         }
     }
@@ -539,6 +609,67 @@ mod tests {
 
         let distance = ExtendedDistanceMetric::Manhattan.distance(&a, &b)?;
         assert_eq!(distance, 9.0); // |1-4| + |2-5| + |3-6| = 9
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_metric_unregistered_returns_error() {
+        let a = Vector::new(vec![1.0, 0.0]);
+        let b = Vector::new(vec![0.0, 1.0]);
+        let result = ExtendedDistanceMetric::Custom(9999).distance(&a, &b);
+        assert!(
+            result.is_err(),
+            "unregistered custom metric should return Err"
+        );
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("9999"), "error should mention the missing id");
+    }
+
+    #[test]
+    fn test_custom_metric_manhattan_via_registry() -> Result<()> {
+        // Use a unique ID to avoid interference between tests.
+        const MY_MANHATTAN: u32 = 0xCAFE_0001;
+        super::register_custom_metric(MY_MANHATTAN, |a, b| {
+            Ok(a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum())
+        });
+
+        let a = Vector::new(vec![1.0, 2.0, 3.0]);
+        let b = Vector::new(vec![4.0, 5.0, 6.0]);
+        let dist = ExtendedDistanceMetric::Custom(MY_MANHATTAN).distance(&a, &b)?;
+        assert!(
+            (dist - 9.0).abs() < 1e-6,
+            "custom Manhattan distance should be 9"
+        );
+
+        super::unregister_custom_metric(MY_MANHATTAN);
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_metric_overwrite() -> Result<()> {
+        const MY_ID: u32 = 0xCAFE_0002;
+        // Register a "always 0" metric
+        super::register_custom_metric(MY_ID, |_a, _b| Ok(0.0));
+        let a = Vector::new(vec![1.0, 2.0]);
+        let b = Vector::new(vec![3.0, 4.0]);
+        let d1 = ExtendedDistanceMetric::Custom(MY_ID).distance(&a, &b)?;
+        assert!((d1 - 0.0).abs() < 1e-6);
+
+        // Overwrite with Euclidean
+        super::register_custom_metric(MY_ID, |a, b| {
+            Ok(a.iter()
+                .zip(b)
+                .map(|(x, y)| (x - y).powi(2))
+                .sum::<f32>()
+                .sqrt())
+        });
+        let d2 = ExtendedDistanceMetric::Custom(MY_ID).distance(&a, &b)?;
+        assert!(
+            d2 > 0.0,
+            "overwritten metric should produce non-zero distance"
+        );
+
+        super::unregister_custom_metric(MY_ID);
         Ok(())
     }
 }

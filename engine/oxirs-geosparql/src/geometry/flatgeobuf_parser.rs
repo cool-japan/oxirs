@@ -873,9 +873,13 @@ mod tests {
     #[test]
     fn test_flatgeobuf_write_empty_geometries() {
         let geometries: Vec<Geometry> = vec![];
+        let out_path = std::env::temp_dir()
+            .join(format!("oxirs_test_{}.fgb", std::process::id()))
+            .display()
+            .to_string();
         #[cfg(feature = "flatgeobuf-support")]
         {
-            let result = write_flatgeobuf_to_file(&geometries, "/tmp/test.fgb");
+            let result = write_flatgeobuf_to_file(&geometries, &out_path);
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -885,7 +889,7 @@ mod tests {
 
         #[cfg(not(feature = "flatgeobuf-support"))]
         {
-            let result = write_flatgeobuf_to_file(&geometries, "/tmp/test.fgb");
+            let result = write_flatgeobuf_to_file(&geometries, &out_path);
             assert!(result.is_err());
         }
     }

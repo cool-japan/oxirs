@@ -165,7 +165,11 @@ fn test_registry_register_and_get() {
     let registry = ModelRegistry::new();
     let meta = GgufParser::parse_bytes(&minimal_gguf(3, 0, 0)).expect("parse ok");
     let handle = registry
-        .register_with_metadata("mymodel", PathBuf::from("/tmp/mymodel.gguf"), meta)
+        .register_with_metadata(
+            "mymodel",
+            std::env::temp_dir().join(format!("oxirs_mymodel_{}.gguf", std::process::id())),
+            meta,
+        )
         .expect("register ok");
     assert_eq!(handle.name(), "mymodel");
     let info = registry.get(&handle).expect("model must be found");

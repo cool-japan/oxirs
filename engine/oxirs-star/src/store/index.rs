@@ -7,21 +7,21 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Indexing structure for efficient quoted triple lookups
 #[derive(Debug, Clone)]
-pub(super) struct QuotedTripleIndex {
+pub(crate) struct QuotedTripleIndex {
     /// B-tree index mapping quoted triple signatures to triple indices
-    pub(super) signature_to_indices: BTreeMap<String, BTreeSet<usize>>,
+    pub(crate) signature_to_indices: BTreeMap<String, BTreeSet<usize>>,
     /// Subject-based index for S?? pattern queries
-    pub(super) subject_index: BTreeMap<String, BTreeSet<usize>>,
+    pub(crate) subject_index: BTreeMap<String, BTreeSet<usize>>,
     /// Predicate-based index for ?P? pattern queries
-    pub(super) predicate_index: BTreeMap<String, BTreeSet<usize>>,
+    pub(crate) predicate_index: BTreeMap<String, BTreeSet<usize>>,
     /// Object-based index for ??O pattern queries
-    pub(super) object_index: BTreeMap<String, BTreeSet<usize>>,
+    pub(crate) object_index: BTreeMap<String, BTreeSet<usize>>,
     /// Nesting depth index for performance optimization
-    pub(super) nesting_depth_index: BTreeMap<usize, BTreeSet<usize>>,
+    pub(crate) nesting_depth_index: BTreeMap<usize, BTreeSet<usize>>,
 }
 
 impl QuotedTripleIndex {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             signature_to_indices: BTreeMap::new(),
             subject_index: BTreeMap::new(),
@@ -31,7 +31,7 @@ impl QuotedTripleIndex {
         }
     }
 
-    pub(super) fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.signature_to_indices.clear();
         self.subject_index.clear();
         self.predicate_index.clear();
@@ -40,7 +40,7 @@ impl QuotedTripleIndex {
     }
 
     /// Get index statistics for optimization analysis
-    pub(super) fn get_statistics(&self) -> IndexStatistics {
+    pub(crate) fn get_statistics(&self) -> IndexStatistics {
         IndexStatistics {
             total_entries: self.signature_to_indices.len(),
             subject_index_size: self.subject_index.len(),

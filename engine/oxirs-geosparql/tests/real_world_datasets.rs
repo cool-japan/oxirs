@@ -793,8 +793,6 @@ mod osm_real_data_scenarios {
     use super::*;
     #[cfg(any(feature = "geojson-support", feature = "shapefile-support"))]
     use std::fs;
-    #[cfg(any(feature = "geojson-support", feature = "shapefile-support"))]
-    use std::path::Path;
 
     /// Test loading real OpenStreetMap GeoJSON export
     /// Requires: Download OSM data via Overpass API or export from JOSM
@@ -803,20 +801,23 @@ mod osm_real_data_scenarios {
     #[ignore] // Run manually with: cargo test --test real_world_datasets osm_real_geojson -- --ignored
     #[cfg(feature = "geojson-support")]
     fn test_load_real_osm_geojson() {
-        let test_data_path = "/tmp/osm_test_data.geojson";
+        let test_data_path = std::env::temp_dir().join("osm_test_data.geojson");
 
         // Skip test if file doesn't exist
-        if !Path::new(test_data_path).exists() {
+        if !test_data_path.exists() {
             eprintln!(
                 "Skipping test: Place real OSM GeoJSON file at {}",
-                test_data_path
+                test_data_path.display()
             );
-            eprintln!("Download example: curl 'https://overpass-api.de/api/interpreter?data=[out:json];node(around:500,37.7749,-122.4194);out;' > /tmp/osm_test_data.geojson");
+            eprintln!(
+                "Download example: curl 'https://overpass-api.de/api/interpreter?data=[out:json];node(around:500,37.7749,-122.4194);out;' > {}",
+                test_data_path.display()
+            );
             return;
         }
 
         let geojson_data =
-            fs::read_to_string(test_data_path).expect("Failed to read OSM GeoJSON file");
+            fs::read_to_string(&test_data_path).expect("Failed to read OSM GeoJSON file");
 
         // Parse GeoJSON features
         let features = oxirs_geosparql::geometry::geojson_parser::parse_geojson_feature_collection(
@@ -848,19 +849,19 @@ mod osm_real_data_scenarios {
     #[ignore] // Run manually with: cargo test --test real_world_datasets osm_real_shapefile -- --ignored
     #[cfg(feature = "shapefile-support")]
     fn test_load_real_osm_shapefile() {
-        let test_shapefile = "/tmp/osm_roads.shp";
+        let test_shapefile = std::env::temp_dir().join("osm_roads.shp");
 
-        if !Path::new(test_shapefile).exists() {
+        if !test_shapefile.exists() {
             eprintln!(
                 "Skipping test: Place real OSM shapefile at {}",
-                test_shapefile
+                test_shapefile.display()
             );
             eprintln!("Download from: https://download.geofabrik.de/");
             return;
         }
 
         let geometries =
-            oxirs_geosparql::geometry::shapefile_parser::read_shapefile(test_shapefile)
+            oxirs_geosparql::geometry::shapefile_parser::read_shapefile(&test_shapefile)
                 .expect("Failed to read OSM shapefile");
 
         println!(

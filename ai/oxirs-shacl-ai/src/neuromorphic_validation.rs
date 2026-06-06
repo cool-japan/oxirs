@@ -581,13 +581,17 @@ impl NeuromorphicValidationNetwork {
         Ok(spikes)
     }
 
-    /// Calculate shape complexity for spike encoding
+    /// Calculate shape complexity for spike encoding.
+    ///
+    /// Complexity is derived from the number of SHACL constraints (weighted higher,
+    /// because each constraint contributes directly to validation cost) and the number
+    /// of targets (weighted lower).  The result is clamped to [0.0, 1.0].
     fn calculate_shape_complexity(&self, shape: &Shape) -> f64 {
-        // Simple complexity metric based on shape properties
-        // TODO: Access actual shape properties when available
-        let constraint_count = 1.0; // Placeholder: shape.property_constraints.len() as f64;
-        let target_count = 1.0; // Placeholder: shape.targets.len() as f64;
+        let constraint_count = shape.constraints.len() as f64;
+        let target_count = shape.targets.len() as f64;
 
+        // Each constraint costs ~1 unit; each target adds 0.5 units.
+        // Normalise against a "high complexity" ceiling of 10 units.
         (constraint_count + target_count * 0.5_f64).min(10.0_f64) / 10.0
     }
 

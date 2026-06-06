@@ -1,8 +1,8 @@
-use rand_distr::Distribution;use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
-use scirs2_core::random::Random;
-use rand_distr::Uniform;
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
+use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimdBenchmarkConfig {
@@ -110,20 +110,22 @@ pub async fn run_simd_benchmark(config: SimdBenchmarkConfig) -> Result<SimdBench
 
     // Detect system architecture and SIMD capabilities
     let architecture_info = detect_architecture_info();
-    println!("🖥️  Architecture: {} with SIMD support: {:?}",
-             architecture_info.platform, architecture_info.simd_support);
+    println!(
+        "🖥️  Architecture: {} with SIMD support: {:?}",
+        architecture_info.platform, architecture_info.simd_support
+    );
 
     // Run benchmarks for each operation and vector size
     for operation in &config.test_operations {
         for &vector_size in &config.vector_sizes {
-            println!("📊 Testing {:?} with vector size {}", operation, vector_size);
+            println!(
+                "📊 Testing {:?} with vector size {}",
+                operation, vector_size
+            );
 
-            let result = run_single_simd_benchmark(
-                &config,
-                operation,
-                vector_size,
-                &architecture_info,
-            ).await?;
+            let result =
+                run_single_simd_benchmark(&config, operation, vector_size, &architecture_info)
+                    .await?;
 
             results.push(result);
         }
@@ -182,7 +184,7 @@ fn get_cpu_model() -> String {
     #[cfg(target_os = "macos")]
     {
         if let Ok(output) = std::process::Command::new("sysctl")
-            .args(&["-n", "machdep.cpu.brand_string"])
+            .args(["-n", "machdep.cpu.brand_string"])
             .output()
         {
             return String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -253,27 +255,25 @@ async fn run_single_simd_benchmark(
 
     // Calculate throughput metrics
     let operations_per_iteration = vector_size;
-    let throughput_ops_per_sec = (operations_per_iteration as f64 * config.iterations as f64)
-        / simd_duration.as_secs_f64();
+    let throughput_ops_per_sec =
+        (operations_per_iteration as f64 * config.iterations as f64) / simd_duration.as_secs_f64();
 
     // Estimate memory bandwidth (rough calculation)
     let bytes_per_operation = match operation {
-        SimdOperation::VectorAdd | SimdOperation::VectorSub | SimdOperation::VectorMul =>
-            vector_size * 4 * 3, // 3 vectors (2 input, 1 output) * 4 bytes per f32
-        SimdOperation::DotProduct | SimdOperation::CosineSimilarity |
-        SimdOperation::EuclideanDistance | SimdOperation::ManhattanDistance =>
-            vector_size * 4 * 2, // 2 input vectors * 4 bytes per f32
+        SimdOperation::VectorAdd | SimdOperation::VectorSub | SimdOperation::VectorMul => {
+            vector_size * 4 * 3
+        } // 3 vectors (2 input, 1 output) * 4 bytes per f32
+        SimdOperation::DotProduct
+        | SimdOperation::CosineSimilarity
+        | SimdOperation::EuclideanDistance
+        | SimdOperation::ManhattanDistance => vector_size * 4 * 2, // 2 input vectors * 4 bytes per f32
         _ => vector_size * 4 * 2,
     };
     let memory_bandwidth_gb_per_sec = (bytes_per_operation as f64 * config.iterations as f64)
         / (simd_duration.as_secs_f64() * 1_000_000_000.0);
 
     // Verify correctness
-    let correctness_verified = verify_operation_correctness(
-        operation,
-        &test_data_a,
-        &test_data_b
-    );
+    let correctness_verified = verify_operation_correctness(operation, &test_data_a, &test_data_b);
 
     // Determine SIMD architecture being used
     let simd_architecture = if arch_info.simd_support.contains(&"AVX2".to_string()) {
@@ -301,24 +301,20 @@ async fn run_single_simd_benchmark(
 }
 
 fn generate_test_vectors(size: usize) -> (Vec<f32>, Vec<f32>) {
-    let mut rng = Random::seed(42);
+    let mut rng = StdRng::seed_from_u64(42);
 
     let vec_a: Vec<f32> = (0..size)
-        .map(|_| rng.random_range(-1.0, 1.0) as f32)
+        .map(|_| rng.random_range(-1.0f32..1.0f32))
         .collect();
 
     let vec_b: Vec<f32> = (0..size)
-        .map(|_| rng.random_range(-1.0, 1.0) as f32)
+        .map(|_| rng.random_range(-1.0f32..1.0f32))
         .collect();
 
     (vec_a, vec_b)
 }
 
-fn run_scalar_operation(
-    operation: &SimdOperation,
-    vec_a: &[f32],
-    vec_b: &[f32],
-) -> Vec<f32> {
+fn run_scalar_operation(operation: &SimdOperation, vec_a: &[f32], vec_b: &[f32]) -> Vec<f32> {
     match operation {
         SimdOperation::VectorAdd => scalar_vector_add(vec_a, vec_b),
         SimdOperation::VectorSub => scalar_vector_sub(vec_a, vec_b),
@@ -333,11 +329,7 @@ fn run_scalar_operation(
     }
 }
 
-fn run_simd_operation(
-    operation: &SimdOperation,
-    vec_a: &[f32],
-    vec_b: &[f32],
-) -> Vec<f32> {
+fn run_simd_operation(operation: &SimdOperation, vec_a: &[f32], vec_b: &[f32]) -> Vec<f32> {
     // This would integrate with our actual SIMD implementations
     // For now, we'll use optimized versions where available
 
@@ -360,11 +352,7 @@ fn run_simd_operation(
 }
 
 #[cfg(target_arch = "x86_64")]
-fn run_avx2_operation(
-    operation: &SimdOperation,
-    vec_a: &[f32],
-    vec_b: &[f32],
-) -> Vec<f32> {
+fn run_avx2_operation(operation: &SimdOperation, vec_a: &[f32], vec_b: &[f32]) -> Vec<f32> {
     match operation {
         SimdOperation::VectorAdd => avx2_vector_add(vec_a, vec_b),
         SimdOperation::VectorSub => avx2_vector_sub(vec_a, vec_b),
@@ -375,11 +363,7 @@ fn run_avx2_operation(
 }
 
 #[cfg(target_arch = "aarch64")]
-fn run_neon_operation(
-    operation: &SimdOperation,
-    vec_a: &[f32],
-    vec_b: &[f32],
-) -> Vec<f32> {
+fn run_neon_operation(operation: &SimdOperation, vec_a: &[f32], vec_b: &[f32]) -> Vec<f32> {
     match operation {
         SimdOperation::VectorAdd => neon_vector_add(vec_a, vec_b),
         SimdOperation::VectorSub => neon_vector_sub(vec_a, vec_b),
@@ -523,11 +507,7 @@ fn neon_dot_product(a: &[f32], b: &[f32]) -> f32 {
     sum
 }
 
-fn verify_operation_correctness(
-    operation: &SimdOperation,
-    vec_a: &[f32],
-    vec_b: &[f32],
-) -> bool {
+fn verify_operation_correctness(operation: &SimdOperation, vec_a: &[f32], vec_b: &[f32]) -> bool {
     let scalar_result = run_scalar_operation(operation, vec_a, vec_b);
     let simd_result = run_simd_operation(operation, vec_a, vec_b);
 
@@ -558,28 +538,41 @@ fn average_duration(durations: &[Duration]) -> Duration {
 
 fn calculate_simd_benchmark_summary(
     results: &[SimdBenchmarkResult],
-    config: &SimdBenchmarkConfig,
+    _config: &SimdBenchmarkConfig,
 ) -> SimdBenchmarkSummary {
     let speedups: Vec<f64> = results.iter().map(|r| r.speedup_factor).collect();
 
     let average_speedup = speedups.iter().sum::<f64>() / speedups.len() as f64;
-    let max_speedup = speedups.iter().copied().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
-    let min_speedup = speedups.iter().copied().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
-
-    let operations_meeting_target = results
+    let max_speedup = speedups
         .iter()
-        .filter(|r| r.performance_target_met)
-        .count();
+        .copied()
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or(0.0);
+    let min_speedup = speedups
+        .iter()
+        .copied()
+        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or(0.0);
+
+    let operations_meeting_target = results.iter().filter(|r| r.performance_target_met).count();
 
     let best_performing = results
         .iter()
-        .max_by(|a, b| a.speedup_factor.partial_cmp(&b.speedup_factor).unwrap())
+        .max_by(|a, b| {
+            a.speedup_factor
+                .partial_cmp(&b.speedup_factor)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map(|r| r.operation.clone())
         .unwrap_or_default();
 
     let worst_performing = results
         .iter()
-        .min_by(|a, b| a.speedup_factor.partial_cmp(&b.speedup_factor).unwrap())
+        .min_by(|a, b| {
+            a.speedup_factor
+                .partial_cmp(&b.speedup_factor)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map(|r| r.operation.clone())
         .unwrap_or_default();
 
@@ -591,7 +584,8 @@ fn calculate_simd_benchmark_summary(
         "Fair"
     } else {
         "Poor"
-    }.to_string();
+    }
+    .to_string();
 
     SimdBenchmarkSummary {
         average_speedup,
@@ -613,20 +607,46 @@ pub mod report {
         let mut report = String::new();
 
         report.push_str("# SIMD Operations Benchmark Report\n\n");
-        report.push_str(&format!("**Test Duration**: {:.2}s\n", suite.total_duration.as_secs_f64()));
-        report.push_str(&format!("**Platform**: {}\n", suite.architecture_info.platform));
+        report.push_str(&format!(
+            "**Test Duration**: {:.2}s\n",
+            suite.total_duration.as_secs_f64()
+        ));
+        report.push_str(&format!(
+            "**Platform**: {}\n",
+            suite.architecture_info.platform
+        ));
         report.push_str(&format!("**CPU**: {}\n", suite.architecture_info.cpu_model));
-        report.push_str(&format!("**SIMD Support**: {:?}\n", suite.architecture_info.simd_support));
+        report.push_str(&format!(
+            "**SIMD Support**: {:?}\n",
+            suite.architecture_info.simd_support
+        ));
 
         report.push_str("\n## Summary\n\n");
         let summary = &suite.summary;
-        report.push_str(&format!("- **Average Speedup**: {:.2}x\n", summary.average_speedup));
-        report.push_str(&format!("- **Maximum Speedup**: {:.2}x\n", summary.max_speedup));
-        report.push_str(&format!("- **Minimum Speedup**: {:.2}x\n", summary.min_speedup));
-        report.push_str(&format!("- **Operations Meeting Target**: {}/{}\n",
-            summary.operations_meeting_target, summary.total_operations_tested));
-        report.push_str(&format!("- **Best Operation**: {}\n", summary.best_performing_operation));
-        report.push_str(&format!("- **Overall Rating**: {}\n", summary.overall_performance_rating));
+        report.push_str(&format!(
+            "- **Average Speedup**: {:.2}x\n",
+            summary.average_speedup
+        ));
+        report.push_str(&format!(
+            "- **Maximum Speedup**: {:.2}x\n",
+            summary.max_speedup
+        ));
+        report.push_str(&format!(
+            "- **Minimum Speedup**: {:.2}x\n",
+            summary.min_speedup
+        ));
+        report.push_str(&format!(
+            "- **Operations Meeting Target**: {}/{}\n",
+            summary.operations_meeting_target, summary.total_operations_tested
+        ));
+        report.push_str(&format!(
+            "- **Best Operation**: {}\n",
+            summary.best_performing_operation
+        ));
+        report.push_str(&format!(
+            "- **Overall Rating**: {}\n",
+            summary.overall_performance_rating
+        ));
 
         report.push_str("\n## Detailed Results\n\n");
         report.push_str("| Operation | Vector Size | Scalar (μs) | SIMD (μs) | Speedup | Arch | Throughput (ops/s) | Target Met |\n");
@@ -635,7 +655,11 @@ pub mod report {
         for result in &suite.results {
             let scalar_us = result.scalar_duration.as_micros();
             let simd_us = result.simd_duration.as_micros();
-            let target_met = if result.performance_target_met { "✅" } else { "❌" };
+            let target_met = if result.performance_target_met {
+                "✅"
+            } else {
+                "❌"
+            };
 
             report.push_str(&format!(
                 "| {} | {} | {} | {} | {:.2}x | {} | {:.0} | {} |\n",

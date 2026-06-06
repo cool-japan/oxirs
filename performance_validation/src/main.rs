@@ -6,24 +6,24 @@
 
 use anyhow::Result;
 use clap::{Arg, Command};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::fs;
-use log::{info, warn, error};
 
 mod benchmarks;
 mod datasets;
 mod scenarios;
 
 use benchmarks::{
+    ai_ml::{self, AiMlBenchmarkConfig},
+    federation::{self, FederationBenchmarkConfig},
     gpu_acceleration::{self, GpuBenchmarkConfig},
     simd_operations::{self, SimdBenchmarkConfig},
-    federation::{self, FederationBenchmarkConfig},
-    ai_ml::{self, AiMlBenchmarkConfig},
 };
 use datasets::DatasetManager;
-use scenarios::{ScenarioRunner, ScenarioResult};
+use scenarios::{ScenarioResult, ScenarioRunner};
 
 /// Performance validation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,7 +121,10 @@ impl ValidationRunner {
         if self.config.run_all_benchmarks {
             info!("🎮 Running GPU acceleration benchmarks...");
             if let Ok(gpu_suite) = self.run_gpu_benchmarks().await {
-                let report_path = format!("{}/gpu_benchmark_report.md", self.config.output_directory.display());
+                let report_path = format!(
+                    "{}/gpu_benchmark_report.md",
+                    self.config.output_directory.display()
+                );
                 gpu_acceleration::report::save_gpu_benchmark_report(&gpu_suite, &report_path)?;
                 benchmark_results.gpu_acceleration = Some(format!("Saved to {}", report_path));
 
@@ -135,37 +138,61 @@ impl ValidationRunner {
 
             info!("⚡ Running SIMD optimization benchmarks...");
             if let Ok(simd_suite) = self.run_simd_benchmarks().await {
-                let report_path = format!("{}/simd_benchmark_report.md", self.config.output_directory.display());
+                let report_path = format!(
+                    "{}/simd_benchmark_report.md",
+                    self.config.output_directory.display()
+                );
                 simd_operations::report::save_simd_benchmark_report(&simd_suite, &report_path)?;
                 benchmark_results.simd_operations = Some(format!("Saved to {}", report_path));
 
-                all_findings.push(format!("SIMD average speedup: {:.2}x", simd_suite.summary.average_speedup));
+                all_findings.push(format!(
+                    "SIMD average speedup: {:.2}x",
+                    simd_suite.summary.average_speedup
+                ));
                 if simd_suite.summary.average_speedup < 2.0 {
-                    all_recommendations.push("Consider expanding SIMD optimization coverage".to_string());
+                    all_recommendations
+                        .push("Consider expanding SIMD optimization coverage".to_string());
                 }
             }
 
             info!("🔗 Running federation optimization benchmarks...");
             if let Ok(federation_suite) = self.run_federation_benchmarks().await {
-                let report_path = format!("{}/federation_benchmark_report.md", self.config.output_directory.display());
-                federation::report::save_federation_benchmark_report(&federation_suite, &report_path)?;
+                let report_path = format!(
+                    "{}/federation_benchmark_report.md",
+                    self.config.output_directory.display()
+                );
+                federation::report::save_federation_benchmark_report(
+                    &federation_suite,
+                    &report_path,
+                )?;
                 benchmark_results.federation = Some(format!("Saved to {}", report_path));
 
-                all_findings.push(format!("Federation average improvement: {:.1}%", federation_suite.summary.average_improvement_percent));
+                all_findings.push(format!(
+                    "Federation average improvement: {:.1}%",
+                    federation_suite.summary.average_improvement_percent
+                ));
                 if federation_suite.summary.average_improvement_percent < 50.0 {
-                    all_recommendations.push("Enhance ML-driven federation optimization".to_string());
+                    all_recommendations
+                        .push("Enhance ML-driven federation optimization".to_string());
                 }
             }
 
             info!("🧠 Running AI/ML optimization benchmarks...");
             if let Ok(ai_ml_suite) = self.run_ai_ml_benchmarks().await {
-                let report_path = format!("{}/ai_ml_benchmark_report.md", self.config.output_directory.display());
+                let report_path = format!(
+                    "{}/ai_ml_benchmark_report.md",
+                    self.config.output_directory.display()
+                );
                 ai_ml::report::save_ai_ml_benchmark_report(&ai_ml_suite, &report_path)?;
                 benchmark_results.ai_ml = Some(format!("Saved to {}", report_path));
 
-                all_findings.push(format!("AI/ML performance score: {:.1}/100", ai_ml_suite.summary.overall_performance_score));
+                all_findings.push(format!(
+                    "AI/ML performance score: {:.1}/100",
+                    ai_ml_suite.summary.overall_performance_score
+                ));
                 if ai_ml_suite.summary.overall_performance_score < 80.0 {
-                    all_recommendations.push("Optimize AI/ML algorithms for better performance".to_string());
+                    all_recommendations
+                        .push("Optimize AI/ML algorithms for better performance".to_string());
                 }
             }
         }
@@ -184,7 +211,10 @@ impl ValidationRunner {
             scenario_results = scenario_runner.run_all_scenarios().await?;
 
             // Save scenario report
-            let scenario_report_path = format!("{}/scenario_validation_report.md", self.config.output_directory.display());
+            let scenario_report_path = format!(
+                "{}/scenario_validation_report.md",
+                self.config.output_directory.display()
+            );
             scenarios::report::save_scenario_report(&scenario_results, &scenario_report_path)?;
 
             // Extract findings and recommendations from scenarios
@@ -195,7 +225,10 @@ impl ValidationRunner {
         }
 
         let total_scenarios = scenario_results.len();
-        let scenarios_passed = scenario_results.iter().filter(|r| r.objectives_met.overall_objectives_met).count();
+        let scenarios_passed = scenario_results
+            .iter()
+            .filter(|r| r.objectives_met.overall_objectives_met)
+            .count();
 
         // Calculate overall performance score
         let gpu_score = 85.0; // Simulated based on typical performance
@@ -208,7 +241,8 @@ impl ValidationRunner {
             0.0
         };
 
-        let overall_performance_score = (gpu_score + simd_score + federation_score + ai_ml_score + scenario_score) / 5.0;
+        let overall_performance_score =
+            (gpu_score + simd_score + federation_score + ai_ml_score + scenario_score) / 5.0;
 
         let summary = ValidationSummary {
             total_scenarios_run: total_scenarios,
@@ -219,7 +253,9 @@ impl ValidationRunner {
         };
 
         let results = ValidationResults {
-            timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+            timestamp: chrono::Utc::now()
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string(),
             config: self.config.clone(),
             system_info,
             benchmark_results,
@@ -227,7 +263,10 @@ impl ValidationRunner {
             summary,
         };
 
-        info!("✅ Performance validation completed in {:.2}s", start_time.elapsed().as_secs_f64());
+        info!(
+            "✅ Performance validation completed in {:.2}s",
+            start_time.elapsed().as_secs_f64()
+        );
         Ok(results)
     }
 
@@ -334,6 +373,7 @@ impl ValidationRunner {
         ai_ml::run_ai_ml_benchmark(config).await
     }
 
+    #[allow(unreachable_code)]
     fn detect_gpu_availability(&self) -> bool {
         #[cfg(feature = "cuda")]
         {
@@ -384,7 +424,7 @@ impl ValidationRunner {
         #[cfg(target_os = "macos")]
         {
             if let Ok(output) = std::process::Command::new("sysctl")
-                .args(&["-n", "machdep.cpu.brand_string"])
+                .args(["-n", "machdep.cpu.brand_string"])
                 .output()
             {
                 return String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -438,7 +478,11 @@ async fn main() -> Result<()> {
         .get_matches();
 
     // Create configuration
-    let output_directory = PathBuf::from(matches.get_one::<String>("output").unwrap());
+    let output_directory = PathBuf::from(
+        matches
+            .get_one::<String>("output")
+            .expect("'output' has a default value"),
+    );
     let benchmarks_only = matches.get_flag("benchmarks-only");
     let scenarios_only = matches.get_flag("scenarios-only");
 
@@ -467,12 +511,22 @@ async fn main() -> Result<()> {
     println!("🖥️  Platform: {}", results.system_info.platform);
     println!("🔧 CPU: {}", results.system_info.cpu_model);
     println!("⚡ SIMD: {:?}", results.system_info.simd_support);
-    println!("🎮 GPU: {}", if results.system_info.gpu_available { "Available" } else { "Not Available" });
+    println!(
+        "🎮 GPU: {}",
+        if results.system_info.gpu_available {
+            "Available"
+        } else {
+            "Not Available"
+        }
+    );
     println!();
     println!("📊 Performance Results:");
     println!("- Scenarios Run: {}", results.summary.total_scenarios_run);
     println!("- Scenarios Passed: {}", results.summary.scenarios_passed);
-    println!("- Overall Score: {:.1}/100", results.summary.overall_performance_score);
+    println!(
+        "- Overall Score: {:.1}/100",
+        results.summary.overall_performance_score
+    );
     println!();
 
     if !results.summary.key_findings.is_empty() {

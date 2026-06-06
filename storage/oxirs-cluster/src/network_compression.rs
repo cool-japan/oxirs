@@ -403,10 +403,8 @@ impl NetworkCompressor {
             }
 
             NetworkCompressionAlgorithm::Snappy => {
-                let mut encoder = snap::raw::Encoder::new();
-                encoder
-                    .compress_vec(data)
-                    .map_err(|e| ClusterError::Compression(format!("Snappy error: {}", e)))
+                // oxiarc_snappy::compress is infallible (returns Vec<u8>).
+                Ok(oxiarc_snappy::compress(data))
             }
         }
     }
@@ -428,15 +426,8 @@ impl NetworkCompressor {
             NetworkCompressionAlgorithm::Zstd { .. } => oxiarc_zstd::decode_all(data)
                 .map_err(|e| ClusterError::Compression(format!("Zstd error: {}", e))),
 
-            NetworkCompressionAlgorithm::Snappy => {
-                let mut decoder = snap::raw::Decoder::new();
-                let mut out = vec![0u8; original_len];
-                let written = decoder
-                    .decompress(data, &mut out)
-                    .map_err(|e| ClusterError::Compression(format!("Snappy error: {}", e)))?;
-                out.truncate(written);
-                Ok(out)
-            }
+            NetworkCompressionAlgorithm::Snappy => oxiarc_snappy::decompress(data)
+                .map_err(|e| ClusterError::Compression(format!("Snappy error: {}", e))),
         }
     }
 }

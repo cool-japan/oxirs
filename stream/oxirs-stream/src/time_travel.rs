@@ -709,8 +709,16 @@ impl TimeTravelEngine {
                 }
             }
             TimePoint::Snapshot(name) => {
-                // This would integrate with snapshot store
-                Err(anyhow!("Snapshot resolution not implemented: {}", name))
+                // Named snapshots require an external snapshot store integration.
+                // The TimeTravelEngine does not embed a snapshot store; callers that need
+                // named-snapshot resolution should resolve the snapshot to a concrete
+                // Timestamp or Version and use that TimePoint variant instead.
+                Err(anyhow!(
+                    "Named snapshot '{}' cannot be resolved: the TimeTravelEngine requires an \
+                     integrated snapshot store for named-snapshot resolution. \
+                     Convert the snapshot to a Timestamp or Version TimePoint.",
+                    name
+                ))
             }
         }
     }

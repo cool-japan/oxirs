@@ -8,6 +8,8 @@
 
 pub mod optimization;
 pub mod selector;
+pub(crate) mod selector_eval;
+pub(crate) mod selector_query;
 pub mod target_impl;
 pub mod types;
 

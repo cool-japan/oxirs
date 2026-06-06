@@ -1,9 +1,9 @@
 //! # OxiRS SHACL-AI
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.
@@ -429,6 +429,9 @@ pub mod ai_orchestrator;
 pub mod analytics;
 pub mod anomaly_detection;
 pub mod bias_detection;
+pub(crate) mod bio_neural_components;
+pub(crate) mod bio_neural_core;
+pub mod bio_neural_types;
 pub mod biological_neural_integration;
 pub mod blockchain_validation;
 pub mod collaborative_development;
@@ -445,7 +448,15 @@ pub mod explainable_ai;
 pub mod explainable_violations;
 pub mod feature_store;
 pub mod federated_learning;
+pub mod federated_learning_privacy;
+mod federated_learning_tests;
+pub mod federated_learning_trainer;
+pub mod federated_learning_types;
 pub mod forecasting_models;
+pub mod forecasting_models_engines;
+pub mod forecasting_models_eval;
+mod forecasting_models_tests;
+pub mod forecasting_models_types;
 pub mod hyperparameter_optimization;
 pub mod insights;
 pub mod integration_testing;
@@ -470,12 +481,22 @@ pub mod neural_cost_estimation;
 pub mod neural_patterns;
 pub mod neural_transformer_pattern_integration;
 pub mod neuromorphic_validation;
+pub mod opt_algs_evolutionary;
+pub mod opt_algs_swarm;
+pub mod opt_algs_tests;
 pub mod optimization;
+pub mod optimization_algorithms;
 pub mod optimization_engine;
 pub mod owl_to_shacl;
 pub mod patterns;
 pub mod performance_analytics;
 pub mod performance_benchmarking;
+pub mod performance_monitoring;
+pub mod performance_monitoring_advanced;
+pub mod performance_monitoring_collector;
+pub mod performance_monitoring_reporter;
+mod performance_monitoring_tests;
+pub mod performance_monitoring_types;
 pub mod prediction;
 pub mod predictive_analytics;
 pub mod production_deployment;
@@ -484,6 +505,10 @@ pub mod quality;
 pub mod realtime_adaptive_query_optimizer;
 pub mod realtime_anomaly_streams;
 pub mod recommendation_systems;
+// Sibling sub-modules for recommendation_systems (sibling-file split pattern)
+pub mod recommendation_systems_engine;
+pub mod recommendation_systems_tests;
+pub mod recommendation_systems_types;
 pub mod reinforcement_learning;
 pub mod scalability_testing;
 pub mod security_audit;
@@ -491,8 +516,19 @@ pub mod self_adaptive_ai;
 pub mod shape;
 pub mod shape_management;
 pub mod sophisticated_validation_optimization;
+pub mod sophisticated_validation_optimization_core;
+pub mod sophisticated_validation_optimization_strategies;
+#[cfg(test)]
+mod sophisticated_validation_optimization_tests;
+pub mod sophisticated_validation_optimization_types;
 pub mod streaming_adaptation;
 pub mod system_monitoring;
+pub mod system_monitoring_alerting;
+pub mod system_monitoring_anomaly;
+pub mod system_monitoring_collector;
+pub mod system_monitoring_monitor;
+pub mod system_monitoring_tests;
+pub mod system_monitoring_types;
 pub mod training;
 pub mod validation_performance;
 pub mod version_control;

@@ -816,6 +816,9 @@ impl QueryRouter {
             Some(crate::model::pattern::SubjectPattern::Variable(v)) => {
                 algebra::TermPattern::Variable(v.clone())
             }
+            Some(crate::model::pattern::SubjectPattern::QuotedTriple(qt)) => {
+                algebra::TermPattern::QuotedTriple(qt.clone())
+            }
             None => {
                 return Err(OxirsError::Query(
                     "Subject pattern cannot be None in basic graph pattern".to_string(),
@@ -850,6 +853,9 @@ impl QueryRouter {
             Some(crate::model::pattern::ObjectPattern::Variable(v)) => {
                 algebra::TermPattern::Variable(v.clone())
             }
+            Some(crate::model::pattern::ObjectPattern::QuotedTriple(qt)) => {
+                algebra::TermPattern::QuotedTriple(qt.clone())
+            }
             None => {
                 return Err(OxirsError::Query(
                     "Object pattern cannot be None in basic graph pattern".to_string(),
@@ -857,10 +863,18 @@ impl QueryRouter {
             }
         };
 
+        use crate::model::pattern::{ObjectPattern, PredicatePattern, SubjectPattern};
+        let subject_pattern = SubjectPattern::try_from(subject)
+            .map_err(|e| OxirsError::Query(format!("Invalid subject pattern: {e}")))?;
+        let predicate_pattern = PredicatePattern::try_from(predicate)
+            .map_err(|e| OxirsError::Query(format!("Invalid predicate pattern: {e}")))?;
+        let object_pattern = ObjectPattern::try_from(object)
+            .map_err(|e| OxirsError::Query(format!("Invalid object pattern: {e}")))?;
+
         Ok(algebra::TriplePattern::new(
-            Some(subject.into()),
-            Some(predicate.into()),
-            Some(object.into()),
+            Some(subject_pattern),
+            Some(predicate_pattern),
+            Some(object_pattern),
         ))
     }
 
@@ -875,6 +889,9 @@ impl QueryRouter {
             algebra::TermPattern::NamedNode(n) => Some(SubjectPattern::NamedNode(n.clone())),
             algebra::TermPattern::BlankNode(b) => Some(SubjectPattern::BlankNode(b.clone())),
             algebra::TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
+            algebra::TermPattern::QuotedTriple(qt) => {
+                Some(SubjectPattern::QuotedTriple(qt.clone()))
+            }
             _ => None,
         };
 
@@ -889,8 +906,9 @@ impl QueryRouter {
             algebra::TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
             algebra::TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
             algebra::TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
-            algebra::TermPattern::QuotedTriple(_) => {
-                panic!("RDF-star quoted triples not yet supported in distributed queries")
+            algebra::TermPattern::QuotedTriple(qt) => {
+                // RDF-star quoted triples as objects are represented in the pattern.
+                Some(ObjectPattern::QuotedTriple(qt.clone()))
             }
         };
 

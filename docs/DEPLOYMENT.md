@@ -1,7 +1,7 @@
 # OxiRS Deployment Guide
 
-**Version**: 0.1.0
-**Date**: January 7, 2026
+**Version**: 0.3.1
+**Date**: June 6, 2026
 **Status**: Production Deployment Ready
 
 ## 🚀 Quick Start
@@ -22,7 +22,7 @@
 
 ```bash
 # Download latest release
-curl -LO https://github.com/cool-japan/oxirs/releases/download/v0.1.0/oxirs-x86_64-linux.tar.gz
+curl -LO https://github.com/cool-japan/oxirs/releases/download/v0.3.1/oxirs-x86_64-linux.tar.gz
 
 # Extract
 tar xzf oxirs-x86_64-linux.tar.gz
@@ -59,16 +59,16 @@ cargo install --path server/oxirs-fuseki
 
 ```bash
 # Pull latest image
-docker pull ghcr.io/cool-japan/oxirs-fuseki:v0.1.0
+docker pull ghcr.io/cool-japan/oxirs-fuseki:v0.3.1
 
 # Run with default configuration
-docker run -p 3030:3030 ghcr.io/cool-japan/oxirs-fuseki:v0.1.0
+docker run -p 3030:3030 ghcr.io/cool-japan/oxirs-fuseki:v0.3.1
 
 # Run with custom configuration
 docker run -p 3030:3030 \
   -v $(pwd)/oxirs.toml:/etc/oxirs/oxirs.toml:ro \
   -v oxirs-data:/var/lib/oxirs \
-  ghcr.io/cool-japan/oxirs-fuseki:v0.1.0
+  ghcr.io/cool-japan/oxirs-fuseki:v0.3.1
 ```
 
 ### Method 4: Kubernetes (Cloud)
@@ -89,7 +89,7 @@ kubectl get services -n oxirs
 ### Dockerfile
 
 ```dockerfile
-# /Users/kitasan/work/oxirs/Dockerfile
+# /path/to/oxirs/Dockerfile
 
 FROM rust:1.90-slim as builder
 
@@ -136,13 +136,13 @@ CMD ["oxirs-fuseki", "--config", "/etc/oxirs/oxirs.toml"]
 ### docker-compose.yml
 
 ```yaml
-# /Users/kitasan/work/oxirs/docker-compose.yml
+# /path/to/oxirs/docker-compose.yml
 
 version: '3.8'
 
 services:
   oxirs-fuseki:
-    image: ghcr.io/cool-japan/oxirs-fuseki:v0.1.0
+    image: ghcr.io/cool-japan/oxirs-fuseki:v0.3.1
     container_name: oxirs-fuseki
     ports:
       - "3030:3030"
@@ -330,7 +330,7 @@ spec:
     spec:
       containers:
       - name: oxirs-fuseki
-        image: ghcr.io/cool-japan/oxirs-fuseki:v0.1.0
+        image: ghcr.io/cool-japan/oxirs-fuseki:v0.3.1
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
@@ -951,5 +951,5 @@ journalctl -u oxirs-fuseki -f
 
 ---
 
-*Deployment Guide - January 7, 2026*
-*Production-ready deployment for v0.1.0*
+*Deployment Guide - June 6, 2026*
+*Production-ready deployment for v0.3.1*

@@ -468,12 +468,9 @@ impl StreamingSolution {
                     .map_err(|e| anyhow!("LZ4 compression failed: {}", e))
             }
             CompressionAlgorithm::Gzip => {
-                // Balanced gzip compression (existing implementation)
-                use std::io::Write;
-                let mut encoder =
-                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-                encoder.write_all(&serialized)?;
-                Ok(encoder.finish()?)
+                // Balanced gzip compression (RFC 1952) via Pure-Rust oxiarc-deflate.
+                // Level 6 is the balanced default.
+                Ok(oxiarc_deflate::gzip_compress(&serialized, 6)?)
             }
             CompressionAlgorithm::Zstd => {
                 // High compression zstd for space-critical scenarios
@@ -496,12 +493,8 @@ impl StreamingSolution {
                     .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?
             }
             CompressionAlgorithm::Gzip => {
-                // Gzip decompression (existing implementation)
-                use std::io::Read;
-                let mut decoder = flate2::read::GzDecoder::new(compressed);
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
-                decompressed
+                // Gzip decompression (RFC 1952) via Pure-Rust oxiarc-deflate.
+                oxiarc_deflate::gzip_decompress(compressed)?
             }
             CompressionAlgorithm::Zstd => {
                 // Zstd decompression

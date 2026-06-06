@@ -325,8 +325,8 @@ cargo test -p oxirs-vec --features tantivy-search --test tantivy_integration_tes
 
 - **Tantivy Documentation**: [https://docs.rs/tantivy](https://docs.rs/tantivy)
 - **Tantivy GitHub**: [https://github.com/quickwit-oss/tantivy](https://github.com/quickwit-oss/tantivy)
-- **OxiRS Project**: `/Users/kitasan/work/oxirs`
-- **SciRS2 Core**: `/Users/kitasan/work/scirs/scirs2-core`
+- **OxiRS Project**: `/path/to/oxirs`
+- **SciRS2 Core**: `/path/to/scirs/scirs2-core`
 
 ## Success Criteria
 

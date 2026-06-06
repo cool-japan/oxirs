@@ -725,11 +725,18 @@ fn stream_mode_parse() {
 
 #[test]
 fn substitute_replaces_known_tokens() {
+    let tmpdir = std::env::temp_dir()
+        .join("oxirs_parity_x")
+        .to_string_lossy()
+        .into_owned();
     let mut vars = BTreeMap::new();
-    vars.insert("TMPDIR", "/tmp/x".to_string());
+    vars.insert("TMPDIR", tmpdir.clone());
     vars.insert("FIXTURE", "/fix/abc".to_string());
     let out = substitute("--input ${FIXTURE}/data.ttl --out ${TMPDIR}/out.nt", &vars);
-    assert_eq!(out, "--input /fix/abc/data.ttl --out /tmp/x/out.nt");
+    assert_eq!(
+        out,
+        format!("--input /fix/abc/data.ttl --out {tmpdir}/out.nt")
+    );
 }
 
 #[test]

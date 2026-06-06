@@ -681,8 +681,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_immutable_storage() {
+        let dir = tempfile::tempdir().expect("tempdir");
         let config = ImmutableConfig {
-            path: PathBuf::from("/tmp/oxirs_immutable_test"),
+            path: dir.path().join("oxirs_immutable_test"),
             ..Default::default()
         };
 
@@ -736,8 +737,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_deduplication() {
+        let dir = tempfile::tempdir().expect("tempdir");
         let config = ImmutableConfig {
-            path: PathBuf::from("/tmp/oxirs_immutable_dedup"),
+            path: dir.path().join("oxirs_immutable_dedup"),
             deduplication: true,
             ..Default::default()
         };

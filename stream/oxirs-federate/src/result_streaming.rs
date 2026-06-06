@@ -6,12 +6,10 @@
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
 use bytes::Bytes;
-use flate2::{write::GzEncoder, Compression as GzCompression};
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
-use std::io::Write;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -37,7 +35,7 @@ pub struct StreamingConfig {
     pub enable_compression: bool,
     /// Compression algorithm to use
     pub compression_algorithm: CompressionAlgorithm,
-    /// Compression level (1-9 for gzip, 1-21 for brotli)
+    /// Compression level (0-9 for gzip/deflate, 0-11 for brotli)
     pub compression_level: u32,
     /// Minimum result size to trigger compression (bytes)
     pub compression_threshold: usize,
@@ -375,37 +373,20 @@ impl ResultStreamingManager {
         match self.config.compression_algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
             CompressionAlgorithm::Gzip => {
-                let mut encoder = GzEncoder::new(
-                    Vec::new(),
-                    GzCompression::new(self.config.compression_level),
-                );
-                encoder.write_all(data)?;
-                Ok(encoder.finish()?)
+                let level = self.config.compression_level.min(9) as u8;
+                oxiarc_deflate::gzip_compress(data, level)
+                    .map_err(|e| anyhow!("Gzip compression failed: {}", e))
             }
             CompressionAlgorithm::Deflate => {
-                // Simplified deflate implementation using flate2
-                let mut encoder = flate2::write::DeflateEncoder::new(
-                    Vec::new(),
-                    flate2::Compression::new(self.config.compression_level),
-                );
-                encoder.write_all(data)?;
-                Ok(encoder.finish()?)
+                // Raw DEFLATE (no zlib/gzip header) via Pure Rust oxiarc-deflate.
+                let level = self.config.compression_level.min(9) as u8;
+                oxiarc_deflate::deflate(data, level)
+                    .map_err(|e| anyhow!("Deflate compression failed: {}", e))
             }
             CompressionAlgorithm::Brotli => {
-                use brotli::enc::BrotliEncoderParams;
-                use std::io::Cursor;
-
-                let mut input = Cursor::new(data);
-                let mut output = Vec::new();
-                let params = BrotliEncoderParams {
-                    quality: self.config.compression_level.min(11) as i32,
-                    ..Default::default()
-                };
-
-                brotli::BrotliCompress(&mut input, &mut output, &params)
-                    .map_err(|e| anyhow!("Brotli compression failed: {}", e))?;
-
-                Ok(output)
+                let quality = self.config.compression_level.min(11);
+                oxiarc_brotli::compress(data, quality)
+                    .map_err(|e| anyhow!("Brotli compression failed: {}", e))
             }
             CompressionAlgorithm::Lz4 => {
                 let compressed = oxiarc_lz4::compress(data)
@@ -429,39 +410,12 @@ impl ResultStreamingManager {
     ) -> Result<Vec<u8>> {
         match algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
-            CompressionAlgorithm::Gzip => {
-                use flate2::read::GzDecoder;
-                use std::io::Read;
-
-                let mut decoder = GzDecoder::new(data);
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
-                Ok(decompressed)
-            }
-            CompressionAlgorithm::Deflate => {
-                use flate2::read::DeflateDecoder;
-                use std::io::Read;
-
-                let mut decoder = DeflateDecoder::new(data);
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
-                Ok(decompressed)
-            }
-            CompressionAlgorithm::Brotli => {
-                use brotli::Decompressor;
-                use std::io::Cursor;
-
-                let mut input = Cursor::new(data);
-                let mut output = Vec::new();
-                let mut decompressor = Decompressor::new(&mut input, 4096);
-
-                use std::io::Read;
-                decompressor
-                    .read_to_end(&mut output)
-                    .map_err(|e| anyhow!("Brotli decompression failed: {}", e))?;
-
-                Ok(output)
-            }
+            CompressionAlgorithm::Gzip => oxiarc_deflate::gzip_decompress(data)
+                .map_err(|e| anyhow!("Gzip decompression failed: {}", e)),
+            CompressionAlgorithm::Deflate => oxiarc_deflate::inflate(data)
+                .map_err(|e| anyhow!("Deflate decompression failed: {}", e)),
+            CompressionAlgorithm::Brotli => oxiarc_brotli::decompress(data)
+                .map_err(|e| anyhow!("Brotli decompression failed: {}", e)),
             CompressionAlgorithm::Lz4 => {
                 let decompressed = oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
                     .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
@@ -809,19 +763,10 @@ impl ResultStreamingManager {
     ) -> Result<(Bytes, CompressionInfo)> {
         let _start_time = Instant::now();
 
-        let compressed = match algorithm {
-            CompressionAlgorithm::Gzip => {
-                let mut encoder = GzEncoder::new(Vec::new(), GzCompression::new(level));
-                encoder.write_all(data)?;
-                encoder.finish()?
-            }
-            _ => {
-                // Fallback to gzip for unsupported algorithms
-                let mut encoder = GzEncoder::new(Vec::new(), GzCompression::new(level));
-                encoder.write_all(data)?;
-                encoder.finish()?
-            }
-        };
+        // All algorithms use gzip here (Gzip directly, others fall back to gzip).
+        let gzip_level = level.min(9) as u8;
+        let compressed = oxiarc_deflate::gzip_compress(data, gzip_level)
+            .map_err(|e| anyhow!("Gzip compression failed: {}", e))?;
 
         let compression_info = CompressionInfo {
             algorithm,
@@ -1339,6 +1284,60 @@ mod tests {
             .await
             .expect("async operation should succeed");
         assert_eq!(decompressed.as_ref(), test_data.as_slice());
+    }
+
+    /// Round-trip every migrated compression algorithm (Pure Rust oxiarc-*),
+    /// including an incompressible/random buffer, to guarantee wire-format
+    /// fidelity (gzip↔gzip, raw-deflate↔raw-deflate, brotli↔brotli).
+    #[tokio::test]
+    async fn test_compression_roundtrip_all_algorithms() {
+        // Mix of a highly compressible payload and a pseudo-random
+        // (incompressible) payload generated without external crates.
+        let compressible = b"Hello, World! This is a test string for compression.".repeat(50);
+        let mut random: Vec<u8> = Vec::with_capacity(4096);
+        let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..4096 {
+            // xorshift64 PRNG — produces an incompressible byte stream.
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            random.push((state & 0xFF) as u8);
+        }
+
+        for algorithm in [
+            CompressionAlgorithm::Gzip,
+            CompressionAlgorithm::Deflate,
+            CompressionAlgorithm::Brotli,
+        ] {
+            let config = StreamingConfig {
+                compression_algorithm: algorithm,
+                compression_threshold: 1, // force compression even for tiny inputs
+                ..Default::default()
+            };
+            let manager = ResultStreamingManager::with_config(config);
+
+            for payload in [compressible.as_slice(), random.as_slice()] {
+                let compressed = manager
+                    .compress_result(payload)
+                    .await
+                    .expect("compression should succeed");
+                assert_eq!(
+                    compressed.algorithm, algorithm,
+                    "algorithm tag preserved for {algorithm:?}"
+                );
+
+                let decompressed = manager
+                    .decompress_result(&compressed)
+                    .await
+                    .expect("decompression should succeed");
+                assert_eq!(
+                    decompressed.as_ref(),
+                    payload,
+                    "round-trip mismatch for {algorithm:?} (len {})",
+                    payload.len()
+                );
+            }
+        }
     }
 
     #[tokio::test]

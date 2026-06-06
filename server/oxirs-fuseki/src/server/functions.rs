@@ -511,6 +511,7 @@ mod tests {
             request_logger: Arc::new(handlers::RequestLogger::new()),
             startup_time: Instant::now(),
             system_monitor: Arc::new(parking_lot::Mutex::new(sysinfo::System::new_all())),
+            audit_logger: Arc::new(oxirs_core::audit::InMemoryAuditLogger::new()),
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
         };

@@ -40,7 +40,7 @@ regex.workspace = true
 
 # Federated learning dependencies
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
-flate2.workspace = true
+oxiarc-deflate.workspace = true
 oxiarc-lz4.workspace = true
 oxiarc-zstd.workspace = true
 

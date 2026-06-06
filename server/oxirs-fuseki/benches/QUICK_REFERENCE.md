@@ -272,5 +272,5 @@ For performance issues or benchmark questions:
 ---
 
 *Quick Reference Guide - OxiRS Fuseki Benchmarking*
-*Version: 0.1.0*
-*Last Updated: 2026-01-06*
+*Version: 0.3.1*
+*Last Updated: 2026-06-06*

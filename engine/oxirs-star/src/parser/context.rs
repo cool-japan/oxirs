@@ -15,27 +15,27 @@ use crate::{StarError, StarResult};
 /// Manages the complex state machine required for parsing TriG-star format,
 /// including graph block nesting, graph name parsing, and context transitions.
 #[derive(Debug, Default)]
-pub(super) struct TrigParserState {
+pub(crate) struct TrigParserState {
     /// Current graph context
-    pub(super) current_graph: Option<StarTerm>,
+    pub(crate) current_graph: Option<StarTerm>,
     /// Nesting level (for tracking braces)
-    pub(super) brace_depth: usize,
+    pub(crate) brace_depth: usize,
     /// Whether we're inside a graph block
-    pub(super) in_graph_block: bool,
+    pub(crate) in_graph_block: bool,
     /// Buffer for accumulating multi-line graph names
-    pub(super) graph_name_buffer: String,
+    pub(crate) graph_name_buffer: String,
     /// Whether we're parsing a graph name declaration
-    pub(super) parsing_graph_name: bool,
+    pub(crate) parsing_graph_name: bool,
 }
 
 impl TrigParserState {
     /// Create a new TriG parser state
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Reset graph context to default state
-    pub(super) fn reset_graph_context(&mut self) {
+    pub(crate) fn reset_graph_context(&mut self) {
         self.current_graph = None;
         self.in_graph_block = false;
         self.brace_depth = 0;
@@ -44,7 +44,7 @@ impl TrigParserState {
     }
 
     /// Enter a graph block with the given graph name
-    pub(super) fn enter_graph_block(&mut self, graph: Option<StarTerm>) {
+    pub(crate) fn enter_graph_block(&mut self, graph: Option<StarTerm>) {
         self.current_graph = graph;
         self.in_graph_block = true;
         self.brace_depth += 1;
@@ -55,7 +55,7 @@ impl TrigParserState {
     /// Exit the current graph block
     ///
     /// Returns true if we've completely exited all nested graph blocks
-    pub(super) fn exit_graph_block(&mut self) -> bool {
+    pub(crate) fn exit_graph_block(&mut self) -> bool {
         if self.brace_depth > 0 {
             self.brace_depth -= 1;
             if self.brace_depth == 0 {
@@ -112,36 +112,36 @@ pub struct ParseError {
 /// - Position tracking for error reporting
 /// - Accumulated parsing errors
 #[derive(Debug, Default)]
-pub(super) struct ParseContext {
+pub(crate) struct ParseContext {
     /// Namespace prefixes
-    pub(super) prefixes: HashMap<String, String>,
+    pub(crate) prefixes: HashMap<String, String>,
     /// Current base IRI
-    pub(super) base_iri: Option<String>,
+    pub(crate) base_iri: Option<String>,
     /// Current graph name (for TriG/N-Quads)
     #[allow(dead_code)]
-    pub(super) current_graph: Option<StarTerm>,
+    pub(crate) current_graph: Option<StarTerm>,
     /// Blank node counter
-    pub(super) blank_node_counter: usize,
+    pub(crate) blank_node_counter: usize,
     /// Current line number for error reporting
-    pub(super) line_number: usize,
+    pub(crate) line_number: usize,
     /// Current column position for error reporting
-    pub(super) column_position: usize,
+    pub(crate) column_position: usize,
     /// Strict parsing mode (reject any malformed input)
-    pub(super) strict_mode: bool,
+    pub(crate) strict_mode: bool,
     /// Error recovery mode (try to continue parsing after errors)
-    pub(super) error_recovery: bool,
+    pub(crate) error_recovery: bool,
     /// Accumulated parsing errors for batch reporting
-    pub(super) parsing_errors: Vec<ParseError>,
+    pub(crate) parsing_errors: Vec<ParseError>,
 }
 
 impl ParseContext {
     /// Create a new default parsing context
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Create context with configuration
-    pub(super) fn with_config(strict_mode: bool, error_recovery: bool) -> Self {
+    pub(crate) fn with_config(strict_mode: bool, error_recovery: bool) -> Self {
         Self {
             strict_mode,
             error_recovery,
@@ -150,13 +150,13 @@ impl ParseContext {
     }
 
     /// Update position tracking
-    pub(super) fn update_position(&mut self, line: usize, column: usize) {
+    pub(crate) fn update_position(&mut self, line: usize, column: usize) {
         self.line_number = line;
         self.column_position = column;
     }
 
     /// Add a parsing error with context
-    pub(super) fn add_error(&mut self, message: String, context: String, severity: ErrorSeverity) {
+    pub(crate) fn add_error(&mut self, message: String, context: String, severity: ErrorSeverity) {
         let error = ParseError {
             message,
             line: self.line_number,
@@ -168,32 +168,32 @@ impl ParseContext {
     }
 
     /// Check if fatal errors occurred
-    pub(super) fn has_fatal_errors(&self) -> bool {
+    pub(crate) fn has_fatal_errors(&self) -> bool {
         self.parsing_errors
             .iter()
             .any(|e| e.severity == ErrorSeverity::Fatal)
     }
 
     /// Get all errors
-    pub(super) fn get_errors(&self) -> &[ParseError] {
+    pub(crate) fn get_errors(&self) -> &[ParseError] {
         &self.parsing_errors
     }
 
     /// Clear errors
     #[allow(dead_code)]
-    pub(super) fn clear_errors(&mut self) {
+    pub(crate) fn clear_errors(&mut self) {
         self.parsing_errors.clear();
     }
 
     /// Generate a new blank node identifier
-    pub(super) fn next_blank_node(&mut self) -> String {
+    pub(crate) fn next_blank_node(&mut self) -> String {
         self.blank_node_counter += 1;
         let counter = self.blank_node_counter;
         format!("_:b{counter}")
     }
 
     /// Resolve a prefixed name to full IRI with enhanced error reporting
-    pub(super) fn resolve_prefix(&mut self, prefixed: &str) -> StarResult<String> {
+    pub(crate) fn resolve_prefix(&mut self, prefixed: &str) -> StarResult<String> {
         if let Some(colon_pos) = prefixed.find(':') {
             let prefix = &prefixed[..colon_pos];
             let local = &prefixed[colon_pos + 1..];
@@ -225,7 +225,7 @@ impl ParseContext {
     }
 
     /// Resolve relative IRI against base
-    pub(super) fn resolve_relative(&self, iri: &str) -> String {
+    pub(crate) fn resolve_relative(&self, iri: &str) -> String {
         if let Some(ref base) = self.base_iri {
             // Simple relative IRI resolution (not fully RFC compliant)
             if iri.starts_with('#') {
@@ -239,7 +239,7 @@ impl ParseContext {
     }
 
     /// Try to recover from parsing error
-    pub(super) fn try_recover_from_error(&mut self, error_context: &str) -> bool {
+    pub(crate) fn try_recover_from_error(&mut self, error_context: &str) -> bool {
         if !self.error_recovery {
             return false;
         }

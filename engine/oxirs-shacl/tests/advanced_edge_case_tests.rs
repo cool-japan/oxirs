@@ -137,7 +137,7 @@ fn test_concurrent_validation_stress() {
             let result = engine.validate_store(&*store_clone);
             let duration = start_time.elapsed();
 
-            let mut results_guard = results_clone.lock().unwrap();
+            let mut results_guard = results_clone.lock().unwrap_or_else(|e| e.into_inner());
             results_guard.push((thread_id, result.is_ok(), duration));
         });
 
@@ -150,7 +150,7 @@ fn test_concurrent_validation_stress() {
     }
 
     // Verify all validations succeeded
-    let results_guard = results.lock().unwrap();
+    let results_guard = results.lock().unwrap_or_else(|e| e.into_inner());
     assert_eq!(results_guard.len(), 10);
 
     for (thread_id, success, duration) in results_guard.iter() {

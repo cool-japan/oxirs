@@ -5,6 +5,10 @@
 
 mod error;
 mod parser;
+mod parser_builder;
+mod parser_lexer;
+mod parser_tests;
+mod parser_types;
 mod serializer;
 mod streaming;
 mod utils;

@@ -22,7 +22,7 @@ use super::context::ParseContext;
 /// # Returns
 ///
 /// `Ok(())` on success, or an error if processing fails
-pub(super) fn process_jsonld_star_value(
+pub(crate) fn process_jsonld_star_value(
     value: &serde_json::Value,
     graph: &mut StarGraph,
     context: &mut ParseContext,
@@ -60,7 +60,7 @@ pub(super) fn process_jsonld_star_value(
 /// # Returns
 ///
 /// `Ok(())` on success, or an error if processing fails
-pub(super) fn process_jsonld_star_object(
+pub(crate) fn process_jsonld_star_object(
     obj: &serde_json::Map<String, serde_json::Value>,
     graph: &mut StarGraph,
     context: &mut ParseContext,
@@ -114,7 +114,7 @@ pub(super) fn process_jsonld_star_object(
 /// # Returns
 ///
 /// `Ok(())` on success, or an error if processing fails
-pub(super) fn process_property_values(
+pub(crate) fn process_property_values(
     subject: &StarTerm,
     predicate: &StarTerm,
     value: &serde_json::Value,
@@ -154,7 +154,7 @@ pub(super) fn process_property_values(
 /// # Returns
 ///
 /// `Ok(())` on success, or an error if processing fails
-pub(super) fn create_triple_from_value(
+pub(crate) fn create_triple_from_value(
     subject: &StarTerm,
     predicate: &StarTerm,
     value: &serde_json::Value,
@@ -256,7 +256,7 @@ pub(super) fn create_triple_from_value(
 /// # Returns
 ///
 /// `Ok(())` on success, or an error if processing fails
-pub(super) fn process_quoted_triple_annotation(
+pub(crate) fn process_quoted_triple_annotation(
     obj: &serde_json::Map<String, serde_json::Value>,
     graph: &mut StarGraph,
     context: &mut ParseContext,
@@ -326,7 +326,7 @@ pub(super) fn process_quoted_triple_annotation(
 /// # Returns
 ///
 /// The converted StarTerm, or an error if conversion fails
-pub(super) fn json_value_to_star_term(value: &serde_json::Value) -> StarResult<StarTerm> {
+pub(crate) fn json_value_to_star_term(value: &serde_json::Value) -> StarResult<StarTerm> {
     match value {
         serde_json::Value::String(s) => {
             if s.starts_with("_:") {

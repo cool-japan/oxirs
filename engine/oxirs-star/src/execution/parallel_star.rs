@@ -659,7 +659,10 @@ mod tests {
             let p = AnnotatedPattern::new(None, None, None);
             let sq = SubQuery::new(i, p);
             // Force to worker 0 by direct lock.
-            scheduler.queues[0].lock().unwrap().push(sq);
+            scheduler.queues[0]
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(sq);
         }
         // Worker 1 should steal from worker 0.
         let stolen = scheduler.pop_or_steal(1);

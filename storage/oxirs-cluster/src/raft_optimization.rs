@@ -439,16 +439,9 @@ impl RaftOptimizer {
                 oxiarc_lz4::compress(data).unwrap_or_else(|_| data.to_vec())
             }
             CompressionAlgorithm::Flate2 => {
-                use flate2::write::GzEncoder;
-                use flate2::Compression;
-                use std::io::Write;
-
-                let mut encoder = GzEncoder::new(
-                    Vec::new(),
-                    Compression::new(self.compression_config.level as u32),
-                );
-                encoder.write_all(data)?;
-                encoder.finish()?
+                let level = self.compression_config.level.clamp(0, 9) as u8;
+                oxiarc_deflate::gzip_compress(data, level)
+                    .map_err(|e| anyhow::anyhow!("Gzip compression failed: {}", e))?
             }
         };
 
@@ -472,15 +465,8 @@ impl RaftOptimizer {
                 .map_err(|e| anyhow::anyhow!("Zstd decompression failed: {}", e))?,
             CompressionAlgorithm::Lz4 => oxiarc_lz4::decompress(compressed, 100 * 1024 * 1024)
                 .map_err(|e| anyhow::anyhow!("LZ4 decompression failed: {}", e))?,
-            CompressionAlgorithm::Flate2 => {
-                use flate2::read::GzDecoder;
-                use std::io::Read;
-
-                let mut decoder = GzDecoder::new(compressed);
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
-                decompressed
-            }
+            CompressionAlgorithm::Flate2 => oxiarc_deflate::gzip_decompress(compressed)
+                .map_err(|e| anyhow::anyhow!("Gzip decompression failed: {}", e))?,
         };
 
         Ok(decompressed)
@@ -538,16 +524,9 @@ impl RaftOptimizer {
                             oxiarc_lz4::compress(entry).unwrap_or_else(|_| entry.clone())
                         }
                         CompressionAlgorithm::Flate2 => {
-                            use flate2::write::GzEncoder;
-                            use flate2::Compression;
-                            use std::io::Write;
-
-                            let mut encoder = GzEncoder::new(
-                                Vec::new(),
-                                Compression::new(self.compression_config.level as u32),
-                            );
-                            encoder.write_all(entry).ok();
-                            encoder.finish().unwrap_or_else(|_| entry.clone())
+                            let level = self.compression_config.level.clamp(0, 9) as u8;
+                            oxiarc_deflate::gzip_compress(entry, level)
+                                .unwrap_or_else(|_| entry.clone())
                         }
                     }
                 })

@@ -1,10 +1,10 @@
 # OxiRS Stream - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Current Status
 
-OxiRS Stream v0.2.3 is production-ready, providing enterprise-grade real-time RDF streaming with advanced windowing, backpressure management, and ML integration.
+OxiRS Stream v0.3.1 is production-ready, providing enterprise-grade real-time RDF streaming with advanced windowing, backpressure management, and ML integration.
 
 ### Production Features
 - ✅ **Multiple Backends** - Kafka, NATS, Redis, Kinesis, Pulsar, RabbitMQ support
@@ -85,8 +85,8 @@ OxiRS Stream v0.2.3 is production-ready, providing enterprise-grade real-time RD
   - **Risk:** none.
 
 ### v1.0.0 - LTS Release (Q2 2026)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features and integrations (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features and integrations (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Complete stream processing framework (W2-S6 — completed 2026-04-30)
   - **Goal:** Close gaps in watermark/window/join semantics to match a "complete stream processing framework" (Flink-lite minus distributed shards).
   - **Design:** Watermark propagation across operators (`WatermarkPropagator`) enforces non-decreasing per-edge watermarks and minimum-rule aggregation across upstream inputs; late events flow through `LateDataHandler` (drop / re-assign with allowed-lateness budget / side-output) backed by `AllowedLatenessTracker` and `SideOutputRouter`. Three watermark-driven window joins (tumbling-tumbling, tumbling-sliding with sliding-pane de-duplication, session-session with both-sides-closed semantics). `ExactlyOnceAggregator` wraps `state::exactly_once::ExactlyOnceProcessor` with checkpointable per-partition aggregate state (`Count`/`Sum`/`Min`/`Max`/`Mean`). `docs/engine_overview.md` describes the contract end-to-end.
@@ -107,4 +107,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Stream v0.2.3 - Enterprise-grade real-time RDF streaming with advanced windowing*
+*OxiRS Stream v0.3.1 - Enterprise-grade real-time RDF streaming with advanced windowing*

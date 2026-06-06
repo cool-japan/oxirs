@@ -81,21 +81,12 @@ impl<W: Write> StreamingSerializer<W> {
         Ok(())
     }
 
-    /// Compress a chunk of data using zstd compression
+    /// Compress a chunk of data using gzip compression
     fn compress_chunk(&self, data: &[u8]) -> StarResult<Vec<u8>> {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-        use std::io::Write;
-
-        // Use gzip compression for compatibility
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(data)
-            .map_err(|e| StarError::serialization_error(format!("Compression failed: {}", e)))?;
-
-        encoder.finish().map_err(|e| {
-            StarError::serialization_error(format!("Compression finish failed: {}", e))
-        })
+        // Use gzip compression for compatibility.
+        // Level 6 matches the previous flate2 Compression::default().
+        oxiarc_deflate::gzip_compress(data, 6)
+            .map_err(|e| StarError::serialization_error(format!("Compression failed: {}", e)))
     }
 
     /// Serialize triples in streaming fashion
@@ -210,5 +201,36 @@ impl<W: Write> StreamingSerializer<W> {
             }
             StarTerm::Variable(var) => Ok(format!("?{}", var.name)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::config::StreamingConfig;
+    use super::*;
+
+    /// Round-trip test for the migrated gzip codec path (`compress_chunk`).
+    /// Verifies that the oxiarc-deflate gzip output decodes back to the
+    /// original bytes, preserving the gzip format variant.
+    #[test]
+    fn test_compress_chunk_gzip_roundtrip() {
+        let config = StreamingConfig {
+            compress_chunks: true,
+            ..Default::default()
+        };
+        let serializer = StreamingSerializer::new(Vec::new(), config);
+
+        let original = b"<http://example.org/s> <http://example.org/p> \"gzip chunk\" .\n\
+                         <http://example.org/s2> <http://example.org/p2> \"more data\" .\n";
+        let compressed = serializer
+            .compress_chunk(original)
+            .expect("gzip compress_chunk should succeed");
+
+        // Output must be a valid gzip stream (magic bytes 0x1f 0x8b).
+        assert_eq!(&compressed[..2], &[0x1f, 0x8b]);
+
+        let decompressed =
+            oxiarc_deflate::gzip_decompress(&compressed).expect("gzip decompress should succeed");
+        assert_eq!(decompressed.as_slice(), original);
     }
 }

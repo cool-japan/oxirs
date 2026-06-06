@@ -359,22 +359,17 @@ impl DiskBackend {
             return Ok(data.to_vec());
         }
 
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-        use std::io::Write;
-
         match self.config.compression_algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
             CompressionAlgorithm::Gzip => {
-                let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(data)?;
-                Ok(encoder.finish()?)
+                // Level 6 matches the previous flate2 Compression::default().
+                oxiarc_deflate::gzip_compress(data, 6)
+                    .map_err(|e| anyhow::anyhow!("Gzip compression failed: {}", e))
             }
             _ => {
-                // For other algorithms, fallback to gzip
-                let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(data)?;
-                Ok(encoder.finish()?)
+                // For other algorithms, fallback to gzip.
+                oxiarc_deflate::gzip_compress(data, 6)
+                    .map_err(|e| anyhow::anyhow!("Gzip compression failed: {}", e))
             }
         }
     }
@@ -384,23 +379,14 @@ impl DiskBackend {
             return Ok(data.to_vec());
         }
 
-        use flate2::read::GzDecoder;
-        use std::io::Read;
-
         match self.config.compression_algorithm {
             CompressionAlgorithm::None => Ok(data.to_vec()),
-            CompressionAlgorithm::Gzip => {
-                let mut decoder = GzDecoder::new(data);
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
-                Ok(decompressed)
-            }
+            CompressionAlgorithm::Gzip => oxiarc_deflate::gzip_decompress(data)
+                .map_err(|e| anyhow::anyhow!("Gzip decompression failed: {}", e)),
             _ => {
-                // For other algorithms, fallback to gzip
-                let mut decoder = GzDecoder::new(data);
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
-                Ok(decompressed)
+                // For other algorithms, fallback to gzip.
+                oxiarc_deflate::gzip_decompress(data)
+                    .map_err(|e| anyhow::anyhow!("Gzip decompression failed: {}", e))
             }
         }
     }
@@ -804,5 +790,46 @@ mod tests {
 
         assert_eq!(restored.len(), 1);
         assert!(restored.contains_key("entity1"));
+    }
+
+    /// Round-trip test for the migrated gzip codec path on `DiskBackend`.
+    /// Explicitly selects `CompressionAlgorithm::Gzip` so the gzip arm of
+    /// `compress_data`/`decompress_data` (oxiarc-deflate) is exercised
+    /// end-to-end, preserving the gzip format variant.
+    #[tokio::test]
+    async fn test_disk_backend_gzip_roundtrip() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("should succeed");
+        let config = StorageBackendConfig {
+            compression: true,
+            compression_algorithm: CompressionAlgorithm::Gzip,
+            ..StorageBackendConfig::default()
+        };
+        let mut backend =
+            DiskBackend::new(temp_dir.path().to_path_buf(), config).expect("should succeed");
+
+        let mut embeddings = HashMap::new();
+        embeddings.insert("entity1".to_string(), Vector::new(vec![1.0, 2.0, 3.0]));
+        embeddings.insert("entity2".to_string(), Vector::new(vec![4.0, 5.0, 6.0]));
+
+        backend
+            .save_entity_embeddings(&embeddings)
+            .await
+            .expect("should succeed");
+        let loaded = backend
+            .load_entity_embeddings()
+            .await
+            .expect("should succeed");
+
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(
+            loaded.get("entity1").expect("should succeed").values,
+            vec![1.0, 2.0, 3.0]
+        );
+        assert_eq!(
+            loaded.get("entity2").expect("should succeed").values,
+            vec![4.0, 5.0, 6.0]
+        );
     }
 }

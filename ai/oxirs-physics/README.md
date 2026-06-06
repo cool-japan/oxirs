@@ -104,7 +104,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-physics = { version = "0.3.0", features = ["simulation"] }
+oxirs-physics = { version = "0.3.1", features = ["simulation"] }
 ```
 
 ### Feature Flags

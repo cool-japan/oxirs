@@ -17,7 +17,6 @@ pub use endpoint_cache::{
 use anyhow::{anyhow, Result};
 #[cfg(feature = "caching")]
 use bloom::{BloomFilter, ASMS};
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 #[cfg(feature = "caching")]
 use lru::LruCache;
 #[cfg(feature = "caching")]
@@ -182,7 +181,6 @@ mod cache_stubs {
 use cache_stubs::{AsyncCache, BloomFilter, LruCache, ASMS};
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-use std::io::{Read, Write};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -1278,18 +1276,16 @@ impl FederationCache {
     /// Compress cache entry data for storage efficiency
     #[allow(dead_code)]
     fn compress_data(data: &[u8]) -> Result<Vec<u8>> {
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(data)?;
-        encoder.finish().map_err(Into::into)
+        // flate2 `Compression::default()` mapped to level 6 (Pure Rust oxiarc-deflate).
+        oxiarc_deflate::gzip_compress(data, 6)
+            .map_err(|e| anyhow!("Gzip compression failed: {}", e))
     }
 
     /// Decompress cache entry data
     #[allow(dead_code)]
     fn decompress_data(compressed: &[u8]) -> Result<Vec<u8>> {
-        let mut decoder = GzDecoder::new(compressed);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
-        Ok(decompressed)
+        oxiarc_deflate::gzip_decompress(compressed)
+            .map_err(|e| anyhow!("Gzip decompression failed: {}", e))
     }
 
     /// Check if entry should be compressed based on size

@@ -1,10 +1,10 @@
 # OxiRS Rule - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Current Status
 
-OxiRS Rule v0.2.3 is production-ready, providing rule-based reasoning with RDFS/OWL support and advanced rule formats.
+OxiRS Rule v0.3.1 is production-ready, providing rule-based reasoning with RDFS/OWL support and advanced rule formats.
 
 ### Production Features
 - ✅ **RDFS Reasoning** - Complete RDFS entailment support
@@ -38,8 +38,8 @@ OxiRS Rule v0.2.3 is production-ready, providing rule-based reasoning with RDFS/
   - **Files:** `src/owl2/{el_reasoner,ql_reasoner,rlel_combined}.rs` (new), `src/owl2/profile.rs` (new — OwlProfile enum), `src/owl2/mod.rs` (extend dispatcher), `src/owl_dl/` (existing, unchanged), `tests/owl2_conformance.rs` (new)
   - **Tests:** unit on classic taxonomies (Pizza ontology subsets), EL CEL completeness against pellet reference, QL UCQ rewriting correctness; integration W3C OWL 2 conformance test suite — pass_rate >= 0.95 per profile (RL: 1.0, EL: ≥0.95, QL: ≥0.95)
   - **Risk:** EL/QL closure can blow up on complex ontologies. Mitigation: semi-naive evaluation + bounded queue + warning when fixed-point exceeds 30s.
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing

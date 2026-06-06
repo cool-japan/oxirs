@@ -1230,7 +1230,10 @@ mod tests {
                 },
             },
             persistence: PersistenceConfig {
-                wal_path: "/tmp/wal".to_string(),
+                wal_path: std::env::temp_dir()
+                    .join(format!("oxirs_repl_wal_{}", std::process::id()))
+                    .display()
+                    .to_string(),
                 checkpoint_interval: Duration::from_secs(300),
                 max_wal_size: 100 * 1024 * 1024,
                 wal_compression: true,

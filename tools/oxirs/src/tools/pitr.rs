@@ -400,9 +400,12 @@ impl TransactionLog {
     }
 
     fn calculate_checksum(data: &[u8]) -> String {
-        use ring::digest;
-        let hash = digest::digest(&digest::SHA256, data);
-        hex::encode(hash.as_ref())
+        // SHA-256 one-shot via OxiCrypto (Pure Rust); hex-encode the 32-byte
+        // digest. Produces the same checksum string as the previous `ring`
+        // implementation. `hash_fixed` is an inherent method on `Sha256`, so the
+        // `Hash` trait does not need to be in scope.
+        let hash: [u8; 32] = oxicrypto_hash::Sha256.hash_fixed(data);
+        hex::encode(hash)
     }
 
     fn verify_checksum(entry: &TransactionLogEntry) -> bool {

@@ -332,6 +332,10 @@ fn has_phrase(tokens: &[String], phrase: &[String]) -> bool {
 ///
 /// Provides high-performance, Lucene-compatible indexing and querying over
 /// large RDF literal datasets.  The index is persisted to disk at `index_dir`.
+///
+/// Only compiled when the non-default `full-text-search` feature is enabled
+/// (Tantivy pulls C `zstd-sys`). Without it, the server uses [`SimpleTextIndex`].
+#[cfg(feature = "full-text-search")]
 pub struct TantivyTextIndex {
     index: tantivy::Index,
     writer: Arc<RwLock<tantivy::IndexWriter>>,
@@ -349,6 +353,7 @@ pub struct TantivyTextIndex {
     field_lang: tantivy::schema::Field,
 }
 
+#[cfg(feature = "full-text-search")]
 impl TantivyTextIndex {
     /// Writer heap size (default 50 MB).
     const WRITER_HEAP_BYTES: usize = 50 * 1024 * 1024;
@@ -516,6 +521,7 @@ impl TantivyTextIndex {
 }
 
 /// Extract a stored text field value from a Tantivy document.
+#[cfg(feature = "full-text-search")]
 fn get_field_str(doc: &tantivy::TantivyDocument, field: tantivy::schema::Field) -> String {
     use tantivy::schema::Value;
     doc.get_first(field)
@@ -532,7 +538,9 @@ fn get_field_str(doc: &tantivy::TantivyDocument, field: tantivy::schema::Field) 
 pub enum TextIndexBackend {
     /// In-memory simple inverted index (for small datasets / testing)
     Simple(SimpleTextIndex),
-    /// Tantivy-backed disk-persistent index (for production)
+    /// Tantivy-backed disk-persistent index (for production).
+    /// Only present with the non-default `full-text-search` feature.
+    #[cfg(feature = "full-text-search")]
     Tantivy(TantivyTextIndex),
 }
 
@@ -552,11 +560,24 @@ impl TextIndex {
     }
 
     /// Create a Tantivy-backed text index persisted at `index_dir`.
+    ///
+    /// Requires the non-default `full-text-search` feature.
+    #[cfg(feature = "full-text-search")]
     pub fn new_tantivy(index_dir: PathBuf) -> FusekiResult<Self> {
         let tantivy_idx = TantivyTextIndex::open(index_dir)?;
         Ok(TextIndex {
             backend: Arc::new(RwLock::new(TextIndexBackend::Tantivy(tantivy_idx))),
         })
+    }
+
+    /// Create a Tantivy-backed text index persisted at `index_dir`.
+    ///
+    /// Fallback used when the `full-text-search` feature is disabled: the
+    /// `index_dir` argument is ignored and an in-memory [`SimpleTextIndex`] is
+    /// returned so callers keep working in the Pure-Rust default build.
+    #[cfg(not(feature = "full-text-search"))]
+    pub fn new_tantivy(_index_dir: PathBuf) -> FusekiResult<Self> {
+        Ok(TextIndex::new_simple())
     }
 
     /// Index an RDF literal.
@@ -569,6 +590,7 @@ impl TextIndex {
                 idx.index(literal);
                 Ok(())
             }
+            #[cfg(feature = "full-text-search")]
             TextIndexBackend::Tantivy(idx) => idx.index(&literal),
         }
     }
@@ -580,6 +602,7 @@ impl TextIndex {
         })?;
         match &mut *backend {
             TextIndexBackend::Simple(idx) => Ok(idx.remove_subject(subject)),
+            #[cfg(feature = "full-text-search")]
             TextIndexBackend::Tantivy(idx) => {
                 idx.remove_subject(subject)?;
                 Ok(0) // Tantivy doesn't return a count synchronously
@@ -594,6 +617,7 @@ impl TextIndex {
         })?;
         match &*backend {
             TextIndexBackend::Simple(idx) => Ok(idx.search(query, limit)),
+            #[cfg(feature = "full-text-search")]
             TextIndexBackend::Tantivy(idx) => idx.search(query, limit),
         }
     }
@@ -605,6 +629,7 @@ impl TextIndex {
         })?;
         match &*backend {
             TextIndexBackend::Simple(idx) => Ok(idx.phrase_search(phrase, limit)),
+            #[cfg(feature = "full-text-search")]
             TextIndexBackend::Tantivy(idx) => {
                 // Wrap in quotes for Tantivy phrase query
                 let quoted = format!("\"{}\"", phrase.replace('"', ""));
@@ -620,6 +645,7 @@ impl TextIndex {
         })?;
         match &*backend {
             TextIndexBackend::Simple(_) => Ok(()),
+            #[cfg(feature = "full-text-search")]
             TextIndexBackend::Tantivy(idx) => idx.commit(),
         }
     }
@@ -629,6 +655,7 @@ impl TextIndex {
         let backend = self.backend.read().unwrap_or_else(|e| e.into_inner());
         match &*backend {
             TextIndexBackend::Simple(idx) => idx.document_count(),
+            #[cfg(feature = "full-text-search")]
             TextIndexBackend::Tantivy(idx) => idx.document_count(),
         }
     }
@@ -823,6 +850,7 @@ mod tests {
         assert_eq!(hits[0].subject, "http://ex.org/s2");
     }
 
+    #[cfg(feature = "full-text-search")]
     #[test]
     fn test_tantivy_index() {
         let dir = std::env::temp_dir().join(format!("oxirs_tantivy_test_{}", std::process::id()));
@@ -851,6 +879,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(feature = "full-text-search")]
     #[test]
     fn test_tantivy_phrase_search() {
         let dir = std::env::temp_dir().join(format!("oxirs_tantivy_phrase_{}", std::process::id()));

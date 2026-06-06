@@ -230,13 +230,9 @@ impl IncrementalValidator {
                 }
 
                 // Validate this node against this shape
-                // TODO: Replace with actual single-node validation method
-                let result = self.validator.validate_nodes(
-                    store,
-                    shape_id,
-                    std::slice::from_ref(focus_node),
-                    None,
-                )?;
+                let result = self
+                    .validator
+                    .validate_node(store, shape_id, focus_node, None)?;
 
                 // Cache the result
                 if self.config.enable_caching {
@@ -504,5 +500,45 @@ mod tests {
 
         let key = incremental.make_cache_key(&shape_id, &focus_node);
         assert!(key.contains("test:shape"));
+    }
+
+    /// Verify that `validate_changeset` exercises the `validate_node` code path and
+    /// returns an `Ok` report.  We register a node-shape so the inner loop runs.
+    #[test]
+    fn test_validate_node_singular_returns_report() {
+        use crate::{Shape, ShapeId, ShapeType};
+        use oxirs_core::ConcreteStore;
+
+        let mut validator = Validator::new();
+
+        let shape_id = ShapeId::new("http://example.org/TestShape");
+        let shape = Shape::new(shape_id.clone(), ShapeType::NodeShape);
+        validator
+            .add_shape(shape)
+            .expect("adding a minimal node-shape should succeed");
+
+        let config = IncrementalConfig::default();
+        let mut incremental = IncrementalValidator::new(validator, config);
+
+        let mut changeset = Changeset::new();
+        let subject = NamedNode::new_unchecked("http://example.org/node1");
+        let predicate = NamedNode::new_unchecked("http://example.org/prop");
+        let object = Literal::new_simple_literal("value");
+        changeset.add_addition(Quad::new_default_graph(subject, predicate, object));
+
+        let store = ConcreteStore::new().expect("ConcreteStore creation should not fail");
+        let result = incremental.validate_changeset(&changeset, &store);
+
+        assert!(
+            result.is_ok(),
+            "validate_changeset should return Ok; got: {:?}",
+            result
+        );
+        let report = result.expect("already asserted Ok above");
+        // A node-shape with no constraints conforms trivially.
+        assert!(
+            report.conforms(),
+            "empty node-shape should produce a conforming report"
+        );
     }
 }

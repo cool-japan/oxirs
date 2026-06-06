@@ -734,7 +734,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_mvcc_storage_basic() {
-        let storage = MVCCStorage::new(1, "/tmp/mvcc_test".to_string(), CompactionStrategy::None);
+        let base_dir = tempfile::tempdir().expect("tempdir");
+        let storage = MVCCStorage::new(
+            1,
+            base_dir.path().to_string_lossy().into_owned(),
+            CompactionStrategy::None,
+        );
         storage.start().await.unwrap();
 
         let triple = Triple::new(
@@ -766,8 +771,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_mvcc_storage_transaction() {
-        let storage =
-            MVCCStorage::new(1, "/tmp/mvcc_test_tx".to_string(), CompactionStrategy::None);
+        let base_dir = tempfile::tempdir().expect("tempdir");
+        let storage = MVCCStorage::new(
+            1,
+            base_dir.path().to_string_lossy().into_owned(),
+            CompactionStrategy::None,
+        );
         storage.start().await.unwrap();
 
         let tx_id = "test_tx".to_string();

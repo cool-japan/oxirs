@@ -28,6 +28,9 @@ pub mod querysessionmanager_traits;
 pub mod querytimeoutmanager_traits;
 pub mod sparqlperformancemonitor_traits;
 pub mod types;
+pub mod types_monitor;
+pub mod types_query;
+pub mod types_resource;
 
 // Re-export all types
 pub use querymemorytracker_type::*;

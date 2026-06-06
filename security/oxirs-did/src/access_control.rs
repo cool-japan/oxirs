@@ -388,7 +388,10 @@ mod tests {
     fn test_expired_policy() {
         let mut acl = AccessControlList::new();
         acl.add_policy(AccessPolicy {
-            resource: "/tmp/resource".to_string(),
+            resource: std::env::temp_dir()
+                .join(format!("oxirs_resource_{}", std::process::id()))
+                .display()
+                .to_string(),
             allowed_dids: vec!["did:key:alice".to_string()],
             allowed_permissions: vec![Permission::Read],
             deny_dids: vec![],
@@ -396,7 +399,10 @@ mod tests {
         });
         let req = AccessRequest {
             did: "did:key:alice".to_string(),
-            resource: "/tmp/resource".to_string(),
+            resource: std::env::temp_dir()
+                .join(format!("oxirs_resource_{}", std::process::id()))
+                .display()
+                .to_string(),
             permission: Permission::Read,
             timestamp_ms: 5001, // past expiry
         };
@@ -407,7 +413,10 @@ mod tests {
     fn test_not_expired_policy_before_expiry() {
         let mut acl = AccessControlList::new();
         acl.add_policy(AccessPolicy {
-            resource: "/tmp/resource".to_string(),
+            resource: std::env::temp_dir()
+                .join(format!("oxirs_resource_{}", std::process::id()))
+                .display()
+                .to_string(),
             allowed_dids: vec!["did:key:alice".to_string()],
             allowed_permissions: vec![Permission::Read],
             deny_dids: vec![],
@@ -415,7 +424,10 @@ mod tests {
         });
         let req = AccessRequest {
             did: "did:key:alice".to_string(),
-            resource: "/tmp/resource".to_string(),
+            resource: std::env::temp_dir()
+                .join(format!("oxirs_resource_{}", std::process::id()))
+                .display()
+                .to_string(),
             permission: Permission::Read,
             timestamp_ms: 9_999,
         };

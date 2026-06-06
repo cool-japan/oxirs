@@ -42,7 +42,6 @@ use lettre::{
     AsyncTransport, Message, Tokio1Executor,
 };
 use serde::{Deserialize, Serialize};
-use slack_hook2::{PayloadBuilder, Slack};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
@@ -413,7 +412,6 @@ struct AlertHistoryEntry {
 pub struct AlertingManager {
     config: AlertingConfig,
     email_transport: Arc<RwLock<Option<AsyncSmtpTransport<Tokio1Executor>>>>,
-    slack_client: Arc<RwLock<Option<Slack>>>,
     alert_history: Arc<RwLock<VecDeque<AlertHistoryEntry>>>,
     throttle_state: Arc<RwLock<ThrottleState>>,
     running: Arc<RwLock<bool>>,
@@ -462,19 +460,13 @@ impl AlertingManager {
             Arc::new(RwLock::new(None))
         };
 
-        let slack_client = if let Some(slack_config) = &config.slack_channel {
-            let client = Slack::new(&slack_config.webhook_url).map_err(|e| {
-                AlertingError::SlackError(format!("Failed to create Slack client: {e}"))
-            })?;
-            Arc::new(RwLock::new(Some(client)))
-        } else {
-            Arc::new(RwLock::new(None))
-        };
+        // Slack alerts are delivered via a stateless reqwest webhook POST
+        // (see `send_slack_alert`), so there is no persistent client to build
+        // here. Delivery is gated on `config.slack_channel.is_some()`.
 
         Ok(Self {
             config,
             email_transport,
-            slack_client,
             alert_history: Arc::new(RwLock::new(VecDeque::new())),
             throttle_state: Arc::new(RwLock::new(ThrottleState::new())),
             running: Arc::new(RwLock::new(false)),
@@ -655,45 +647,49 @@ impl AlertingManager {
         Ok(())
     }
 
-    /// Send alert via Slack
+    /// Send alert via Slack.
+    ///
+    /// Posts the alert to the configured Slack incoming-webhook URL as a plain
+    /// JSON payload over the Pure Rust `reqwest` (rustls) stack. No third-party
+    /// Slack client is used (avoids `slack-hook2`, which pulls `native-tls`).
     async fn send_slack_alert(&self, alert: &Alert) -> Result<()> {
-        let client = self.slack_client.read().await;
-        let Some(client) = client.as_ref() else {
+        let Some(slack_config) = self.config.slack_channel.as_ref() else {
             return Ok(());
         };
 
-        let slack_config = self
-            .config
-            .slack_channel
-            .as_ref()
-            .expect("slack_channel config should be present when slack client exists");
+        let text = format!(
+            "{} *{}*\n{}",
+            alert.severity.emoji(),
+            alert.title,
+            alert.message
+        );
+        let username = slack_config.username.as_deref().unwrap_or("OxiRS Cluster");
 
-        let mut payload = PayloadBuilder::new()
-            .text(format!(
-                "{} *{}*\n{}",
-                alert.severity.emoji(),
-                alert.title,
-                alert.message
-            ))
-            .username(slack_config.username.as_deref().unwrap_or("OxiRS Cluster"));
-
+        // Build the Slack incoming-webhook payload, including only the optional
+        // fields that are configured.
+        let mut body = serde_json::json!({
+            "text": text,
+            "username": username,
+        });
         if let Some(channel) = &slack_config.channel {
-            payload = payload.channel(channel);
+            body["channel"] = serde_json::Value::String(channel.clone());
         }
-
         if let Some(icon) = &slack_config.icon_emoji {
-            payload = payload.icon_emoji(icon);
+            body["icon_emoji"] = serde_json::Value::String(icon.clone());
         }
 
-        let payload = payload.build().map_err(|e| {
-            AlertingError::SlackError(format!("Failed to build Slack payload: {e}"))
-        })?;
-
-        // slack_hook2's send is async, we need to await it
-        client
-            .send(&payload)
+        let response = reqwest::Client::new()
+            .post(&slack_config.webhook_url)
+            .json(&body)
+            .send()
             .await
             .map_err(|e| AlertingError::SlackError(format!("Failed to send Slack message: {e}")))?;
+
+        if let Err(e) = response.error_for_status() {
+            return Err(AlertingError::SlackError(format!(
+                "Slack webhook returned an error status: {e}"
+            )));
+        }
 
         Ok(())
     }

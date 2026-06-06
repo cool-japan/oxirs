@@ -476,7 +476,8 @@ mod tests {
     async fn test_fine_tuning_engine_creation() {
         let config = EngineConfig {
             max_concurrent_jobs: 2,
-            default_output_dir: PathBuf::from("/tmp/fine_tuning"),
+            default_output_dir: std::env::temp_dir()
+                .join(format!("oxirs_fine_tuning_{}", std::process::id())),
             checkpoint_interval: Duration::from_secs(300),
             auto_cleanup_days: 30,
             resource_limits: ResourceLimits {

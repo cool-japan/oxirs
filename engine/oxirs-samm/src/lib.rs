@@ -1,8 +1,8 @@
 //! # OxiRS SAMM - Semantic Aspect Meta Model Implementation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! ✅ All public APIs documented. Production-ready with API stability guarantees.
 //!
 //! This crate provides a Rust implementation of the Semantic Aspect Meta Model (SAMM),
@@ -181,6 +181,24 @@ pub mod analytics;
 pub mod aspect_differ;
 pub mod cache;
 pub mod cloud_backends;
+/// AWS S3 (and S3-compatible) storage backend: [`cloud_backends_aws::S3Config`] / [`cloud_backends_aws::S3Backend`].
+pub mod cloud_backends_aws;
+/// Azure Blob Storage backend: [`cloud_backends_azure::AzureConfig`] / [`cloud_backends_azure::AzureBlobBackend`].
+pub mod cloud_backends_azure;
+/// Common HMAC/SHA-256, hex, URL and XML helpers shared by the cloud backends.
+pub mod cloud_backends_common;
+/// Google Cloud Storage backend: [`cloud_backends_gcp::GcsConfig`] / [`cloud_backends_gcp::GcsBackend`].
+pub mod cloud_backends_gcp;
+/// Generic HTTP REST storage backend: [`cloud_backends_http::HttpConfig`] / [`cloud_backends_http::HttpBackend`].
+pub mod cloud_backends_http;
+/// Backend aggregation plus the local-filesystem adapter [`cloud_backends_impl::LocalFsBackend`].
+pub mod cloud_backends_impl;
+/// Multi-backend replication and synchronization for cloud storage.
+pub mod cloud_backends_sync;
+#[cfg(test)]
+mod cloud_backends_tests;
+/// Cloud backend configuration envelopes and capability/access-policy enums.
+pub mod cloud_backends_types;
 pub mod cloud_client;
 pub mod cloud_storage;
 pub mod codegen;
@@ -190,6 +208,8 @@ pub mod dtdl_parser;
 pub mod error;
 pub mod generators;
 pub mod graph_analytics;
+/// JSON-LD 1.1 compaction and framing algorithms.
+pub mod jsonld;
 pub mod metamodel;
 pub mod migration;
 pub mod operation_mapper;
@@ -201,6 +221,7 @@ pub mod query;
 pub mod query_cache;
 pub mod serializer;
 pub mod simd_ops;
+/// SAMM submodel templates: reusable groups of properties for aspect models.
 pub mod submodel_templates;
 pub mod templates;
 pub mod transformation;
@@ -253,8 +274,25 @@ pub mod property_mapper;
 /// SAMM characteristic constraint validators (RangeConstraint, LengthConstraint, EncodingConstraint, RegularExpressionConstraint) (v1.1.0 round 16).
 pub mod constraint_validator;
 
+/// Cross-model URN reference validation for SAMM aspect models (v0.3.1).
+///
+/// Provides [`CrossModelRegistry`] for indexing multiple SAMM model namespaces
+/// and [`CrossModelValidator`] for checking that all cross-model URN references
+/// resolve.  See the [`cross_model`] module documentation for a full example.
+pub mod cross_model;
+pub use cross_model::{
+    CrossModelError, CrossModelReference, CrossModelRegistry, CrossModelValidator, ModelEntry,
+};
+// Re-export ValidationReport from cross_model under a distinct name to avoid
+// clashing with validation::ValidationReport.
+pub use cross_model::ValidationReport as CrossModelValidationReport;
+
 /// ESMF SDK 2.x feature parity matrix and status report (v0.3.0).
 pub mod parity;
+pub use parity::{
+    generate_report, load_catalog, FeatureCategory, FeatureEntry, FeatureStatus, ImplStatus,
+    ParityMatrix,
+};
 
 /// Command-line interface sub-command implementations (v0.3.0).
 pub mod cli;
@@ -282,7 +320,7 @@ pub use cloud_storage::{
 };
 pub use codegen::{
     HttpMethod, JsonSchemaGenerator, JsonSchemaOptions, JsonSchemaValidator, OpenApiGenerator,
-    OpenApiOptions, OpenApiVersion, ValidationError as JsonSchemaValidationError,
+    OpenApiOptions, OpenApiVersion, PaginationConfig, ValidationError as JsonSchemaValidationError,
 };
 pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, PropertyChange};
 pub use documentation::{DocumentationFormat, DocumentationGenerator, DocumentationStyle};

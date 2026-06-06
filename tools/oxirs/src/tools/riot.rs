@@ -243,7 +243,12 @@ fn parse_rdf_content(
             }
         }
         _ => {
-            return Err(format!("Parsing for format '{format}' not yet implemented").into());
+            return Err(format!(
+                "Parsing for format '{}' is not supported. \
+                 Supported formats: ntriples, nquads, turtle",
+                format
+            )
+            .into());
         }
     }
 
@@ -446,7 +451,12 @@ fn serialize_rdf_content(triples: &[RdfTriple], format: &str) -> ToolResult<Stri
             }
         }
         _ => {
-            return Err(format!("Serialization for format '{format}' not yet implemented").into());
+            return Err(format!(
+                "Serialization for format '{}' is not supported. \
+                 Supported formats: ntriples, nquads, turtle",
+                format
+            )
+            .into());
         }
     }
 

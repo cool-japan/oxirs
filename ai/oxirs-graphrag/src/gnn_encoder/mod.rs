@@ -32,11 +32,23 @@
 //! assert_eq!(embeddings.embeddings.ncols(), 16);
 //! ```
 
+// ── Original GraphSAGE submodules ───────────────────────────────────────────
 pub mod aggregator;
 pub mod graphsage;
 pub mod sampler;
 
+// ── New GNN encoder submodules (v0.3.1) ─────────────────────────────────────
+pub mod adjacency;
+pub mod attention;
+pub mod message_passing;
+
+// ── Re-exports: original GraphSAGE ─────────────────────────────────────────
 pub use graphsage::{
     EntityEmbeddings, GnnError, GnnResult, GraphSageConfig, GraphSageEncoder, KgGraph,
     TrainingHistory,
 };
+
+// ── Re-exports: new GNN components ─────────────────────────────────────────
+pub use adjacency::{AdjacencyGraph, EdgeList};
+pub use attention::ScaledDotProductAttention;
+pub use message_passing::{GnnEncoder, GnnEncoderConfig};

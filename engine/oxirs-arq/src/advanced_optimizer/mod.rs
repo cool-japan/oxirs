@@ -6,6 +6,11 @@
 
 pub mod index_advisor;
 pub mod ml_predictor;
+pub mod ml_predictor_features;
+pub mod ml_predictor_model;
+#[cfg(test)]
+mod ml_predictor_tests;
+pub mod ml_predictor_training;
 pub mod model_manager;
 pub mod optimization_cache;
 pub mod streaming_analyzer;

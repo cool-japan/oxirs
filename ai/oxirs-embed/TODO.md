@@ -1,6 +1,6 @@
 # OxiRS Embed - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
@@ -72,8 +72,8 @@
   - **Risk:** docker build runtime in CI. Mitigation: cache base layers; use scratch+musl for slim runtime image.
 
 ### v1.0.0 - LTS Release (Q2 2026)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 - [x] Model zoo and pretrained models (planned 2026-05-01)
   - **Goal:** First-class `ModelZoo` API. `ModelZoo::registry().load("transe-fb15k237")`
@@ -132,5 +132,5 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ## Proposed follow-ups
 
-- [~] Long-term support guarantees — RFC published at `docs/policies/lts.md`.
-- [~] Enterprise features — decomposed in `docs/policies/enterprise.md`.
+- [x] Long-term support guarantees — RFC published at `docs/policies/lts.md`. (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features — decomposed in `docs/policies/enterprise.md`. (completed 2026-05-17 via RFC-002)

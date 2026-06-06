@@ -1238,7 +1238,7 @@ mod tests {
             cpu: true,
             io: false,
             flamegraph: true,
-            flamegraph_output: Some(PathBuf::from("/tmp/test_profile.svg")),
+            flamegraph_output: Some(std::env::temp_dir().join("oxirs_perf_test_profile.svg")),
         };
 
         assert_eq!(cmd.operation, "test_op");
@@ -1249,14 +1249,15 @@ mod tests {
 
     #[test]
     fn test_optimizer_command_creation() {
+        let dataset = std::env::temp_dir().join("oxirs_perf_test_dataset");
         let cmd = OptimizerCommand {
-            dataset: PathBuf::from("/tmp/test_dataset"),
+            dataset: dataset.clone(),
             format: "json".to_string(),
-            save: Some(PathBuf::from("/tmp/optimization_report.json")),
+            save: Some(std::env::temp_dir().join("oxirs_perf_optimization_report.json")),
             detailed: true,
         };
 
-        assert_eq!(cmd.dataset, PathBuf::from("/tmp/test_dataset"));
+        assert_eq!(cmd.dataset, dataset);
         assert_eq!(cmd.format, "json");
         assert!(cmd.detailed);
         assert!(cmd.save.is_some());
@@ -1280,18 +1281,23 @@ mod tests {
 
     #[test]
     fn test_advisor_command_file_mode() {
+        let query = std::env::temp_dir()
+            .join("oxirs_perf_query.sparql")
+            .to_string_lossy()
+            .into_owned();
+        let save = std::env::temp_dir().join("oxirs_perf_analysis.json");
         let cmd = AdvisorCommand {
-            query: "/tmp/query.sparql".to_string(),
+            query: query.clone(),
             file: true,
             format: "json".to_string(),
             verbose: false,
-            save: Some(PathBuf::from("/tmp/analysis.json")),
+            save: Some(save.clone()),
         };
 
-        assert_eq!(cmd.query, "/tmp/query.sparql");
+        assert_eq!(cmd.query, query);
         assert!(cmd.file);
         assert!(!cmd.verbose);
-        assert_eq!(cmd.save, Some(PathBuf::from("/tmp/analysis.json")));
+        assert_eq!(cmd.save, Some(save));
     }
 
     #[test]
@@ -1313,33 +1319,38 @@ mod tests {
 
     #[test]
     fn test_predictor_command_with_training_data() {
+        let train = std::env::temp_dir().join("oxirs_perf_training_data.json");
         let cmd = PredictorCommand {
             query: "SELECT * WHERE { ?s ?p ?o }".to_string(),
             file: false,
-            train: Some(PathBuf::from("/tmp/training_data.json")),
+            train: Some(train.clone()),
             format: "json".to_string(),
-            save: Some(PathBuf::from("/tmp/prediction.json")),
+            save: Some(std::env::temp_dir().join("oxirs_perf_prediction.json")),
             detailed: true,
         };
 
         assert!(cmd.train.is_some());
-        assert_eq!(cmd.train, Some(PathBuf::from("/tmp/training_data.json")));
+        assert_eq!(cmd.train, Some(train));
         assert!(cmd.detailed);
         assert_eq!(cmd.format, "json");
     }
 
     #[test]
     fn test_predictor_command_file_mode() {
+        let query = std::env::temp_dir()
+            .join("oxirs_perf_complex_query.sparql")
+            .to_string_lossy()
+            .into_owned();
         let cmd = PredictorCommand {
-            query: "/tmp/complex_query.sparql".to_string(),
+            query: query.clone(),
             file: true,
-            train: Some(PathBuf::from("/tmp/historical_data.json")),
+            train: Some(std::env::temp_dir().join("oxirs_perf_historical_data.json")),
             format: "text".to_string(),
-            save: Some(PathBuf::from("/tmp/perf_prediction.txt")),
+            save: Some(std::env::temp_dir().join("oxirs_perf_prediction.txt")),
             detailed: true,
         };
 
-        assert_eq!(cmd.query, "/tmp/complex_query.sparql");
+        assert_eq!(cmd.query, query);
         assert!(cmd.file);
         assert!(cmd.train.is_some());
         assert!(cmd.detailed);

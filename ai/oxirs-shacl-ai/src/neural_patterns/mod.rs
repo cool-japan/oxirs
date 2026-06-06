@@ -7,6 +7,10 @@ pub mod attention;
 pub mod correlation;
 pub mod hierarchies;
 pub mod learning;
+pub mod learning_engine;
+pub mod learning_eval;
+mod learning_tests;
+pub mod learning_types;
 pub mod recognizer;
 pub mod types;
 

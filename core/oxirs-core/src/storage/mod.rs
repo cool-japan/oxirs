@@ -16,7 +16,6 @@ pub mod immutable;
 pub mod mmap_storage;
 pub mod mvcc;
 pub mod temporal;
-#[cfg(feature = "rocksdb")]
 pub mod tiered;
 pub mod virtualization;
 

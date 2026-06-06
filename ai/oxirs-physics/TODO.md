@@ -1,6 +1,6 @@
 # OxiRS Physics - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
@@ -86,7 +86,7 @@
   - **Design:** Deserialize DTDL JSON-LD (Interface, Telemetry, Property, Command, Component, Relationship) → DtdlToRdfMapper → triples in oxirs-physics: namespace + QUDT units → RDF→DTDL reverse mapper. Validate DTMI IDs, version numbers, property types.
   - **Files:** src/dtdl/{parser,mapper,validator,types}.rs (new), src/lib.rs (export), tests/dtdl_round_trip.rs (new), tests/fixtures/dtdl/*.json (vendored samples)
   - **Tests:** unit per-element-type + DTMI validation + QUDT unit mapping + integration round-trip of sample DTDL docs
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 
 ## Notes
 

@@ -3,12 +3,14 @@
 pub mod adaptive_execution_admin; // Adaptive execution monitoring endpoints (v0.1.0 Final)
 pub mod admin;
 pub mod api_keys;
+pub mod audit; // Audit log export endpoints (`/$/audit/log`, `/$/audit/log/stats`)
 pub mod auth;
 pub mod dataset_stats; // Dataset Statistics
 pub mod gpu_embeddings_admin; // GPU knowledge graph embeddings management (v0.1.0 Final - Session 20)
 pub mod graph;
 pub mod gsp; // Graph Store Protocol (W3C SPARQL 1.1)
 pub mod ldap;
+pub mod ldf; // Linked Data Fragments — Triple Pattern Fragments (Track K27)
 pub mod mfa;
 pub mod ngsi_ld; // NGSI-LD API (ETSI GS CIM 009 V1.6.1) for Smart City/Industry 4.0
 pub mod oauth2;
@@ -27,6 +29,10 @@ pub mod sparql_refactored;
 pub mod tasks; // Async Task Management
 pub mod upload; // RDF Bulk Upload
 pub mod validation; // Validation Services (Query, Update, IRI, Data, Language Tag)
+pub mod validation_core; // Internal validation logic (SPARQL, IRI, RDF, language tags)
+pub mod validation_tests; // Validation unit tests
+pub mod validation_types; // Validation request/response types
+pub mod vocab; // VocPrez-style vocabulary publishing handlers (Track L27)
 pub mod websocket;
 
 // Re-export commonly used handlers
@@ -72,6 +78,9 @@ pub use validation::{
     validate_query, validate_query_get, validate_update, validate_update_get,
 };
 pub use websocket::{websocket_handler, SubscriptionManager};
+
+// Audit log export handlers
+pub use audit::{get_audit_log, get_audit_stats};
 
 // NGSI-LD API handlers
 pub use ngsi_ld::{

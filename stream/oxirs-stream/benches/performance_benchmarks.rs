@@ -439,21 +439,15 @@ fn bench_backpressure_handling(c: &mut Criterion) {
 
 /// Benchmark compression performance
 fn bench_compression_formats(c: &mut Criterion) {
-    use flate2::write::GzEncoder;
-    use flate2::Compression;
-    use std::io::Write;
-
     let mut group = c.benchmark_group("compression_formats");
 
     // Create test data
     let data = vec![0u8; 10240]; // 10KB of zeros (highly compressible)
 
-    // Benchmark Gzip compression
+    // Benchmark Gzip compression (level 6 = previous flate2 default)
     group.bench_function("gzip_compress_10kb", |b| {
         b.iter(|| {
-            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-            encoder.write_all(black_box(&data)).unwrap();
-            let result = encoder.finish().unwrap();
+            let result = oxiarc_deflate::gzip_compress(black_box(&data), 6).unwrap();
             black_box(result)
         });
     });
@@ -468,9 +462,8 @@ fn bench_compression_formats(c: &mut Criterion) {
 
     // Benchmark Snappy compression
     group.bench_function("snappy_compress_10kb", |b| {
-        let mut encoder = snap::raw::Encoder::new();
         b.iter(|| {
-            let result = encoder.compress_vec(black_box(&data)).unwrap();
+            let result = oxiarc_snappy::compress(black_box(&data));
             black_box(result)
         });
     });

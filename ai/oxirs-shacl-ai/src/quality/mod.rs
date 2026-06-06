@@ -5,6 +5,10 @@
 
 pub mod ai_metrics;
 pub mod core;
+pub mod core_metrics;
+#[cfg(test)]
+mod core_tests;
+pub mod core_types;
 pub mod enhancement;
 pub mod extended_dimensions;
 pub mod issue_detection;

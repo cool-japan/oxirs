@@ -1,8 +1,8 @@
 //! # OxiRS TDB - Apache Jena TDB/TDB2 Compatible Storage Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! High-performance RDF triple store with B+Tree indexes, ACID transactions,
@@ -76,7 +76,7 @@
 //! - [`oxirs-core`](https://docs.rs/oxirs-core) - RDF data model
 //! - [`oxirs-arq`](https://docs.rs/oxirs-arq) - SPARQL query engine
 
-#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.3.0")]
+#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.3.1")]
 #![warn(missing_docs)]
 #![allow(dead_code)] // Allow during development
 #![allow(unused_imports)] // Allow during development
@@ -160,9 +160,16 @@ pub mod query_monitor;
 
 // Advanced diagnostic tools
 pub mod diagnostics;
+pub mod diagnostics_collectors;
+pub mod diagnostics_tests;
+pub mod diagnostics_types;
 
 // Advanced diagnostic tools (monitoring and analysis)
 pub mod advanced_diagnostics;
+pub mod advanced_diagnostics_engine;
+#[cfg(test)]
+mod advanced_diagnostics_tests;
+pub mod advanced_diagnostics_types;
 
 // High-performance operations using SciRS2-Core
 pub mod performance;
@@ -200,7 +207,10 @@ pub mod database_ops;
 // Observability and monitoring
 pub mod observability;
 
-// Full-text search over RDF literals (Tantivy-backed)
+// Full-text search over RDF literals (Tantivy-backed).
+// Gated behind the non-default `full-text-search` feature so the default build
+// stays Pure Rust (Tantivy pulls C `zstd-sys`). See Cargo.toml.
+#[cfg(feature = "full-text-search")]
 pub mod text_search;
 
 // Bloom filter for probabilistic triple existence checks

@@ -1,9 +1,9 @@
 //! # OxiRS Turtle - RDF Format Parser
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-ttl/badge.svg)](https://docs.rs/oxirs-ttl)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Production-ready with 461 passing tests and 97% W3C compliance.
 //!
 //! High-performance parsing and serialization for RDF formats in the Turtle family.
@@ -282,3 +282,14 @@ pub mod jsonld_compactor;
 /// TriG named-graph Turtle parser: @prefix/PREFIX declarations, GRAPH blocks,
 /// default-graph triples, prefix expansion, graph_sizes, named_graphs (v1.1.0 round 16)
 pub mod trig_parser;
+
+/// CSV on the Web (CSVW) parser and RDF converter (Track H25).
+///
+/// Parses CSVW JSON metadata and RFC 4180 CSV data, then converts rows to
+/// RDF statements using the W3C CSVW annotation model.
+pub mod csvw;
+
+pub use csvw::{parse_csv, CsvwConverter, CsvwError, CsvwMetadata};
+
+/// N-Quads streaming pull-parser: line-by-line Iterator over [`nquads_streaming::StreamedQuad`].
+pub mod nquads_streaming;

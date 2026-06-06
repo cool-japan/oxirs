@@ -29,9 +29,16 @@
 //! ```
 
 pub mod json_schema;
+/// OpenAPI facade re-exporting all public types and the generator.
 pub mod openapi;
+pub(crate) mod openapi_generator;
+pub(crate) mod openapi_serializer;
+#[cfg(test)]
+mod openapi_tests;
+/// Core type definitions for OpenAPI generation (version, methods, options, pagination).
+pub mod openapi_types;
 
 pub use json_schema::{
     JsonSchemaGenerator, JsonSchemaOptions, JsonSchemaValidator, ValidationError,
 };
-pub use openapi::{HttpMethod, OpenApiGenerator, OpenApiOptions, OpenApiVersion};
+pub use openapi::{HttpMethod, OpenApiGenerator, OpenApiOptions, OpenApiVersion, PaginationConfig};

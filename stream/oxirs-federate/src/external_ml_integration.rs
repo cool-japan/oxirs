@@ -821,7 +821,8 @@ mod tests {
             framework: MLFramework::PyTorch,
             current_version: ModelVersion {
                 version: "1.0.0".to_string(),
-                model_path: PathBuf::from("/tmp/model.pt"),
+                model_path: std::env::temp_dir()
+                    .join(format!("oxirs_model_{}.pt", std::process::id())),
                 format: ModelFormat::PyTorchStateDict,
                 input_schema: vec![],
                 output_schema: vec![],
@@ -894,8 +895,8 @@ mod tests {
 
         let result = converter
             .convert_model(
-                &PathBuf::from("/tmp/input.pt"),
-                &PathBuf::from("/tmp/output.onnx"),
+                &std::env::temp_dir().join(format!("oxirs_input_{}.pt", std::process::id())),
+                &std::env::temp_dir().join(format!("oxirs_output_{}.onnx", std::process::id())),
                 ModelFormat::PyTorchStateDict,
                 ModelFormat::ONNX,
             )

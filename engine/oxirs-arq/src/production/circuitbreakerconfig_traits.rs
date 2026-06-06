@@ -10,7 +10,7 @@
 
 use std::time::Duration;
 
-use super::types::CircuitBreakerConfig;
+use super::types_monitor::CircuitBreakerConfig;
 
 impl Default for CircuitBreakerConfig {
     fn default() -> Self {

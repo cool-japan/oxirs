@@ -1,13 +1,13 @@
-use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
-use anyhow::Result;
 use crate::benchmarks::{
+    ai_ml::{self, AiMlBenchmarkConfig},
+    federation::{self, FederationBenchmarkConfig},
     gpu_acceleration::{self, GpuBenchmarkConfig},
     simd_operations::{self, SimdBenchmarkConfig},
-    federation::{self, FederationBenchmarkConfig},
-    ai_ml::{self, AiMlBenchmarkConfig},
 };
-use crate::datasets::{DatasetManager, DatasetConfig, DatasetSize, DatasetComplexity};
+use crate::datasets::DatasetManager;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScenarioConfig {
@@ -144,10 +144,12 @@ impl ScenarioRunner {
         let performance_metrics = self.simulate_scenario_workload(config).await?;
 
         // Evaluate objectives
-        let objectives_met = self.evaluate_objectives(config, &performance_metrics, &benchmark_results);
+        let objectives_met =
+            self.evaluate_objectives(config, &performance_metrics, &benchmark_results);
 
         // Generate findings and recommendations
-        let (detailed_findings, recommendations) = self.analyze_results(config, &performance_metrics, &benchmark_results);
+        let (detailed_findings, recommendations) =
+            self.analyze_results(config, &performance_metrics, &benchmark_results);
 
         let execution_duration = start_time.elapsed();
 
@@ -351,7 +353,10 @@ impl ScenarioRunner {
         // Verify required datasets exist
         for dataset_name in &config.datasets {
             if self.dataset_manager.get_dataset(dataset_name).is_none() {
-                return Err(anyhow::anyhow!("Required dataset '{}' not found", dataset_name));
+                return Err(anyhow::anyhow!(
+                    "Required dataset '{}' not found",
+                    dataset_name
+                ));
             }
         }
 
@@ -378,7 +383,8 @@ impl ScenarioRunner {
                     test_adaptive_switching: true,
                     gpu_memory_limit_mb: Some(8192),
                 };
-                let gpu_result = gpu_acceleration::run_gpu_acceleration_benchmark(gpu_config).await?;
+                let gpu_result =
+                    gpu_acceleration::run_gpu_acceleration_benchmark(gpu_config).await?;
                 gpu_score = calculate_gpu_benchmark_score(&gpu_result);
 
                 let simd_config = SimdBenchmarkConfig {
@@ -419,7 +425,8 @@ impl ScenarioRunner {
                     },
                     expected_improvement_percent: 50.0,
                 };
-                let federation_result = federation::run_federation_benchmark(federation_config).await?;
+                let federation_result =
+                    federation::run_federation_benchmark(federation_config).await?;
                 federation_score = calculate_federation_benchmark_score(&federation_result);
             }
 
@@ -473,7 +480,8 @@ impl ScenarioRunner {
             ScenarioType::ProductionWorkload | ScenarioType::StressTest => {
                 // Run comprehensive benchmarks
                 let gpu_config = GpuBenchmarkConfig::default();
-                let gpu_result = gpu_acceleration::run_gpu_acceleration_benchmark(gpu_config).await?;
+                let gpu_result =
+                    gpu_acceleration::run_gpu_acceleration_benchmark(gpu_config).await?;
                 gpu_score = calculate_gpu_benchmark_score(&gpu_result);
 
                 let simd_config = SimdBenchmarkConfig::default();
@@ -481,7 +489,8 @@ impl ScenarioRunner {
                 simd_score = calculate_simd_benchmark_score(&simd_result);
 
                 let federation_config = FederationBenchmarkConfig::default();
-                let federation_result = federation::run_federation_benchmark(federation_config).await?;
+                let federation_result =
+                    federation::run_federation_benchmark(federation_config).await?;
                 federation_score = calculate_federation_benchmark_score(&federation_result);
 
                 let ai_ml_config = AiMlBenchmarkConfig::default();
@@ -501,12 +510,16 @@ impl ScenarioRunner {
         })
     }
 
-    async fn simulate_scenario_workload(&self, config: &ScenarioConfig) -> Result<PerformanceMetrics> {
+    async fn simulate_scenario_workload(
+        &self,
+        config: &ScenarioConfig,
+    ) -> Result<PerformanceMetrics> {
         println!("🔄 Simulating workload for scenario: {}", config.name);
 
         // Simulate workload based on test environment
-        let simulation_duration = Duration::from_secs(config.test_environment.test_duration_minutes * 60 / 10); // Scale down for testing
-        let target_qps = config.test_environment.query_load_per_second;
+        let simulation_duration =
+            Duration::from_secs(config.test_environment.test_duration_minutes * 60 / 10); // Scale down for testing
+        let _target_qps = config.test_environment.query_load_per_second;
 
         let start_time = Instant::now();
         let mut total_queries = 0;
@@ -527,7 +540,10 @@ impl ScenarioRunner {
             };
 
             // Apply optimization factors
-            let optimized_latency_ms = base_latency_ms / config.expected_improvements.overall_system_improvement_factor;
+            let optimized_latency_ms = base_latency_ms
+                / config
+                    .expected_improvements
+                    .overall_system_improvement_factor;
 
             tokio::time::sleep(Duration::from_millis(optimized_latency_ms as u64 / 100)).await; // Scale for testing
 
@@ -546,7 +562,8 @@ impl ScenarioRunner {
 
         // Calculate latency percentiles
         latencies.sort();
-        let average_latency = latencies.iter().map(|d| d.as_millis()).sum::<u128>() as f64 / latencies.len() as f64;
+        let average_latency =
+            latencies.iter().map(|d| d.as_millis()).sum::<u128>() as f64 / latencies.len() as f64;
         let p95_index = (latencies.len() as f64 * 0.95) as usize;
         let p99_index = (latencies.len() as f64 * 0.99) as usize;
         let p95_latency = latencies[p95_index.min(latencies.len() - 1)].as_millis() as f64;
@@ -575,7 +592,7 @@ impl ScenarioRunner {
             cpu_utilization_percent: cpu_utilization,
             gpu_utilization_percent: gpu_utilization,
             cache_hit_rate_percent: 78.0, // Simulated cache efficiency
-            error_rate_percent: 0.1, // Low error rate
+            error_rate_percent: 0.1,      // Low error rate
         })
     }
 
@@ -587,22 +604,29 @@ impl ScenarioRunner {
     ) -> ObjectivesMet {
         // Evaluate throughput objective
         let baseline_throughput = 50.0; // Baseline QPS
-        let throughput_improvement = ((metrics.throughput_queries_per_second - baseline_throughput) / baseline_throughput) * 100.0;
-        let throughput_objective_met = throughput_improvement >= config.performance_objectives.throughput_improvement_percent;
+        let throughput_improvement =
+            ((metrics.throughput_queries_per_second - baseline_throughput) / baseline_throughput)
+                * 100.0;
+        let throughput_objective_met =
+            throughput_improvement >= config.performance_objectives.throughput_improvement_percent;
 
         // Evaluate latency objective
         let baseline_latency = 100.0; // Baseline latency in ms
-        let latency_reduction = ((baseline_latency - metrics.average_latency_ms) / baseline_latency) * 100.0;
-        let latency_objective_met = latency_reduction >= config.performance_objectives.latency_reduction_percent;
+        let latency_reduction =
+            ((baseline_latency - metrics.average_latency_ms) / baseline_latency) * 100.0;
+        let latency_objective_met =
+            latency_reduction >= config.performance_objectives.latency_reduction_percent;
 
         // Evaluate memory efficiency
-        let memory_efficiency_met = metrics.memory_usage_peak_gb <= config.test_environment.max_memory_usage_gb;
+        let memory_efficiency_met =
+            metrics.memory_usage_peak_gb <= config.test_environment.max_memory_usage_gb;
 
         // Evaluate CPU efficiency
         let cpu_efficiency_met = metrics.cpu_utilization_percent <= 80.0; // Reasonable CPU usage
 
         // Evaluate accuracy (simulated as maintained in benchmarks)
-        let accuracy_objective_met = benchmarks.overall_benchmark_score >= config.performance_objectives.accuracy_maintenance_threshold;
+        let accuracy_objective_met = benchmarks.overall_benchmark_score
+            >= config.performance_objectives.accuracy_maintenance_threshold;
 
         let overall_objectives_met = throughput_objective_met
             && latency_objective_met
@@ -633,36 +657,48 @@ impl ScenarioRunner {
         if benchmarks.gpu_benchmark_score > 80.0 {
             findings.push("GPU acceleration is performing excellently".to_string());
         } else if benchmarks.gpu_benchmark_score > 60.0 {
-            findings.push("GPU acceleration is performing well but has room for improvement".to_string());
-            recommendations.push("Consider optimizing GPU memory usage and kernel efficiency".to_string());
+            findings.push(
+                "GPU acceleration is performing well but has room for improvement".to_string(),
+            );
+            recommendations
+                .push("Consider optimizing GPU memory usage and kernel efficiency".to_string());
         } else {
             findings.push("GPU acceleration performance is below expectations".to_string());
-            recommendations.push("Review GPU algorithm implementations and consider alternative approaches".to_string());
+            recommendations.push(
+                "Review GPU algorithm implementations and consider alternative approaches"
+                    .to_string(),
+            );
         }
 
         if benchmarks.simd_benchmark_score > 85.0 {
             findings.push("SIMD optimizations are highly effective".to_string());
         } else {
             findings.push("SIMD optimizations show potential for improvement".to_string());
-            recommendations.push("Expand SIMD optimization coverage to additional operations".to_string());
+            recommendations
+                .push("Expand SIMD optimization coverage to additional operations".to_string());
         }
 
-        if config.scenario_type == ScenarioType::FederatedQueryPerformance && benchmarks.federation_benchmark_score > 75.0 {
+        if config.scenario_type == ScenarioType::FederatedQueryPerformance
+            && benchmarks.federation_benchmark_score > 75.0
+        {
             findings.push("Federation optimization strategies are working well".to_string());
         } else if config.scenario_type == ScenarioType::FederatedQueryPerformance {
             findings.push("Federation performance needs improvement".to_string());
-            recommendations.push("Enhance ML-driven source selection and join optimization".to_string());
+            recommendations
+                .push("Enhance ML-driven source selection and join optimization".to_string());
         }
 
         // Analyze resource utilization
         if metrics.memory_usage_peak_gb > config.test_environment.max_memory_usage_gb * 0.9 {
             findings.push("Memory usage is approaching limits".to_string());
-            recommendations.push("Implement more aggressive memory optimization strategies".to_string());
+            recommendations
+                .push("Implement more aggressive memory optimization strategies".to_string());
         }
 
         if metrics.cpu_utilization_percent > 85.0 {
             findings.push("High CPU utilization detected".to_string());
-            recommendations.push("Consider load balancing or additional CPU optimization".to_string());
+            recommendations
+                .push("Consider load balancing or additional CPU optimization".to_string());
         }
 
         // Analyze latency
@@ -675,16 +711,20 @@ impl ScenarioRunner {
         if benchmarks.overall_benchmark_score > 80.0 {
             findings.push("Overall performance optimization is highly successful".to_string());
         } else if benchmarks.overall_benchmark_score > 60.0 {
-            findings.push("Performance optimizations are effective but can be improved".to_string());
+            findings
+                .push("Performance optimizations are effective but can be improved".to_string());
             recommendations.push("Focus on the lowest-scoring optimization areas".to_string());
         } else {
             findings.push("Performance optimizations require significant improvement".to_string());
-            recommendations.push("Comprehensive review and redesign of optimization strategies needed".to_string());
+            recommendations.push(
+                "Comprehensive review and redesign of optimization strategies needed".to_string(),
+            );
         }
 
         (findings, recommendations)
     }
 
+    #[allow(dead_code)]
     pub fn get_scenarios(&self) -> &[ScenarioConfig] {
         &self.scenarios
     }
@@ -722,20 +762,42 @@ pub mod report {
         report.push_str(&format!("**Total Scenarios**: {}\n", results.len()));
 
         let total_duration: Duration = results.iter().map(|r| r.execution_duration).sum();
-        report.push_str(&format!("**Total Execution Time**: {:.2}s\n\n", total_duration.as_secs_f64()));
+        report.push_str(&format!(
+            "**Total Execution Time**: {:.2}s\n\n",
+            total_duration.as_secs_f64()
+        ));
 
         // Executive Summary
         report.push_str("## Executive Summary\n\n");
 
-        let objectives_met_count = results.iter().filter(|r| r.objectives_met.overall_objectives_met).count();
+        let objectives_met_count = results
+            .iter()
+            .filter(|r| r.objectives_met.overall_objectives_met)
+            .count();
         let success_rate = (objectives_met_count as f64 / results.len() as f64) * 100.0;
 
-        report.push_str(&format!("- **Success Rate**: {:.1}% ({}/{})\n", success_rate, objectives_met_count, results.len()));
+        report.push_str(&format!(
+            "- **Success Rate**: {:.1}% ({}/{})\n",
+            success_rate,
+            objectives_met_count,
+            results.len()
+        ));
 
-        let avg_throughput: f64 = results.iter().map(|r| r.performance_metrics.throughput_queries_per_second).sum::<f64>() / results.len() as f64;
-        let avg_latency: f64 = results.iter().map(|r| r.performance_metrics.average_latency_ms).sum::<f64>() / results.len() as f64;
+        let avg_throughput: f64 = results
+            .iter()
+            .map(|r| r.performance_metrics.throughput_queries_per_second)
+            .sum::<f64>()
+            / results.len() as f64;
+        let avg_latency: f64 = results
+            .iter()
+            .map(|r| r.performance_metrics.average_latency_ms)
+            .sum::<f64>()
+            / results.len() as f64;
 
-        report.push_str(&format!("- **Average Throughput**: {:.1} QPS\n", avg_throughput));
+        report.push_str(&format!(
+            "- **Average Throughput**: {:.1} QPS\n",
+            avg_throughput
+        ));
         report.push_str(&format!("- **Average Latency**: {:.1}ms\n", avg_latency));
 
         // Detailed Results
@@ -743,32 +805,100 @@ pub mod report {
 
         for result in results {
             report.push_str(&format!("### {}\n\n", result.config.name));
-            report.push_str(&format!("**Description**: {}\n\n", result.config.description));
+            report.push_str(&format!(
+                "**Description**: {}\n\n",
+                result.config.description
+            ));
 
             report.push_str("**Performance Metrics**:\n");
-            report.push_str(&format!("- Throughput: {:.1} QPS\n", result.performance_metrics.throughput_queries_per_second));
-            report.push_str(&format!("- Average Latency: {:.1}ms\n", result.performance_metrics.average_latency_ms));
-            report.push_str(&format!("- P95 Latency: {:.1}ms\n", result.performance_metrics.p95_latency_ms));
-            report.push_str(&format!("- Memory Usage: {:.1}GB\n", result.performance_metrics.memory_usage_peak_gb));
-            report.push_str(&format!("- CPU Utilization: {:.1}%\n", result.performance_metrics.cpu_utilization_percent));
+            report.push_str(&format!(
+                "- Throughput: {:.1} QPS\n",
+                result.performance_metrics.throughput_queries_per_second
+            ));
+            report.push_str(&format!(
+                "- Average Latency: {:.1}ms\n",
+                result.performance_metrics.average_latency_ms
+            ));
+            report.push_str(&format!(
+                "- P95 Latency: {:.1}ms\n",
+                result.performance_metrics.p95_latency_ms
+            ));
+            report.push_str(&format!(
+                "- Memory Usage: {:.1}GB\n",
+                result.performance_metrics.memory_usage_peak_gb
+            ));
+            report.push_str(&format!(
+                "- CPU Utilization: {:.1}%\n",
+                result.performance_metrics.cpu_utilization_percent
+            ));
 
             if let Some(gpu_util) = result.performance_metrics.gpu_utilization_percent {
                 report.push_str(&format!("- GPU Utilization: {:.1}%\n", gpu_util));
             }
 
             report.push_str("\n**Benchmark Scores**:\n");
-            report.push_str(&format!("- GPU Acceleration: {:.1}/100\n", result.benchmark_results.gpu_benchmark_score));
-            report.push_str(&format!("- SIMD Optimization: {:.1}/100\n", result.benchmark_results.simd_benchmark_score));
-            report.push_str(&format!("- Federation: {:.1}/100\n", result.benchmark_results.federation_benchmark_score));
-            report.push_str(&format!("- AI/ML: {:.1}/100\n", result.benchmark_results.ai_ml_benchmark_score));
-            report.push_str(&format!("- **Overall Score**: {:.1}/100\n", result.benchmark_results.overall_benchmark_score));
+            report.push_str(&format!(
+                "- GPU Acceleration: {:.1}/100\n",
+                result.benchmark_results.gpu_benchmark_score
+            ));
+            report.push_str(&format!(
+                "- SIMD Optimization: {:.1}/100\n",
+                result.benchmark_results.simd_benchmark_score
+            ));
+            report.push_str(&format!(
+                "- Federation: {:.1}/100\n",
+                result.benchmark_results.federation_benchmark_score
+            ));
+            report.push_str(&format!(
+                "- AI/ML: {:.1}/100\n",
+                result.benchmark_results.ai_ml_benchmark_score
+            ));
+            report.push_str(&format!(
+                "- **Overall Score**: {:.1}/100\n",
+                result.benchmark_results.overall_benchmark_score
+            ));
 
             report.push_str("\n**Objectives Status**:\n");
-            report.push_str(&format!("- Throughput: {}\n", if result.objectives_met.throughput_objective_met { "✅" } else { "❌" }));
-            report.push_str(&format!("- Latency: {}\n", if result.objectives_met.latency_objective_met { "✅" } else { "❌" }));
-            report.push_str(&format!("- Memory Efficiency: {}\n", if result.objectives_met.memory_efficiency_objective_met { "✅" } else { "❌" }));
-            report.push_str(&format!("- CPU Efficiency: {}\n", if result.objectives_met.cpu_efficiency_objective_met { "✅" } else { "❌" }));
-            report.push_str(&format!("- Accuracy: {}\n", if result.objectives_met.accuracy_objective_met { "✅" } else { "❌" }));
+            report.push_str(&format!(
+                "- Throughput: {}\n",
+                if result.objectives_met.throughput_objective_met {
+                    "✅"
+                } else {
+                    "❌"
+                }
+            ));
+            report.push_str(&format!(
+                "- Latency: {}\n",
+                if result.objectives_met.latency_objective_met {
+                    "✅"
+                } else {
+                    "❌"
+                }
+            ));
+            report.push_str(&format!(
+                "- Memory Efficiency: {}\n",
+                if result.objectives_met.memory_efficiency_objective_met {
+                    "✅"
+                } else {
+                    "❌"
+                }
+            ));
+            report.push_str(&format!(
+                "- CPU Efficiency: {}\n",
+                if result.objectives_met.cpu_efficiency_objective_met {
+                    "✅"
+                } else {
+                    "❌"
+                }
+            ));
+            report.push_str(&format!(
+                "- Accuracy: {}\n",
+                if result.objectives_met.accuracy_objective_met {
+                    "✅"
+                } else {
+                    "❌"
+                }
+            ));
 
             if !result.detailed_findings.is_empty() {
                 report.push_str("\n**Key Findings**:\n");

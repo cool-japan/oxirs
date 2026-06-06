@@ -1,6 +1,6 @@
 # OxiRS Cluster - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
@@ -150,9 +150,9 @@
   - **Risk:** None — straightforward gate insertion.
 
 ### v1.0.0 - LTS Release (Q2 2026)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] Comprehensive certification (completed 2026-05-01)
-- [~] Enterprise support (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Enterprise support (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Performance benchmarks publication (completed 2026-04-29)
 
 ## Documentation
@@ -168,7 +168,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Cluster v0.2.3 - Distributed RDF storage with multi-tenant isolation*
+*OxiRS Cluster v0.3.1 - Distributed RDF storage with multi-tenant isolation*
 
 ## Proposed follow-ups
 

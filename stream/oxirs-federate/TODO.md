@@ -1,10 +1,10 @@
 # OxiRS Federate - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Current Status
 
-OxiRS Federate v0.2.3 is production-ready, providing SPARQL federation with advanced ML optimization and distributed consensus.
+OxiRS Federate v0.3.1 is production-ready, providing SPARQL federation with advanced ML optimization and distributed consensus.
 
 ### Production Features
 - ✅ **SPARQL Federation** - SERVICE clause execution with 2-phase commit
@@ -39,8 +39,8 @@ OxiRS Federate v0.2.3 is production-ready, providing SPARQL federation with adva
 - ✅ 1397 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise support features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise support features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Complete federation framework (completed 2026-04-30)
   - **Goal:** Close all gaps in the federation orchestrator so SPARQL 1.1 SERVICE is fully spec-compliant + cost-driven across all federation patterns.
   - **Delivered:** Algebra-level optimizer (`src/optimizer/`) with `filter_pushdown`, `service_merge`, `join_decomposer` passes plus a composable `OptimizerPipeline` (default order: pushdown → merge → pushdown → reorder).  `FederationCostModel` (in `src/cost_model.rs`) wraps `oxirs_arq::cost_model::CostModel` for local CPU/IO/memory cost and combines it with per-endpoint network transfer cost.  `EndpointCache` (`src/cache/endpoint_cache.rs`) provides a TTL-bounded, LRU-evicting per-endpoint subresult cache with optional per-endpoint TTL overrides.
@@ -53,4 +53,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Federate v0.2.3 - Advanced SPARQL federation*
+*OxiRS Federate v0.3.1 - Advanced SPARQL federation*

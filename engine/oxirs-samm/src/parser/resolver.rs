@@ -72,6 +72,11 @@ impl ModelResolver {
     /// Get or create HTTP client
     fn get_http_client(&mut self) -> Result<&reqwest::Client> {
         if self.http_client.is_none() {
+            // Install the Pure Rust rustls CryptoProvider before building the
+            // client: `reqwest` uses the `rustls-no-provider` feature, so a
+            // process-default provider must exist or `build()` panics. See
+            // `cloud_backends_common::build_tls_client` for the full rationale.
+            oxirs_core::ensure_crypto_provider();
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(self.http_timeout_secs))
                 .build()

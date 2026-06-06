@@ -6,32 +6,39 @@
 //! This provides interoperability with legacy systems that require RSA signatures.
 //! For new systems, EdDSA or ES256 are preferred.
 //!
-//! Uses `ring` for all signing and verification (constant-time, immune to
-//! RUSTSEC-2023-0071 / Marvin Attack). RSA key generation (behind the
-//! `keygen` feature) uses the `rsa` crate only for key material creation;
-//! all cryptographic operations run through ring.
+//! Implemented entirely in pure Rust with the [`rsa`] crate (RSASSA-PKCS1-v1_5)
+//! plus [`sha2`] for hashing. Signing and verification go through the
+//! `signature` traits re-exported by `rsa`. RSA key generation (behind the
+//! `keygen` feature) likewise uses the `rsa` crate.
+//!
+//! Key material is exchanged in PKCS#1 DER:
+//! * private keys as `RSAPrivateKey` (PKCS#1) DER, and
+//! * public keys as `RSAPublicKey` (PKCS#1, `SEQUENCE { n, e }`) DER,
+//!
+//! preserving the on-the-wire encoding used by external JWT/JWS peers.
 
 use crate::{DidError, DidResult};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use ring::{
-    rand::SystemRandom,
-    rsa::{self as ring_rsa, KeyPair as RingKeyPair},
-    signature::{self as ring_sig, RsaPublicKeyComponents, UnparsedPublicKey},
-};
+use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
+use rsa::pkcs1v15::{Signature as Pkcs1v15Signature, SigningKey, VerifyingKey};
+use rsa::signature::{SignatureEncoding, Signer, Verifier};
+use rsa::traits::PublicKeyParts;
+use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 
 /// Default RSA key size in bits
 pub const DEFAULT_KEY_SIZE: usize = 2048;
 
 /// An RSA key pair for RS256 signing.
 ///
-/// Holds the PKCS#1 DER-encoded private key and the corresponding `ring`
-/// key pair so that signing is always performed by ring (constant-time).
+/// Holds the parsed [`RsaPrivateKey`] used for signing together with the
+/// PKCS#1 DER bytes so the private key can be re-exported losslessly.
 pub struct RsaKeyPair {
-    /// PKCS#1 DER bytes of the private key (used to reconstruct ring KeyPair).
+    /// PKCS#1 DER bytes of the private key (preserved for lossless export).
     pkcs1_der: Vec<u8>,
-    /// Ring key pair (the actual signing handle).
-    ring_kp: RingKeyPair,
+    /// Parsed private key (the actual signing handle, pure Rust).
+    private_key: RsaPrivateKey,
 }
 
 impl RsaKeyPair {
@@ -50,7 +57,7 @@ impl RsaKeyPair {
     /// Requires the `keygen` feature.
     #[cfg(feature = "keygen")]
     pub fn generate_with_bits(bits: usize) -> DidResult<Self> {
-        use rsa::{pkcs1::EncodeRsaPrivateKey, RsaPrivateKey};
+        use rsa::pkcs1::EncodeRsaPrivateKey;
 
         if bits < 2048 {
             return Err(DidError::InvalidKey(
@@ -66,16 +73,19 @@ impl RsaKeyPair {
             .map_err(|e| DidError::SerializationError(format!("PKCS#1 DER export failed: {e}")))?
             .as_bytes()
             .to_vec();
-        Self::from_pkcs1_der(&pkcs1_der)
+        Ok(Self {
+            pkcs1_der,
+            private_key,
+        })
     }
 
     /// Create from DER-encoded PKCS#1 private key bytes.
     pub fn from_pkcs1_der(der: &[u8]) -> DidResult<Self> {
-        let ring_kp = RingKeyPair::from_der(der)
+        let private_key = RsaPrivateKey::from_pkcs1_der(der)
             .map_err(|e| DidError::InvalidKey(format!("Invalid PKCS#1 DER private key: {e}")))?;
         Ok(Self {
             pkcs1_der: der.to_vec(),
-            ring_kp,
+            private_key,
         })
     }
 
@@ -84,29 +94,35 @@ impl RsaKeyPair {
         Ok(self.pkcs1_der.clone())
     }
 
+    /// The corresponding RSA public key.
+    fn public_key(&self) -> RsaPublicKey {
+        RsaPublicKey::from(&self.private_key)
+    }
+
     /// Get the public key as JWK (`{ kty, alg, use, n, e }`).
     pub fn public_key_jwk(&self) -> DidResult<serde_json::Value> {
-        let components: RsaPublicKeyComponents<Vec<u8>> =
-            RsaPublicKeyComponents::from(self.ring_kp.public());
+        let public = self.public_key();
+        let n = public.n().to_bytes_be();
+        let e = public.e().to_bytes_be();
 
         Ok(serde_json::json!({
             "kty": "RSA",
             "alg": "RS256",
             "use": "sig",
-            "n": URL_SAFE_NO_PAD.encode(&components.n),
-            "e": URL_SAFE_NO_PAD.encode(&components.e)
+            "n": URL_SAFE_NO_PAD.encode(&n),
+            "e": URL_SAFE_NO_PAD.encode(&e)
         }))
     }
 
     /// Get the public key as DER-encoded PKCS#1 (`RSAPublicKey`).
     ///
-    /// Ring exposes the raw public-key DER via `public().as_ref()`, which is
-    /// in SubjectPublicKeyInfo (SPKI) format.  We encode n+e as PKCS#1 DER
-    /// manually so that `Rs256Verifier::from_pkcs1_der` can round-trip.
+    /// Encodes `n` and `e` as a PKCS#1 `RSAPublicKey` SEQUENCE so that
+    /// [`Rs256Verifier::from_pkcs1_der`] can round-trip.
     pub fn public_key_pkcs1_der(&self) -> DidResult<Vec<u8>> {
-        let components: RsaPublicKeyComponents<Vec<u8>> =
-            RsaPublicKeyComponents::from(self.ring_kp.public());
-        encode_pkcs1_public_key_der(&components.n, &components.e)
+        let public = self.public_key();
+        let n = public.n().to_bytes_be();
+        let e = public.e().to_bytes_be();
+        encode_pkcs1_public_key_der(&n, &e)
     }
 }
 
@@ -117,23 +133,24 @@ impl RsaKeyPair {
 //     publicExponent    INTEGER   -- e
 // }
 //
-// This is the format required by ring's `UnparsedPublicKey` for RSA_PKCS1_*.
+// This is the canonical PKCS#1 public-key format consumed by
+// `RsaPublicKey::from_pkcs1_der` and by external RSA peers.
 
 fn encode_pkcs1_public_key_der(n: &[u8], e: &[u8]) -> DidResult<Vec<u8>> {
-    let n_int = encode_der_integer(n);
-    let e_int = encode_der_integer(e);
+    let n_int = encode_der_integer(n)?;
+    let e_int = encode_der_integer(e)?;
 
     let inner_len = n_int.len() + e_int.len();
     let mut out = Vec::with_capacity(6 + inner_len);
     out.push(0x30); // SEQUENCE tag
-    encode_der_length(&mut out, inner_len);
+    encode_der_length(&mut out, inner_len)?;
     out.extend_from_slice(&n_int);
     out.extend_from_slice(&e_int);
     Ok(out)
 }
 
 /// Encode a big-endian unsigned integer as a DER INTEGER.
-fn encode_der_integer(bytes: &[u8]) -> Vec<u8> {
+fn encode_der_integer(bytes: &[u8]) -> DidResult<Vec<u8>> {
     // Strip leading zeros from value portion.
     let stripped = strip_leading_zeros(bytes);
     // If the high bit is set, prepend 0x00 to mark as non-negative.
@@ -142,12 +159,12 @@ fn encode_der_integer(bytes: &[u8]) -> Vec<u8> {
 
     let mut out = Vec::with_capacity(2 + value_len);
     out.push(0x02); // INTEGER tag
-    encode_der_length(&mut out, value_len);
+    encode_der_length(&mut out, value_len)?;
     if needs_zero {
         out.push(0x00);
     }
     out.extend_from_slice(stripped);
-    out
+    Ok(out)
 }
 
 fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
@@ -157,7 +174,7 @@ fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
     &bytes[start..]
 }
 
-fn encode_der_length(out: &mut Vec<u8>, len: usize) {
+fn encode_der_length(out: &mut Vec<u8>, len: usize) -> DidResult<()> {
     if len < 0x80 {
         out.push(len as u8);
     } else if len <= 0xFF {
@@ -168,14 +185,17 @@ fn encode_der_length(out: &mut Vec<u8>, len: usize) {
         out.push((len >> 8) as u8);
         out.push(len as u8);
     } else {
-        // Keys larger than 64 KiB are not practical; this should never happen.
-        panic!("RSA key too large for DER length encoding");
+        // Keys larger than 64 KiB are not practical.
+        return Err(DidError::SerializationError(
+            "RSA key too large for DER length encoding".to_string(),
+        ));
     }
+    Ok(())
 }
 
 // ── Signer ───────────────────────────────────────────────────────────────────
 
-/// RS256 Signer using RSA PKCS1v15 with SHA-256 (via ring).
+/// RS256 Signer using RSA PKCS#1 v1.5 with SHA-256 (pure Rust, `rsa` crate).
 pub struct Rs256Signer {
     key_pair: RsaKeyPair,
     key_id: Option<String>,
@@ -201,18 +221,17 @@ impl Rs256Signer {
         self.key_id.as_deref()
     }
 
-    /// Sign a message using RS256 (RSA PKCS1v15 with SHA-256).
+    /// Sign a message using RS256 (RSA PKCS#1 v1.5 with SHA-256).
     ///
-    /// Returns the raw RSA signature bytes. SHA-256 hashing is applied
-    /// internally by ring in constant time.
+    /// Returns the raw big-endian RSA signature bytes. SHA-256 hashing is
+    /// applied internally by the `rsa` signer. RSASSA-PKCS1-v1_5 is
+    /// deterministic, so no randomness is required.
     pub fn sign(&self, message: &[u8]) -> DidResult<Vec<u8>> {
-        let rng = SystemRandom::new();
-        let mut signature = vec![0u8; self.key_pair.ring_kp.public().modulus_len()];
-        self.key_pair
-            .ring_kp
-            .sign(&ring_sig::RSA_PKCS1_SHA256, &rng, message, &mut signature)
+        let signing_key = SigningKey::<Sha256>::new(self.key_pair.private_key.clone());
+        let signature: Pkcs1v15Signature = signing_key
+            .try_sign(message)
             .map_err(|e| DidError::SigningFailed(format!("RS256 signing failed: {e}")))?;
-        Ok(signature)
+        Ok(signature.to_vec())
     }
 
     /// Sign and produce a JWS compact serialization.
@@ -236,10 +255,10 @@ impl Rs256Signer {
 
 // ── Verifier ─────────────────────────────────────────────────────────────────
 
-/// RS256 Verifier using RSA PKCS1v15 with SHA-256 (via ring).
+/// RS256 Verifier using RSA PKCS#1 v1.5 with SHA-256 (pure Rust, `rsa` crate).
 pub struct Rs256Verifier {
-    /// PKCS#1 DER of the RSAPublicKey (the format ring's `UnparsedPublicKey` needs).
-    public_key_der: Vec<u8>,
+    /// Parsed RSA public key.
+    public_key: RsaPublicKey,
 }
 
 impl Rs256Verifier {
@@ -267,29 +286,28 @@ impl Rs256Verifier {
             .decode(e_b64)
             .map_err(|e| DidError::InvalidKey(format!("Invalid 'e': {e}")))?;
 
-        let public_key_der = encode_pkcs1_public_key_der(&n_bytes, &e_bytes)?;
-        Ok(Self { public_key_der })
+        let n = BigUint::from_bytes_be(&n_bytes);
+        let e = BigUint::from_bytes_be(&e_bytes);
+        let public_key = RsaPublicKey::new(n, e)
+            .map_err(|e| DidError::InvalidKey(format!("Invalid RSA public key components: {e}")))?;
+        Ok(Self { public_key })
     }
 
     /// Create from DER-encoded PKCS#1 public key bytes (`RSAPublicKey` format).
     pub fn from_pkcs1_der(der: &[u8]) -> DidResult<Self> {
-        // Validate by attempting to parse via ring.
-        let pk = UnparsedPublicKey::new(&ring_sig::RSA_PKCS1_2048_8192_SHA256, der);
-        // Perform a dummy verify to trigger validation (ring parses lazily).
-        // Alternatively we just store it; ring will reject bad DER on verify.
-        let _ = pk; // stored below
-        Ok(Self {
-            public_key_der: der.to_vec(),
-        })
+        let public_key = RsaPublicKey::from_pkcs1_der(der)
+            .map_err(|e| DidError::InvalidKey(format!("Invalid PKCS#1 DER public key: {e}")))?;
+        Ok(Self { public_key })
     }
 
     /// Verify an RS256 signature over a message.
     pub fn verify(&self, message: &[u8], signature_bytes: &[u8]) -> DidResult<bool> {
-        let pk = UnparsedPublicKey::new(
-            &ring_sig::RSA_PKCS1_2048_8192_SHA256,
-            self.public_key_der.as_slice(),
-        );
-        match pk.verify(message, signature_bytes) {
+        let signature = match Pkcs1v15Signature::try_from(signature_bytes) {
+            Ok(sig) => sig,
+            Err(_) => return Ok(false),
+        };
+        let verifying_key = VerifyingKey::<Sha256>::new(self.public_key.clone());
+        match verifying_key.verify(message, &signature) {
             Ok(()) => Ok(true),
             Err(_) => Ok(false),
         }
@@ -327,28 +345,56 @@ struct Rs256JwsHeader {
 mod tests {
     use super::*;
 
-    /// Pre-generated 2048-bit RSA private key in PKCS#1 DER format (hex-encoded).
+    /// A fixed, valid 2048-bit RSA private key in PKCS#1 DER form (hex), so the
+    /// sign/verify round-trips run fast and deterministically without invoking
+    /// RSA key generation (which is slow and otherwise feature-gated).
     ///
-    /// Generated offline so tests are fast. The test key is not secret — it is
-    /// only used to verify round-trip behaviour of the ring-based signer/verifier.
-    fn test_keypair_der() -> Vec<u8> {
-        // 2048-bit RSA key, PKCS#1 DER.  Generated with:
-        //   openssl genrsa 2048 | openssl rsa -outform DER | xxd -p -c 0
-        hex::decode(concat!(
-            "3082025e02010002818100af7a5e7e3e1ee4af8f90f2e1f0b0c0d3fa4d9b3c",
-            "2e1f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3",
-            "e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3",
-            "e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3",
-            "e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c203",
-            "010001028181"
-        ))
-        .unwrap_or_default()
-    }
+    /// Generated offline with the `rsa` crate. **Not secret** — it exists only
+    /// to exercise the pure-Rust RSASSA-PKCS1-v1_5 path across this migration.
+    const TEST_RSA_PKCS1_DER_HEX: &str = concat!(
+        "308204a50201000282010100b574a22ec0d6ea3d23ee2d555d4adaac9d006138",
+        "0072d7cec1fa8eb0fbfc4c60e2c1c651fd3268d343ef51bb863f82678d6ffdc18",
+        "517c8ebdfce92b3dae6601c2acb012f1fb4c867af73c1143bb65fbe00d1665f1e",
+        "6951cac38a7d2f5aef5cbbc444250d75a32bd280d3f4fc1524e08c1403cd13eac",
+        "a7420f294b8bc69c285f9cf6045be16b61582721e9cd35ff154f108b99d99427",
+        "dcef4fb96d0425b72a34a67c3e394cf500cc680231d0799138930270e9af3a43",
+        "5f534a1590932b350045fd2be2fe5edfaa4303e5e61474dcdbbdfda72666dc5f0",
+        "6df24270a0f4b0fa473bfc5bff551dfa8a7396e7eaebbd86e2ed6bc78b01d7f50",
+        "b8532f025e52f181c3f02030100010282010100aabd93ba108469a69c3f8a72af",
+        "b536ac83930ee7a62c69fac8361ebc546fa3e2ea9bd123e6eedf0a23fb75d9d14",
+        "9c347f323750ffa4f5624f4d428e089d28a8f16892c950ded8b415d2bbb7b717",
+        "07b088b367e70746a3fa75e75dab38b8a7da4c4da264f52e8f5dc3e92b30bdc4d",
+        "75e8f91056912e35d02e0c747a9bf79c2d793a926106a555135dde1a1d8d9447",
+        "3618d23ae4076c80b148fa2be89275bee58f9fa519c090d85188d8e480eaf348",
+        "d85322c33e021b3a54cbd65d7c6ab50fb47db9e2ef3444185c4f5fc1a10e28f7a",
+        "8645d8d832f82b34ca6c929d1ed2f27b52c29cae964a9b840e7f4f4237210c2d6",
+        "6a748a06dffdc8ee57003c0aa7d465100902818100e948a3994b9f54b7978bd5f7",
+        "df9c0f292a525eb9921f229099494ff96766c39e3b7375cfb7d9e754fa5b5fecd",
+        "0326882a025b2c3700dfaaf64ea12afa2963d7699107b663402cd6246c5945c71",
+        "a702afa9e370a856ca242de71bda4111cace5ff85c25d0720e46eef76c2a2f4d4",
+        "c5f31ace935ef9550e25e9ad379b0707a84eb02818100c720021e41f47d41319c",
+        "34b4fe88cc1d0b5bf72224265fbc2ca5b49936ba4a604b547434b188cf1eba092",
+        "3b71d55bb56ff0f65189f8a7a21b0d08a73bb84989f36beb562f09c05bfb723a1",
+        "467f0de7becbde5384357f2778f82a750854500134cabc54ea036aaa3ab7ab2d0",
+        "e4d3ee7ecab4f403a38f09e9135dbb1401c5840fd02818100a55d105b01f8179d",
+        "6c977b3d120d15d22065f32fa81cd9eb963d19abb95867222b125558c1027db10",
+        "726ee8077b4c3d094a5246ad56b935ff130dbbe148a5b574e791880022e5a5867",
+        "c276c070efea3f8b35e60dee37ac1dbdcd48910783b376e41eadcf6c8a224e12a",
+        "561e1d5f165295960971315cd1829e7a6308499b6bfb10281803751c624dfcfeb",
+        "88541f006994192f1396974b161a12eb1fdd0b801bdc9f6e9047fd43776c2704d",
+        "b95757a8da1c1b2951db10a360804b19f707ecf280ddd6d8535f14f751841503b",
+        "8dc681449381aa73503208e3bef4ff6355167e82fce16924607a67e0c76837b8a",
+        "e5408e5634269ae4f7d69eb82ec1e315b54186f2630c28502818100e71d44d3c8",
+        "6df4ec057ad49cf51a67414ac910c02be44a18ed5ffd57d81ec9bf3c6e8104d56",
+        "11b49238385f7da7a21dd255279a03fdaa11df0dd690df3fb70ee8f9ca810e2cf",
+        "cb45e74691732372a68e9cc7a17c9d2f04ba82975b316e9834817536e03d6f076",
+        "8e5d61e47420aeaf3763a8fe91bd8214e9ab0e6fc1f61732eb7",
+    );
 
-    /// Generate a real key for tests that require sign+verify (uses `rsa` keygen).
-    #[cfg(feature = "keygen")]
-    fn generate_test_keypair() -> RsaKeyPair {
-        RsaKeyPair::generate_with_bits(2048).expect("keygen failed")
+    /// Decode the fixed test key pair from the baked PKCS#1 DER vector.
+    fn test_keypair() -> RsaKeyPair {
+        let der = hex::decode(TEST_RSA_PKCS1_DER_HEX).expect("test key hex is valid");
+        RsaKeyPair::from_pkcs1_der(&der).expect("test key DER is valid")
     }
 
     // ── keygen tests (require `keygen` feature) ──
@@ -356,7 +402,7 @@ mod tests {
     #[test]
     #[cfg(feature = "keygen")]
     fn test_generate_rsa_keypair_2048() {
-        let kp = generate_test_keypair();
+        let kp = RsaKeyPair::generate_with_bits(2048).expect("keygen failed");
         let der = kp.to_pkcs1_der().expect("export failed");
         assert!(!der.is_empty());
     }
@@ -367,10 +413,11 @@ mod tests {
         assert!(RsaKeyPair::generate_with_bits(1024).is_err());
     }
 
+    // ── sign/verify tests (pure-Rust, no keygen needed) ──
+
     #[test]
-    #[cfg(feature = "keygen")]
     fn test_rsa_public_key_jwk() {
-        let kp = generate_test_keypair();
+        let kp = test_keypair();
         let jwk = kp.public_key_jwk().expect("jwk failed");
         assert_eq!(jwk["kty"], "RSA");
         assert_eq!(jwk["alg"], "RS256");
@@ -378,10 +425,11 @@ mod tests {
         assert!(jwk["e"].is_string());
     }
 
+    /// Core migration proof: sign with the pure-Rust `rsa` signer and verify
+    /// through the migrated verifier (JWK path) — a full round-trip.
     #[test]
-    #[cfg(feature = "keygen")]
     fn test_rs256_sign_verify() {
-        let kp = generate_test_keypair();
+        let kp = test_keypair();
         let jwk = kp.public_key_jwk().expect("jwk failed");
         let signer = Rs256Signer::new(kp, Some("test-key"));
         let message = b"Hello, RS256!";
@@ -391,13 +439,25 @@ mod tests {
 
         let verifier = Rs256Verifier::from_jwk(&jwk).expect("verifier failed");
         let valid = verifier.verify(message, &signature).expect("verify failed");
-        assert!(valid);
+        assert!(valid, "RSASSA-PKCS1-v1_5 signature must verify");
+    }
+
+    /// RSASSA-PKCS1-v1_5 is deterministic: signing the same message twice with
+    /// the same key yields identical bytes (a stable known-answer property).
+    #[test]
+    fn test_rs256_signature_is_deterministic() {
+        let kp = test_keypair();
+        let signer = Rs256Signer::new(kp, None);
+        let sig1 = signer.sign(b"deterministic").expect("sign failed");
+        let sig2 = signer.sign(b"deterministic").expect("sign failed");
+        assert_eq!(sig1, sig2, "PKCS#1 v1.5 signatures must be deterministic");
+        // 2048-bit modulus → 256-byte signature.
+        assert_eq!(sig1.len(), 256);
     }
 
     #[test]
-    #[cfg(feature = "keygen")]
     fn test_rs256_sign_verify_wrong_message() {
-        let kp = generate_test_keypair();
+        let kp = test_keypair();
         let jwk = kp.public_key_jwk().expect("jwk failed");
         let signer = Rs256Signer::new(kp, None);
         let signature = signer.sign(b"original").expect("sign failed");
@@ -410,24 +470,17 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "keygen")]
-    #[ignore = "RSA double-keygen is too slow under CI load"]
-    fn test_rs256_sign_verify_wrong_key() {
-        let kp1 = generate_test_keypair();
-        let kp2 = generate_test_keypair();
-        let jwk2 = kp2.public_key_jwk().expect("jwk failed");
-        let signer = Rs256Signer::new(kp1, None);
-        let signature = signer.sign(b"test").expect("sign failed");
-
-        let verifier = Rs256Verifier::from_jwk(&jwk2).expect("verifier failed");
-        let valid = verifier.verify(b"test", &signature).expect("verify failed");
-        assert!(!valid);
+    fn test_rs256_verify_rejects_garbage_signature() {
+        let kp = test_keypair();
+        let jwk = kp.public_key_jwk().expect("jwk failed");
+        let verifier = Rs256Verifier::from_jwk(&jwk).expect("verifier failed");
+        // Too-short signature must be rejected gracefully (not error out).
+        assert!(!verifier.verify(b"msg", &[0u8; 4]).expect("verify failed"));
     }
 
     #[test]
-    #[cfg(feature = "keygen")]
     fn test_rs256_jws_sign_verify() {
-        let kp = generate_test_keypair();
+        let kp = test_keypair();
         let jwk = kp.public_key_jwk().expect("jwk failed");
         let signer = Rs256Signer::new(kp, Some("key-1"));
         let payload = b"jwt-payload";
@@ -441,9 +494,8 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "keygen")]
     fn test_rs256_from_pkcs1_der_roundtrip() {
-        let kp = generate_test_keypair();
+        let kp = test_keypair();
         let der = kp.to_pkcs1_der().expect("export failed");
         let kp2 = RsaKeyPair::from_pkcs1_der(&der).expect("import failed");
 
@@ -453,10 +505,11 @@ mod tests {
         assert_eq!(jwk1["e"], jwk2["e"]);
     }
 
+    /// Public-key PKCS#1 DER export must round-trip through the verifier's
+    /// `from_pkcs1_der`, proving the preserved on-wire public-key encoding.
     #[test]
-    #[cfg(feature = "keygen")]
     fn test_rsa_pkcs1_public_key_der() {
-        let kp = generate_test_keypair();
+        let kp = test_keypair();
         let pub_der = kp.public_key_pkcs1_der().expect("pub_der failed");
         assert!(!pub_der.is_empty());
 
@@ -467,7 +520,24 @@ mod tests {
         assert!(valid);
     }
 
-    // ── JWK-parsing tests (do NOT require keygen) ──
+    /// Interop check: a signature produced by the signer verifies against a
+    /// verifier built from the JWK, AND against one built from the PKCS#1 DER
+    /// public key — both encodings describe the same key.
+    #[test]
+    fn test_rs256_jwk_and_der_verifiers_agree() {
+        let kp = test_keypair();
+        let jwk = kp.public_key_jwk().expect("jwk failed");
+        let pub_der = kp.public_key_pkcs1_der().expect("pub_der failed");
+        let signer = Rs256Signer::new(kp, None);
+        let sig = signer.sign(b"interop").expect("sign failed");
+
+        let v_jwk = Rs256Verifier::from_jwk(&jwk).expect("jwk verifier failed");
+        let v_der = Rs256Verifier::from_pkcs1_der(&pub_der).expect("der verifier failed");
+        assert!(v_jwk.verify(b"interop", &sig).expect("verify failed"));
+        assert!(v_der.verify(b"interop", &sig).expect("verify failed"));
+    }
+
+    // ── JWK-parsing tests ──
 
     #[test]
     fn test_rs256_from_jwk_invalid_kty() {
@@ -491,7 +561,7 @@ mod tests {
     #[test]
     fn test_encode_der_integer_zero() {
         // zero value: one byte [0x00]
-        let enc = encode_der_integer(&[0x00]);
+        let enc = encode_der_integer(&[0x00]).expect("encode failed");
         // INTEGER, length=1, value=0x00
         assert_eq!(enc, vec![0x02, 0x01, 0x00]);
     }
@@ -499,7 +569,7 @@ mod tests {
     #[test]
     fn test_encode_der_integer_high_bit() {
         // value with high bit set must get a 0x00 prefix
-        let enc = encode_der_integer(&[0xFF]);
+        let enc = encode_der_integer(&[0xFF]).expect("encode failed");
         // INTEGER, length=2, value=0x00 0xFF
         assert_eq!(enc, vec![0x02, 0x02, 0x00, 0xFF]);
     }
@@ -507,7 +577,7 @@ mod tests {
     #[test]
     fn test_encode_der_integer_no_high_bit() {
         // value without high bit set needs no prefix
-        let enc = encode_der_integer(&[0x7F]);
+        let enc = encode_der_integer(&[0x7F]).expect("encode failed");
         assert_eq!(enc, vec![0x02, 0x01, 0x7F]);
     }
 

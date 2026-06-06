@@ -309,30 +309,18 @@ impl CompressionStrategy {
             .map_err(|e| ClusterError::Compression(format!("Zstd decompression failed: {e}")))
     }
 
-    // LZMA implementation using xz2
+    // LZMA implementation using oxiarc-lzma (Pure Rust, replaces xz2/lzma-sys).
+    // Uses the self-describing LZMA stream (header carries props + dict size +
+    // uncompressed length), so `compress_bytes`/`decompress_bytes` round-trip
+    // without the caller tracking the original size.
     fn compress_lzma(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use std::io::Write;
-        use xz2::write::XzEncoder;
-
-        let mut encoder = XzEncoder::new(Vec::new(), 6);
-        encoder
-            .write_all(data)
-            .map_err(|e| ClusterError::Compression(format!("LZMA compression failed: {e}")))?;
-        encoder
-            .finish()
+        oxiarc_lzma::compress_bytes(data)
             .map_err(|e| ClusterError::Compression(format!("LZMA compression failed: {e}")))
     }
 
     fn decompress_lzma(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use std::io::Read;
-        use xz2::read::XzDecoder;
-
-        let mut decoder = XzDecoder::new(data);
-        let mut result = Vec::new();
-        decoder
-            .read_to_end(&mut result)
-            .map_err(|e| ClusterError::Compression(format!("LZMA decompression failed: {e}")))?;
-        Ok(result)
+        oxiarc_lzma::decompress_bytes(data)
+            .map_err(|e| ClusterError::Compression(format!("LZMA decompression failed: {e}")))
     }
 
     /// Get compression metrics
@@ -472,6 +460,36 @@ mod tests {
             .decompress(&compressed)
             .expect("Decompression failed");
         assert_eq!(decompressed, original);
+    }
+
+    // Exercises the Pure Rust oxiarc-lzma path on small/edge-case inputs that
+    // hit different LZMA-stream header branches than the large repetitive case
+    // in `test_lzma_round_trip`.
+    #[test]
+    fn test_lzma_round_trip_small_and_edge_inputs() {
+        let config = CompressionConfig {
+            default_algorithm: Algorithm::Lzma,
+            auto_select: false,
+            compression_threshold_bytes: 0,
+        };
+        let strategy = CompressionStrategy::new(config);
+
+        let cases: &[&[u8]] = &[b"", b"a", b"abc", b"The quick brown fox.", &[0xABu8; 33]];
+        for original in cases {
+            let compressed = strategy
+                .compress(original)
+                .expect("LZMA compression failed");
+            assert_eq!(compressed.algorithm, Algorithm::Lzma);
+            let decompressed = strategy
+                .decompress(&compressed)
+                .expect("LZMA decompression failed");
+            assert_eq!(
+                decompressed.as_slice(),
+                *original,
+                "LZMA round-trip failed for {}-byte input",
+                original.len()
+            );
+        }
     }
 
     #[test]

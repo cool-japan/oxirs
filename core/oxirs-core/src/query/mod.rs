@@ -24,6 +24,15 @@ pub mod query_plan_visualizer;
 pub mod query_profiler;
 pub mod result_cache;
 pub mod sparql_algebra;
+pub mod sparql_algebra_ops;
+#[cfg(test)]
+mod sparql_algebra_tests;
+pub mod sparql_algebra_transform;
+pub mod sparql_algebra_types;
+pub mod sparql_algebra_types_expr;
+pub mod sparql_algebra_types_paths;
+pub mod sparql_algebra_types_pattern;
+pub mod sparql_algebra_types_terms;
 pub mod sparql_query;
 pub mod statistics;
 pub mod streaming_results;

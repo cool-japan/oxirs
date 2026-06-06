@@ -6,7 +6,6 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{Cursor, Read, Write};
 use std::time::{Duration, Instant};
 
 /// Compression algorithms supported by the serialization layer
@@ -240,14 +239,9 @@ impl MessageSerializer {
                     (compressed, CompressionAlgorithm::Zstd)
                 }
                 CompressionAlgorithm::Deflate => {
-                    use flate2::write::DeflateEncoder;
-                    use flate2::Compression;
-                    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
-                    encoder
-                        .write_all(&serialized_data)
-                        .map_err(|e| anyhow!("Deflate compression failed: {}", e))?;
-                    let compressed = encoder
-                        .finish()
+                    // Raw DEFLATE stream (no zlib/gzip wrapper) at the default
+                    // compression level (6) to match the previous flate2 output.
+                    let compressed = oxiarc_deflate::deflate(&serialized_data, 6)
                         .map_err(|e| anyhow!("Deflate compression failed: {}", e))?;
                     (compressed, CompressionAlgorithm::Deflate)
                 }
@@ -351,15 +345,8 @@ impl MessageSerializer {
             .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?,
             CompressionAlgorithm::Zstd => oxiarc_zstd::decode_all(&message.payload)
                 .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?,
-            CompressionAlgorithm::Deflate => {
-                use flate2::read::DeflateDecoder;
-                let mut decoder = DeflateDecoder::new(Cursor::new(&message.payload));
-                let mut decompressed = Vec::new();
-                decoder
-                    .read_to_end(&mut decompressed)
-                    .map_err(|e| anyhow!("Deflate decompression failed: {}", e))?;
-                decompressed
-            }
+            CompressionAlgorithm::Deflate => oxiarc_deflate::inflate(&message.payload)
+                .map_err(|e| anyhow!("Deflate decompression failed: {}", e))?,
         };
 
         if self.config.enable_metrics {
@@ -605,18 +592,9 @@ impl AdaptiveCompression {
             CompressionAlgorithm::Zstd => oxiarc_zstd::encode_all(data, 3)
                 .map_err(|e| anyhow!("Zstd benchmark failed: {}", e))?
                 .len(),
-            CompressionAlgorithm::Deflate => {
-                use flate2::write::DeflateEncoder;
-                use flate2::Compression;
-                let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
-                encoder
-                    .write_all(data)
-                    .map_err(|e| anyhow!("Deflate benchmark failed: {}", e))?;
-                encoder
-                    .finish()
-                    .map_err(|e| anyhow!("Deflate benchmark failed: {}", e))?
-                    .len()
-            }
+            CompressionAlgorithm::Deflate => oxiarc_deflate::deflate(data, 6)
+                .map_err(|e| anyhow!("Deflate benchmark failed: {}", e))?
+                .len(),
         };
 
         let compression_time = start_time.elapsed();

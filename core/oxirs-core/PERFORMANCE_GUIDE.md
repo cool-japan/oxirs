@@ -1,6 +1,6 @@
 # OxiRS Core - Performance Optimization Guide
 
-*Version: v0.1.0 | Last Updated: January 7, 2026*
+*Version: 0.3.1 | Last Updated: 2026-06-06*
 
 ## Table of Contents
 

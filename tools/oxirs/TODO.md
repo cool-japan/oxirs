@@ -1,10 +1,10 @@
 # OxiRS CLI - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Current Status
 
-OxiRS CLI v0.2.3 is production-ready with comprehensive SPARQL support, interactive REPL, and complete RDF management capabilities.
+OxiRS CLI v0.3.1 is production-ready with comprehensive SPARQL support, interactive REPL, and complete RDF management capabilities.
 
 ### Production Features
 - ✅ Complete SPARQL 1.1/1.2 query execution
@@ -41,8 +41,8 @@ OxiRS CLI v0.2.3 is production-ready with comprehensive SPARQL support, interact
 - ✅ 1615 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features and support (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features and support (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Complete Jena/Fuseki parity verification (CLI side) (completed 2026-04-30)
   - **Goal:** Verify behavioral parity between OxiRS CLI tools and the Jena `riot`/`sparql`/`tdb2.tdbquery`/`shacl` CLI tools over a defined request matrix and fix any gaps surfaced.
   - **Design:** Built parity matrix in `tests/jena_cli_parity.rs` (driver + 17 tests including 11 self-tests + matrix walker). 44 fixtures cover the parser tools `q-parse`/`u-parse` (8), the Jena `arq` equivalent and `query` against initialised datasets (5), `riot`/`rdf-copy`/`rdf-parse`/`rdf-diff` for conversion (12), `shacl` (5), `tdb-stats`/`tdb-query` (7), and utilities `lang-tag`/`iri`/`www-enc`/`www-dec` (7). Each fixture is a TOML manifest pinning argv, stdin, exit code, and per-stream contract (`exact` / `contains` / `regex` / `absent`). Per-fixture `${TMPDIR}` and `${FIXTURE}` substitution + optional `setup = [argv...]` for fixtures that need an initialised TDB store. Spec-required mismatches FAIL the matrix; impl-detail mismatches print warnings.
@@ -58,4 +58,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines on how to contribute
 
 ---
 
-*OxiRS CLI v0.2.3 - Production-ready semantic web toolkit*
+*OxiRS CLI v0.3.1 - Production-ready semantic web toolkit*

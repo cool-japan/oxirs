@@ -27,6 +27,9 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install the Pure Rust crypto provider as the process default (idempotent).
+    let _ = rustls::crypto::CryptoProvider::install_default((*oxitls::pure_provider()).clone());
+
     tracing_subscriber::fmt::init();
 
     let args = Args::parse();

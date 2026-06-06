@@ -115,7 +115,7 @@ fn main() -> Result<()> {
 
     let start_time = Instant::now();
 
-    let result = match matches.get_one::<String>("mode").unwrap().as_str() {
+    let result = match matches.get_one::<String>("mode").expect("mode has a default value").as_str() {
         "full" => run_full_benchmarks(&matches),
         "quick" => run_quick_benchmarks(&matches),
         "category" => run_category_benchmarks(&matches),
@@ -131,7 +131,7 @@ fn main() -> Result<()> {
             println!("\n✅ Benchmark suite completed successfully!");
             println!("📊 Total comparisons: {}", comparison_count);
             println!("⏱️  Total time: {:.2} seconds", total_time.as_secs_f64());
-            println!("📁 Results saved to: {}", matches.get_one::<String>("output-dir").unwrap());
+            println!("📁 Results saved to: {}", matches.get_one::<String>("output-dir").expect("output-dir has a default value"));
 
             println!("\n📋 Next steps:");
             println!("   1. Review the generated HTML report: benchmark_report.html");
@@ -191,18 +191,18 @@ fn run_category_benchmarks(matches: &ArgMatches) -> Result<usize> {
 }
 
 fn build_config(matches: &ArgMatches) -> Result<ComprehensiveBenchmarkConfig> {
-    let runs: usize = matches.get_one::<String>("runs").unwrap().parse()
+    let runs: usize = matches.get_one::<String>("runs").expect("runs has a default value").parse()
         .context("Invalid runs count")?;
-    let warmup: usize = matches.get_one::<String>("warmup").unwrap().parse()
+    let warmup: usize = matches.get_one::<String>("warmup").expect("warmup has a default value").parse()
         .context("Invalid warmup count")?;
-    let timeout: u64 = matches.get_one::<String>("timeout").unwrap().parse()
+    let timeout: u64 = matches.get_one::<String>("timeout").expect("timeout has a default value").parse()
         .context("Invalid timeout")?;
-    let seed: u64 = matches.get_one::<String>("seed").unwrap().parse()
+    let seed: u64 = matches.get_one::<String>("seed").expect("seed has a default value").parse()
         .context("Invalid seed")?;
 
-    let jena_path = PathBuf::from(matches.get_one::<String>("jena-path").unwrap());
-    let datasets_path = PathBuf::from(matches.get_one::<String>("datasets-path").unwrap());
-    let output_dir = PathBuf::from(matches.get_one::<String>("output-dir").unwrap());
+    let jena_path = PathBuf::from(matches.get_one::<String>("jena-path").expect("jena-path has a default value"));
+    let datasets_path = PathBuf::from(matches.get_one::<String>("datasets-path").expect("datasets-path has a default value"));
+    let output_dir = PathBuf::from(matches.get_one::<String>("output-dir").expect("output-dir has a default value"));
 
     Ok(ComprehensiveBenchmarkConfig {
         warmup_runs: warmup,

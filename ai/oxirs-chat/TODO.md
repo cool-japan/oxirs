@@ -1,6 +1,6 @@
 # OxiRS Chat - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready (Experimental)
 
@@ -71,8 +71,8 @@
 - [x] Web-based chat UI components — Tauri 2.x desktop app, desktop/oxirs-tauri/, chat.html (completed 2026-05-02)
 - [x] Visual query builder UI — Tauri 2.x SVG-based SPARQL visual editor, desktop/ui/query_builder.html (completed 2026-05-02)
 - [x] Enterprise SSO integration — OIDC + SAML-SP (completed 2026-05-01)
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive documentation (planned 2026-05-01)
   - **Goal:** Top-level rustdoc + admin/user-facing tutorial covering session
     lifecycle, query routing, RAG retrieval path, LLM call paths. Two worked
@@ -108,6 +108,6 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 - [ ] Web chat UI components — OVERSIZED: requires a new frontend subcrate. Defer until UI strategy is decided (Tauri? Yew? Leptos? web-only?).
 - [x] Visual query builder UI — implemented: SVG canvas with drag-and-drop triple patterns, filter nodes, SPARQL generation/validation, example loader. desktop/ui/query_builder.html + desktop/oxirs-tauri/src/query_builder.rs (completed 2026-05-02).
 - [x] Enterprise SSO — OIDC + SAML-SP implemented in `src/sso/` (oidc.rs, saml_sp.rs, session.rs + SsoManagerConfig refactor).
-- [~] Long-term support guarantees — RFC published at `docs/policies/lts.md`.
-- [~] Enterprise features — decomposed in `docs/policies/enterprise.md`.
+- [x] Long-term support guarantees — RFC published at `docs/policies/lts.md`. (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features — decomposed in `docs/policies/enterprise.md`. (completed 2026-05-17 via RFC-002)
 - [x] Model marketplace integration — implemented: HuggingFace Hub (offline catalogue), Ollama (local server), local GGUF filesystem registry.

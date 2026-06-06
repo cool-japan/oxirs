@@ -224,6 +224,9 @@ impl<'a> QueryExecutor<'a> {
             }
             SubjectPattern::NamedNode(n) => matches!(subject, Subject::NamedNode(nn) if nn == n),
             SubjectPattern::BlankNode(b) => matches!(subject, Subject::BlankNode(bn) if bn == b),
+            // A quoted-triple pattern matches any quoted-triple subject; variable binding
+            // refinement for the inner triple is handled at a higher level.
+            SubjectPattern::QuotedTriple(_) => matches!(subject, Subject::QuotedTriple(_)),
         }
     }
 
@@ -280,6 +283,8 @@ impl<'a> QueryExecutor<'a> {
             ObjectPattern::NamedNode(n) => matches!(object, Object::NamedNode(nn) if nn == n),
             ObjectPattern::BlankNode(b) => matches!(object, Object::BlankNode(bn) if bn == b),
             ObjectPattern::Literal(l) => matches!(object, Object::Literal(lit) if lit == l),
+            // A quoted-triple pattern matches any quoted-triple object.
+            ObjectPattern::QuotedTriple(_) => matches!(object, Object::QuotedTriple(_)),
         }
     }
 

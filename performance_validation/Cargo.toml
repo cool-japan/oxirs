@@ -8,10 +8,11 @@ authors.workspace = true
 description = "Revolutionary performance validation and benchmarking suite for OxiRS"
 keywords = ["performance", "benchmarking", "validation", "testing", "profiling"]
 categories = ["development-tools", "database"]
+publish = false
 
 [dependencies]
 # SciRS2 Core Dependencies (Full Usage - MANDATORY)
-scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
+scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling", "memory_management", "ml_pipeline"] }
 scirs2-graph = { workspace = true }
 scirs2-linalg = { workspace = true }
 scirs2-stats = { workspace = true }
@@ -33,6 +34,14 @@ toml = { workspace = true }
 # Logging and Tracing
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+
+# Random number generation (direct usage in benchmark files)
+rand = { workspace = true }
+rand_distr = { workspace = true }
+num_cpus = { workspace = true }
+clap = { workspace = true }
 
 # Time Handling
 chrono = { workspace = true, features = ["serde"] }
@@ -42,23 +51,17 @@ tempfile = { workspace = true }
 proptest = { workspace = true }
 criterion = { workspace = true, features = ["html_reports"] }
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cuda", "opencl"))'] }
+
 [features]
 default = ["quantum", "gpu", "distributed", "ml"]
-quantum = ["scirs2-core/quantum"]
+quantum = []
 gpu = ["scirs2-core/gpu"]
-distributed = ["scirs2-cluster/distributed"]
-ml = ["scirs2-neural/ml"]
-cosmic-scale = ["scirs2-core/cosmic"]
+distributed = []
+ml = []
+cosmic-scale = []
 
-[profile.release]
-opt-level = 3
-debug = false
-strip = true
-lto = true
-codegen-units = 1
-panic = "abort"
-
-[profile.bench]
-opt-level = 3
-debug = true
-lto = true
+# NOTE: Profiles are intentionally NOT declared here. Cargo ignores `[profile.*]`
+# sections in non-root workspace members (and emits a warning for them), so all
+# build profiles are configured once at the workspace root Cargo.toml.

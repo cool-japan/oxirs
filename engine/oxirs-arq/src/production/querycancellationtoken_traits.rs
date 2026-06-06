@@ -9,7 +9,7 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use super::types::QueryCancellationToken;
+use super::types_query::QueryCancellationToken;
 
 impl Default for QueryCancellationToken {
     fn default() -> Self {

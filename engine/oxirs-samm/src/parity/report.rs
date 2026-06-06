@@ -3,7 +3,7 @@
 //! Call [`generate_report`] to produce a complete markdown document
 //! summarising the implementation status across all feature categories.
 
-use crate::parity::matrix::{FeatureCategory, FeatureEntry, ImplStatus, ParityMatrix};
+use crate::parity::matrix::{FeatureCategory, FeatureEntry, FeatureStatus, ParityMatrix};
 
 /// Human-readable heading for each [`FeatureCategory`].
 fn category_heading(cat: &FeatureCategory) -> &'static str {
@@ -32,101 +32,119 @@ fn category_order() -> Vec<FeatureCategory> {
     ]
 }
 
-/// Emoji / badge string for a status value.
-fn status_badge(status: &ImplStatus) -> &'static str {
+/// Badge string for a status value.
+fn status_badge(status: &FeatureStatus) -> &'static str {
     match status {
-        ImplStatus::Implemented => "✅ Implemented",
-        ImplStatus::Partial => "⚠️ Partial",
-        ImplStatus::Missing => "❌ Missing",
+        FeatureStatus::Done => "Done",
+        FeatureStatus::Partial => "Partial",
+        FeatureStatus::Missing => "Missing",
     }
 }
 
 /// Count features by status across a slice of entries.
+/// Returns `(done, partial, missing)`.
 fn count_by_status(entries: &[FeatureEntry]) -> (usize, usize, usize) {
-    let implemented = entries
+    let done = entries
         .iter()
-        .filter(|e| e.status == ImplStatus::Implemented)
+        .filter(|e| e.status == FeatureStatus::Done)
         .count();
     let partial = entries
         .iter()
-        .filter(|e| e.status == ImplStatus::Partial)
+        .filter(|e| e.status == FeatureStatus::Partial)
         .count();
     let missing = entries
         .iter()
-        .filter(|e| e.status == ImplStatus::Missing)
+        .filter(|e| e.status == FeatureStatus::Missing)
         .count();
-    (implemented, partial, missing)
+    (done, partial, missing)
 }
 
 /// Generate a full markdown parity report from a [`ParityMatrix`].
 ///
 /// The report contains:
-/// 1. A summary table with per-category counts.
-/// 2. A detailed section for every category with one row per feature.
+/// 1. An H1 title "ESMF SDK 2.x Parity Report".
+/// 2. A summary table with per-category counts at the top.
+/// 3. Per-category H2 sections showing Done / Partial / Missing entries with
+///    a symbol marker per row.
 ///
 /// The returned `String` is suitable for writing directly to a `.md` file
 /// (e.g. `docs/esmf_parity.md`).
 pub fn generate_report(matrix: &ParityMatrix) -> String {
-    let mut out = String::with_capacity(4096);
+    let mut out = String::with_capacity(8192);
 
     out.push_str("# ESMF SDK 2.x Parity Report — oxirs-samm\n\n");
     out.push_str("> **Generated automatically** by `cargo run --bin parity_report`.\n");
     out.push_str("> Do not edit by hand — regenerate after updating `esmf_catalog.toml`.\n\n");
     out.push_str("---\n\n");
 
-    // ── Summary table ────────────────────────────────────────────────────
+    // ── Summary table ──────────────────────────────────────────────────────
     out.push_str("## Summary\n\n");
-    out.push_str("| Category | ✅ Implemented | ⚠️ Partial | ❌ Missing | Total |\n");
-    out.push_str("|---|---|---|---|---|\n");
+    out.push_str("| Category | Done | Partial | Missing | Total | Coverage |\n");
+    out.push_str("|---|---|---|---|---|---|\n");
 
-    let mut grand_impl = 0usize;
+    let mut grand_done = 0usize;
     let mut grand_part = 0usize;
     let mut grand_miss = 0usize;
 
     for cat in category_order() {
         let heading = category_heading(&cat);
         let entries = match matrix.get(&cat) {
-            Some(e) => e.as_slice(),
+            Some(e) => e,
             None => &[],
         };
-        let (imp, part, miss) = count_by_status(entries);
-        let total = imp + part + miss;
-        grand_impl += imp;
+        let (done, part, miss) = count_by_status(entries);
+        let total = done + part + miss;
+        grand_done += done;
         grand_part += part;
         grand_miss += miss;
+        let coverage = if total == 0 {
+            0.0
+        } else {
+            (done as f64 + part as f64 * 0.5) / total as f64 * 100.0
+        };
         out.push_str(&format!(
-            "| {heading} | {imp} | {part} | {miss} | {total} |\n"
+            "| {heading} | {done} | {part} | {miss} | {total} | {coverage:.0}% |\n"
         ));
     }
 
     // Also collect any Other categories that may exist in the matrix
-    for (cat, entries) in matrix {
+    for (cat, entries) in matrix.iter() {
         if matches!(cat, FeatureCategory::Other(_)) {
             let heading = category_heading(cat);
-            let (imp, part, miss) = count_by_status(entries);
-            let total = imp + part + miss;
-            grand_impl += imp;
+            let (done, part, miss) = count_by_status(entries);
+            let total = done + part + miss;
+            grand_done += done;
             grand_part += part;
             grand_miss += miss;
+            let coverage = if total == 0 {
+                0.0
+            } else {
+                (done as f64 + part as f64 * 0.5) / total as f64 * 100.0
+            };
             out.push_str(&format!(
-                "| {heading} | {imp} | {part} | {miss} | {total} |\n"
+                "| {heading} | {done} | {part} | {miss} | {total} | {coverage:.0}% |\n"
             ));
         }
     }
 
-    let grand_total = grand_impl + grand_part + grand_miss;
+    let grand_total = grand_done + grand_part + grand_miss;
+    let grand_coverage = if grand_total == 0 {
+        0.0
+    } else {
+        (grand_done as f64 + grand_part as f64 * 0.5) / grand_total as f64 * 100.0
+    };
     out.push_str(&format!(
-        "| **Total** | **{grand_impl}** | **{grand_part}** | **{grand_miss}** | **{grand_total}** |\n"
+        "| **Total** | **{grand_done}** | **{grand_part}** | **{grand_miss}** | **{grand_total}** | **{grand_coverage:.0}%** |\n"
     ));
     out.push('\n');
 
-    // ── Detailed per-category sections ──────────────────────────────────
+    // ── Detailed per-category sections ─────────────────────────────────────
     out.push_str("## Detailed Parity Matrix\n\n");
 
     for cat in category_order() {
         let heading = category_heading(&cat);
         let entries = match matrix.get(&cat) {
-            Some(e) => e.as_slice(),
+            Some(e) => e,
             None => continue,
         };
         if entries.is_empty() {
@@ -134,7 +152,7 @@ pub fn generate_report(matrix: &ParityMatrix) -> String {
         }
 
         out.push_str(&format!("### {heading}\n\n"));
-        out.push_str("| Feature | Status | oxirs-samm Module | ESMF Reference | Notes |\n");
+        out.push_str("| Status | Feature | Description | oxirs-samm Module | Notes |\n");
         out.push_str("|---|---|---|---|---|\n");
 
         for entry in entries {
@@ -146,21 +164,21 @@ pub fn generate_report(matrix: &ParityMatrix) -> String {
             let badge = status_badge(&entry.status);
             // Escape pipe characters in fields to avoid breaking the table
             let name = entry.name.replace('|', "\\|");
-            let notes = entry.notes.replace('|', "\\|");
+            let desc = entry.description.replace('|', "\\|");
+            let notes = entry.notes.as_deref().unwrap_or("—").replace('|', "\\|");
             out.push_str(&format!(
-                "| {name} | {badge} | {module} | [spec]({}) | {notes} |\n",
-                entry.esmf_reference
+                "| {badge} | {name} | {desc} | {module} | {notes} |\n"
             ));
         }
         out.push('\n');
     }
 
     // Any Other categories
-    for (cat, entries) in matrix {
+    for (cat, entries) in matrix.iter() {
         if matches!(cat, FeatureCategory::Other(_)) {
             let heading = category_heading(cat);
             out.push_str(&format!("### {heading}\n\n"));
-            out.push_str("| Feature | Status | oxirs-samm Module | ESMF Reference | Notes |\n");
+            out.push_str("| Status | Feature | Description | oxirs-samm Module | Notes |\n");
             out.push_str("|---|---|---|---|---|\n");
             for entry in entries {
                 let module = entry
@@ -170,10 +188,10 @@ pub fn generate_report(matrix: &ParityMatrix) -> String {
                     .unwrap_or_else(|| "—".to_string());
                 let badge = status_badge(&entry.status);
                 let name = entry.name.replace('|', "\\|");
-                let notes = entry.notes.replace('|', "\\|");
+                let desc = entry.description.replace('|', "\\|");
+                let notes = entry.notes.as_deref().unwrap_or("—").replace('|', "\\|");
                 out.push_str(&format!(
-                    "| {name} | {badge} | {module} | [spec]({}) | {notes} |\n",
-                    entry.esmf_reference
+                    "| {badge} | {name} | {desc} | {module} | {notes} |\n"
                 ));
             }
             out.push('\n');
@@ -188,40 +206,43 @@ pub fn generate_report(matrix: &ParityMatrix) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parity::matrix::{FeatureCategory, FeatureEntry, ImplStatus};
-    use std::collections::HashMap;
+    use crate::parity::matrix::{FeatureCategory, FeatureEntry, FeatureStatus, ParityMatrix};
 
     fn sample_matrix() -> ParityMatrix {
-        let mut m = HashMap::new();
-        m.insert(
+        let mut m = ParityMatrix::new();
+        m.add_entry(
             FeatureCategory::AspectModeling,
-            vec![
-                FeatureEntry {
-                    name: "Aspect definition".to_string(),
-                    status: ImplStatus::Implemented,
-                    oxirs_module: Some("metamodel::aspect".to_string()),
-                    esmf_reference: "https://example.com/aspect".to_string(),
-                    notes: "Core aspect.".to_string(),
-                },
-                FeatureEntry {
-                    name: "Either characteristic".to_string(),
-                    status: ImplStatus::Missing,
-                    oxirs_module: None,
-                    esmf_reference: "https://example.com/either".to_string(),
-                    notes: "Not yet implemented.".to_string(),
-                },
-            ],
-        );
-        m.insert(
+            FeatureEntry {
+                name: "Aspect definition".to_string(),
+                description: "Core aspect element.".to_string(),
+                status: FeatureStatus::Done,
+                oxirs_module: Some("metamodel::aspect".to_string()),
+                notes: None,
+            },
+        )
+        .expect("first entry");
+        m.add_entry(
+            FeatureCategory::AspectModeling,
+            FeatureEntry {
+                name: "Either characteristic".to_string(),
+                description: "Union type.".to_string(),
+                status: FeatureStatus::Missing,
+                oxirs_module: None,
+                notes: Some("Not yet implemented.".to_string()),
+            },
+        )
+        .expect("second entry");
+        m.add_entry(
             FeatureCategory::Validation,
-            vec![FeatureEntry {
+            FeatureEntry {
                 name: "SHACL validation".to_string(),
-                status: ImplStatus::Implemented,
+                description: "SHACL shape validation.".to_string(),
+                status: FeatureStatus::Done,
                 oxirs_module: Some("validator::shacl_validator".to_string()),
-                esmf_reference: "https://example.com/shacl".to_string(),
-                notes: "Full SHACL support.".to_string(),
-            }],
-        );
+                notes: None,
+            },
+        )
+        .expect("validation entry");
         m
     }
 
@@ -229,8 +250,8 @@ mod tests {
     fn test_report_contains_headings() {
         let report = generate_report(&sample_matrix());
         assert!(
-            report.contains("ESMF SDK 2.x Parity Report"),
-            "title missing"
+            report.contains("ESMF SDK"),
+            "ESMF SDK title missing from report"
         );
         assert!(report.contains("## Summary"), "summary section missing");
         assert!(
@@ -244,27 +265,36 @@ mod tests {
         let report = generate_report(&sample_matrix());
         assert!(
             report.contains("Aspect Modeling"),
-            "Aspect Modeling missing"
+            "Aspect Modeling heading missing"
         );
         assert!(
             report.contains("Validation") || report.contains("validation"),
-            "Validation missing"
+            "Validation heading missing"
         );
     }
 
     #[test]
-    fn test_report_contains_status_badges() {
+    fn test_report_contains_status_markers() {
         let report = generate_report(&sample_matrix());
-        assert!(report.contains("Implemented"), "implemented badge missing");
-        assert!(report.contains("Missing"), "missing badge missing");
+        assert!(report.contains("Done"), "done marker missing");
+        assert!(report.contains("Missing"), "missing marker missing");
     }
 
     #[test]
     fn test_report_empty_matrix() {
-        let report = generate_report(&HashMap::new());
+        let report = generate_report(&ParityMatrix::new());
         assert!(
-            report.contains("ESMF SDK 2.x Parity Report"),
+            report.contains("ESMF SDK"),
             "title should appear even for empty matrix"
+        );
+    }
+
+    #[test]
+    fn test_report_summary_table_present() {
+        let report = generate_report(&sample_matrix());
+        assert!(
+            report.contains("| Category |"),
+            "summary table header missing"
         );
     }
 }

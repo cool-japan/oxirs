@@ -10,11 +10,8 @@ use axum::body::Body;
 use axum::http::{header, HeaderMap, HeaderValue, Request, Response, StatusCode};
 use axum::response::IntoResponse;
 use dashmap::DashMap;
-use flate2::read::GzEncoder;
-use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -473,14 +470,11 @@ impl CdnStaticManager {
         )
     }
 
-    /// Compress content using gzip
+    /// Compress content using gzip (Pure-Rust `oxiarc-deflate`, best level)
     fn compress_content(content: &[u8]) -> FusekiResult<Vec<u8>> {
-        let mut encoder = GzEncoder::new(content, Compression::best());
-        let mut compressed = Vec::new();
-        encoder.read_to_end(&mut compressed).map_err(|e| {
-            FusekiError::configuration(format!("Failed to compress content: {}", e))
-        })?;
-        Ok(compressed)
+        // `Compression::best()` corresponds to gzip level 9.
+        oxiarc_deflate::gzip_compress(content, 9)
+            .map_err(|e| FusekiError::configuration(format!("Failed to compress content: {}", e)))
     }
 
     /// Determine cache policy for extension

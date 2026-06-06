@@ -673,26 +673,17 @@ pub mod compression {
     }
 
     fn compress_gzip(data: &[u8]) -> Result<Vec<u8>, String> {
-        use std::io::Write;
-        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-        encoder
-            .write_all(data)
-            .map_err(|e| format!("Gzip compression error: {}", e))?;
-        encoder
-            .finish()
-            .map_err(|e| format!("Gzip finalization error: {}", e))
+        // Gzip (RFC 1952) compression via Pure-Rust oxiarc-deflate.
+        // Level 6 is the balanced default.
+        oxiarc_deflate::gzip_compress(data, 6).map_err(|e| format!("Gzip compression error: {}", e))
     }
 
     fn compress_deflate(data: &[u8]) -> Result<Vec<u8>, String> {
-        use std::io::Write;
-        let mut encoder =
-            flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
-        encoder
-            .write_all(data)
-            .map_err(|e| format!("Deflate compression error: {}", e))?;
-        encoder
-            .finish()
-            .map_err(|e| format!("Deflate finalization error: {}", e))
+        // Raw DEFLATE (RFC 1951) compression via Pure-Rust oxiarc-deflate.
+        // Level 6 is the balanced default. This is the bare deflate stream
+        // (no zlib/gzip framing), matching the HTTP "deflate" content-encoding
+        // produced by a raw DeflateEncoder.
+        oxiarc_deflate::deflate(data, 6).map_err(|e| format!("Deflate compression error: {}", e))
     }
 
     fn compress_brotli(_data: &[u8]) -> Result<Vec<u8>, String> {
@@ -885,5 +876,47 @@ mod tests {
 
         let none = compression::compress(data, CompressionType::None).expect("should succeed");
         assert_eq!(none, data);
+    }
+
+    #[test]
+    fn test_gzip_compression_roundtrip() {
+        // Verify the gzip (RFC 1952) Content-Encoding path round-trips: the
+        // bytes produced by compress(Gzip) must decode with a gzip decoder.
+        let data: Vec<u8> = b"oxirs-gql streamed response gzip body "
+            .iter()
+            .cycle()
+            .take(4096)
+            .copied()
+            .collect();
+
+        let compressed =
+            compression::compress(&data, CompressionType::Gzip).expect("gzip compression failed");
+        // Gzip magic header (RFC 1952): 0x1f 0x8b.
+        assert_eq!(&compressed[..2], &[0x1f, 0x8b]);
+        assert!(compressed.len() < data.len());
+
+        let decompressed =
+            oxiarc_deflate::gzip_decompress(&compressed).expect("gzip decompression failed");
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_deflate_compression_roundtrip() {
+        // Verify the raw DEFLATE (RFC 1951) Content-Encoding path round-trips:
+        // compress(Deflate) emits a bare deflate stream (no zlib/gzip framing),
+        // so it must decode with the raw inflate function.
+        let data: Vec<u8> = b"oxirs-gql streamed response deflate body "
+            .iter()
+            .cycle()
+            .take(4096)
+            .copied()
+            .collect();
+
+        let compressed = compression::compress(&data, CompressionType::Deflate)
+            .expect("deflate compression failed");
+        assert!(compressed.len() < data.len());
+
+        let decompressed = oxiarc_deflate::inflate(&compressed).expect("inflate failed");
+        assert_eq!(decompressed, data);
     }
 }

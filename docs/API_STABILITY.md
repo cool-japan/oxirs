@@ -1,7 +1,7 @@
 # OxiRS API Stability Guarantees
 
-**Version**: v0.1.0
-**Date**: January 7, 2026
+**Version**: 0.3.1
+**Last Updated**: June 6, 2026 (initial release: January 7, 2026)
 **Status**: Production-Ready
 **Stability Level**: Production Release
 
@@ -9,7 +9,7 @@
 
 ## 🎯 Overview
 
-This document defines OxiRS's API stability guarantees, versioning policy, and deprecation procedures. Starting with v0.1.0, we commit to **backward compatibility** within the v0.1.x series and establish a clear path to v1.0.0 stability. As of v0.1.0, stability guarantees are now expanded with distributed storage and AI modules reaching unstable/stable status.
+This document defines OxiRS's API stability guarantees, versioning policy, and deprecation procedures. Starting with v0.1.0, we committed to **backward compatibility** within each published minor series (currently the v0.3.x patch line) and to providing migration guidance across minor releases — a contract that has held in practice across the v0.1.0 → v0.2.x → v0.3.1 progression. As of v0.3.1, stability guarantees cover an expanded surface, with distributed storage and AI modules having matured through the 0.2.x and 0.3.x series.
 
 ---
 
@@ -22,7 +22,7 @@ OxiRS APIs are classified into three stability levels:
 **Guarantee**: These APIs will NOT change in backward-incompatible ways within the same major version (v0.x → v0.y)
 
 **Policy**:
-- ✅ Guaranteed backward compatibility within v0.1.x
+- ✅ Guaranteed backward compatibility within the current minor series (v0.3.x)
 - ✅ Safe for production use
 - ✅ Deprecations announced 3 months before removal
 - ✅ Migration path provided for all changes
@@ -46,10 +46,10 @@ impl QueryEngine {
 
 ### 🟡 Unstable (Pre-Production)
 
-**Guarantee**: These APIs may change between minor versions (v0.1.x → v0.2.x) but will provide migration guides
+**Guarantee**: These APIs may change between minor versions (e.g., v0.2.x → v0.3.x) but will provide migration guides
 
 **Policy**:
-- ⚠️ May change in v0.2.3
+- ⚠️ May change in a future minor release
 - ⚠️ Suitable for testing and evaluation
 - ⚠️ Changes documented in CHANGELOG
 - ⚠️ Migration examples provided
@@ -60,14 +60,14 @@ impl QueryEngine {
 pub struct ShapeLearner { /* ... */ }
 impl ShapeLearner {
     pub fn learn_shapes(&self, graph: &Graph) -> Result<ShapeSchema>;
-    // May change to take additional parameters in v0.2.3
+    // May change to take additional parameters in a future minor release
 }
 
 // Unstable APIs in oxirs-embed
 pub struct EmbeddingModel { /* ... */ }
 impl EmbeddingModel {
     pub fn encode(&self, text: &str) -> Result<Vec<f32>>;
-    // Vector size may become configurable in v0.2.3
+    // Vector size may become configurable in a future minor release
 }
 ```
 
@@ -110,7 +110,7 @@ OxiRS follows [Semantic Versioning 2.0.0](https://semver.org/) with Rust-specifi
 - Changes to trait requirements
 - Incompatible data format changes
 
-**Timeline**: v1.0.0 planned for Q2 2026 (after v0.1.0 → v0.2.3 → Stable)
+**Timeline**: v0.1.0 (Jan 2026) → v0.2.x (Mar 2026) → v0.3.0 (May 2026) → v0.3.1 (Jun 2026) have shipped. A future v1.0.0 (date TBD) is planned as the long-term-stable milestone.
 
 #### Minor Version (0.1.x → 0.2.x)
 **Non-breaking additions and unstable API changes**:
@@ -120,9 +120,9 @@ OxiRS follows [Semantic Versioning 2.0.0](https://semver.org/) with Rust-specifi
 - Changes to unstable APIs
 - Performance improvements
 
-**Timeline**: v0.2.3 planned for Q1 2026 (3 months after v0.1.0)
+**Timeline**: The v0.2.x minor series shipped in March 2026 (v0.2.0 on 2026-03-05 through v0.2.4 on 2026-03-28); v0.3.0 shipped 2026-05-03 and v0.3.1 on 2026-06-06.
 
-#### Patch Version (0.1.0 → 0.1.1)
+#### Patch Version (0.3.1 → 0.3.2)
 **Bug fixes only**:
 - Security patches
 - Bug fixes
@@ -169,9 +169,9 @@ pub fn ConcreteStore::new() -> Result<Self> {
 // ConcreteStore::new() removed entirely
 ```
 
-### Current Deprecations (v0.1.0)
+### Current Deprecations (v0.3.1)
 
-*No deprecations in v0.1.0 - this is the initial production release.*
+*No deprecations are currently active as of v0.3.1.*
 
 ---
 
@@ -179,7 +179,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Core Foundation (🟢 Stable)
 
-#### oxirs-core (v0.1.0)
+#### oxirs-core (v0.3.1)
 **Stability**: 🟢 **Stable** (95% frozen)
 
 | API Surface | Stability | Notes |
@@ -196,7 +196,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **LOW** (< 5%)
 
-#### oxirs-tdb (v0.1.0)
+#### oxirs-tdb (v0.3.1)
 **Stability**: 🟢 **Stable** (90% frozen)
 
 | API Surface | Stability | Notes |
@@ -213,7 +213,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Query Engine (🟢 Stable)
 
-#### oxirs-arq (v0.1.0)
+#### oxirs-arq (v0.3.1)
 **Stability**: 🟢 **Stable** (90% frozen)
 
 | API Surface | Stability | Notes |
@@ -227,7 +227,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **LOW** (< 10%)
 
-#### oxirs-rule (v0.1.0)
+#### oxirs-rule (v0.3.1)
 **Stability**: 🟡 **Unstable** (70% frozen)
 
 | API Surface | Stability | Notes |
@@ -243,7 +243,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Server & HTTP (🟢 Stable)
 
-#### oxirs-fuseki (v0.1.0)
+#### oxirs-fuseki (v0.3.1)
 **Stability**: 🟢 **Stable** (95% frozen)
 
 | API Surface | Stability | Notes |
@@ -256,7 +256,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **VERY LOW** (< 5%)
 
-#### oxirs-gql (v0.1.0)
+#### oxirs-gql (v0.3.1)
 **Stability**: 🟡 **Unstable** (80% frozen)
 
 | API Surface | Stability | Notes |
@@ -271,7 +271,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Storage & Distribution (🟡 Unstable)
 
-#### oxirs-cluster (v0.1.0)
+#### oxirs-cluster (v0.3.1)
 **Stability**: 🟡 **Unstable** (70% frozen)
 
 | API Surface | Stability | Notes |
@@ -287,7 +287,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Validation & Reasoning (🟡 Unstable)
 
-#### oxirs-shacl (v0.1.0)
+#### oxirs-shacl (v0.3.1)
 **Stability**: 🟡 **Unstable** (75% frozen)
 
 | API Surface | Stability | Notes |
@@ -298,7 +298,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **MEDIUM** (25%)
 
-#### oxirs-shacl-ai (v0.1.0)
+#### oxirs-shacl-ai (v0.3.1)
 **Stability**: 🔴 **Experimental** (50% frozen)
 
 | API Surface | Stability | Notes |
@@ -312,18 +312,18 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### AI & Machine Learning (🔴 Experimental)
 
-#### oxirs-embed (v0.1.0)
+#### oxirs-embed (v0.3.1)
 **Stability**: 🔴 **Experimental** (60% frozen)
 
 | API Surface | Stability | Notes |
 |-------------|-----------|-------|
-| `EmbeddingModel::encode()` | 🟡 Unstable | Encoding API stabilizing in v0.1.0 |
+| `EmbeddingModel::encode()` | 🟡 Unstable | Encoding API stabilizing across the 0.x series |
 | `VectorStore` | 🔴 Experimental | Storage format may change |
 | Similarity search | 🔴 Experimental | Algorithm may be replaced |
 
 **Breaking Change Risk**: **HIGH** (40%)
 
-#### oxirs-chat (v0.1.0)
+#### oxirs-chat (v0.3.1)
 **Stability**: 🔴 **Experimental** (50% frozen)
 
 | API Surface | Stability | Notes |
@@ -338,7 +338,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Streaming & Federation (🟡 Unstable)
 
-#### oxirs-stream (v0.1.0)
+#### oxirs-stream (v0.3.1)
 **Stability**: 🟡 **Unstable** (65% frozen)
 
 | API Surface | Stability | Notes |
@@ -349,7 +349,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **MEDIUM** (35%)
 
-#### oxirs-federate (v0.1.0)
+#### oxirs-federate (v0.3.1)
 **Stability**: 🟡 **Unstable** (80% frozen)
 
 | API Surface | Stability | Notes |
@@ -364,7 +364,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Extensions (🔴 Experimental)
 
-#### oxirs-star (v0.1.0)
+#### oxirs-star (v0.3.1)
 **Stability**: 🟡 **Unstable** (85% frozen)
 
 | API Surface | Stability | Notes |
@@ -375,7 +375,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **MEDIUM** (15%)
 
-#### oxirs-geosparql (v0.1.0)
+#### oxirs-geosparql (v0.3.1)
 **Stability**: 🔴 **Experimental** (60% frozen)
 
 | API Surface | Stability | Notes |
@@ -388,31 +388,159 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ---
 
-## 🔒 API Stability Contract (v0.1.0 → v1.0.0)
+### Digital Twin & Simulation (🟡 Unstable)
+
+> The following crates were added during the v0.2.x / v0.3.x series and have a smaller stable surface than the core modules above. Their public APIs are **🟡 Unstable** (newer; may change between minor releases).
+
+#### oxirs-samm (v0.3.1)
+**Stability**: 🟡 **Unstable** (newer module; APIs evolving)
+
+Semantic Aspect Meta Model (SAMM) implementation for describing digital-twin aspect models — Turtle parsing, SHACL validation, and multi-language code generation.
+
+| API Surface | Stability | Notes |
+|-------------|-----------|-------|
+| `parser::parse_aspect_model()` | 🟡 Unstable | Aspect-model loading API may change |
+| `metamodel::Aspect` / `ModelElement` | 🟡 Unstable | Meta-model types still evolving |
+| `generators::*` | 🟡 Unstable | Code-generation surface (TS/GraphQL/SQL/…) expanding |
+
+**Breaking Change Risk**: **MEDIUM** (40%)
+
+#### oxirs-physics (v0.3.1)
+**Stability**: 🟡 **Unstable** (newer module; APIs evolving)
+
+Physics-informed digital-twin simulation bridge connecting RDF knowledge graphs with SciRS2 simulations — parameter extraction, result injection, and conservation-law validation.
+
+| API Surface | Stability | Notes |
+|-------------|-----------|-------|
+| `simulation::SimulationOrchestrator` | 🟡 Unstable | Orchestration API may change |
+| `digital_twin::DigitalTwin` | 🟡 Unstable | Twin-synchronization surface evolving |
+| `rdf::*` (SPARQL builder, literal parser) | 🟡 Unstable | RDF / unit-conversion bridge may change |
+
+**Breaking Change Risk**: **MEDIUM** (40%)
+
+---
+
+### Knowledge Graph RAG (🟡 Unstable)
+
+#### oxirs-graphrag (v0.3.1)
+**Stability**: 🟡 **Unstable** (newer module; APIs evolving)
+
+Hybrid vector + graph Retrieval-Augmented Generation — triple extraction, community detection, path finding, and subgraph summarization for LLM context.
+
+| API Surface | Stability | Notes |
+|-------------|-----------|-------|
+| `triple_extractor::TripleExtractor` | 🟡 Unstable | NLP → RDF extraction evolving |
+| `community_detector` / `path_finder` | 🟡 Unstable | Graph-retrieval primitives may change |
+| `summarizer::SubgraphSummarizer` | 🟡 Unstable | Context-building API evolving |
+
+**Breaking Change Risk**: **MEDIUM** (40%)
+
+---
+
+### Identity & Trust (🟡 Unstable)
+
+#### oxirs-did (v0.3.1)
+**Stability**: 🟡 **Unstable** (newer module; APIs evolving)
+
+W3C Decentralized Identifiers (DID) and Verifiable Credentials with signed RDF graphs — did:key / did:web, VC Data Model 2.0, and Ed25519 dataset canonicalization.
+
+| API Surface | Stability | Notes |
+|-------------|-----------|-------|
+| `Did` / `DidResolver` | 🟡 Unstable | DID creation / resolution API may change |
+| `VerifiableCredential` / `CredentialIssuer` | 🟡 Unstable | VC issuance / verification evolving |
+| `signed_graph` module | 🟡 Unstable | RDF canonicalization + signing evolving |
+
+**Breaking Change Risk**: **MEDIUM** (40%)
+
+---
+
+### Browser / WebAssembly (🟡 Unstable)
+
+#### oxirs-wasm (v0.3.1)
+**Stability**: 🟡 **Unstable** (newer module; APIs evolving)
+
+WebAssembly bindings to run RDF/SPARQL in the browser — streaming parser, compact triple store, and a `wasm_bindgen` JS/TS surface.
+
+| API Surface | Stability | Notes |
+|-------------|-----------|-------|
+| `OxiRSStore` (JS/TS binding) | 🟡 Unstable | `wasm_bindgen` surface may change |
+| `query` / `update` modules | 🟡 Unstable | SPARQL query / update API evolving |
+| `parser` (streaming) | 🟡 Unstable | Incremental parsing API may change |
+
+**Breaking Change Risk**: **MEDIUM** (40%)
+
+---
+
+### Industrial Connectivity (🟡 Unstable)
+
+#### oxirs-modbus (v0.3.1)
+**Stability**: 🟡 **Unstable** (newer module; APIs evolving)
+
+Modbus TCP/RTU/ASCII/TLS protocol support for industrial-IoT ingestion into RDF — register mapping with QUDT units and W3C PROV-O provenance.
+
+| API Surface | Stability | Notes |
+|-------------|-----------|-------|
+| `ModbusTcpClient` / `ModbusConfig` | 🟡 Unstable | Client / config API may change |
+| `mapping::RegisterMap` | 🟡 Unstable | Register-mapping surface evolving |
+
+**Breaking Change Risk**: **MEDIUM** (40%)
+
+#### oxirs-canbus (v0.3.1)
+**Stability**: 🟡 **Unstable** (newer module; APIs evolving)
+
+CANbus/J1939 protocol support for automotive and heavy-machinery data — DBC parsing, PGN decoding, multi-packet reassembly, and RDF mapping.
+
+| API Surface | Stability | Notes |
+|-------------|-----------|-------|
+| `J1939Processor` / `PgnRegistry` | 🟡 Unstable | J1939 processing API may change |
+| `CanFrame` / `CanId` | 🟡 Unstable | Frame / ID types still evolving |
+
+**Breaking Change Risk**: **MEDIUM** (40%)
+
+---
+
+### Time-Series Storage (🟡 Unstable)
+
+#### oxirs-tsdb (v0.3.1)
+**Stability**: 🟡 **Unstable** (newer module; APIs evolving)
+
+Time-series optimizations for IoT-scale RDF — Gorilla compression, delta-of-delta timestamps, SPARQL temporal extensions, and hybrid RDF + time-series storage.
+
+| API Surface | Stability | Notes |
+|-------------|-----------|-------|
+| `HybridStore` | 🟡 Unstable | Hybrid RDF + time-series API may change |
+| `query` / `sparql` modules | 🟡 Unstable | Temporal query extensions evolving |
+| `write` (WAL / compaction) | 🟡 Unstable | Write-path API may change |
+
+**Breaking Change Risk**: **MEDIUM** (40%)
+
+---
+
+## 🔒 API Stability Contract (v0.3.1 → v1.0.0)
 
 ### What We Guarantee
 
-#### ✅ Backward Compatibility Within v0.2.x
-- **All patch releases (v0.2.3, v0.2.3, ...)** maintain 100% backward compatibility
+#### ✅ Backward Compatibility Within v0.3.x
+- **All patch releases (v0.3.1, v0.3.2, ...)** maintain 100% backward compatibility
 - **No API removals** in patch releases
 - **No signature changes** in patch releases
 - **Only bug fixes and docs** in patch releases
 
-#### ✅ Migration Path for v0.3.0
+#### ✅ Migration Path for the Next Minor (v0.4.0)
 - **Deprecations announced 3 months in advance**
 - **Migration guide** provided for all breaking changes
 - **Examples** for all deprecated APIs
 - **Compatibility shims** where possible
 
 #### ✅ Data Format Stability
-- **TDB format** stable across v0.2.x
-- **RDF serialization** compatible across v0.2.x
+- **TDB format** stable across v0.3.x
+- **RDF serialization** compatible across v0.3.x
 - **Configuration format** backward compatible (new fields additive only)
 
 #### ✅ Protocol Stability
 - **SPARQL 1.1 Protocol** fully compliant (no deviations)
 - **HTTP endpoints** stable (no URL changes)
-- **GraphQL schema** additive only in v0.2.x
+- **GraphQL schema** additive only in v0.3.x
 
 ### What We Don't Guarantee
 
@@ -436,7 +564,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ## 📊 Stability Roadmap
 
-### v0.1.0 (January 2026)
+### v0.1.0 (January 2026) — Shipped
 **Focus**: API freeze for core modules
 
 - 🟢 **Stable**: oxirs-core, oxirs-arq, oxirs-fuseki, oxirs-tdb (95% frozen)
@@ -445,39 +573,45 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: 10% overall
 
-### v0.2.3 (Current - March 2026)
-**Focus**: Stabilize distributed storage, GraphQL, and AI modules
+### v0.2.x (March 2026) — Shipped
+**Focus**: Performance, search, clustering scale, and AI hardening
 
-- 🟢 **Stable**: oxirs-cluster, oxirs-gql promoted to stable (90%+ frozen)
-- 🟡 **Unstable**: oxirs-embed, oxirs-stream, oxirs-chat promoted to unstable (75%+ frozen)
-- 🔴 **Experimental**: oxirs-shacl-ai remains experimental (research preview)
-- **New**: CUDA GPU acceleration for embeddings, memory-mapped storage optimization
+The v0.2 series (v0.2.0 on 2026-03-05 through v0.2.4 on 2026-03-28) delivered a ~10x cumulative query speedup, Tantivy full-text search, 3D GeoSPARQL, 1000+ node clustering, and AI production hardening. All additions were backward compatible with v0.1.0 and feature-gated for gradual rollout.
 
-**Breaking Change Risk**: 5% overall
+- 🟢 **Stable**: core modules (oxirs-core, oxirs-arq, oxirs-fuseki, oxirs-tdb) unchanged
+- 🟡 **Unstable**: distributed (oxirs-cluster), GraphQL (oxirs-gql), and streaming (oxirs-stream) continued to mature
+- 🔴 **Experimental**: AI modules (oxirs-embed, oxirs-chat, oxirs-shacl-ai) continued as research previews
 
-### v0.3.0 (Q3 2026)
-**Focus**: Production release with full API stability
+**Breaking Change Risk**: low (additive, backward-compatible)
 
-- 🟢 **Stable**: All core modules frozen (99% frozen)
-- 🟡 **Unstable**: Only experimental features remain unstable
-- 🔴 **Experimental**: AI research features remain experimental
+### v0.3.0 (May 2026) — Shipped
+**Focus**: Audit/compliance, certification, SSO, and marketplace
 
-**Breaking Change Risk**: < 1% overall
+Shipped 2026-05-03: a SOC2/GDPR audit module (oxirs-core), SHACL-AI certification, a chat marketplace (HuggingFace Hub / Ollama / local GGUF), SSO (OIDC + SAML 2.0), cluster certification, and GraphRAG model loading.
 
-### v1.0.0 (Q2 2026)
+**Breaking Change Risk**: low (additive)
+
+### v0.3.1 (June 2026) — Shipped (Current)
+**Focus**: Pure-Rust crypto/compression/TLS migration, FIPS feature gates, SHACL-AF
+
+Shipped 2026-06-06: migration of compression (brotli/snap/flate2 → oxiarc-*), crypto (ring → oxicrypto), and TLS (process-wide pure-Rust oxitls provider); FIPS 140-2 feature gates for oxirs-fuseki and oxirs-did; additional SHACL Advanced Features; an HDT 1.0 reader; a streaming TriG parser; and a wave of file-size refactors.
+
+**Breaking Change Risk**: low (additive; the default build is now fully Pure Rust)
+
+### v1.0.0 (Planned — date TBD)
 **Focus**: Stable release with long-term API guarantees
 
 - 🟢 **Stable**: 100% API freeze for core modules
 - 🟡 **Unstable**: Experimental features moved to separate workspace
 - 🔴 **Experimental**: None (moved to oxirs-experimental workspace)
 
-**Breaking Change Risk**: 0% for stable APIs
+**Breaking Change Risk**: 0% for stable APIs (aspirational target)
 
 ---
 
 ## 🛡️ MSRV (Minimum Supported Rust Version) Policy
 
-### Current MSRV: **Rust 1.75.0**
+### Current MSRV: **Rust 1.70** (declared MSRV; CI builds on newer stable)
 
 **Policy**:
 - MSRV increases are **NOT** considered breaking changes
@@ -496,7 +630,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 [package]
 name = "oxirs-core"
 version = "0.2.3"
-rust-version = "1.75.0"  # MSRV declared
+rust-version = "1.70"  # MSRV declared (conservative; builds on newer stable)
 ```
 
 **Upgrade Guidance**:
@@ -518,9 +652,14 @@ cargo build --release
 ### Stable Features (Always Available)
 ```toml
 [features]
-default = ["native-tls"]
-native-tls = ["dep:native-tls"]  # TLS via system libraries
-rustls = ["dep:rustls"]          # Pure Rust TLS
+# Default build is fully Pure Rust (no ring / aws-lc-sys / native-tls).
+default = ["metrics", "auth"]
+metrics = ["prometheus", "axum-prometheus"]  # Prometheus metrics + exporter
+auth = ["jsonwebtoken", "bcrypt"]            # JWT + bcrypt authentication
+# TLS is pure-Rust rustls. The `rustls`/`oxitls` crates are always compiled in
+# (non-optional) so a process-wide pure-Rust crypto provider is installed at
+# startup; the optional `tls` feature adds the HTTPS listener + PEM key loading.
+tls = ["tokio-rustls", "rustls-pemfile", "axum-server"]
 ```
 
 ### Unstable Features (May Change)
@@ -551,8 +690,8 @@ experimental-neuro = ["dep:oxirs-neuro"]
 ```
 
 **Policy**:
-- **Stable features**: Never removed in v0.2.x
-- **Unstable features**: May change in v0.3.x with migration guide
+- **Stable features**: Never removed within a minor series (e.g., v0.3.x)
+- **Unstable features**: May change in a future minor release with migration guide
 - **Experimental features**: May be removed at any time
 
 ---
@@ -623,7 +762,7 @@ pub struct Triple {
 **Most Important**: Always read CHANGELOG.md before upgrading
 ```bash
 # View changes between versions
-git log v0.1.0..v0.1.0 --oneline CHANGELOG.md
+git log v0.3.0..v0.3.1 --oneline CHANGELOG.md
 ```
 
 #### 2. Compiler Warnings
@@ -655,7 +794,7 @@ See API documentation for migration guidance.
 ### Getting Help with API Changes
 
 #### Documentation
-- **API Docs**: https://docs.rs/oxirs-core/0.1.0
+- **API Docs**: https://docs.rs/oxirs-core/0.3.1
 - **Migration Guides**: `/docs/MIGRATION_*.md`
 - **Architecture Guide**: `/docs/ARCHITECTURE.md`
 
@@ -674,7 +813,7 @@ If you encounter an **undocumented breaking change**, please report:
 
 ## 🎯 Summary: What You Can Rely On
 
-### ✅ Safe for Production (v0.1.0)
+### ✅ Safe for Production (v0.3.1)
 
 **Core RDF Operations**:
 - ✅ `oxirs-core`: Store trait, RDF model, error types
@@ -729,7 +868,7 @@ If you encounter an **undocumented breaking change**, please report:
 
 ### Long-Term API Guarantees (v1.x.y)
 
-Once we reach v1.0.0 (Q2 2026):
+Once we reach v1.0.0 (planned, date TBD):
 
 - ✅ **10-year stability guarantee** for core APIs
 - ✅ **Zero breaking changes** within v1.x series
@@ -758,9 +897,9 @@ v1.0.0 ────────────────────────�
 
 ## ✅ Conclusion
 
-**OxiRS v0.1.0** establishes a **clear stability contract**:
+**OxiRS v0.3.1** establishes a **clear stability contract**:
 
-1. **Core APIs (🟢 Stable)**: Safe for production, backward compatible within v0.1.x
+1. **Core APIs (🟢 Stable)**: Safe for production, backward compatible within the current minor series (v0.3.x)
 2. **Distributed APIs (🟡 Unstable → 🟢 Stable)**: Most now stable, safe for production
 3. **AI APIs (🔴→🟡 Unstable)**: Most now unstable, approaching stability
 4. **Research APIs (🔴 Experimental)**: Shape learning remains research preview
@@ -769,11 +908,13 @@ v1.0.0 ────────────────────────�
 
 **Timeline**:
 - **v0.1.0 (January 2026)**: Initial production release with stable APIs
-- **v0.1.0 (Q1 2026)**: Full API freeze
-- **v1.0.0 (Q2 2026)**: Long-term stability guarantee
+- **v0.2.0–v0.2.4 (March 2026)**: ~10x query performance, full-text search, 3D GeoSPARQL, 1000+ node clustering, AI hardening
+- **v0.3.0 (May 2026)**: Audit/compliance, certification, SSO, marketplace, additional SHACL features
+- **v0.3.1 (June 2026, current)**: Pure-Rust crypto/compression/TLS migration, FIPS feature gates, additional SHACL-AF
+- **v1.0.0 (planned, date TBD)**: Long-term stability guarantee
 
 ---
 
-*API Stability Guarantees - January 7, 2026*
-*Version: v0.1.0*
+*API Stability Guarantees - Last Updated June 6, 2026 (initial: January 7, 2026)*
+*Version: 0.3.1*
 *Status: Production-Ready*

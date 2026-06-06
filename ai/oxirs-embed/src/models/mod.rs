@@ -64,14 +64,24 @@ pub use scirs_neural::{ActivationType, OptimizerType, SciRS2NeuralConfig, SciRS2
 // GraphSAGE and GAT basic implementations
 pub mod gat_basic;
 pub mod graphsage;
+// Triple-based inductive GraphSAGE embedder (Hamilton et al. 2017)
+pub mod graph_sage;
+// Triple-based inductive GAT embedder (Veličković et al. 2018)
+pub mod gat;
 
-// Re-exports for GraphSAGE
+// Re-exports for GraphSAGE (index-based, graph-data API)
 pub use graphsage::{
     AggregatorType, GraphData, GraphSage, GraphSageConfig, GraphSageEmbeddings,
     GraphSageTrainingMetrics, SimpleLcg,
 };
 
-// Re-exports for GAT
+// Re-exports for triple-based GraphSAGE embedder
+pub use graph_sage::{GraphSageEmbedder, GraphSageEmbedderConfig};
+
+// Re-exports for triple-based GAT embedder (multi-head attention)
+pub use gat::{GatEmbedder, GatEmbedderConfig};
+
+// Re-exports for GAT basic (index-based)
 pub use gat_basic::{Gat, GatConfig, GatEmbeddings};
 
 // Knowledge Graph Embedding algorithms (TransE, DistMult, RotatE)

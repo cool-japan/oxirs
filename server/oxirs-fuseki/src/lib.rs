@@ -1,9 +1,9 @@
 //! # OxiRS Fuseki - SPARQL HTTP Server
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-fuseki/badge.svg)](https://docs.rs/oxirs-fuseki)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SPARQL 1.1/1.2 HTTP protocol server with Apache Fuseki compatibility.
@@ -52,6 +52,12 @@ pub mod auth;
 pub mod backup;
 pub mod batch_execution;
 pub mod bind_values_enhanced;
+pub mod bind_values_enhanced_bind;
+pub mod bind_values_enhanced_optim;
+#[cfg(test)]
+mod bind_values_enhanced_tests;
+pub mod bind_values_enhanced_types;
+pub mod bind_values_enhanced_values;
 pub mod cache;
 pub mod clustering;
 pub mod concurrent;
@@ -66,6 +72,15 @@ pub mod ddos_protection;
 pub mod disaster_recovery;
 pub mod error;
 pub mod federated_query_optimizer;
+pub mod federated_query_optimizer_exec;
+pub mod federated_query_optimizer_planner;
+#[cfg(test)]
+mod federated_query_optimizer_tests;
+pub mod federated_query_optimizer_types;
+// Backing implementation modules for the federated query optimizer facade.
+pub mod federated_query_executor;
+pub mod federated_query_planner;
+pub mod federated_query_types;
 pub mod federation;
 pub mod gpu_kg_embeddings;
 pub mod graph_analytics;
@@ -162,6 +177,11 @@ pub mod query_logger;
 // v0.3.0 API stability harness (mirrors core/oxirs-core/src/api_surface.rs)
 pub mod api_surface;
 
+pub use auth::cluster_auth::{
+    ClusterAuthConfig, ClusterAuthError, ClusterAuthManager, ClusterNodeToken,
+    NodeIdentity as ClusterNodeIdentity,
+};
+pub use auth::ldap_ha::{LdapHaError, LdapHaPool, LdapServer, LdapServerRole, ReadPolicy};
 pub use ldp::{LdpContainer, LdpRequest, LdpResourceType, LdpResponse, LdpService};
 
 use store::Store;
@@ -221,6 +241,11 @@ impl ServerBuilder {
     }
 
     pub async fn build(self) -> Result<Server, Box<dyn std::error::Error>> {
+        // Install the Pure Rust crypto provider as the process default before any
+        // rustls-backed component runs (TLS termination, OAuth via reqwest, the
+        // metrics push-gateway). Idempotent: a prior install elsewhere is fine.
+        let _ = rustls::crypto::CryptoProvider::install_default((*oxitls::pure_provider()).clone());
+
         let addr: SocketAddr = format!("{}:{}", self.host, self.port).parse()?;
         let store = if let Some(path) = self.dataset_path {
             Store::open(path)?

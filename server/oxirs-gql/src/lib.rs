@@ -1,9 +1,9 @@
 //! # OxiRS GraphQL - GraphQL Interface for RDF
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-gql/badge.svg)](https://docs.rs/oxirs-gql)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! GraphQL interface for RDF data with automatic schema generation from ontologies.
@@ -325,6 +325,10 @@ pub mod resolvers;
 pub mod schema;
 pub mod schema_cache;
 pub mod schema_docs_generator;
+pub mod schema_generator;
+pub mod schema_loader;
+pub mod schema_sdl;
+pub mod schema_types;
 pub mod server;
 pub mod sse_subscriptions;
 pub mod subscriptions;

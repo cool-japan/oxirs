@@ -536,7 +536,10 @@ mod tests {
     fn test_spill_to_disk_records_as_dropped() {
         let config = BackpressureConfig {
             strategy: BackpressureStrategy::SpillToDisk {
-                path: "/tmp/spill.bin".to_string(),
+                path: std::env::temp_dir()
+                    .join(format!("oxirs_spill_{}.bin", std::process::id()))
+                    .display()
+                    .to_string(),
             },
             high_watermark: 2,
             low_watermark: 1,

@@ -3,7 +3,10 @@
 //! Provides Speech-to-Text (STT) and Text-to-Speech (TTS) capabilities for voice interactions
 //! with the chat system. Supports multiple providers and streaming audio.
 
-use anyhow::{Context, Result};
+#[cfg(feature = "openai")]
+use anyhow::Context;
+use anyhow::Result;
+#[cfg(feature = "openai")]
 use async_openai::{
     config::OpenAIConfig,
     types::audio::{
@@ -15,7 +18,11 @@ use async_openai::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{debug, info, warn};
+use tracing::warn;
+// `debug`/`info` are only used by the OpenAI STT/TTS providers, which are gated
+// behind the `openai` feature.
+#[cfg(feature = "openai")]
+use tracing::{debug, info};
 
 /// Voice interface manager
 pub struct VoiceInterface {
@@ -178,7 +185,18 @@ impl VoiceInterface {
     /// Create a new voice interface
     pub fn new(config: VoiceConfig) -> Self {
         let stt_provider: Arc<Mutex<dyn SpeechToTextProvider>> = match config.stt_provider {
+            #[cfg(feature = "openai")]
             SttProviderType::OpenAI => Arc::new(Mutex::new(OpenAISttProvider::new(config.clone()))),
+            // Without the `openai` feature the OpenAI Whisper backend is not
+            // compiled in; fall back to the local Whisper provider.
+            #[cfg(not(feature = "openai"))]
+            SttProviderType::OpenAI => {
+                warn!(
+                    "OpenAI STT requested but the `openai` feature is disabled; \
+                     falling back to the local Whisper provider"
+                );
+                Arc::new(Mutex::new(LocalWhisperProvider::new(config.clone())))
+            }
             SttProviderType::Google => Arc::new(Mutex::new(GoogleSttProvider::new(config.clone()))),
             SttProviderType::Azure => Arc::new(Mutex::new(AzureSttProvider::new(config.clone()))),
             SttProviderType::LocalWhisper => {
@@ -187,7 +205,18 @@ impl VoiceInterface {
         };
 
         let tts_provider: Arc<Mutex<dyn TextToSpeechProvider>> = match config.tts_provider {
+            #[cfg(feature = "openai")]
             TtsProviderType::OpenAI => Arc::new(Mutex::new(OpenAITtsProvider::new(config.clone()))),
+            // Without the `openai` feature the OpenAI TTS backend is not compiled
+            // in; fall back to the local TTS engine.
+            #[cfg(not(feature = "openai"))]
+            TtsProviderType::OpenAI => {
+                warn!(
+                    "OpenAI TTS requested but the `openai` feature is disabled; \
+                     falling back to the local TTS engine"
+                );
+                Arc::new(Mutex::new(LocalTtsEngine::new(config.clone())))
+            }
             TtsProviderType::Google => Arc::new(Mutex::new(GoogleTtsProvider::new(config.clone()))),
             TtsProviderType::Azure => Arc::new(Mutex::new(AzureTtsProvider::new(config.clone()))),
             TtsProviderType::LocalEngine => {
@@ -226,11 +255,13 @@ impl VoiceInterface {
 // ========== Provider Implementations ==========
 
 /// OpenAI STT Provider (Whisper API)
+#[cfg(feature = "openai")]
 struct OpenAISttProvider {
     config: VoiceConfig,
     client: Client<OpenAIConfig>,
 }
 
+#[cfg(feature = "openai")]
 impl OpenAISttProvider {
     fn new(config: VoiceConfig) -> Self {
         let client = Client::new();
@@ -238,6 +269,7 @@ impl OpenAISttProvider {
     }
 }
 
+#[cfg(feature = "openai")]
 #[async_trait::async_trait]
 impl SpeechToTextProvider for OpenAISttProvider {
     async fn transcribe(&self, audio_data: &[u8], config: &VoiceConfig) -> Result<SttResult> {
@@ -481,11 +513,13 @@ impl SpeechToTextProvider for LocalWhisperProvider {
 }
 
 /// OpenAI TTS Provider
+#[cfg(feature = "openai")]
 struct OpenAITtsProvider {
     config: VoiceConfig,
     client: Client<OpenAIConfig>,
 }
 
+#[cfg(feature = "openai")]
 impl OpenAITtsProvider {
     fn new(config: VoiceConfig) -> Self {
         let client = Client::new();
@@ -493,6 +527,7 @@ impl OpenAITtsProvider {
     }
 }
 
+#[cfg(feature = "openai")]
 #[async_trait::async_trait]
 impl TextToSpeechProvider for OpenAITtsProvider {
     async fn synthesize(&self, text: &str, config: &VoiceConfig) -> Result<TtsResult> {

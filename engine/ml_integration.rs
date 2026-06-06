@@ -237,7 +237,7 @@ impl MLOrchestrator {
         
         // Update shared knowledge base
         {
-            let mut kb = self.knowledge_base.write().unwrap();
+            let mut kb = self.knowledge_base.write().unwrap_or_else(|e| e.into_inner());
             kb.performance_insights.extend(all_insights);
             
             // Analyze patterns and generate optimization strategies
@@ -245,7 +245,7 @@ impl MLOrchestrator {
         }
         
         // Share knowledge with all components
-        let kb = self.knowledge_base.read().unwrap();
+        let kb = self.knowledge_base.read().unwrap_or_else(|e| e.into_inner());
         for component in self.components.values_mut() {
             // Note: This would need proper mutable access in real implementation
             // component.process_shared_knowledge(&kb)?;
@@ -342,7 +342,7 @@ impl MLOrchestrator {
     
     /// Generate cross-module recommendations
     pub fn generate_recommendations(&self, context: &str) -> Result<Vec<String>> {
-        let kb = self.knowledge_base.read().unwrap();
+        let kb = self.knowledge_base.read().unwrap_or_else(|e| e.into_inner());
         let mut recommendations = Vec::new();
         
         // Analyze applicable optimization strategies

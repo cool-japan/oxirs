@@ -145,16 +145,45 @@ impl PatternHierarchyAnalyzer {
         Ok(parent_child_map)
     }
 
-    /// Determine which pattern is parent and which is child
+    /// Determine which pattern is parent and which is child.
+    ///
+    /// Heuristic: a *parent* pattern is one that is referenced (i.e. more
+    /// general / higher in the hierarchy).  We use three signals in order:
+    ///
+    /// 1. **Correlation direction** – `Hierarchical` correlation type implies
+    ///    the ordering already encoded in `(pattern1_id, pattern2_id)`.
+    /// 2. **Confidence** – the higher-confidence endpoint is more likely to be
+    ///    the general/parent concept.
+    /// 3. **Lexicographic fallback** – purely for determinism when signals
+    ///    are equal.
     fn determine_parent_child_relationship(
         &self,
         correlation: &PatternCorrelation,
     ) -> Result<(String, String)> {
-        // TODO: Implement sophisticated parent-child determination logic
-        // This could be based on pattern complexity, specificity, etc.
+        // Signal 1: explicit Hierarchical correlation preserves semantic direction.
+        if matches!(correlation.correlation_type, CorrelationType::Hierarchical) {
+            return Ok((
+                correlation.pattern1_id.clone(),
+                correlation.pattern2_id.clone(),
+            ));
+        }
 
-        // For now, use lexicographic ordering as a placeholder
-        if correlation.pattern1_id < correlation.pattern2_id {
+        // Signal 2: the lower bound of the confidence interval indicates the
+        // more stable/general (parent) side of the relationship.
+        let (ci_lo, ci_hi) = correlation.confidence_interval;
+        if (ci_hi - ci_lo).abs() > 1e-9 {
+            // Wider interval → less certain → treat as child
+            if ci_hi - ci_lo > 0.2 {
+                // Asymmetry: p1 is child, p2 is parent
+                return Ok((
+                    correlation.pattern2_id.clone(),
+                    correlation.pattern1_id.clone(),
+                ));
+            }
+        }
+
+        // Signal 3: lexicographic determinism
+        if correlation.pattern1_id <= correlation.pattern2_id {
             Ok((
                 correlation.pattern1_id.clone(),
                 correlation.pattern2_id.clone(),
@@ -246,11 +275,49 @@ impl PatternHierarchyAnalyzer {
         })
     }
 
-    /// Compute coherence within a hierarchy level
-    async fn compute_level_coherence(&self, _patterns: &[String]) -> Result<f64> {
-        // TODO: Implement proper coherence computation
-        // This could measure semantic similarity, structural similarity, etc.
-        Ok(0.8)
+    /// Compute coherence within a hierarchy level.
+    ///
+    /// Coherence measures how internally consistent the patterns at a given
+    /// level are.  We approximate it by examining the proportion of pattern-id
+    /// pairs that share a common prefix segment (e.g. "schema_", "temporal_"),
+    /// which is a lightweight structural proxy for semantic similarity.
+    ///
+    /// Returns a value in [0, 1]: 1.0 means all patterns have matching
+    /// prefixes; 0.0 means no shared structure.
+    async fn compute_level_coherence(&self, patterns: &[String]) -> Result<f64> {
+        let n = patterns.len();
+        if n < 2 {
+            // A singleton or empty level is trivially coherent
+            return Ok(1.0);
+        }
+
+        // Extract the first "_"-delimited segment of each pattern id as its
+        // "family" identifier, collected upfront to avoid lifetime issues.
+        let families: Vec<&str> = patterns
+            .iter()
+            .map(|id| id.find('_').map(|pos| &id[..pos]).unwrap_or(id.as_str()))
+            .collect();
+
+        let mut shared_pairs = 0usize;
+        let mut total_pairs = 0usize;
+        for i in 0..n {
+            for j in i + 1..n {
+                total_pairs += 1;
+                if families[i] == families[j] {
+                    shared_pairs += 1;
+                }
+            }
+        }
+
+        let raw_coherence = shared_pairs as f64 / total_pairs as f64;
+
+        // Blend with a size-based penalty: very large levels are harder to
+        // maintain as coherent regardless of prefix matching.
+        let size_factor =
+            1.0 - ((n as f64 - 2.0) / (n as f64 + self.config.max_branching_factor as f64));
+        let coherence = (raw_coherence * 0.7 + size_factor * 0.3).clamp(0.0, 1.0);
+
+        Ok(coherence)
     }
 
     /// Compute connections between hierarchy levels
@@ -266,8 +333,20 @@ impl PatternHierarchyAnalyzer {
             if let Some(children) = parent_child_map.get(parent) {
                 for child in children {
                     if next_level.contains(child) {
-                        // TODO: Compute actual connection strength
-                        let connection_strength = 0.9;
+                        // Connection strength is inversely proportional to the
+                        // edit distance between the two IDs (normalised to [0.5, 1]).
+                        // Longer common prefix ⇒ stronger structural connection.
+                        let common_prefix_len = parent
+                            .chars()
+                            .zip(child.chars())
+                            .take_while(|(a, b)| a == b)
+                            .count();
+                        let max_len = parent.len().max(child.len()).max(1);
+                        let prefix_ratio = common_prefix_len as f64 / max_len as f64;
+                        // Map [0, 1] → [0.5, 1.0] so that even unrelated names still
+                        // have a moderate connection strength due to the proven
+                        // structural parent-child relationship.
+                        let connection_strength = 0.5 + 0.5 * prefix_ratio;
                         connections.push((parent.clone(), child.clone(), connection_strength));
                     }
                 }
@@ -360,9 +439,41 @@ impl PatternHierarchyAnalyzer {
             .sum::<f64>()
             / depth as f64;
 
-        // TODO: Implement proper coverage and stability measures
-        let coverage_percentage = 0.85;
-        let stability_measure = 0.9;
+        // Coverage: fraction of total known patterns captured by this hierarchy.
+        // We estimate it as the ratio of patterns in the hierarchy to a
+        // representative "universe" based on the deepest branching level.
+        let total_patterns_in_hierarchy: usize = hierarchy
+            .hierarchy_levels
+            .iter()
+            .map(|l| l.patterns.len())
+            .sum();
+        let max_level_size = hierarchy
+            .hierarchy_levels
+            .iter()
+            .map(|l| l.patterns.len())
+            .max()
+            .unwrap_or(1);
+        // A fully balanced tree of depth `depth` with branching `max_level_size`
+        // would have up to max_level_size^depth leaf patterns.  Coverage is the
+        // ratio of what we found to this theoretical maximum.
+        let theoretical_max = (max_level_size as f64).powi(depth as i32).max(1.0);
+        let coverage_percentage =
+            (total_patterns_in_hierarchy as f64 / theoretical_max).clamp(0.0, 1.0);
+
+        // Stability: reflects how uniform the level sizes are.
+        // A perfectly balanced tree has stability 1.0; high variance → lower stability.
+        let mean_level_size = total_patterns_in_hierarchy as f64 / depth as f64;
+        let variance: f64 = hierarchy
+            .hierarchy_levels
+            .iter()
+            .map(|l| {
+                let diff = l.patterns.len() as f64 - mean_level_size;
+                diff * diff
+            })
+            .sum::<f64>()
+            / depth as f64;
+        let stability_measure =
+            (1.0 / (1.0 + variance.sqrt() / (mean_level_size + 1.0))).clamp(0.0, 1.0);
 
         Ok(HierarchyMetrics {
             hierarchy_depth: depth,

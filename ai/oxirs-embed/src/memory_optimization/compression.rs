@@ -2,7 +2,6 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
 
 /// Compression algorithm
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -72,27 +71,14 @@ impl Compressor {
     }
 
     fn compress_gzip(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(data)
-            .map_err(|e| anyhow!("Gzip compression failed: {}", e))?;
-        encoder
-            .finish()
+        // Level 6 matches the previous flate2 Compression::default().
+        oxiarc_deflate::gzip_compress(data, 6)
             .map_err(|e| anyhow!("Gzip compression failed: {}", e))
     }
 
     fn decompress_gzip(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::read::GzDecoder;
-
-        let mut decoder = GzDecoder::new(data);
-        let mut decompressed = Vec::new();
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|e| anyhow!("Gzip decompression failed: {}", e))?;
-        Ok(decompressed)
+        oxiarc_deflate::gzip_decompress(data)
+            .map_err(|e| anyhow!("Gzip decompression failed: {}", e))
     }
 
     /// Calculate compression ratio

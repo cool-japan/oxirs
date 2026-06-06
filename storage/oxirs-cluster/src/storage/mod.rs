@@ -11,9 +11,14 @@ pub mod error;
 #[cfg(any(test, debug_assertions))]
 pub mod mock;
 pub mod persistent;
+pub(crate) mod persistent_integrity;
+pub(crate) mod persistent_wal;
 pub mod recovery;
 pub mod stats;
 pub mod types;
+
+#[cfg(test)]
+mod persistent_tests;
 
 // Re-export main types
 pub use config::StorageConfig;

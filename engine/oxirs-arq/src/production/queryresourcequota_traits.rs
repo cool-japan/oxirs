@@ -10,7 +10,7 @@
 
 use std::time::Duration;
 
-use super::types::QueryResourceQuota;
+use super::types_resource::QueryResourceQuota;
 
 impl Default for QueryResourceQuota {
     fn default() -> Self {

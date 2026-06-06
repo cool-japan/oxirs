@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use oxirs_core::model::NamedNode;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::io::{BufRead, Read, Write};
+use std::io::BufRead;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -243,18 +243,13 @@ impl SpillManager {
         Ok(())
     }
     pub(super) fn compress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::new(self.compression_level));
-        encoder.write_all(data)?;
-        Ok(encoder.finish()?)
+        // Gzip (RFC 1952) compression via Pure-Rust oxiarc-deflate.
+        // oxiarc-deflate takes a u8 level (0-9); clamp the configured u32 level.
+        let level = self.compression_level.min(9) as u8;
+        Ok(oxiarc_deflate::gzip_compress(data, level)?)
     }
     pub(super) fn decompress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::read::GzDecoder;
-        let mut decoder = GzDecoder::new(data);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
-        Ok(decompressed)
+        Ok(oxiarc_deflate::gzip_decompress(data)?)
     }
 }
 /// Streaming aggregation operator

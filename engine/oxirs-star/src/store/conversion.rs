@@ -10,7 +10,7 @@ use oxirs_core::model::{
 };
 
 /// Convert StarTerm to a core RDF Subject
-pub(super) fn star_term_to_subject(term: &StarTerm) -> StarResult<Subject> {
+pub(crate) fn star_term_to_subject(term: &StarTerm) -> StarResult<Subject> {
     match term {
         StarTerm::NamedNode(nn) => {
             let named_node = CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
@@ -33,7 +33,7 @@ pub(super) fn star_term_to_subject(term: &StarTerm) -> StarResult<Subject> {
 }
 
 /// Convert StarTerm to a core RDF Predicate
-pub(super) fn star_term_to_predicate(term: &StarTerm) -> StarResult<Predicate> {
+pub(crate) fn star_term_to_predicate(term: &StarTerm) -> StarResult<Predicate> {
     match term {
         StarTerm::NamedNode(nn) => {
             let named_node = CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
@@ -46,7 +46,7 @@ pub(super) fn star_term_to_predicate(term: &StarTerm) -> StarResult<Predicate> {
 }
 
 /// Convert StarTerm to a core RDF Object
-pub(super) fn star_term_to_object(term: &StarTerm) -> StarResult<Object> {
+pub(crate) fn star_term_to_object(term: &StarTerm) -> StarResult<Object> {
     match term {
         StarTerm::NamedNode(nn) => {
             let named_node = CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;

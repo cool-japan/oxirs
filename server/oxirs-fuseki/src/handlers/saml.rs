@@ -26,10 +26,8 @@ use axum::{
 };
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Duration, Utc};
-use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{Read, Write};
 use tracing::{debug, error, info, instrument, warn};
 
 /// SAML SSO initiation parameters
@@ -436,13 +434,18 @@ fn decode_saml_response(encoded_response: &str) -> FusekiResult<String> {
         .decode(encoded_response)
         .map_err(|e| FusekiError::bad_request(format!("Invalid base64 encoding: {}", e)))?;
 
-    let mut decoder = DeflateDecoder::new(&decoded[..]);
-    let mut decompressed = String::new();
-    decoder.read_to_string(&mut decompressed).map_err(|e| {
+    // SAML HTTP-Redirect binding uses raw DEFLATE (RFC 1951), decompressed here
+    // via Pure-Rust `oxiarc-deflate`.
+    let decompressed_bytes = oxiarc_deflate::inflate(&decoded).map_err(|e| {
         FusekiError::bad_request(format!("Failed to decompress SAML response: {}", e))
     })?;
 
-    Ok(decompressed)
+    String::from_utf8(decompressed_bytes).map_err(|e| {
+        FusekiError::bad_request(format!(
+            "Decompressed SAML response is not valid UTF-8: {}",
+            e
+        ))
+    })
 }
 
 /// Decode SAML request
@@ -452,14 +455,10 @@ fn decode_saml_request(encoded_request: &str) -> FusekiResult<String> {
 
 /// Encode SAML response with base64 and deflate compression
 fn encode_saml_response(response_xml: &str) -> FusekiResult<String> {
-    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
-    encoder
-        .write_all(response_xml.as_bytes())
+    // SAML HTTP-Redirect binding uses raw DEFLATE (RFC 1951) at the default
+    // compression level (6) via Pure-Rust `oxiarc-deflate`.
+    let compressed = oxiarc_deflate::deflate(response_xml.as_bytes(), 6)
         .map_err(|e| FusekiError::internal(format!("Failed to compress SAML response: {}", e)))?;
-
-    let compressed = encoder
-        .finish()
-        .map_err(|e| FusekiError::internal(format!("Failed to finish compression: {}", e)))?;
 
     Ok(general_purpose::STANDARD.encode(compressed))
 }
@@ -840,9 +839,13 @@ mod tests {
 
     #[test]
     fn test_saml_response_decoding() {
-        let encoded = general_purpose::STANDARD.encode("test response");
-        // In a real test, this would be properly compressed
-        // assert!(decode_saml_response(&encoded).is_ok());
+        // Round-trip through the base64 + raw DEFLATE (HTTP-Redirect binding)
+        // encoder/decoder, now backed by Pure-Rust `oxiarc-deflate`.
+        let xml = "<samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\">\
+                   <samlp:Status/></samlp:Response>";
+        let encoded = encode_saml_response(xml).expect("encode");
+        let decoded = decode_saml_response(&encoded).expect("decode");
+        assert_eq!(decoded, xml, "SAML DEFLATE round-trip must be lossless");
     }
 
     #[test]

@@ -334,14 +334,11 @@ impl BackupEngine {
             BackupCompression::Zstd => oxiarc_zstd::encode_all(&data, 3)
                 .map_err(|e| TdbError::Other(format!("zstd compress: {}", e))),
             BackupCompression::Gzip => {
-                use flate2::write::GzEncoder;
-                use flate2::Compression;
-                use std::io::Write;
-                let mut enc = GzEncoder::new(Vec::new(), Compression::default());
-                enc.write_all(&data)
-                    .map_err(|e| TdbError::Other(format!("gzip write: {}", e)))?;
-                enc.finish()
-                    .map_err(|e| TdbError::Other(format!("gzip finish: {}", e)))
+                // oxiarc-deflate gzip (Pure Rust). Level 6 matches the previous
+                // flate2 `Compression::default()`; the on-disk gzip format is
+                // standard and unchanged.
+                oxiarc_deflate::gzip_compress(&data, 6)
+                    .map_err(|e| TdbError::Other(format!("gzip compress: {}", e)))
             }
         }
     }
@@ -351,15 +348,8 @@ impl BackupEngine {
             BackupCompression::None => Ok(data),
             BackupCompression::Zstd => oxiarc_zstd::decode_all(&data)
                 .map_err(|e| TdbError::Other(format!("zstd decompress: {}", e))),
-            BackupCompression::Gzip => {
-                use flate2::read::GzDecoder;
-                use std::io::Read;
-                let mut dec = GzDecoder::new(&data[..]);
-                let mut out = Vec::new();
-                dec.read_to_end(&mut out)
-                    .map_err(|e| TdbError::Other(format!("gzip decode: {}", e)))?;
-                Ok(out)
-            }
+            BackupCompression::Gzip => oxiarc_deflate::gzip_decompress(&data)
+                .map_err(|e| TdbError::Other(format!("gzip decode: {}", e))),
         }
     }
 }
@@ -494,6 +484,37 @@ mod tests {
         fs::remove_dir_all(&d).ok();
         fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn test_gzip_compress_decompress_roundtrip() {
+        // Low-level gzip codec round-trip via oxiarc-deflate. The output must be
+        // a standard gzip stream (magic 0x1f 0x8b, deflate method 0x08).
+        let original = b"oxiarc gzip backup fidelity check ".repeat(64).to_vec();
+        let compressed = BackupEngine::compress(original.clone(), BackupCompression::Gzip).unwrap();
+        assert!(compressed.len() >= 3);
+        assert_eq!(compressed[0], 0x1f);
+        assert_eq!(compressed[1], 0x8b);
+        assert_eq!(compressed[2], 0x08);
+
+        let decompressed = BackupEngine::decompress(compressed, BackupCompression::Gzip).unwrap();
+        assert_eq!(decompressed, original);
+    }
+
+    #[test]
+    fn test_gzip_cross_decompress_with_oxiarc() {
+        // A blob compressed directly by oxiarc-deflate must decompress through
+        // BackupEngine, and BackupEngine output must decode via oxiarc-deflate.
+        let original = b"cross-decompress gzip payload ".repeat(32).to_vec();
+
+        let direct = oxiarc_deflate::gzip_compress(&original, 6).unwrap();
+        let via_engine = BackupEngine::decompress(direct, BackupCompression::Gzip).unwrap();
+        assert_eq!(via_engine, original);
+
+        let engine_blob =
+            BackupEngine::compress(original.clone(), BackupCompression::Gzip).unwrap();
+        let via_oxiarc = oxiarc_deflate::gzip_decompress(&engine_blob).unwrap();
+        assert_eq!(via_oxiarc, original);
     }
 
     fn dummy_manifest() -> BackupManifest {

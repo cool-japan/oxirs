@@ -175,33 +175,17 @@ impl BinarySerializer {
             .map_err(|e| anyhow::anyhow!("Zstd decompression failed: {}", e))
     }
 
-    /// Compress data using Deflate
+    /// Compress data using Deflate (zlib-wrapped DEFLATE stream)
     fn compress_deflate(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::write::ZlibEncoder;
-        use flate2::Compression;
-        use std::io::Write;
-
-        let mut encoder = ZlibEncoder::new(
-            Vec::new(),
-            Compression::new(self.config.compression_level as u32),
-        );
-        encoder.write_all(data)?;
-        encoder
-            .finish()
+        let level = self.config.compression_level.clamp(0, 9) as u8;
+        oxiarc_deflate::zlib_compress(data, level)
             .map_err(|e| anyhow::anyhow!("Deflate compression failed: {}", e))
     }
 
-    /// Decompress Deflate data
+    /// Decompress Deflate data (zlib-wrapped DEFLATE stream)
     fn decompress_deflate(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::read::ZlibDecoder;
-        use std::io::Read;
-
-        let mut decoder = ZlibDecoder::new(data);
-        let mut result = Vec::new();
-        decoder
-            .read_to_end(&mut result)
-            .map_err(|e| anyhow::anyhow!("Deflate decompression failed: {}", e))?;
-        Ok(result)
+        oxiarc_deflate::zlib_decompress(data)
+            .map_err(|e| anyhow::anyhow!("Deflate decompression failed: {}", e))
     }
 }
 

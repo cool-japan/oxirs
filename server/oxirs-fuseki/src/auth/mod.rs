@@ -21,18 +21,21 @@ use tracing::{debug, info};
 // Module declarations
 pub mod api_key_service; // API key management with rotation and revocation
 pub mod certificate;
+pub mod cluster_auth; // Cross-node authentication tokens for cluster communication (Track A24)
 pub mod graph_acl; // Graph-level ACL on top of dataset RBAC (v1.0 LTS)
 pub mod graph_auth; // Graph-level authorization (ReBAC-based, Phase 2)
 pub mod http_auth; // Simplified HTTP auth middleware (ApiKey, Basic, Bearer, None)
 pub mod jwt; // JWT token generation and validation
 pub mod jwt_validation; // JWT validation and JWK management
 pub mod ldap;
+pub mod ldap_ha; // LDAP HA failover pool (multi-server, circuit breaker, round-robin)
 pub mod mfa_storage; // MFA persistent/in-memory storage backend
 pub mod oauth;
 pub mod oauth_providers; // Provider-specific OAuth2 implementations
 pub mod password;
 pub mod permissions;
 pub mod policy_engine; // 🆕 Unified Policy Engine (RBAC + ReBAC)
+pub mod policy_templates; // 🆕 Enterprise RBAC policy template registry (DBA, ReadOnly, Auditor)
 pub mod query_filter; // 🆕 SPARQL query result filtering (Phase 2)
 pub mod rbac; // Enhanced Role-Based Access Control
 pub mod rdf_rebac; // 🆕 RDF-native ReBAC implementation (Phase 4)
@@ -41,12 +44,26 @@ pub mod rebac_migration; // 🆕 ReBAC migration tools (Export/Import/Migrate)
 pub mod refresh_token; // OAuth 2.0 Refresh Token Rotation (RFC 6749 §10.4)
 #[cfg(feature = "saml")]
 pub mod saml;
+#[cfg(feature = "saml")]
+pub mod saml_helpers;
+#[cfg(feature = "saml")]
+pub mod saml_parser;
+#[cfg(feature = "saml")]
+pub mod saml_provider;
+#[cfg(all(test, feature = "saml"))]
+mod saml_tests;
+#[cfg(feature = "saml")]
+pub mod saml_types;
 pub mod session;
 pub mod token_management; // Token introspection and revocation (RFC 7662, RFC 7009)
 pub mod types;
 
 // Re-export key types for easy access
 pub use certificate::CertificateAuthService as CertificateAuthenticator;
+pub use cluster_auth::{
+    ClusterAuthConfig, ClusterAuthError, ClusterAuthManager, ClusterNodeToken, NodeIdentity,
+};
+pub use policy_templates::{GraphScope, PolicyTemplate, PolicyTemplateRegistry};
 pub use session::SessionManager;
 pub use types::*;
 

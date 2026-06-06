@@ -1077,18 +1077,10 @@ impl SubscriptionManager {
         (changed_count as f64 / total_bindings as f64) * 100.0
     }
 
-    /// Decompress message
+    /// Decompress message (gzip via Pure-Rust `oxiarc-deflate`)
     fn decompress_message(data: &[u8]) -> FusekiResult<Vec<u8>> {
-        use flate2::read::GzDecoder;
-        use std::io::Read;
-
-        let mut decoder = GzDecoder::new(data);
-        let mut decompressed = Vec::new();
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|e| FusekiError::bad_request(format!("Decompression error: {e}")))?;
-
-        Ok(decompressed)
+        oxiarc_deflate::gzip_decompress(data)
+            .map_err(|e| FusekiError::bad_request(format!("Decompression error: {e}")))
     }
 
     /// Handle store change notification

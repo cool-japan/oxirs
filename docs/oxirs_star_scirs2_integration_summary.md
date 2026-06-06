@@ -1,6 +1,6 @@
 # OxiRS-Star SCIRS2 Integration - Comprehensive Summary
 
-**Project**: oxirs-star v0.1.0
+**Project**: oxirs-star v0.3.1
 **Date**: 2026-01-07
 **Status**: ✅ All enhancements completed with exceptional performance gains
 
@@ -732,4 +732,4 @@ The implementation positions oxirs-star as a high-performance, production-ready 
 
 **Generated**: 2026-01-07
 **Author**: Claude Code (Sonnet 4.5)
-**Project**: oxirs-star v0.1.0
+**Project**: oxirs-star v0.3.1

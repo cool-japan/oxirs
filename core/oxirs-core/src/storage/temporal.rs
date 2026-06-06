@@ -684,8 +684,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_temporal_storage() {
+        let dir = tempfile::tempdir().expect("tempdir");
         let config = TemporalConfig {
-            path: PathBuf::from("/tmp/oxirs_temporal_test"),
+            path: dir.path().join("oxirs_temporal_test"),
             ..Default::default()
         };
 
@@ -736,8 +737,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_entity_history() {
+        let dir = tempfile::tempdir().expect("tempdir");
         let config = TemporalConfig {
-            path: PathBuf::from("/tmp/oxirs_temporal_history"),
+            path: dir.path().join("oxirs_temporal_history"),
             ..Default::default()
         };
 

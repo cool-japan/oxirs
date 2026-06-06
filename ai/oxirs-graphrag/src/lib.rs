@@ -253,8 +253,18 @@ pub mod explainability;
 // v1.1.0 round 17: Interactive refinement with user feedback
 pub mod feedback;
 
+// v0.4.0: Re-export new GraphSummarizer + GraphSummary types
+pub use summarizer::{GraphSummarizer, GraphSummary};
+// v0.4.0: Re-export new TripleRelevanceFeedback + Relevance types
+pub use feedback::{Relevance, TripleId, TripleRelevanceFeedback};
+
 // v0.3.0 / block-5: GNN encoder — phase a: GraphSAGE over the knowledge graph
 pub mod gnn_encoder;
+
+// v0.3.1: GNN encoder new components
+pub use gnn_encoder::{
+    AdjacencyGraph, EdgeList, GnnEncoder, GnnEncoderConfig, ScaledDotProductAttention,
+};
 
 // v0.3.0 / block-6: Hybrid GNN+LLM — phase b/c: LLM head with frozen GNN soft-prompt
 pub mod hybrid;

@@ -486,6 +486,7 @@ impl JitCompiler {
                 Some(SubjectPattern::Variable(v)) => format!("var:{}", v.as_str()),
                 Some(SubjectPattern::NamedNode(n)) => format!("node:{}", n.as_str()),
                 Some(SubjectPattern::BlankNode(b)) => format!("blank:{}", b.as_str()),
+                Some(SubjectPattern::QuotedTriple(_)) => "quoted-triple".to_string(),
                 None => continue,
             };
 
@@ -774,6 +775,7 @@ impl JitCompiler {
             }
             SubjectPattern::NamedNode(n) => matches!(subject, Subject::NamedNode(nn) if nn == n),
             SubjectPattern::BlankNode(b) => matches!(subject, Subject::BlankNode(bn) if bn == b),
+            SubjectPattern::QuotedTriple(_) => matches!(subject, Subject::QuotedTriple(_)),
         }
     }
 
@@ -822,6 +824,7 @@ impl JitCompiler {
             ObjectPattern::NamedNode(n) => matches!(object, Object::NamedNode(nn) if nn == n),
             ObjectPattern::BlankNode(b) => matches!(object, Object::BlankNode(bn) if bn == b),
             ObjectPattern::Literal(l) => matches!(object, Object::Literal(lit) if lit == l),
+            ObjectPattern::QuotedTriple(_) => matches!(object, Object::QuotedTriple(_)),
         }
     }
 
@@ -1043,6 +1046,12 @@ fn match_triple_fast(
                         return None;
                     }
                 } else {
+                    return None;
+                }
+            }
+            SubjectPattern::QuotedTriple(_) => {
+                // A quoted-triple pattern matches any quoted-triple subject.
+                if !matches!(triple.subject(), Subject::QuotedTriple(_)) {
                     return None;
                 }
             }

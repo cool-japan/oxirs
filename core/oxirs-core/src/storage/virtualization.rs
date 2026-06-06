@@ -568,10 +568,9 @@ impl VirtualStorage {
     ) -> Result<Arc<dyn StorageEngine>, OxirsError> {
         match &config.backend_type {
             BackendType::Tiered => {
-                // Tiered backend temporarily disabled due to dependency conflicts
+                // Tiered persistent backend is not available in this build.
                 Err(OxirsError::Store(
-                    "Tiered backend temporarily disabled due to RocksDB dependency conflicts"
-                        .to_string(),
+                    "Tiered backend persistent storage is not available in this build".to_string(),
                 ))
             }
             BackendType::Columnar => {
@@ -1104,13 +1103,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "Virtual storage backends not yet implemented - all backend types are disabled"]
     async fn test_virtual_storage() {
-        let test_dir = format!(
-            "/tmp/oxirs_virtual_test_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("operation should succeed")
-                .as_millis()
-        );
+        let dir = tempfile::tempdir().expect("tempdir");
+        let test_dir = dir.path().join("oxirs_virtual_test").display().to_string();
 
         let mut config = VirtualStorageConfig {
             path: PathBuf::from(&test_dir),

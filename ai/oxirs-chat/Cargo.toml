@@ -41,7 +41,10 @@ futures-util.workspace = true
 
 # LLM Integration
 reqwest = { workspace = true, features = ["stream"] }
-async-openai = { version = "0.36", features = ["chat-completion", "audio"] }
+# async-openai forces `reqwest/rustls` (= aws-lc-rs, C/C++) and has no
+# no-provider variant, so feature-unification would poison the whole graph with
+# aws-lc-sys. It is therefore opt-in behind the non-default `openai` feature.
+async-openai = { version = "0.36", default-features = false, features = ["chat-completion", "audio"], optional = true }
 # anthropic-sdk = "0.1" # Add when available
 
 # Storage and Caching
@@ -72,7 +75,7 @@ sha2.workspace = true
 # Session persistence and state management
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 oxiarc-zstd.workspace = true
-flate2.workspace = true    # Gzip compression for memory_optimization
+oxiarc-deflate.workspace = true  # Pure Rust gzip compression for memory_optimization
 oxiarc-lz4.workspace = true  # LZ4 compression for memory_optimization
 
 # Encryption
@@ -94,6 +97,12 @@ default = []
 llm-integration = []
 nl2sparql = []
 excel-export = ["rust_xlsxwriter"]
+# OpenAI provider (chat + Whisper STT/TTS) via async-openai. NOT in `default`
+# because async-openai's HTTP path would otherwise pull `aws-lc-rs` (C/C++) into
+# the whole workspace through feature unification. The crate's own reqwest is
+# `default-features = false`, so it rides the workspace's pure rustls-no-provider
+# backend (process-default Pure Rust provider) once enabled.
+openai = ["dep:async-openai"]
 
 [[bin]]
 name = "oxirs-chat"

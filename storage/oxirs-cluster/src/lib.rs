@@ -1,9 +1,9 @@
 //! # OxiRS Cluster
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-cluster/badge.svg)](https://docs.rs/oxirs-cluster)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Raft-backed distributed dataset for high availability and horizontal scaling.
@@ -77,6 +77,11 @@ pub mod backup_restore;
 pub mod circuit_breaker;
 pub mod cloud_integration;
 pub mod cluster_metrics;
+pub mod cluster_metrics_manager;
+pub mod cluster_metrics_stats;
+#[cfg(test)]
+mod cluster_metrics_tests;
+pub mod cluster_metrics_types;
 pub mod compression_strategy;
 pub mod conflict_resolution;
 pub mod consensus;

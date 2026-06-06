@@ -136,6 +136,7 @@ async fn test_oauth2_handler_authorization_flow() {
         request_logger: std::sync::Arc::new(oxirs_fuseki::handlers::RequestLogger::new()),
         startup_time: std::time::Instant::now(),
         system_monitor: std::sync::Arc::new(parking_lot::Mutex::new(sysinfo::System::new_all())),
+        audit_logger: std::sync::Arc::new(oxirs_core::audit::InMemoryAuditLogger::new()),
         #[cfg(feature = "rate-limit")]
         rate_limiter: None,
     };

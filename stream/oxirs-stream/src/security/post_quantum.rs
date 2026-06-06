@@ -57,7 +57,11 @@ impl PostQuantumCryptoEngine {
                 self.generate_falcon_keypair(algorithm).await?
             }
             _ => {
-                return Err(anyhow!("Algorithm {:?} not yet implemented", algorithm));
+                return Err(anyhow!(
+                    "Post-quantum algorithm {:?} is not yet implemented. \
+                     Supported algorithms: Dilithium2/3/5, SPHINCS+-SHA2-128s/256s, Falcon512/1024",
+                    algorithm
+                ));
             }
         };
 

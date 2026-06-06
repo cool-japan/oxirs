@@ -1,6 +1,6 @@
 # OxiRS SAMM - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
@@ -61,8 +61,8 @@ OxiRS SAMM provides comprehensive support for the Semantic Aspect Meta Model (SA
   - **Prerequisites:** `toml`, `serde` already in workspace.
   - **Tests:** TOML round-trip; catalog references resolve; report contains every category; missing-status rows generate proper TODO entries; status enum exhaustiveness.
   - **Risk:** ESMF SDK feature list is large. Mitigation: scope to ESMF SDK 2.x core only; profile add-ons deferred.
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing
@@ -84,3 +84,11 @@ Top-3 `Missing` features surfaced by the ESMF SDK 2.x parity matrix (see `docs/e
 - [x] **Either characteristic** — implement the `samm-c:Either` union-type characteristic in `metamodel::characteristic` so that aspects can model properties whose value may be one of two distinct types. Reference: <https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#either-characteristic>
 - [x] **CLI `generate` command** — wire the existing code generators (Java, TypeScript, Python) to an oxirs CLI sub-command `samm generate` so that developers can invoke code generation without writing Rust code. Reference: <https://eclipse-esmf.github.io/esmf-sdk/2.9.7/samm-cli.html#generate> (completed 2026-05-01)
 - [x] **OpenAPI 3.1 schema generation** — extend `codegen::openapi` to emit OpenAPI 3.1 specifications aligned with JSON Schema 2020-12, enabling validation of the emitted document with modern tools. Reference: <https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#open-api-generation>
+
+## New ESMF parity gaps (surfaced 2026-05-17)
+
+Top-3 `Missing` features from the updated ESMF SDK 2.x parity matrix (see `docs/esmf_parity.md`):
+
+- [ ] **Cross-model reference validation** — validate external URN references that span independently loaded SAMM model files, so that `oxirs-samm` can report errors when a property references a type defined in a separately resolved model. Affects: `validator`. Reference: <https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#cross-model-reference>
+- [ ] **Pagination extension in OpenAPI output** — emit the `x-samm-pagination` extension block in OpenAPI specs generated from Collection-type aspects, enabling pagination-aware clients. Affects: `codegen::openapi`. Reference: <https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#open-api-generation>
+- [ ] **JSON-LD compaction / framing** — implement the JSON-LD 1.1 compaction algorithm and framing API so that emitted JSON-LD documents can be reshaped into application-specific frames. Affects: `generators::jsonld`, `serializer::jsonld`. Reference: <https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#mapping-to-json-ld>

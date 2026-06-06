@@ -17,9 +17,14 @@ pub mod result_formatter;
 
 // v1.8.0 SPARQL UPDATE statement parser
 pub mod update_parser;
+#[cfg(test)]
+mod update_parser_tests;
 
 pub mod aggregates;
 pub mod executor;
+pub mod executor_query_handlers;
+#[cfg(test)]
+mod executor_tests;
 pub mod expressions;
 pub mod filter;
 pub mod modifiers;

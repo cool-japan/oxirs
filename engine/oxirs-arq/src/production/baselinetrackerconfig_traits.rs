@@ -8,7 +8,7 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use super::types::BaselineTrackerConfig;
+use super::types_monitor::BaselineTrackerConfig;
 
 impl Default for BaselineTrackerConfig {
     fn default() -> Self {

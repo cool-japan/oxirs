@@ -1167,7 +1167,10 @@ mod tests {
 
         // Modify parameters
         {
-            let mut params = calibrator.parameters.write().unwrap();
+            let mut params = calibrator
+                .parameters
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             params.seq_scan_cost = 2.5;
         }
 

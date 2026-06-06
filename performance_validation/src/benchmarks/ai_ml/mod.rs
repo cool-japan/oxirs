@@ -1,29 +1,17 @@
-use rand_distr::Distribution;use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
-use scirs2_core::random::Random;
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
+use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 
 // Helper function for normal distribution using Box-Muller transform
-fn generate_normal(rng: &mut Random<impl rand::Rng>, mean: f64, std_dev: f64) -> f64 {
+fn generate_normal(rng: &mut StdRng, mean: f64, std_dev: f64) -> f64 {
     use std::f64::consts::PI;
-    static mut SPARE: Option<f64> = None;
-    static mut HAS_SPARE: bool = false;
-
-    unsafe {
-        if HAS_SPARE {
-            HAS_SPARE = false;
-            return SPARE.unwrap() * std_dev + mean;
-        }
-
-        HAS_SPARE = true;
-        let u: f64 = rng.random_range(0.0, 1.0);
-        let v: f64 = rng.random_range(0.0, 1.0);
-        let mag = std_dev * (-2.0 * u.ln()).sqrt();
-        SPARE = Some(mag * (2.0 * PI * v).sin());
-        mag * (2.0 * PI * v).cos() + mean
-    }
+    let u: f64 = rng.random_range(0.0f64..1.0f64);
+    let v: f64 = rng.random_range(0.0f64..1.0f64);
+    let mag = std_dev * (-2.0 * u.ln()).sqrt();
+    mag * (2.0 * PI * v).cos() + mean
 }
-use rand_distr::{Normal, Uniform};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,8 +158,10 @@ pub async fn run_ai_ml_benchmark(config: AiMlBenchmarkConfig) -> Result<AiMlBenc
 
     // Detect hardware capabilities
     let hardware_info = detect_hardware_info();
-    println!("🖥️  Hardware: GPU={}, CPU cores={}, SIMD={:?}",
-             hardware_info.gpu_available, hardware_info.cpu_cores, hardware_info.simd_support);
+    println!(
+        "🖥️  Hardware: GPU={}, CPU cores={}, SIMD={:?}",
+        hardware_info.gpu_available, hardware_info.cpu_cores, hardware_info.simd_support
+    );
 
     // Test embedding generation performance
     println!("🔤 Testing embedding generation...");
@@ -234,6 +224,7 @@ fn detect_hardware_info() -> HardwareInfo {
     }
 }
 
+#[allow(unreachable_code)]
 fn detect_gpu_availability() -> bool {
     #[cfg(feature = "cuda")]
     {
@@ -265,7 +256,8 @@ async fn test_embedding_generation(
                     dimensions,
                     dataset_size,
                     batch_size,
-                ).await?;
+                )
+                .await?;
                 results.push(result);
             }
         }
@@ -288,7 +280,14 @@ async fn benchmark_embedding_generation(
     // Warmup
     for _ in 0..config.warmup_iterations {
         let _ = baseline_embedding_generation(&entities, &relations, dimensions, batch_size);
-        let _ = optimized_embedding_generation(&entities, &relations, dimensions, batch_size, hardware_info).await;
+        let _ = optimized_embedding_generation(
+            &entities,
+            &relations,
+            dimensions,
+            batch_size,
+            hardware_info,
+        )
+        .await;
     }
 
     // Benchmark baseline
@@ -296,7 +295,8 @@ async fn benchmark_embedding_generation(
     let mut baseline_memory_usage = Vec::new();
     for _ in 0..config.iterations {
         let start = Instant::now();
-        let baseline_result = baseline_embedding_generation(&entities, &relations, dimensions, batch_size);
+        let baseline_result =
+            baseline_embedding_generation(&entities, &relations, dimensions, batch_size);
         baseline_durations.push(start.elapsed());
         baseline_memory_usage.push(baseline_result.memory_usage_mb);
     }
@@ -317,7 +317,14 @@ async fn benchmark_embedding_generation(
 
     for _ in 0..config.iterations {
         let start = Instant::now();
-        let optimized_result = optimized_embedding_generation(&entities, &relations, dimensions, batch_size, hardware_info).await;
+        let optimized_result = optimized_embedding_generation(
+            &entities,
+            &relations,
+            dimensions,
+            batch_size,
+            hardware_info,
+        )
+        .await;
         optimized_durations.push(start.elapsed());
         optimized_memory_usage.push(optimized_result.memory_usage_mb);
         gpu_used = optimized_result.gpu_used;
@@ -331,20 +338,18 @@ async fn benchmark_embedding_generation(
     let optimized_duration = average_duration(&optimized_durations);
     let speedup_factor = baseline_duration.as_secs_f64() / optimized_duration.as_secs_f64();
 
-    let baseline_memory = baseline_memory_usage.iter().sum::<f64>() / baseline_memory_usage.len() as f64;
-    let optimized_memory = optimized_memory_usage.iter().sum::<f64>() / optimized_memory_usage.len() as f64;
-    let memory_efficiency_improvement = ((baseline_memory - optimized_memory) / baseline_memory) * 100.0;
+    let baseline_memory =
+        baseline_memory_usage.iter().sum::<f64>() / baseline_memory_usage.len() as f64;
+    let optimized_memory =
+        optimized_memory_usage.iter().sum::<f64>() / optimized_memory_usage.len() as f64;
+    let memory_efficiency_improvement =
+        ((baseline_memory - optimized_memory) / baseline_memory) * 100.0;
 
     let throughput_ops_per_sec = (dataset_size as f64) / optimized_duration.as_secs_f64();
 
     // Test accuracy
-    let (accuracy_maintained, accuracy_difference) = test_embedding_accuracy(
-        &entities,
-        &relations,
-        dimensions,
-        batch_size,
-        hardware_info,
-    ).await;
+    let (accuracy_maintained, accuracy_difference) =
+        test_embedding_accuracy(&entities, &relations, dimensions, batch_size, hardware_info).await;
 
     Ok(AiMlBenchmarkResult {
         test_name: "embedding_generation".to_string(),
@@ -363,7 +368,8 @@ async fn benchmark_embedding_generation(
         gpu_acceleration_used: gpu_used && config.test_gpu_acceleration,
         simd_optimization_used: simd_used && config.test_simd_optimization,
         scirs2_integration_used: scirs2_used && config.test_scirs2_integration,
-        performance_target_met: speedup_factor >= config.performance_thresholds.embedding_generation_speedup,
+        performance_target_met: speedup_factor
+            >= config.performance_thresholds.embedding_generation_speedup,
         optimization_breakdown,
     })
 }
@@ -376,12 +382,9 @@ async fn test_similarity_computation(
 
     for &dimensions in &config.embedding_dimensions {
         for &dataset_size in &config.dataset_sizes {
-            let result = benchmark_similarity_computation(
-                config,
-                hardware_info,
-                dimensions,
-                dataset_size,
-            ).await?;
+            let result =
+                benchmark_similarity_computation(config, hardware_info, dimensions, dataset_size)
+                    .await?;
             results.push(result);
         }
     }
@@ -402,7 +405,8 @@ async fn benchmark_similarity_computation(
     // Warmup
     for _ in 0..config.warmup_iterations {
         let _ = baseline_similarity_computation(&embeddings, &query_embeddings);
-        let _ = optimized_similarity_computation(&embeddings, &query_embeddings, hardware_info).await;
+        let _ =
+            optimized_similarity_computation(&embeddings, &query_embeddings, hardware_info).await;
     }
 
     // Benchmark baseline
@@ -418,7 +422,8 @@ async fn benchmark_similarity_computation(
     let mut optimization_results = Vec::new();
     for _ in 0..config.iterations {
         let start = Instant::now();
-        let result = optimized_similarity_computation(&embeddings, &query_embeddings, hardware_info).await;
+        let result =
+            optimized_similarity_computation(&embeddings, &query_embeddings, hardware_info).await;
         optimized_durations.push(start.elapsed());
         optimization_results.push(result);
     }
@@ -449,8 +454,10 @@ async fn benchmark_similarity_computation(
         accuracy_difference: 0.0001, // Very small difference expected
         gpu_acceleration_used: optimization_results[0].gpu_used && config.test_gpu_acceleration,
         simd_optimization_used: optimization_results[0].simd_used && config.test_simd_optimization,
-        scirs2_integration_used: optimization_results[0].scirs2_used && config.test_scirs2_integration,
-        performance_target_met: speedup_factor >= config.performance_thresholds.similarity_computation_speedup,
+        scirs2_integration_used: optimization_results[0].scirs2_used
+            && config.test_scirs2_integration,
+        performance_target_met: speedup_factor
+            >= config.performance_thresholds.similarity_computation_speedup,
         optimization_breakdown,
     })
 }
@@ -462,13 +469,10 @@ async fn test_neural_training(
     let mut results = Vec::new();
 
     for architecture in &config.neural_architectures {
-        for &dimensions in &config.embedding_dimensions[..2] { // Limit for training tests
-            let result = benchmark_neural_training(
-                config,
-                hardware_info,
-                architecture,
-                dimensions,
-            ).await?;
+        for &dimensions in &config.embedding_dimensions[..2] {
+            // Limit for training tests
+            let result =
+                benchmark_neural_training(config, hardware_info, architecture, dimensions).await?;
             results.push(result);
         }
     }
@@ -487,12 +491,14 @@ async fn benchmark_neural_training(
     // Warmup
     for _ in 0..config.warmup_iterations {
         let _ = baseline_neural_training(&training_data, architecture, dimensions);
-        let _ = optimized_neural_training(&training_data, architecture, dimensions, hardware_info).await;
+        let _ = optimized_neural_training(&training_data, architecture, dimensions, hardware_info)
+            .await;
     }
 
     // Benchmark training
     let mut baseline_durations = Vec::new();
-    for _ in 0..std::cmp::min(config.iterations, 5) { // Limit training iterations
+    for _ in 0..std::cmp::min(config.iterations, 5) {
+        // Limit training iterations
         let start = Instant::now();
         let _ = baseline_neural_training(&training_data, architecture, dimensions);
         baseline_durations.push(start.elapsed());
@@ -502,7 +508,9 @@ async fn benchmark_neural_training(
     let mut optimization_results = Vec::new();
     for _ in 0..std::cmp::min(config.iterations, 5) {
         let start = Instant::now();
-        let result = optimized_neural_training(&training_data, architecture, dimensions, hardware_info).await;
+        let result =
+            optimized_neural_training(&training_data, architecture, dimensions, hardware_info)
+                .await;
         optimized_durations.push(start.elapsed());
         optimization_results.push(result);
     }
@@ -529,7 +537,8 @@ async fn benchmark_neural_training(
         accuracy_difference: 0.005, // Small difference acceptable in training
         gpu_acceleration_used: optimization_results[0].gpu_used && config.test_gpu_acceleration,
         simd_optimization_used: optimization_results[0].simd_used && config.test_simd_optimization,
-        scirs2_integration_used: optimization_results[0].scirs2_used && config.test_scirs2_integration,
+        scirs2_integration_used: optimization_results[0].scirs2_used
+            && config.test_scirs2_integration,
         performance_target_met: speedup_factor >= config.performance_thresholds.training_speedup,
         optimization_breakdown,
     })
@@ -613,7 +622,7 @@ async fn benchmark_fisher_yates_shuffle(
     let array_size: usize = 1000000; // 1M elements
 
     // Generate test data
-    let test_data: Vec<u32> = (0..array_size as u32).map(|i| i).collect();
+    let test_data: Vec<u32> = (0..array_size as u32).collect();
 
     // Baseline: Standard library shuffle
     let mut baseline_durations = Vec::new();
@@ -676,7 +685,7 @@ fn generate_test_relations(count: usize) -> Vec<String> {
 }
 
 fn generate_test_embeddings(count: usize, dimensions: usize) -> Vec<Vec<f32>> {
-    let mut rng = Random::seed(42);
+    let mut rng = StdRng::seed_from_u64(42);
 
     (0..count)
         .map(|_| {
@@ -688,7 +697,7 @@ fn generate_test_embeddings(count: usize, dimensions: usize) -> Vec<Vec<f32>> {
 }
 
 fn generate_training_data(samples: usize, dimensions: usize) -> Vec<TrainingTriple> {
-    let mut rng = Random::seed(789);
+    let mut rng = StdRng::seed_from_u64(789);
 
     (0..samples)
         .map(|_| TrainingTriple {
@@ -700,6 +709,7 @@ fn generate_training_data(samples: usize, dimensions: usize) -> Vec<TrainingTrip
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct TrainingTriple {
     head: usize,
     relation: usize,
@@ -721,7 +731,7 @@ fn baseline_embedding_generation(
     batch_size: usize,
 ) -> EmbeddingGenerationResult {
     let mut embeddings = HashMap::new();
-    let mut rng = Random::seed(123);
+    let mut rng = StdRng::seed_from_u64(123);
 
     // Simple embedding generation without optimizations
     for entity in entities.iter().take(batch_size) {
@@ -764,7 +774,7 @@ async fn optimized_embedding_generation(
     hardware_info: &HardwareInfo,
 ) -> OptimizedEmbeddingResult {
     let mut embeddings = HashMap::new();
-    let mut rng = Random::seed(123); // scirs2 random number generator
+    let mut rng = StdRng::seed_from_u64(123); // scirs2 random number generator
 
     let gpu_used = hardware_info.gpu_available && dimensions >= 512 && batch_size >= 128;
     let simd_used = !hardware_info.simd_support.is_empty() && dimensions >= 64;
@@ -774,10 +784,11 @@ async fn optimized_embedding_generation(
     let optimization_factor = 1.0
         * if gpu_used { 0.3 } else { 1.0 }       // 70% reduction with GPU
         * if simd_used { 0.7 } else { 1.0 }      // 30% reduction with SIMD
-        * if scirs2_used { 0.9 } else { 1.0 };   // 10% reduction with scirs2
+        * if scirs2_used { 0.9 } else { 1.0 }; // 10% reduction with scirs2
 
     // Simulate optimized computation time
-    let computation_time_ms = (batch_size as f64 * dimensions as f64 / 1000.0 * optimization_factor) as u64;
+    let computation_time_ms =
+        (batch_size as f64 * dimensions as f64 / 1000.0 * optimization_factor) as u64;
     tokio::time::sleep(Duration::from_millis(computation_time_ms / 100)).await; // Scale for testing
 
     // Generate embeddings more efficiently
@@ -816,10 +827,7 @@ async fn optimized_embedding_generation(
     }
 }
 
-fn baseline_similarity_computation(
-    embeddings: &[Vec<f32>],
-    queries: &[Vec<f32>],
-) -> Vec<Vec<f32>> {
+fn baseline_similarity_computation(embeddings: &[Vec<f32>], queries: &[Vec<f32>]) -> Vec<Vec<f32>> {
     let mut similarities = Vec::new();
 
     for query in queries {
@@ -835,6 +843,7 @@ fn baseline_similarity_computation(
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct OptimizedSimilarityResult {
     similarities: Vec<Vec<f32>>,
     memory_usage_mb: f64,
@@ -855,10 +864,11 @@ async fn optimized_similarity_computation(
 
     let optimization_factor = 1.0
         * if gpu_used { 0.2 } else { 1.0 }    // 80% reduction with GPU
-        * if simd_used { 0.5 } else { 1.0 };  // 50% reduction with SIMD
+        * if simd_used { 0.5 } else { 1.0 }; // 50% reduction with SIMD
 
     // Simulate optimized computation
-    let computation_time_ms = (embeddings.len() * queries.len() / 1000) as f64 * optimization_factor;
+    let computation_time_ms =
+        (embeddings.len() * queries.len() / 1000) as f64 * optimization_factor;
     tokio::time::sleep(Duration::from_millis(computation_time_ms as u64 / 100)).await;
 
     let mut similarities = Vec::new();
@@ -934,7 +944,7 @@ async fn optimized_neural_training(
 
     OptimizedEmbeddingResult {
         embeddings: HashMap::new(), // Not used for training
-        memory_usage_mb: 100.0, // Simulated training memory usage
+        memory_usage_mb: 100.0,     // Simulated training memory usage
         gpu_used,
         simd_used,
         scirs2_used: true,
@@ -950,33 +960,35 @@ async fn optimized_neural_training(
 
 fn generate_normal_samples_baseline(count: usize) -> Vec<f64> {
     // Simple approximation using uniform random numbers for baseline
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
-    (0..count).map(|_| {
-        // Box-Muller transform using standard library rand
-        let u1: f64 = rng.random();
-        let u2: f64 = rng.random();
-        (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
-    }).collect()
+    (0..count)
+        .map(|_| {
+            // Box-Muller transform using standard library rand
+            let u1: f64 = rng.random();
+            let u2: f64 = rng.random();
+            (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
+        })
+        .collect()
 }
 
 fn generate_normal_samples_scirs2(count: usize) -> Vec<f64> {
-    let mut rng = Random::seed(42);
+    let mut rng = StdRng::seed_from_u64(42);
 
-    (0..count).map(|_| generate_normal(&mut rng, 0.0, 1.0)).collect()
+    (0..count)
+        .map(|_| generate_normal(&mut rng, 0.0, 1.0))
+        .collect()
 }
 
 fn shuffle_baseline<T>(items: &mut [T]) {
     use rand::seq::SliceRandom;
-    use rand::thread_rng;
 
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     items.shuffle(&mut rng);
 }
 
 fn shuffle_scirs2<T>(items: &mut [T]) {
-    let mut rng = Random::seed(123);
+    let mut rng = StdRng::seed_from_u64(123);
 
     // Fisher-Yates shuffle with scirs2 RNG
     for i in (1..items.len()).rev() {
@@ -994,8 +1006,11 @@ async fn test_embedding_accuracy(
     batch_size: usize,
     hardware_info: &HardwareInfo,
 ) -> (bool, f64) {
-    let baseline_result = baseline_embedding_generation(entities, relations, dimensions, batch_size);
-    let optimized_result = optimized_embedding_generation(entities, relations, dimensions, batch_size, hardware_info).await;
+    let baseline_result =
+        baseline_embedding_generation(entities, relations, dimensions, batch_size);
+    let optimized_result =
+        optimized_embedding_generation(entities, relations, dimensions, batch_size, hardware_info)
+            .await;
 
     // Compare a sample of embeddings
     let mut total_difference = 0.0;
@@ -1003,7 +1018,8 @@ async fn test_embedding_accuracy(
 
     for (key, baseline_embedding) in baseline_result.embeddings.iter().take(10) {
         if let Some(optimized_embedding) = optimized_result.embeddings.get(key) {
-            let difference = calculate_embedding_difference(baseline_embedding, optimized_embedding);
+            let difference =
+                calculate_embedding_difference(baseline_embedding, optimized_embedding);
             total_difference += difference;
             comparisons += 1;
         }
@@ -1025,7 +1041,8 @@ fn calculate_embedding_difference(embedding1: &[f32], embedding2: &[f32]) -> f64
         .iter()
         .zip(embedding2.iter())
         .map(|(a, b)| (*a as f64 - *b as f64).abs())
-        .sum::<f64>() / embedding1.len() as f64
+        .sum::<f64>()
+        / embedding1.len() as f64
 }
 
 fn average_duration(durations: &[Duration]) -> Duration {
@@ -1039,7 +1056,7 @@ fn average_duration(durations: &[Duration]) -> Duration {
 
 fn calculate_ai_ml_benchmark_summary(
     results: &[AiMlBenchmarkResult],
-    config: &AiMlBenchmarkConfig,
+    _config: &AiMlBenchmarkConfig,
 ) -> AiMlBenchmarkSummary {
     let embedding_results: Vec<&AiMlBenchmarkResult> = results
         .iter()
@@ -1062,10 +1079,8 @@ fn calculate_ai_ml_benchmark_summary(
 
     let tests_meeting_targets = results.iter().filter(|r| r.performance_target_met).count();
 
-    let gpu_results: Vec<&AiMlBenchmarkResult> = results
-        .iter()
-        .filter(|r| r.gpu_acceleration_used)
-        .collect();
+    let gpu_results: Vec<&AiMlBenchmarkResult> =
+        results.iter().filter(|r| r.gpu_acceleration_used).collect();
     let simd_results: Vec<&AiMlBenchmarkResult> = results
         .iter()
         .filter(|r| r.simd_optimization_used)
@@ -1093,7 +1108,8 @@ fn calculate_ai_ml_benchmark_summary(
         scirs2_results.iter().map(|r| r.speedup_factor).sum::<f64>() / scirs2_results.len() as f64
     };
 
-    let overall_speedup = results.iter().map(|r| r.speedup_factor).sum::<f64>() / results.len() as f64;
+    let overall_speedup =
+        results.iter().map(|r| r.speedup_factor).sum::<f64>() / results.len() as f64;
     let overall_performance_score = (overall_speedup / 3.0 * 100.0).min(100.0); // Scale to 0-100
 
     AiMlBenchmarkSummary {
@@ -1107,7 +1123,10 @@ fn calculate_ai_ml_benchmark_summary(
             gpu_acceleration_effectiveness: gpu_effectiveness,
             simd_optimization_effectiveness: simd_effectiveness,
             scirs2_integration_effectiveness: scirs2_effectiveness,
-            overall_optimization_score: (gpu_effectiveness + simd_effectiveness + scirs2_effectiveness) / 3.0,
+            overall_optimization_score: (gpu_effectiveness
+                + simd_effectiveness
+                + scirs2_effectiveness)
+                / 3.0,
         },
     }
 }
@@ -1124,15 +1143,21 @@ fn calculate_operation_summary(results: &[&AiMlBenchmarkResult]) -> OperationSum
 
     let speedups: Vec<f64> = results.iter().map(|r| r.speedup_factor).collect();
     let average_speedup = speedups.iter().sum::<f64>() / speedups.len() as f64;
-    let max_speedup = speedups.iter().copied().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
+    let max_speedup = speedups
+        .iter()
+        .copied()
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or(0.0);
 
     let average_memory_efficiency = results
         .iter()
         .map(|r| r.memory_efficiency_improvement)
-        .sum::<f64>() / results.len() as f64;
+        .sum::<f64>()
+        / results.len() as f64;
 
     let accuracy_maintained_count = results.iter().filter(|r| r.accuracy_maintained).count();
-    let accuracy_maintained_percent = (accuracy_maintained_count as f64 / results.len() as f64) * 100.0;
+    let accuracy_maintained_percent =
+        (accuracy_maintained_count as f64 / results.len() as f64) * 100.0;
 
     OperationSummary {
         average_speedup,
@@ -1150,44 +1175,107 @@ pub mod report {
         let mut report = String::new();
 
         report.push_str("# AI/ML Performance Benchmark Report\n\n");
-        report.push_str(&format!("**Test Duration**: {:.2}s\n", suite.total_duration.as_secs_f64()));
-        report.push_str(&format!("**GPU Available**: {}\n", suite.hardware_info.gpu_available));
-        report.push_str(&format!("**SIMD Support**: {:?}\n", suite.hardware_info.simd_support));
+        report.push_str(&format!(
+            "**Test Duration**: {:.2}s\n",
+            suite.total_duration.as_secs_f64()
+        ));
+        report.push_str(&format!(
+            "**GPU Available**: {}\n",
+            suite.hardware_info.gpu_available
+        ));
+        report.push_str(&format!(
+            "**SIMD Support**: {:?}\n",
+            suite.hardware_info.simd_support
+        ));
 
         report.push_str("\n## Summary\n\n");
         let summary = &suite.summary;
-        report.push_str(&format!("- **Overall Performance Score**: {:.1}/100\n", summary.overall_performance_score));
-        report.push_str(&format!("- **Tests Meeting Targets**: {}/{}\n", summary.tests_meeting_targets, summary.total_tests));
+        report.push_str(&format!(
+            "- **Overall Performance Score**: {:.1}/100\n",
+            summary.overall_performance_score
+        ));
+        report.push_str(&format!(
+            "- **Tests Meeting Targets**: {}/{}\n",
+            summary.tests_meeting_targets, summary.total_tests
+        ));
 
         report.push_str("\n### Operation Summaries\n\n");
-        report.push_str(&format!("**Embedding Generation**\n"));
-        report.push_str(&format!("- Average Speedup: {:.2}x\n", summary.embedding_generation_summary.average_speedup));
-        report.push_str(&format!("- Max Speedup: {:.2}x\n", summary.embedding_generation_summary.max_speedup));
-        report.push_str(&format!("- Memory Efficiency: {:.1}%\n", summary.embedding_generation_summary.average_memory_efficiency));
+        report.push_str("**Embedding Generation**\n");
+        report.push_str(&format!(
+            "- Average Speedup: {:.2}x\n",
+            summary.embedding_generation_summary.average_speedup
+        ));
+        report.push_str(&format!(
+            "- Max Speedup: {:.2}x\n",
+            summary.embedding_generation_summary.max_speedup
+        ));
+        report.push_str(&format!(
+            "- Memory Efficiency: {:.1}%\n",
+            summary
+                .embedding_generation_summary
+                .average_memory_efficiency
+        ));
 
-        report.push_str(&format!("\n**Similarity Computation**\n"));
-        report.push_str(&format!("- Average Speedup: {:.2}x\n", summary.similarity_computation_summary.average_speedup));
-        report.push_str(&format!("- Max Speedup: {:.2}x\n", summary.similarity_computation_summary.max_speedup));
+        report.push_str("\n**Similarity Computation**\n");
+        report.push_str(&format!(
+            "- Average Speedup: {:.2}x\n",
+            summary.similarity_computation_summary.average_speedup
+        ));
+        report.push_str(&format!(
+            "- Max Speedup: {:.2}x\n",
+            summary.similarity_computation_summary.max_speedup
+        ));
 
-        report.push_str(&format!("\n**Neural Training**\n"));
-        report.push_str(&format!("- Average Speedup: {:.2}x\n", summary.neural_training_summary.average_speedup));
-        report.push_str(&format!("- Max Speedup: {:.2}x\n", summary.neural_training_summary.max_speedup));
+        report.push_str("\n**Neural Training**\n");
+        report.push_str(&format!(
+            "- Average Speedup: {:.2}x\n",
+            summary.neural_training_summary.average_speedup
+        ));
+        report.push_str(&format!(
+            "- Max Speedup: {:.2}x\n",
+            summary.neural_training_summary.max_speedup
+        ));
 
         report.push_str("\n### Optimization Effectiveness\n\n");
         let opt_eff = &summary.optimization_effectiveness;
-        report.push_str(&format!("- **GPU Acceleration**: {:.2}x average\n", opt_eff.gpu_acceleration_effectiveness));
-        report.push_str(&format!("- **SIMD Optimization**: {:.2}x average\n", opt_eff.simd_optimization_effectiveness));
-        report.push_str(&format!("- **scirs2 Integration**: {:.2}x average\n", opt_eff.scirs2_integration_effectiveness));
+        report.push_str(&format!(
+            "- **GPU Acceleration**: {:.2}x average\n",
+            opt_eff.gpu_acceleration_effectiveness
+        ));
+        report.push_str(&format!(
+            "- **SIMD Optimization**: {:.2}x average\n",
+            opt_eff.simd_optimization_effectiveness
+        ));
+        report.push_str(&format!(
+            "- **scirs2 Integration**: {:.2}x average\n",
+            opt_eff.scirs2_integration_effectiveness
+        ));
 
         report.push_str("\n## Detailed Results\n\n");
         report.push_str("| Test | Dimensions | Dataset Size | Speedup | Memory (MB) | Throughput (ops/s) | GPU | SIMD | scirs2 | Target |\n");
         report.push_str("|------|------------|--------------|---------|-------------|-------------------|-----|------|--------|--------|\n");
 
         for result in &suite.results {
-            let gpu_icon = if result.gpu_acceleration_used { "🟢" } else { "🔴" };
-            let simd_icon = if result.simd_optimization_used { "🟢" } else { "🔴" };
-            let scirs2_icon = if result.scirs2_integration_used { "🟢" } else { "🔴" };
-            let target_icon = if result.performance_target_met { "✅" } else { "❌" };
+            let gpu_icon = if result.gpu_acceleration_used {
+                "🟢"
+            } else {
+                "🔴"
+            };
+            let simd_icon = if result.simd_optimization_used {
+                "🟢"
+            } else {
+                "🔴"
+            };
+            let scirs2_icon = if result.scirs2_integration_used {
+                "🟢"
+            } else {
+                "🔴"
+            };
+            let target_icon = if result.performance_target_met {
+                "✅"
+            } else {
+                "❌"
+            };
 
             report.push_str(&format!(
                 "| {} | {} | {} | {:.2}x | {:.1} | {:.0} | {} | {} | {} | {} |\n",
@@ -1207,7 +1295,10 @@ pub mod report {
         Ok(report)
     }
 
-    pub fn save_ai_ml_benchmark_report(suite: &AiMlBenchmarkSuite, output_path: &str) -> Result<()> {
+    pub fn save_ai_ml_benchmark_report(
+        suite: &AiMlBenchmarkSuite,
+        output_path: &str,
+    ) -> Result<()> {
         let report = generate_ai_ml_benchmark_report(suite)?;
         fs::write(output_path, report)?;
         println!("📊 AI/ML benchmark report saved to: {}", output_path);

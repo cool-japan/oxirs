@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use crate::{patterns::Pattern, Result};
 
+use super::attention::{AttentionConfig, CrossPatternAttention};
 use super::types::{
     CausalRelationship, CorrelationAnalysisConfig, CorrelationAnalysisResult,
     CorrelationAnalysisStats, CorrelationCluster, CorrelationType, PatternCorrelation,
@@ -72,11 +73,38 @@ impl AdvancedPatternCorrelationAnalyzer {
             .filter(|c| c.statistical_significance > self.config.correlation_confidence_threshold)
             .count();
 
+        // Discover pattern hierarchies from the structural correlations.
+        let pattern_hierarchies = if self.config.enable_hierarchical_discovery {
+            self.discover_pattern_hierarchies(patterns, &correlations)
+        } else {
+            Vec::new()
+        };
+
+        // Compute cross-pattern attention insights.
+        // An empty pattern slice is valid; CrossPatternAttention handles it gracefully.
+        let attention_insights = {
+            let attention_config = AttentionConfig {
+                embedding_dim: 64,
+                num_heads: 4,
+                head_dim: 16,
+                dropout_rate: 0.0,
+                temperature: 1.0,
+                enable_position_encoding: false,
+                max_sequence_length: patterns.len().max(1),
+            };
+            let mut attention_mechanism = CrossPatternAttention::new(attention_config);
+            // Non-fatal: if attention fails we fall back to the empty default.
+            attention_mechanism
+                .compute_attention(patterns)
+                .await
+                .unwrap_or_default()
+        };
+
         Ok(CorrelationAnalysisResult {
             discovered_correlations: correlations,
             correlation_clusters: clusters,
-            pattern_hierarchies: Vec::new(), // TODO: Implement hierarchy discovery
-            attention_insights: Default::default(), // TODO: Implement attention analysis
+            pattern_hierarchies,
+            attention_insights,
             causal_relationships,
             analysis_metadata: Default::default(),
         })
@@ -132,7 +160,35 @@ impl AdvancedPatternCorrelationAnalyzer {
             CorrelationType::Semantic => self.compute_semantic_correlation(pattern1, pattern2),
             CorrelationType::Temporal => self.compute_temporal_correlation(pattern1, pattern2),
             CorrelationType::Functional => self.compute_functional_correlation(pattern1, pattern2),
-            _ => Ok(0.0), // TODO: Implement other correlation types
+            // Causal: high correlation between patterns of different types that
+            // frequently co-occur suggests a causal link.  We approximate this
+            // as the product of their supports (joint occurrence probability).
+            CorrelationType::Causal => {
+                let joint = pattern1.support() * pattern2.support();
+                Ok(joint.sqrt().clamp(0.0, 1.0))
+            }
+            // Hierarchical: patterns where one generalises the other (e.g. a
+            // class pattern subsumes a property pattern) are detected by
+            // comparing confidence asymmetry.
+            CorrelationType::Hierarchical => {
+                let conf_diff = (pattern1.confidence() - pattern2.confidence()).abs();
+                let support_min = pattern1.support().min(pattern2.support());
+                Ok((support_min * (1.0 - conf_diff)).clamp(0.0, 1.0))
+            }
+            // Contextual: patterns that share the same context are similar in
+            // support and confidence simultaneously.
+            CorrelationType::Contextual => {
+                let support_sim = 1.0 - (pattern1.support() - pattern2.support()).abs();
+                let conf_sim = 1.0 - (pattern1.confidence() - pattern2.confidence()).abs();
+                Ok((support_sim * conf_sim).clamp(0.0, 1.0))
+            }
+            // CrossDomain: cross-domain correlations are modelled as a scaled
+            // geometric mean of support values (patterns from different domains
+            // rarely have high joint support).
+            CorrelationType::CrossDomain => {
+                let geo_mean = (pattern1.support() * pattern2.support()).sqrt();
+                Ok((geo_mean * 0.5_f64).clamp(0.0, 1.0))
+            }
         }
     }
 
@@ -557,5 +613,96 @@ impl AdvancedPatternCorrelationAnalyzer {
     fn compute_causal_confidence(&self, strength: f64) -> f64 {
         // Convert causal strength to confidence level
         strength.min(0.95)
+    }
+
+    /// Discover hierarchical relationships among patterns by grouping them into
+    /// coarse top-level patterns and finer-grained leaf patterns.
+    ///
+    /// A simple two-level hierarchy is built:
+    /// - *Root* patterns are those whose average structural correlation with all
+    ///   other patterns is above the significance threshold (they are
+    ///   "generalisers").
+    /// - All remaining patterns become *leaf* patterns at level 1.
+    fn discover_pattern_hierarchies(
+        &self,
+        patterns: &[Pattern],
+        correlations: &[PatternCorrelation],
+    ) -> Vec<super::types::PatternHierarchy> {
+        use super::types::{HierarchyLevel, HierarchyMetrics, PatternHierarchy};
+
+        if patterns.len() < 2 {
+            return Vec::new();
+        }
+
+        let threshold = self.config.correlation_confidence_threshold;
+
+        // Compute average outgoing correlation strength per pattern.
+        let mut avg_corr: HashMap<String, (f64, usize)> = HashMap::new();
+        for corr in correlations {
+            let entry = avg_corr.entry(corr.pattern1_id.clone()).or_insert((0.0, 0));
+            entry.0 += corr.correlation_coefficient.abs();
+            entry.1 += 1;
+
+            let entry2 = avg_corr.entry(corr.pattern2_id.clone()).or_insert((0.0, 0));
+            entry2.0 += corr.correlation_coefficient.abs();
+            entry2.1 += 1;
+        }
+
+        let mut root_patterns = Vec::new();
+        let mut leaf_patterns = Vec::new();
+
+        for pattern in patterns {
+            let id = pattern.id().to_owned();
+            let is_root = avg_corr
+                .get(&id)
+                .map(|(sum, count)| *count > 0 && *sum / *count as f64 >= threshold)
+                .unwrap_or(false);
+
+            if is_root {
+                root_patterns.push(id);
+            } else {
+                leaf_patterns.push(id);
+            }
+        }
+
+        if root_patterns.is_empty() {
+            return Vec::new();
+        }
+
+        let branching_factor = if !root_patterns.is_empty() {
+            leaf_patterns.len() as f64 / root_patterns.len() as f64
+        } else {
+            0.0
+        };
+
+        let depth = if leaf_patterns.is_empty() { 1 } else { 2 };
+        let coverage = (root_patterns.len() + leaf_patterns.len()) as f64 / patterns.len() as f64;
+
+        let mut hierarchy = PatternHierarchy::new();
+        hierarchy.hierarchy_id = "discovered_hierarchy_0".to_string();
+        hierarchy.root_patterns = root_patterns.clone();
+        hierarchy.hierarchy_levels = vec![
+            HierarchyLevel {
+                level: 0,
+                patterns: root_patterns,
+                level_coherence: threshold,
+                inter_level_connections: Vec::new(),
+            },
+            HierarchyLevel {
+                level: 1,
+                patterns: leaf_patterns,
+                level_coherence: 1.0 - threshold,
+                inter_level_connections: Vec::new(),
+            },
+        ];
+        hierarchy.hierarchy_metrics = HierarchyMetrics {
+            hierarchy_depth: depth,
+            branching_factor,
+            coherence_score: threshold,
+            coverage_percentage: coverage * 100.0,
+            stability_measure: 0.8,
+        };
+
+        vec![hierarchy]
     }
 }

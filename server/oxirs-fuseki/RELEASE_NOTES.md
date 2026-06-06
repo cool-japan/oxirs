@@ -1,13 +1,13 @@
-# OxiRS Fuseki v0.2.3 Release Notes
+# OxiRS Fuseki v0.3.1 Release Notes
 
-**Release Date**: March 5, 2026
-**Status**: Production Release - v0.2.3
+**Release Date**: June 6, 2026
+**Status**: Production Release - v0.3.1
 
 ---
 
 ## 🎉 Overview
 
-OxiRS Fuseki v0.1.0 is a production-ready SPARQL 1.1/1.2 HTTP server built in Rust, providing full Apache Jena Fuseki compatibility with modern enhancements. This release represents a complete implementation of the semantic web server with advanced features for performance, security, and operations.
+OxiRS Fuseki v0.3.1 is a production-ready SPARQL 1.1/1.2 HTTP server built in Rust, providing full Apache Jena Fuseki compatibility with modern enhancements. This release represents a complete implementation of the semantic web server with advanced features for performance, security, and operations.
 
 ### Key Highlights
 
@@ -480,8 +480,8 @@ cargo build --release --all-features
 ### Docker
 
 ```bash
-docker pull ghcr.io/cool-japan/oxirs-fuseki:0.1.0
-docker run -p 3030:3030 ghcr.io/cool-japan/oxirs-fuseki:0.1.0
+docker pull ghcr.io/cool-japan/oxirs-fuseki:0.3.1
+docker run -p 3030:3030 ghcr.io/cool-japan/oxirs-fuseki:0.3.1
 ```
 
 ### Kubernetes

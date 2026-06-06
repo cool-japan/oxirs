@@ -459,47 +459,77 @@ impl NeuralPatternRecognizer {
         Ok(enhanced_patterns)
     }
 
-    /// Create composite pattern from multiple related patterns
+    /// Create composite pattern from multiple related patterns.
+    ///
+    /// Selects the highest-confidence input pattern as the base and assigns a
+    /// deterministic composite ID derived from all member IDs.  The composite
+    /// inherits the type and structure of the most informative constituent.
     fn create_composite_pattern(
         &self,
         pattern_ids: &[String],
         patterns: &[Pattern],
     ) -> Result<Pattern> {
-        // TODO: Implement sophisticated pattern composition
-        // For now, create a simple placeholder
+        // Pick the base: the constituent with highest confidence
+        let base = patterns
+            .iter()
+            .filter(|p| pattern_ids.contains(&p.id().to_string()))
+            .max_by(|a, b| {
+                a.confidence()
+                    .partial_cmp(&b.confidence())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .or_else(|| patterns.first())
+            .ok_or_else(|| {
+                ShaclAiError::ProcessingError("No patterns available for composition".to_string())
+            })?;
 
-        if let Some(first_pattern) = patterns.first() {
-            let composite = first_pattern
-                .clone()
-                .with_id(format!("composite_{}", uuid::Uuid::new_v4()));
-            Ok(composite)
-        } else {
-            Err(ShaclAiError::ProcessingError(
-                "No patterns available for composition".to_string(),
-            ))
-        }
+        // Build a deterministic composite ID by sorting and joining member IDs
+        let mut sorted_ids = pattern_ids.to_vec();
+        sorted_ids.sort();
+        let composite_id = format!("composite_{}", sorted_ids.join("_x_"));
+
+        Ok(base.clone().with_id(composite_id))
     }
 
-    /// Create merged pattern from two highly correlated patterns
+    /// Create merged pattern from two highly correlated patterns.
+    ///
+    /// Chooses the pattern with higher support as the structural basis for the
+    /// merged result, giving it a canonical merged ID.
     fn create_merged_pattern(
         &self,
         pattern1_id: &str,
         pattern2_id: &str,
         patterns: &[Pattern],
     ) -> Result<Pattern> {
-        // TODO: Implement sophisticated pattern merging
-        // For now, create a simple placeholder
+        // Find both constituent patterns
+        let p1 = patterns.iter().find(|p| p.id() == pattern1_id);
+        let p2 = patterns.iter().find(|p| p.id() == pattern2_id);
 
-        if let Some(first_pattern) = patterns.first() {
-            let merged = first_pattern
-                .clone()
-                .with_id(format!("merged_{pattern1_id}_{pattern2_id}"));
-            Ok(merged)
+        let base = match (p1, p2) {
+            (Some(a), Some(b)) => {
+                // Use the higher-support pattern as the structural base
+                if a.support() >= b.support() {
+                    a
+                } else {
+                    b
+                }
+            }
+            (Some(a), None) => a,
+            (None, Some(b)) => b,
+            (None, None) => patterns.first().ok_or_else(|| {
+                ShaclAiError::ProcessingError("No patterns available for merging".to_string())
+            })?,
+        };
+
+        // Canonical lexicographic merged ID
+        let (lo, hi) = if pattern1_id <= pattern2_id {
+            (pattern1_id, pattern2_id)
         } else {
-            Err(ShaclAiError::ProcessingError(
-                "No patterns available for merging".to_string(),
-            ))
-        }
+            (pattern2_id, pattern1_id)
+        };
+        let merged_id = format!("merged_{lo}__{hi}");
+
+        Ok(base.clone().with_id(merged_id))
     }
 
     /// Generate embeddings for patterns using feature-based approach

@@ -74,8 +74,8 @@ bloom = { version = "0.3", optional = true }
 petgraph.workspace = true
 regex.workspace = true
 md5.workspace = true
-flate2.workspace = true
-brotli.workspace = true
+oxiarc-deflate.workspace = true
+oxiarc-brotli.workspace = true
 oxiarc-lz4.workspace = true
 oxiarc-zstd.workspace = true
 rmp-serde.workspace = true

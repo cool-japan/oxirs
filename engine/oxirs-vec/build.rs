@@ -22,13 +22,17 @@ fn main() {
 
         if cuda_available {
             println!("cargo:rustc-cfg=cuda_runtime_available");
-            println!("cargo:warning=CUDA toolkit detected - GPU acceleration will be available");
+            // Informational only — emitted as plain build-script output (visible
+            // with `cargo build -vv`) rather than `cargo:warning=` so it does not
+            // violate the no-warnings policy.
+            println!("oxirs-vec: CUDA toolkit detected - GPU acceleration will be available");
         } else {
-            // CUDA not available - build will succeed with CPU fallbacks
-            println!("cargo:warning=CUDA feature enabled but toolkit not found");
-            println!("cargo:warning=GPU operations will fall back to CPU implementations");
-            println!("cargo:warning=For GPU acceleration, install CUDA toolkit from https://developer.nvidia.com/cuda-downloads");
-            println!("cargo:warning=Or build without CUDA feature: cargo build -p oxirs-vec (default features are Pure Rust)");
+            // CUDA not available - build will succeed with CPU fallbacks.
+            // Informational only (see note above); not emitted as `cargo:warning=`.
+            println!("oxirs-vec: CUDA feature enabled but toolkit not found");
+            println!("oxirs-vec: GPU operations will fall back to CPU implementations");
+            println!("oxirs-vec: For GPU acceleration, install CUDA toolkit from https://developer.nvidia.com/cuda-downloads");
+            println!("oxirs-vec: Or build without CUDA feature (default features are Pure Rust)");
         }
     }
 }

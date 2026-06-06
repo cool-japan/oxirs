@@ -98,9 +98,7 @@ fn parse_result_set(raw: &str, format: &str) -> ToolResult<QueryResult> {
         "json" | "srj" => parse_sparql_results_json(raw),
         "csv" => parse_sparql_results_csv(raw),
         "tsv" => parse_sparql_results_tsv(raw),
-        "xml" | "srx" => {
-            Err("XML input format is not yet supported for rset. Use JSON or CSV/TSV input.".into())
-        }
+        "xml" | "srx" => parse_sparql_results_xml(raw),
         other => Err(format!("Unsupported input format: '{other}'").into()),
     }
 }
@@ -318,6 +316,253 @@ fn parse_sparql_results_tsv(raw: &str) -> ToolResult<QueryResult> {
     })
 }
 
+/// Parse SPARQL Results XML (W3C SPARQL Results XML Format, SRX).
+///
+/// Supports SELECT results (bindings) and ASK results (boolean).
+/// Implements <https://www.w3.org/TR/rdf-sparql-XMLres/>
+fn parse_sparql_results_xml(raw: &str) -> ToolResult<QueryResult> {
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+
+    /// Tiny parser state machine
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    enum State {
+        Root,
+        Head,
+        Results,
+        Result,
+        Binding,
+        Uri,
+        Literal,
+        BNode,
+    }
+
+    let mut reader = Reader::from_str(raw);
+    reader.config_mut().trim_text(true);
+
+    let mut variables: Vec<Variable> = Vec::new();
+    let mut solutions: Vec<Binding> = Vec::new();
+
+    let mut state = State::Root;
+    let mut current_binding: Option<Binding> = None;
+    let mut current_var_name: Option<String> = None;
+    let mut text_buf = String::new();
+    // Literal attributes
+    let mut lit_lang: Option<String> = None;
+    let mut lit_datatype: Option<String> = None;
+    // For ASK results
+    let mut boolean_value: Option<bool> = None;
+    let mut in_boolean = false;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(ref e)) => {
+                let local = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                // Strip namespace prefix if present (e.g. "sparql:result" → "result")
+                let local = local
+                    .split_once(':')
+                    .map(|(_, l)| l)
+                    .unwrap_or(local.as_str())
+                    .to_owned();
+                match (state, local.as_str()) {
+                    (State::Root, "sparql") => {}
+                    (State::Root, "head") => state = State::Head,
+                    (State::Head, "variable") => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"name" {
+                                let name = String::from_utf8_lossy(&attr.value).into_owned();
+                                if let Ok(var) = Variable::new(&name) {
+                                    variables.push(var);
+                                }
+                            }
+                        }
+                    }
+                    (State::Root, "results") => state = State::Results,
+                    (State::Results, "result") => {
+                        current_binding = Some(HashMap::new());
+                        state = State::Result;
+                    }
+                    (State::Root | State::Head, "boolean") => {
+                        in_boolean = true;
+                        text_buf.clear();
+                    }
+                    (State::Result, "binding") => {
+                        current_var_name = None;
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"name" {
+                                current_var_name =
+                                    Some(String::from_utf8_lossy(&attr.value).into_owned());
+                            }
+                        }
+                        state = State::Binding;
+                    }
+                    (State::Binding, "uri") => {
+                        text_buf.clear();
+                        state = State::Uri;
+                    }
+                    (State::Binding, "literal") => {
+                        text_buf.clear();
+                        lit_lang = None;
+                        lit_datatype = None;
+                        for attr in e.attributes().flatten() {
+                            let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
+                            let val = String::from_utf8_lossy(&attr.value).into_owned();
+                            match key.as_str() {
+                                "xml:lang" | "lang" => lit_lang = Some(val),
+                                "datatype" => lit_datatype = Some(val),
+                                _ => {}
+                            }
+                        }
+                        state = State::Literal;
+                    }
+                    (State::Binding, "bnode") => {
+                        text_buf.clear();
+                        state = State::BNode;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Empty(ref e)) if state == State::Head => {
+                // Self-closing <variable name="x"/> inside <head>
+                let local = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                let local = local
+                    .split_once(':')
+                    .map(|(_, l)| l)
+                    .unwrap_or(local.as_str())
+                    .to_owned();
+                if local == "variable" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"name" {
+                            let name = String::from_utf8_lossy(&attr.value).into_owned();
+                            if let Ok(var) = Variable::new(&name) {
+                                variables.push(var);
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::Empty(_)) => {}
+            Ok(Event::Text(ref e))
+                if in_boolean || matches!(state, State::Uri | State::Literal | State::BNode) =>
+            {
+                let text = String::from_utf8_lossy(e.as_ref()).into_owned();
+                text_buf.push_str(&text);
+            }
+            Ok(Event::Text(_)) => {}
+            Ok(Event::End(ref e)) => {
+                let local = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                let local = local
+                    .split_once(':')
+                    .map(|(_, l)| l)
+                    .unwrap_or(local.as_str())
+                    .to_owned();
+                match (state, local.as_str()) {
+                    (State::Head, "head") => state = State::Root,
+                    (State::Results, "results") => state = State::Root,
+                    (State::Result, "result") => {
+                        if let Some(binding) = current_binding.take() {
+                            solutions.push(binding);
+                        }
+                        state = State::Results;
+                    }
+                    (State::Binding, "binding") => {
+                        state = State::Result;
+                        current_var_name = None;
+                    }
+                    (State::Uri, "uri") => {
+                        if let (Some(ref name), Some(ref mut binding)) =
+                            (&current_var_name, &mut current_binding)
+                        {
+                            let iri_str = text_buf.trim();
+                            match Iri::new(iri_str) {
+                                Ok(iri) => {
+                                    if let Ok(var) = Variable::new(name) {
+                                        binding.insert(var, Term::Iri(iri));
+                                    }
+                                }
+                                Err(e) => {
+                                    return Err(
+                                        format!("Invalid IRI in SRX '{iri_str}': {e}").into()
+                                    );
+                                }
+                            }
+                        }
+                        text_buf.clear();
+                        state = State::Binding;
+                    }
+                    (State::Literal, "literal") => {
+                        if let (Some(ref name), Some(ref mut binding)) =
+                            (&current_var_name, &mut current_binding)
+                        {
+                            let val = text_buf.clone();
+                            let lit = if let Some(lang) = lit_lang.take() {
+                                Literal::with_language(val, lang)
+                            } else if let Some(dt_str) = lit_datatype.take() {
+                                let dt_iri = Iri::new(&dt_str)
+                                    .map_err(|e| format!("Invalid datatype IRI '{dt_str}': {e}"))?;
+                                Literal {
+                                    value: val,
+                                    language: None,
+                                    datatype: Some(dt_iri),
+                                }
+                            } else {
+                                Literal {
+                                    value: val,
+                                    language: None,
+                                    datatype: None,
+                                }
+                            };
+                            if let Ok(var) = Variable::new(name) {
+                                binding.insert(var, Term::Literal(lit));
+                            }
+                        }
+                        text_buf.clear();
+                        state = State::Binding;
+                    }
+                    (State::BNode, "bnode") => {
+                        if let (Some(ref name), Some(ref mut binding)) =
+                            (&current_var_name, &mut current_binding)
+                        {
+                            if let Ok(var) = Variable::new(name) {
+                                binding.insert(var, Term::BlankNode(text_buf.trim().to_string()));
+                            }
+                        }
+                        text_buf.clear();
+                        state = State::Binding;
+                    }
+                    (_, "boolean") if in_boolean => {
+                        let trimmed = text_buf.trim().to_lowercase();
+                        boolean_value = match trimmed.as_str() {
+                            "true" => Some(true),
+                            "false" => Some(false),
+                            other => {
+                                return Err(
+                                    format!("Invalid boolean value in SRX: '{other}'").into()
+                                );
+                            }
+                        };
+                        in_boolean = false;
+                        text_buf.clear();
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(format!("XML parsing error in SRX: {e}").into()),
+            _ => {}
+        }
+    }
+
+    if let Some(val) = boolean_value {
+        return Ok(QueryResult::Boolean(val));
+    }
+
+    Ok(QueryResult::Bindings {
+        variables,
+        solutions,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,8 +622,206 @@ mod tests {
 
     #[test]
     fn test_unsupported_input_format() {
-        let result = parse_result_set("", "xml");
+        // "parquet" is not a supported input format
+        let result = parse_result_set("", "parquet");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_xml_boolean_true() {
+        let srx = r#"<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head/>
+  <boolean>true</boolean>
+</sparql>"#;
+        let result = parse_sparql_results_xml(srx).expect("parse SRX boolean true");
+        assert!(matches!(result, QueryResult::Boolean(true)));
+    }
+
+    #[test]
+    fn test_parse_xml_boolean_false() {
+        let srx = r#"<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head/>
+  <boolean>false</boolean>
+</sparql>"#;
+        let result = parse_sparql_results_xml(srx).expect("parse SRX boolean false");
+        assert!(matches!(result, QueryResult::Boolean(false)));
+    }
+
+    #[test]
+    fn test_parse_xml_bindings_uri() {
+        let srx = r#"<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head>
+    <variable name="s"/>
+    <variable name="p"/>
+    <variable name="o"/>
+  </head>
+  <results>
+    <result>
+      <binding name="s"><uri>http://example.org/alice</uri></binding>
+      <binding name="p"><uri>http://xmlns.com/foaf/0.1/name</uri></binding>
+      <binding name="o"><literal>Alice</literal></binding>
+    </result>
+  </results>
+</sparql>"#;
+        let result = parse_sparql_results_xml(srx).expect("parse SRX bindings");
+        match result {
+            QueryResult::Bindings {
+                variables,
+                solutions,
+            } => {
+                assert_eq!(variables.len(), 3);
+                assert_eq!(solutions.len(), 1);
+                // Check that the IRI term was parsed
+                let s_var = Variable::new("s").expect("variable s");
+                let term = solutions[0].get(&s_var).expect("binding for ?s");
+                assert!(matches!(term, Term::Iri(_)));
+                // Check that the literal was parsed
+                let o_var = Variable::new("o").expect("variable o");
+                let lit = solutions[0].get(&o_var).expect("binding for ?o");
+                assert!(matches!(lit, Term::Literal(_)));
+            }
+            _ => panic!("expected Bindings"),
+        }
+    }
+
+    #[test]
+    fn test_parse_xml_literal_with_lang() {
+        let srx = r#"<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head><variable name="label"/></head>
+  <results>
+    <result>
+      <binding name="label"><literal xml:lang="en">Hello</literal></binding>
+    </result>
+  </results>
+</sparql>"#;
+        let result = parse_sparql_results_xml(srx).expect("parse SRX lang literal");
+        match result {
+            QueryResult::Bindings { solutions, .. } => {
+                assert_eq!(solutions.len(), 1);
+                let label_var = Variable::new("label").expect("variable");
+                if let Some(Term::Literal(lit)) = solutions[0].get(&label_var) {
+                    assert_eq!(lit.value, "Hello");
+                    assert_eq!(lit.language.as_deref(), Some("en"));
+                } else {
+                    panic!("expected literal with lang");
+                }
+            }
+            _ => panic!("expected Bindings"),
+        }
+    }
+
+    #[test]
+    fn test_parse_xml_literal_with_datatype() {
+        let srx = r#"<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head><variable name="age"/></head>
+  <results>
+    <result>
+      <binding name="age">
+        <literal datatype="http://www.w3.org/2001/XMLSchema#integer">42</literal>
+      </binding>
+    </result>
+  </results>
+</sparql>"#;
+        let result = parse_sparql_results_xml(srx).expect("parse SRX datatype literal");
+        match result {
+            QueryResult::Bindings { solutions, .. } => {
+                let age_var = Variable::new("age").expect("variable");
+                if let Some(Term::Literal(lit)) = solutions[0].get(&age_var) {
+                    assert_eq!(lit.value, "42");
+                    assert!(lit.datatype.is_some());
+                } else {
+                    panic!("expected typed literal");
+                }
+            }
+            _ => panic!("expected Bindings"),
+        }
+    }
+
+    #[test]
+    fn test_parse_xml_bnode() {
+        let srx = r#"<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head><variable name="x"/></head>
+  <results>
+    <result>
+      <binding name="x"><bnode>b0</bnode></binding>
+    </result>
+  </results>
+</sparql>"#;
+        let result = parse_sparql_results_xml(srx).expect("parse SRX bnode");
+        match result {
+            QueryResult::Bindings { solutions, .. } => {
+                let x_var = Variable::new("x").expect("variable");
+                assert!(matches!(solutions[0].get(&x_var), Some(Term::BlankNode(_))));
+            }
+            _ => panic!("expected Bindings"),
+        }
+    }
+
+    #[test]
+    fn test_parse_xml_empty_results() {
+        let srx = r#"<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head><variable name="x"/></head>
+  <results/>
+</sparql>"#;
+        let result = parse_sparql_results_xml(srx).expect("parse SRX empty results");
+        match result {
+            QueryResult::Bindings {
+                variables,
+                solutions,
+            } => {
+                assert_eq!(variables.len(), 1);
+                assert_eq!(solutions.len(), 0);
+            }
+            _ => panic!("expected Bindings"),
+        }
+    }
+
+    #[test]
+    fn test_parse_xml_multiple_results() {
+        let srx = r#"<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head><variable name="s"/></head>
+  <results>
+    <result>
+      <binding name="s"><uri>http://example.org/a</uri></binding>
+    </result>
+    <result>
+      <binding name="s"><uri>http://example.org/b</uri></binding>
+    </result>
+    <result>
+      <binding name="s"><uri>http://example.org/c</uri></binding>
+    </result>
+  </results>
+</sparql>"#;
+        let result = parse_sparql_results_xml(srx).expect("parse SRX multiple results");
+        match result {
+            QueryResult::Bindings { solutions, .. } => {
+                assert_eq!(solutions.len(), 3);
+            }
+            _ => panic!("expected Bindings"),
+        }
+    }
+
+    #[test]
+    fn test_parse_xml_via_parse_result_set() {
+        // Test that the xml/srx dispatch in parse_result_set works
+        let srx = r#"<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head/>
+  <boolean>true</boolean>
+</sparql>"#;
+        let result = parse_result_set(srx, "srx").expect("parse SRX via dispatcher");
+        assert!(matches!(result, QueryResult::Boolean(true)));
+
+        let result2 = parse_result_set(srx, "xml").expect("parse XML via dispatcher");
+        assert!(matches!(result2, QueryResult::Boolean(true)));
     }
 
     #[test]

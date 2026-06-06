@@ -1,9 +1,9 @@
 //! # OxiRS Embed: Advanced Knowledge Graph Embeddings
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed)
 //!
-//! **Status**: Production Release (v0.3.0)
+//! **Status**: Production Release (v0.3.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! State-of-the-art knowledge graph embedding methods including TransE, DistMult, ComplEx,
@@ -132,21 +132,48 @@ pub mod batch_processing;
 pub mod biomedical_embeddings;
 pub mod caching;
 pub mod causal_representation_learning;
+pub mod causal_representation_learning_eval;
+pub mod causal_representation_learning_model;
+mod causal_representation_learning_tests;
+pub mod causal_representation_learning_types;
 pub mod cloud_integration;
 pub mod clustering;
 pub mod community_detection;
 pub mod compression;
 pub mod contextual;
 pub mod continual_learning;
+pub(crate) mod continual_learning_strategies;
+#[cfg(test)]
+mod continual_learning_tests;
+pub(crate) mod continual_learning_trainer;
+pub mod continual_learning_types;
 pub mod cross_domain_transfer;
 pub mod cross_module_performance;
+pub mod cross_module_performance_profiler;
+pub mod cross_module_performance_reporter;
+mod cross_module_performance_tests;
+pub mod cross_module_performance_types;
 pub mod delta;
 pub mod diffusion_embeddings;
 pub mod distributed_training;
 pub mod embed_compression;
 pub mod enterprise_knowledge;
+pub mod enterprise_knowledge_analyzer;
+pub mod enterprise_knowledge_analyzer_helpers;
+pub mod enterprise_knowledge_config;
+pub mod enterprise_knowledge_customer;
+pub mod enterprise_knowledge_employee;
+pub mod enterprise_knowledge_engine;
+pub mod enterprise_knowledge_product;
+#[cfg(test)]
+mod enterprise_knowledge_tests;
 pub mod entity_linking;
 pub mod evaluation;
+pub mod evolutionary_nas;
+pub mod evolutionary_nas_eval;
+pub mod evolutionary_nas_evolution;
+mod evolutionary_nas_tests;
+pub mod evolutionary_nas_types;
 pub mod federated_learning;
 pub mod fine_tuning;
 #[cfg(feature = "gpu")]
@@ -159,14 +186,29 @@ pub mod interpretability;
 pub mod kg_completion;
 pub mod link_prediction;
 pub mod mamba_attention;
+pub mod memory_augmented_networks;
+pub mod memory_nets_controller;
+pub mod memory_nets_ops;
+pub mod memory_nets_tests;
 pub mod mixed_precision;
 pub mod model_registry;
 pub mod model_selection;
 pub mod models;
 pub mod monitoring;
+pub mod monitoring_health;
+pub mod monitoring_metrics;
+pub mod monitoring_tests;
 pub mod multimodal;
 pub mod neural_symbolic_integration;
+pub mod neural_symbolic_integration_engine;
+pub mod neural_symbolic_integration_loss;
+mod neural_symbolic_integration_tests;
+pub mod neural_symbolic_integration_types;
 pub mod neuro_evolution;
+pub mod novel_arch_impl;
+#[cfg(test)]
+mod novel_arch_tests;
+pub mod novel_arch_types;
 pub mod novel_architectures;
 pub mod performance_profiler;
 pub mod persistence;
@@ -181,6 +223,10 @@ pub mod temporal_embeddings;
 pub mod training;
 pub mod training_online;
 pub mod utils;
+pub mod utils_io;
+pub mod utils_math;
+mod utils_tests;
+pub mod utils_types;
 pub mod validation;
 pub mod vector_search;
 pub mod vision_language_graph;
@@ -676,11 +722,37 @@ pub use enterprise_knowledge::{
     RecommendationReason, SalesMetrics, Skill, SkillCategory, Team, TeamPerformance,
 };
 pub use evaluation::{
-    AnalogicalReasoningBenchmark, AnalogyQuad, EmbeddingClusteringMetrics, EmbeddingEvaluator,
-    QueryAnsweringEvaluator, QueryEvaluationConfig, QueryEvaluationResults, QueryMetric,
-    QueryResult, QueryTemplate, QueryType, ReasoningChain, ReasoningEvaluationConfig,
-    ReasoningEvaluationResults, ReasoningRule, ReasoningStep, ReasoningTaskEvaluator,
-    ReasoningType, TypeSpecificResults,
+    compute_filtered_rank,
+    hits_at_k,
+    mean_rank,
+    mean_reciprocal_rank,
+    AnalogicalReasoningBenchmark,
+    AnalogyQuad,
+    EmbeddingClusteringMetrics,
+    EmbeddingEvaluator,
+    EvalSplit,
+    EvaluationMetrics,
+    // KGC evaluation framework
+    EvaluationTriple,
+    KgcDataset,
+    KgcEvaluationSuite,
+    KgcEvaluator,
+    KgcEvaluatorConfig,
+    QueryAnsweringEvaluator,
+    QueryEvaluationConfig,
+    QueryEvaluationResults,
+    QueryMetric,
+    QueryResult,
+    QueryTemplate,
+    QueryType,
+    ReasoningChain,
+    ReasoningEvaluationConfig,
+    ReasoningEvaluationResults,
+    ReasoningRule,
+    ReasoningStep,
+    ReasoningTaskEvaluator,
+    ReasoningType,
+    TypeSpecificResults,
 };
 pub use federated_learning::{
     AggregationEngine, AggregationStrategy, AuthenticationConfig, AuthenticationMethod,
@@ -712,6 +784,12 @@ pub use models::{
     AggregationType, ComplEx, DistMult, GNNConfig, GNNEmbedding, GNNType, HoLE, HoLEConfig,
     PoolingStrategy, RotatE, TransE, TransformerConfig, TransformerEmbedding, TransformerType,
 };
+
+// v0.3.1: Triple-based inductive GraphSAGE embedder (Hamilton et al. 2017)
+pub use models::{GraphSageEmbedder, GraphSageEmbedderConfig};
+
+// v0.3.1: Multi-head GAT embedder (Veličković et al. 2018)
+pub use models::{GatEmbedder, GatEmbedderConfig};
 
 pub use contextual::{
     AccessibilityPreferences, ComplexityLevel, ContextualConfig, ContextualEmbeddingModel,

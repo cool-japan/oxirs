@@ -17,8 +17,14 @@ pub mod groq_provider; // Groq ultra-fast LPU inference
 pub mod health_checker; // Provider health monitoring
 pub mod local_provider;
 pub mod manager;
+pub mod manager_cache;
+pub mod manager_impl;
+pub mod manager_router;
+mod manager_tests;
+pub mod manager_types;
 pub mod mistral_provider; // Mistral AI models
 pub mod neural_architecture_search;
+#[cfg(feature = "openai")]
 pub mod openai_provider;
 pub mod performance_optimization;
 pub mod providers;
@@ -69,6 +75,7 @@ pub use neural_architecture_search::{
     ArchitectureOptimizer, ArchitectureSearch, ArchitectureSearchConfig, ModelArchitecture,
     SearchResult,
 };
+#[cfg(feature = "openai")]
 pub use openai_provider::OpenAIProvider;
 pub use performance_optimization::{
     BenchmarkConfig, BenchmarkResult, LoadBalanceStrategy, OptimizationRecommendation,

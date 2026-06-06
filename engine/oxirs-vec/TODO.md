@@ -1,6 +1,6 @@
 # OxiRS Vec - TODO
 
-*Version: 0.3.0 | Last Updated: May 3, 2026*
+*Version: 0.3.1 | Last Updated: June 6, 2026*
 
 ## Status: Production Ready
 
@@ -87,8 +87,8 @@ Production-ready guides available in `/docs`:
   - **Prerequisites:** snapshot+SLA from round 1 (W2-S6, already shipped)
   - **Tests:** full chaos-deployment scenario under fault injection (heavy 40k-op variant `#[ignore]`-gated)
   - **Risk:** test flakiness on slower hardware. Mitigation: relaxed thresholds in `cfg(debug_assertions)` branches.
-- [~] Long-term support guarantees (policy: docs/policies/lts.md)
-- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
+- [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing

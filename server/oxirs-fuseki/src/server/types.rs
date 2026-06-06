@@ -46,6 +46,7 @@ use axum::{
 };
 #[cfg(feature = "rate-limit")]
 use governor::{Quota, RateLimiter};
+use oxirs_core::audit::InMemoryAuditLogger;
 use std::net::SocketAddr;
 #[cfg(feature = "rate-limit")]
 use std::num::NonZeroU32;
@@ -87,6 +88,7 @@ pub struct Runtime {
     adaptive_execution_engine: Option<Arc<AdaptiveExecutionEngine>>,
     rebac_manager: Option<Arc<dyn crate::auth::rebac::RebacEvaluator>>,
     ids_api_state: Option<Arc<crate::ids::IdsApiState>>,
+    audit_logger: Arc<InMemoryAuditLogger>,
     #[cfg(feature = "rate-limit")]
     rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
     #[cfg(feature = "hot-reload")]
@@ -128,6 +130,7 @@ impl Runtime {
             adaptive_execution_engine: None,
             rebac_manager: None,
             ids_api_state: None,
+            audit_logger: Arc::new(InMemoryAuditLogger::new()),
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
             #[cfg(feature = "hot-reload")]
@@ -499,6 +502,7 @@ impl Runtime {
             request_logger: Arc::new(handlers::RequestLogger::new()),
             startup_time: Instant::now(),
             system_monitor: Arc::new(parking_lot::Mutex::new(sysinfo::System::new_all())),
+            audit_logger: self.audit_logger.clone(),
             #[cfg(feature = "rate-limit")]
             rate_limiter: self.rate_limiter.clone(),
         };
@@ -927,6 +931,11 @@ impl Runtime {
                 get(handlers::ngsi_get_temporal).delete(handlers::ngsi_delete_temporal),
             );
         app = crate::rest_api_v2::register_routes(app);
+        // Audit log export endpoints (require ReadAudit or admin permission).
+        app = app
+            .route("/$/audit/log", get(handlers::audit::get_audit_log))
+            .route("/$/audit/log/stats", get(handlers::audit::get_audit_stats));
+        info!("Audit log export endpoints registered at /$/audit/log and /$/audit/log/stats");
         if let Some(ids_api_state) = &self.ids_api_state {
             let ids_router = crate::ids::ids_router(ids_api_state.clone());
             app = app.nest_service("/api/ids", ids_router);
@@ -1163,6 +1172,8 @@ pub struct AppState {
     pub request_logger: Arc<handlers::RequestLogger>,
     pub startup_time: Instant,
     pub system_monitor: Arc<parking_lot::Mutex<sysinfo::System>>,
+    /// In-memory audit event logger for the `/$/audit/log` export endpoint.
+    pub audit_logger: Arc<InMemoryAuditLogger>,
     #[cfg(feature = "rate-limit")]
     pub rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
 }

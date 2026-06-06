@@ -9,11 +9,9 @@ use std::collections::HashMap;
 use tracing::{debug, info};
 
 #[cfg(feature = "compression")]
-use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
+use oxiarc_snappy::{FrameDecoder as SnapDecoder, FrameEncoder as SnapEncoder};
 #[cfg(feature = "compression")]
 use oxiarc_zstd::{ZstdStreamDecoder as ZstdDecoder, ZstdStreamEncoder as ZstdEncoder};
-#[cfg(feature = "compression")]
-use snap::{read::FrameDecoder as SnapDecoder, write::FrameEncoder as SnapEncoder};
 
 use std::io::{Read, Write};
 
@@ -299,14 +297,8 @@ impl CompressionManager {
             CompressionAlgorithm::None => Ok(data.to_vec()),
 
             #[cfg(feature = "compression")]
-            CompressionAlgorithm::Gzip => {
-                let mut encoder =
-                    GzEncoder::new(Vec::new(), GzCompression::new(self.config.level as u32));
-                encoder.write_all(data)?;
-                encoder
-                    .finish()
-                    .map_err(|e| anyhow!("Gzip compression failed: {}", e))
-            }
+            CompressionAlgorithm::Gzip => oxiarc_deflate::gzip_compress(data, self.config.level)
+                .map_err(|e| anyhow!("Gzip compression failed: {}", e)),
 
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Lz4 => {
@@ -320,7 +312,7 @@ impl CompressionManager {
                 let mut encoder = SnapEncoder::new(Vec::new());
                 encoder.write_all(data)?;
                 encoder
-                    .into_inner()
+                    .finish()
                     .map_err(|e| anyhow!("Snappy compression failed: {}", e))
             }
 
@@ -353,12 +345,8 @@ impl CompressionManager {
             CompressionAlgorithm::None => Ok(data.to_vec()),
 
             #[cfg(feature = "compression")]
-            CompressionAlgorithm::Gzip => {
-                let mut decoder = GzDecoder::new(data);
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
-                Ok(decompressed)
-            }
+            CompressionAlgorithm::Gzip => oxiarc_deflate::gzip_decompress(data)
+                .map_err(|e| anyhow!("Gzip decompression failed: {}", e)),
 
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Lz4 => {
@@ -624,5 +612,70 @@ mod tests {
         let large_data = vec![1u8; 100000];
         let algorithm2 = manager.heuristic_algorithm_selection(&large_data);
         assert_eq!(algorithm2, CompressionAlgorithm::Zstd); // High repetition
+    }
+
+    /// Build a config that always uses the given algorithm with no caching
+    /// or ML so that the requested codec path is exercised deterministically.
+    #[cfg(feature = "compression")]
+    fn fixed_algorithm_config(algorithm: CompressionAlgorithm) -> CompressionConfig {
+        CompressionConfig {
+            algorithm,
+            level: 6,
+            min_size_threshold: 1,
+            enable_adaptive_selection: false,
+            enable_ml_optimization: false,
+            cache_enabled: false,
+            cache_size_limit: 0,
+            benchmark_interval_seconds: u64::MAX,
+        }
+    }
+
+    /// Framed-Snappy round-trip through the oxiarc_snappy FrameEncoder/FrameDecoder.
+    #[cfg(feature = "compression")]
+    #[test]
+    fn test_framed_snappy_round_trip() {
+        let mut manager =
+            CompressionManager::new(fixed_algorithm_config(CompressionAlgorithm::Snappy));
+        // Repetitive payload should compress and round-trip exactly.
+        let data = b"NATS framed snappy payload. ".repeat(64);
+        let (compressed, stats) = manager.compress(&data).expect("snappy compress");
+        assert_eq!(stats.algorithm, CompressionAlgorithm::Snappy);
+        let restored = manager
+            .decompress(&compressed, &CompressionAlgorithm::Snappy)
+            .expect("snappy decompress");
+        assert_eq!(restored, data, "framed snappy round-trip mismatch");
+    }
+
+    /// Framed-Snappy must also round-trip an incompressible/random buffer.
+    #[cfg(feature = "compression")]
+    #[test]
+    fn test_framed_snappy_round_trip_random() {
+        use scirs2_core::random::Random;
+        use scirs2_core::RngExt;
+        let mut rng = Random::default();
+        let data: Vec<u8> = (0..4096).map(|_| rng.random()).collect();
+
+        let mut manager =
+            CompressionManager::new(fixed_algorithm_config(CompressionAlgorithm::Snappy));
+        let (compressed, _stats) = manager.compress(&data).expect("snappy compress random");
+        let restored = manager
+            .decompress(&compressed, &CompressionAlgorithm::Snappy)
+            .expect("snappy decompress random");
+        assert_eq!(restored, data, "framed snappy random round-trip mismatch");
+    }
+
+    /// Gzip round-trip through oxiarc_deflate::gzip_compress / gzip_decompress.
+    #[cfg(feature = "compression")]
+    #[test]
+    fn test_gzip_round_trip() {
+        let mut manager =
+            CompressionManager::new(fixed_algorithm_config(CompressionAlgorithm::Gzip));
+        let data = b"NATS gzip payload via oxiarc-deflate. ".repeat(32);
+        let (compressed, stats) = manager.compress(&data).expect("gzip compress");
+        assert_eq!(stats.algorithm, CompressionAlgorithm::Gzip);
+        let restored = manager
+            .decompress(&compressed, &CompressionAlgorithm::Gzip)
+            .expect("gzip decompress");
+        assert_eq!(restored, data, "gzip round-trip mismatch");
     }
 }

@@ -7,6 +7,10 @@ pub mod association_rules;
 pub mod decision_tree;
 pub mod feature_extraction;
 pub mod gnn;
+pub mod gnn_layers;
+mod gnn_tests;
+pub mod gnn_training;
+pub mod gnn_types;
 pub mod model_selection;
 pub mod reinforcement;
 

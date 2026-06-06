@@ -596,22 +596,14 @@ impl GzipCompressionStrategy {
 #[async_trait]
 impl CompressionStrategy for GzipCompressionStrategy {
     async fn compress(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::{write::GzEncoder, Compression};
-        use std::io::Write;
-
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(data)?;
-        Ok(encoder.finish()?)
+        // Gzip (RFC 1952) compression via Pure-Rust oxiarc-deflate.
+        // Level 6 is the balanced default.
+        Ok(oxiarc_deflate::gzip_compress(data, 6)?)
     }
 
     async fn decompress(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use flate2::read::GzDecoder;
-        use std::io::Read;
-
-        let mut decoder = GzDecoder::new(data);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
-        Ok(decompressed)
+        // Gzip (RFC 1952) decompression via Pure-Rust oxiarc-deflate.
+        Ok(oxiarc_deflate::gzip_decompress(data)?)
     }
 }
 

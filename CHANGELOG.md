@@ -5,6 +5,61 @@ All notable changes to OxiRS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-06-06
+
+### Added
+- **oxirs-fuseki**: `auth/policy_templates.rs` — `PolicyTemplateRegistry` with built-in DBA, ReadOnly, Auditor role templates; `PolicyTemplate` (serde-compatible); `apply_to_user`; `ReadAudit` permission variant; `DuplicateTemplate`/`UnknownTemplate` auth errors (18 tests)
+- **oxirs-fuseki**: FIPS 140-2 `fips` feature gate for FIPS-validated cryptography via `ring`
+- **oxirs-did**: FIPS 140-2 `fips` feature gate
+- `docs/policies/fips-boundary.md` — RFC-003 FIPS cryptographic boundary policy
+- **oxirs-graphrag**: `summarizer.rs` — `GraphSummarizer` (Leiden community detection → in-degree centrality → predicate frequency → `to_text()` natural language output) (6 tests)
+- **oxirs-graphrag**: `feedback.rs` — `TripleRelevanceFeedback` / `Relevance` enum; seahash triple IDs; multiplicative weight adjustment (0.1–2.0 clamp); `apply_to_scores` sorted descending (7 tests)
+- **oxirs-embed**: `models/graph_sage.rs` — `GraphSageEmbedder` inductive graph embeddings; k-hop mean aggregation with ReLU+L2-norm; Xavier init via scirs2-core; margin ranking loss; sign-SGD; LCG neighbor sampling; unseen-entity support (6 tests)
+- **oxirs-shacl**: SHACL Advanced Features (SHACL-AF) — recursive shapes and qualified value shapes completed (Round 32)
+- **oxirs-shacl**: SHACL-AF reasoning engine — rule-based reasoning validator with dedicated reasoning types and validation rules (Round 33)
+- **oxirs-shacl-ai**: `optimization/genetic.rs` — genetic algorithm for SHACL shape constraint-order optimization (configurable population/generations/tournament/mutation via `GeneticParams`, cost-estimate fitness scoring, tournament selection)
+- **oxirs-ttl**: HDT 1.0 (Header-Dictionary-Triples) binary RDF format reader — iterator-based read-only parser over Header, Dictionary, and Triples sections
+- **oxirs-ttl**: streaming TriG parser — `TriGStreamingParser` pull-parser implementing `Iterator<Item = Result<StreamedQuad, _>>` for W3C TriG named graphs
+- **oxirs-core**: RDF-star quoted triples in pattern matching and query execution — quoted-triple support across query algebra, executor, JIT, planner, pattern unification, and SIMD triple matching
+- **oxirs**: `rset` tool now parses SPARQL Results XML (SRX) — booleans, bindings, typed/language literals, and blank nodes (via `parse_sparql_results_xml`)
+
+### Changed
+- Version bump to 0.3.1 across all workspace crates
+- **Refactor** `oxirs-fuseki/src/config.rs` (1999 lines) → split into `config.rs` + `config_server.rs` + `config_security.rs` + `config_runtime.rs`; public API preserved via re-exports
+- **Refactor** `oxirs-arq/src/lateral_join.rs` (1978 lines) → directory module; test block extracted to `lateral_join/lateral_join_tests.rs`; source down to 1138 lines
+- **Refactor** `oxirs-federate/src/query_decomposition/advanced_pattern_analysis.rs` (1990 lines) → split into `_consciousness.rs` (252) + `_analyzer.rs` (1484) + `_quantum.rs` (298) + 16-line facade
+- **Refactor** `oxirs-cluster/src/storage/persistent.rs` (1953 lines) → `persistent.rs` (710) + `persistent_wal.rs` (335) + `persistent_integrity.rs` (444) + `persistent_tests.rs` (287)
+- **Refactor** `oxirs-shacl/src/targets/selector.rs` (1961 lines) → `selector.rs` (709) + `selector_query.rs` (548) + `selector_eval.rs` (641)
+- **Refactor** `oxirs-shacl-ai/src/performance_monitoring.rs` (1949 lines) → `performance_monitoring.rs` (1575) + `performance_monitoring_advanced.rs` (514); fixed pre-existing Duration/field-name/Serialize bugs
+- **Refactor** `oxirs-shacl-ai/src/optimization/engine.rs` (1987 lines) → `engine.rs` (1308) + `optimization/engine_analysis.rs` (718)
+- 21 TODO.md files updated: 47 `[~]` items flipped to `[x]` for RFC-001 (LTS) and RFC-002 (Enterprise) now that policies are published
+- Dependency: **SciRS2** workspace crates bumped 0.4.3 → 0.5.0 (all 12 `scirs2-*` sub-crates)
+- Dependency: `oxiarc-*` compression crates pinned to **0.3.3** and consumed directly from crates.io — the temporary `[patch.crates-io]` path overrides were removed, leaving only `pathfinder_simd` patched (an unrelated Rust-nightly intrinsic fix)
+- **Refactor (Round 31 — facade recovery)**: 13 oversized files (1602–1909 lines) across **oxirs-core**, **oxirs-vec**, **oxirs-fuseki**, **oxirs-embed**, **oxirs-shacl-ai**, **oxirs-samm**, **oxirs-rule**, and **oxirs** converted to thin facades over pre-existing sibling modules (~20K lines net removed)
+- **Refactor (Round 32 — tier-2)**: **oxirs-fuseki** `auth/saml.rs` + `bind_values_enhanced.rs`, **oxirs-cluster** `cluster_metrics.rs`, **oxirs-tdb** `advanced_diagnostics.rs`, **oxirs-federate** `service.rs`, and **oxirs** `commands/jena_parity.rs` split into focused submodules
+- **Refactor (Round 33 — tier-3)**: **oxirs-shacl** `constraints/expression_constraint.rs`, **oxirs-vec** `tree_indices.rs` (ball/cover/kd/rp/vp-tree), **oxirs-wasm** `query/construct.rs`, **oxirs-gql** `schema.rs`, and **oxirs-stream** `backend/kafka/backend.rs` split into submodules
+- **Refactor (tools/oxirs)**: `commands/aspect.rs`, `commands/interactive.rs`, and `commands/import_command.rs` split into focused modules; `lib.rs` → `lib_commands.rs` + `lib_dispatch.rs`
+- **Refactor (additional)**: **oxirs-gql** `validation_spec.rs`, **oxirs-tdb** `mvcc/mod.rs`, **oxirs-stream** `lib_types.rs` / `neuromorphic_analytics.rs` / `wasm_edge_computing.rs`, and **oxirs-core** `storage/tiered.rs` split into module directories
+- **oxirs-vec**: `build.rs` CUDA-toolkit detection now emits informational build-script output instead of `cargo:warning=` (no-warnings policy); GPU acceleration remains opt-in via the `cuda` feature with Pure-Rust CPU fallbacks
+- Error-handling hardening: `unwrap()` calls in the benchmark runner and performance-benchmark modules replaced with context-carrying error handling
+
+### Changed — Pure-Rust (COOLJAPAN Policy)
+- Compression: `brotli` → `oxiarc-brotli`, `snap` → `oxiarc-snappy`, `flate2` → `oxiarc-deflate` across all consuming crates (tdb, stream, federate, fuseki, cluster, arq, gql, star, embed, shacl-ai, chat, did, tools); direct `brotli`/`snap`/`flate2` deps removed
+- Crypto: 27 first-party `ring::` call sites (tools/oxirs, oxirs-did, oxirs-fuseki, oxirs-cluster) migrated to **oxicrypto** leaf crates (hash/mac/aead/kdf/rand) + workspace `ed25519-dalek` + `rsa` for Ed25519/RSA signatures; all direct `ring` deps removed
+- TLS: pure-Rust **`oxitls::pure_provider()`** installed process-wide at every binary entry; `rustls` no-provider, `reqwest` rustls-no-provider, `tokio-rustls` default-features=false, `metrics-exporter-prometheus` push-gateway-no-tls-provider; cluster cert-gen `rcgen` → `oxitls-rcgen`; `async-openai` gated behind non-default `openai` feature
+- Fixed an `oxiarc-brotli` incompressible-input compressor bug (it emitted streams its own decoder rejected); the fix shipped upstream as **oxiarc 0.3.3** (2026-06-06) on crates.io, which OxiRS now consumes directly
+- **Default `cargo build` is now free of `ring` and `aws-lc-sys`/`aws-lc-rs` C/asm crypto** — `cargo tree -i ring` and `cargo tree -i aws-lc-sys`/`aws-lc-rs` are all empty for the default feature set
+
+### Fixed
+- **oxirs-stream**: fixed undefined behavior in neuromorphic analytics — `NetworkTopology` and `NeuralResponse` removed from the unsafe `impl_zeroed_default!` macro (`std::mem::zeroed()` is UB for `Vec`/`Instant`); replaced with `derive(Default)` and a manual `Default` impl (Round 31)
+- **oxirs-core**: declared `indexmap` and `toml` as workspace dependencies, fixing a latent compile break in `jsonld::{compaction,flattening}` (Round 31)
+- **oxirs-vec**: restored `JointEmbeddingSpace::zero_shot_retrieval`, lost to earlier module drift (Round 31)
+
+### Policy Compliance
+- All `.rs` files under 2000 lines (proactive refactors applied)
+- Zero warnings, zero errors across workspace
+- Total test count: ~43,511 (+19 graphrag, +6 embed from Round 18)
+
 ## [0.3.0] - 2026-05-03
 
 ### Added
@@ -455,3 +510,11 @@ Production Impact (100K QPS):
 ---
 
 *"Rust makes memory safety table stakes; OxiRS makes knowledge-graph engineering table stakes."*
+
+[0.3.1]: https://github.com/cool-japan/oxirs/releases/tag/v0.3.1
+[0.3.0]: https://github.com/cool-japan/oxirs/releases/tag/v0.3.0
+[0.2.4]: https://github.com/cool-japan/oxirs/releases/tag/v0.2.4
+[0.2.3]: https://github.com/cool-japan/oxirs/releases/tag/v0.2.3
+[0.2.1]: https://github.com/cool-japan/oxirs/releases/tag/v0.2.1
+[0.2.0]: https://github.com/cool-japan/oxirs/releases/tag/v0.2.0
+[0.1.0]: https://github.com/cool-japan/oxirs/releases/tag/v0.1.0

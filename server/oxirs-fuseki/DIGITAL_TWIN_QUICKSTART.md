@@ -1,7 +1,7 @@
 # OxiRS Digital Twin Platform - Quick Start Guide
 
-**Version:** 0.1.0
-**Last Updated:** 2026-01-06
+**Version:** 0.3.1
+**Last Updated:** 2026-06-06
 
 This guide demonstrates how to use OxiRS as an **Industrial Digital Twin Platform** with smart city, manufacturing, and data sovereignty capabilities.
 

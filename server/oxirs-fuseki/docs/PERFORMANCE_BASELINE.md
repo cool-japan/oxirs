@@ -1,14 +1,14 @@
 # OxiRS Fuseki - Performance Baseline Documentation
 
-**Version**: v0.1.0
-**Date**: January 2026
+**Version**: v0.3.1
+**Date**: 2026-06-06
 **Status**: Production Release
 
 ---
 
 ## 📊 Executive Summary
 
-This document establishes performance baselines for OxiRS Fuseki v0.1.0, providing reference metrics for:
+This document establishes performance baselines for OxiRS Fuseki v0.3.1, providing reference metrics for:
 - SPARQL query latency and throughput
 - Concurrent request handling
 - Memory efficiency and pooling

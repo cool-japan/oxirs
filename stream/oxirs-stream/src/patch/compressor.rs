@@ -2,10 +2,8 @@
 
 use super::{PatchParser, PatchSerializer};
 use crate::{PatchOperation, RdfPatch};
-use anyhow::Result;
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
-use std::io::{Read, Write};
 use tracing::info;
 
 pub struct PatchCompressor {
@@ -53,9 +51,9 @@ impl PatchCompressor {
         };
 
         // Apply gzip compression
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::new(self.compression_level));
-        encoder.write_all(optimized_str.as_bytes())?;
-        let compressed = encoder.finish()?;
+        let compressed =
+            oxiarc_deflate::gzip_compress(optimized_str.as_bytes(), self.compression_level as u8)
+                .map_err(|e| anyhow!("Gzip compression failed: {e}"))?;
 
         info!(
             "Compressed patch: {} -> {} bytes ({:.1}% reduction)",
@@ -70,9 +68,10 @@ impl PatchCompressor {
     /// Decompress patch from compressed bytes
     pub fn decompress_patch(&self, compressed_data: &[u8]) -> Result<RdfPatch> {
         // Decompress gzip
-        let mut decoder = GzDecoder::new(compressed_data);
-        let mut decompressed = String::new();
-        decoder.read_to_string(&mut decompressed)?;
+        let decompressed_bytes = oxiarc_deflate::gzip_decompress(compressed_data)
+            .map_err(|e| anyhow!("Gzip decompression failed: {e}"))?;
+        let decompressed = String::from_utf8(decompressed_bytes)
+            .map_err(|e| anyhow!("Decompressed patch is not valid UTF-8: {e}"))?;
 
         // Apply dictionary decompression if needed
         let patch_str = if self.enable_dictionary {
@@ -541,6 +540,59 @@ TC .
         // Should warn about deleting without prior addition
         assert!(!warnings.is_empty());
         assert!(warnings[0].contains("deleted without prior addition"));
+    }
+
+    #[test]
+    fn test_gzip_compress_patch_round_trip() {
+        // Exercises the oxiarc_deflate gzip compress/decompress path.
+        let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::AddPrefix {
+            prefix: "ex".to_string(),
+            namespace: "http://example.org/".to_string(),
+        });
+        for i in 0..32 {
+            patch.add_operation(PatchOperation::Add {
+                subject: format!("http://example.org/subject/{i}"),
+                predicate: "http://example.org/predicate".to_string(),
+                object: format!("\"value-{i}\""),
+            });
+        }
+
+        let compressor = PatchCompressor::new();
+        let compressed = compressor
+            .compress_patch(&patch)
+            .expect("gzip compress_patch");
+        let restored = compressor
+            .decompress_patch(&compressed)
+            .expect("gzip decompress_patch");
+
+        assert_eq!(
+            patch.operations.len(),
+            restored.operations.len(),
+            "operation count mismatch after gzip round-trip"
+        );
+    }
+
+    #[test]
+    fn test_gzip_compress_patch_round_trip_no_dictionary() {
+        // Round-trip with dictionary compression disabled so the gzip layer
+        // operates on the raw serialized patch bytes.
+        let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::Add {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "\"literal object value\"".to_string(),
+        });
+
+        let compressor = PatchCompressor::new().with_dictionary_compression(false);
+        let compressed = compressor
+            .compress_patch(&patch)
+            .expect("gzip compress_patch no-dict");
+        let restored = compressor
+            .decompress_patch(&compressed)
+            .expect("gzip decompress_patch no-dict");
+
+        assert_eq!(patch.operations.len(), restored.operations.len());
     }
 
     #[test]

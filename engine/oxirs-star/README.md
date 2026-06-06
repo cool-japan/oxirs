@@ -1,11 +1,11 @@
 # OxiRS-Star ⭐
 
-[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 [![Tests](https://img.shields.io/badge/tests-1%2C628%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
 
-**Status**: Production Release (v0.2.3) - Feature Complete - March 16, 2026
+**Status**: v0.3.1 - Released 2026-06-06
 
 ✅ **Production Ready**: All v0.2.3 features complete with 1,628 passing tests. Enterprise-ready RDF-star capabilities with comprehensive tooling for compliance, migration, distributed processing, and analysis.
 
@@ -88,7 +88,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-star = "0.3.0"
+oxirs-star = "0.3.1"
 ```
 
 ### Basic Usage

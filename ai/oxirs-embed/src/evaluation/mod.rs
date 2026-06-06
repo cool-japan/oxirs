@@ -41,3 +41,21 @@ pub mod embedding_metrics;
 pub use embedding_metrics::{
     AnalogicalReasoningBenchmark, AnalogyQuad, EmbeddingClusteringMetrics, EmbeddingEvaluator,
 };
+
+// ── KGC evaluation framework (FB15k-237 / WN18RR style) ──────────────────
+
+/// Standard KGC evaluation metrics (MRR, Hits@K, Mean Rank, filtered variants).
+pub mod kgc_metrics;
+
+/// KGC dataset with train/valid/test splits and TSV loading.
+pub mod kgc_dataset;
+
+/// KGC evaluator and high-level evaluation suite.
+pub mod kgc_evaluator;
+
+// Flat re-exports for convenience.
+pub use kgc_dataset::{EvaluationTriple, KgcDataset};
+pub use kgc_evaluator::{EvalSplit, KgcEvaluationSuite, KgcEvaluator, KgcEvaluatorConfig};
+pub use kgc_metrics::{
+    compute_filtered_rank, hits_at_k, mean_rank, mean_reciprocal_rank, EvaluationMetrics,
+};

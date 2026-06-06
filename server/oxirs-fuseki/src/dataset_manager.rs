@@ -597,9 +597,13 @@ mod tests {
             m.create(tdb2_config("prod")).unwrap();
             m
         };
-        let info = mgr.backup("prod", "/tmp/prod.bak").unwrap();
+        let bak = std::env::temp_dir()
+            .join(format!("oxirs_prod_{}.bak", std::process::id()))
+            .display()
+            .to_string();
+        let info = mgr.backup("prod", &bak).unwrap();
         assert_eq!(info.dataset, "prod");
-        assert_eq!(info.path, "/tmp/prod.bak");
+        assert_eq!(info.path, bak);
         assert_eq!(info.size_bytes, 65536); // TDB2
     }
 
@@ -610,14 +614,22 @@ mod tests {
             m.create(mem_config("mem_ds")).unwrap();
             m
         };
-        let info = mgr.backup("mem_ds", "/tmp/mem.bak").unwrap();
+        let bak = std::env::temp_dir()
+            .join(format!("oxirs_mem_{}.bak", std::process::id()))
+            .display()
+            .to_string();
+        let info = mgr.backup("mem_ds", &bak).unwrap();
         assert_eq!(info.size_bytes, 1024);
     }
 
     #[test]
     fn test_backup_not_found() {
         let mgr = manager();
-        let err = mgr.backup("ghost", "/tmp/x.bak").unwrap_err();
+        let bak = std::env::temp_dir()
+            .join(format!("oxirs_ghost_{}.bak", std::process::id()))
+            .display()
+            .to_string();
+        let err = mgr.backup("ghost", &bak).unwrap_err();
         assert_eq!(err, DatasetError::NotFound);
     }
 
@@ -634,7 +646,11 @@ mod tests {
         let mgr = manager(); // clock = ts()
         let mut m2 = manager();
         m2.create(mem_config("ds")).unwrap();
-        let info = m2.backup("ds", "/tmp/x").unwrap();
+        let bak = std::env::temp_dir()
+            .join(format!("oxirs_ts_{}", std::process::id()))
+            .display()
+            .to_string();
+        let info = m2.backup("ds", &bak).unwrap();
         assert_eq!(info.timestamp, ts());
     }
 
@@ -760,7 +776,11 @@ mod tests {
             ts(),
         );
         mgr.create(cfg).unwrap();
-        let info = mgr.backup("ext", "/tmp/ext.bak").unwrap();
+        let bak = std::env::temp_dir()
+            .join(format!("oxirs_ext_{}.bak", std::process::id()))
+            .display()
+            .to_string();
+        let info = mgr.backup("ext", &bak).unwrap();
         assert_eq!(info.size_bytes, 4096);
     }
 
@@ -786,7 +806,11 @@ mod tests {
         let mut mgr = manager();
         mgr.create(mem_config("ds")).unwrap();
         mgr.advance_clock(1000);
-        let info = mgr.backup("ds", "/tmp/x").unwrap();
+        let bak = std::env::temp_dir()
+            .join(format!("oxirs_clock_{}", std::process::id()))
+            .display()
+            .to_string();
+        let info = mgr.backup("ds", &bak).unwrap();
         assert_eq!(info.timestamp, ts() + 1000);
     }
 

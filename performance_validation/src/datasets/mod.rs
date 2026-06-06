@@ -1,30 +1,17 @@
-use rand_distr::Distribution;use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::Path;
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
-use scirs2_core::random::Random;
-use rand_distr::{Uniform, Normal};
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::fs;
 
 // Helper function for normal distribution using Box-Muller transform
-fn generate_normal(rng: &mut Random<impl rand::Rng>, mean: f64, std_dev: f64) -> f64 {
+fn generate_normal(rng: &mut StdRng, mean: f64, std_dev: f64) -> f64 {
     use std::f64::consts::PI;
-    static mut SPARE: Option<f64> = None;
-    static mut HAS_SPARE: bool = false;
-
-    unsafe {
-        if HAS_SPARE {
-            HAS_SPARE = false;
-            return SPARE.unwrap() * std_dev + mean;
-        }
-
-        HAS_SPARE = true;
-        let u: f64 = rng.random_range(0.0, 1.0);
-        let v: f64 = rng.random_range(0.0, 1.0);
-        let mag = std_dev * (-2.0 * u.ln()).sqrt();
-        SPARE = Some(mag * (2.0 * PI * v).sin());
-        mag * (2.0 * PI * v).cos() + mean
-    }
+    let u: f64 = rng.random_range(0.0f64..1.0f64);
+    let v: f64 = rng.random_range(0.0f64..1.0f64);
+    let mag = std_dev * (-2.0 * u.ln()).sqrt();
+    mag * (2.0 * PI * v).cos() + mean
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,11 +27,11 @@ pub struct DatasetConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DatasetSize {
-    Small,      // ~1K triples
-    Medium,     // ~10K triples
-    Large,      // ~100K triples
-    XLarge,     // ~1M triples
-    XXLarge,    // ~10M triples
+    Small,   // ~1K triples
+    Medium,  // ~10K triples
+    Large,   // ~100K triples
+    XLarge,  // ~1M triples
+    XXLarge, // ~10M triples
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,9 +44,9 @@ pub enum DatasetFormat {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DatasetComplexity {
-    Simple,     // Basic subject-predicate-object patterns
-    Medium,     // Some complex queries, moderate joins
-    Complex,    // Complex queries, multiple joins, unions
+    Simple,      // Basic subject-predicate-object patterns
+    Medium,      // Some complex queries, moderate joins
+    Complex,     // Complex queries, multiple joins, unions
     VeryComplex, // Advanced SPARQL features, nested queries
 }
 
@@ -136,7 +123,8 @@ impl DatasetManager {
             domain: DatasetDomain::General,
         };
         let dbpedia_dataset = self.generate_dbpedia_dataset(dbpedia_config).await?;
-        self.datasets.insert("dbpedia_subset".to_string(), dbpedia_dataset);
+        self.datasets
+            .insert("dbpedia_subset".to_string(), dbpedia_dataset);
 
         // Generate Wikidata-like dataset
         let wikidata_config = DatasetConfig {
@@ -149,7 +137,8 @@ impl DatasetManager {
             domain: DatasetDomain::Cultural,
         };
         let wikidata_dataset = self.generate_wikidata_dataset(wikidata_config).await?;
-        self.datasets.insert("wikidata_subset".to_string(), wikidata_dataset);
+        self.datasets
+            .insert("wikidata_subset".to_string(), wikidata_dataset);
 
         // Generate biomedical dataset
         let biomed_config = DatasetConfig {
@@ -162,7 +151,8 @@ impl DatasetManager {
             domain: DatasetDomain::Biomedical,
         };
         let biomed_dataset = self.generate_biomedical_dataset(biomed_config).await?;
-        self.datasets.insert("biomedical_ontology".to_string(), biomed_dataset);
+        self.datasets
+            .insert("biomedical_ontology".to_string(), biomed_dataset);
 
         // Generate synthetic performance test dataset
         let synthetic_config = DatasetConfig {
@@ -175,7 +165,8 @@ impl DatasetManager {
             domain: DatasetDomain::Technology,
         };
         let synthetic_dataset = self.generate_synthetic_dataset(synthetic_config).await?;
-        self.datasets.insert("synthetic_performance".to_string(), synthetic_dataset);
+        self.datasets
+            .insert("synthetic_performance".to_string(), synthetic_dataset);
 
         println!("✅ Generated {} validation datasets", self.datasets.len());
         Ok(())
@@ -186,8 +177,7 @@ impl DatasetManager {
 
         let triple_count = self.get_triple_count_for_size(&config.size);
         let mut triples = Vec::with_capacity(triple_count);
-        let mut rng = Random::seed(42);
-        let uniform = Uniform::new(0, 1000);
+        let mut rng = StdRng::seed_from_u64(42);
 
         // Generate DBpedia-style entities and predicates
         let entities = self.generate_dbpedia_entities(&mut rng, triple_count / 10);
@@ -198,7 +188,7 @@ impl DatasetManager {
             let subject = format!("dbr:{}", entities[rng.random_range(0..entities.len())]);
             let predicate = format!("dbo:{}", predicates[rng.random_range(0..predicates.len())]);
 
-            let object = if rng.random_bool() {
+            let object = if rng.random_bool(0.5) {
                 // Object property (another entity)
                 format!("dbr:{}", entities[rng.random_range(0..entities.len())])
             } else {
@@ -219,7 +209,11 @@ impl DatasetManager {
 
         // Generate embeddings if requested
         let embeddings = if config.include_embeddings {
-            Some(self.generate_embeddings_for_triples(&triples, config.embedding_dimensions, &mut rng))
+            Some(self.generate_embeddings_for_triples(
+                &triples,
+                config.embedding_dimensions,
+                &mut rng,
+            ))
         } else {
             None
         };
@@ -230,7 +224,10 @@ impl DatasetManager {
         // Calculate statistics
         let statistics = self.calculate_dataset_statistics(&triples);
 
-        println!("✅ Generated DBpedia dataset with {} triples", triples.len());
+        println!(
+            "✅ Generated DBpedia dataset with {} triples",
+            triples.len()
+        );
 
         Ok(Dataset {
             config,
@@ -246,20 +243,22 @@ impl DatasetManager {
 
         let triple_count = self.get_triple_count_for_size(&config.size);
         let mut triples = Vec::with_capacity(triple_count);
-        let mut rng = Random::seed(123);
-        let uniform = Uniform::new(0, 1000);
+        let mut rng = StdRng::seed_from_u64(123);
 
         // Generate Wikidata-style Q-entities and P-properties
-        let q_entities = (1..=triple_count/5)
+        let q_entities = (1..=triple_count / 5)
             .map(|i| format!("Q{}", i))
             .collect::<Vec<_>>();
         let p_properties = self.generate_wikidata_properties();
 
         for i in 0..triple_count {
             let subject = format!("wd:{}", q_entities[rng.random_range(0..q_entities.len())]);
-            let predicate = format!("wdt:{}", p_properties[rng.random_range(0..p_properties.len())]);
+            let predicate = format!(
+                "wdt:{}",
+                p_properties[rng.random_range(0..p_properties.len())]
+            );
 
-            let object = if rng.random_bool() {
+            let object = if rng.random_bool(0.5) {
                 format!("wd:{}", q_entities[rng.random_range(0..q_entities.len())])
             } else {
                 self.generate_wikidata_literal(&mut rng)
@@ -277,7 +276,11 @@ impl DatasetManager {
         }
 
         let embeddings = if config.include_embeddings {
-            Some(self.generate_embeddings_for_triples(&triples, config.embedding_dimensions, &mut rng))
+            Some(self.generate_embeddings_for_triples(
+                &triples,
+                config.embedding_dimensions,
+                &mut rng,
+            ))
         } else {
             None
         };
@@ -285,7 +288,10 @@ impl DatasetManager {
         let query_templates = self.generate_wikidata_query_templates();
         let statistics = self.calculate_dataset_statistics(&triples);
 
-        println!("✅ Generated Wikidata dataset with {} triples", triples.len());
+        println!(
+            "✅ Generated Wikidata dataset with {} triples",
+            triples.len()
+        );
 
         Ok(Dataset {
             config,
@@ -301,8 +307,7 @@ impl DatasetManager {
 
         let triple_count = self.get_triple_count_for_size(&config.size);
         let mut triples = Vec::with_capacity(triple_count);
-        let mut rng = Random::seed(456);
-        let uniform = Uniform::new(0, 1000);
+        let mut rng = StdRng::seed_from_u64(456);
 
         // Generate biomedical entities and predicates
         let diseases = self.generate_disease_entities(&mut rng, 1000);
@@ -314,9 +319,18 @@ impl DatasetManager {
         let all_entities = [&diseases[..], &drugs[..], &genes[..], &proteins[..]].concat();
 
         for i in 0..triple_count {
-            let subject = format!("bio:{}", all_entities[rng.random_range(0..all_entities.len())]);
-            let predicate = format!("bioprop:{}", predicates[rng.random_range(0..predicates.len())]);
-            let object = format!("bio:{}", all_entities[rng.random_range(0..all_entities.len())]);
+            let subject = format!(
+                "bio:{}",
+                all_entities[rng.random_range(0..all_entities.len())]
+            );
+            let predicate = format!(
+                "bioprop:{}",
+                predicates[rng.random_range(0..predicates.len())]
+            );
+            let object = format!(
+                "bio:{}",
+                all_entities[rng.random_range(0..all_entities.len())]
+            );
 
             triples.push(Triple {
                 subject,
@@ -330,7 +344,11 @@ impl DatasetManager {
         }
 
         let embeddings = if config.include_embeddings {
-            Some(self.generate_embeddings_for_triples(&triples, config.embedding_dimensions, &mut rng))
+            Some(self.generate_embeddings_for_triples(
+                &triples,
+                config.embedding_dimensions,
+                &mut rng,
+            ))
         } else {
             None
         };
@@ -338,7 +356,10 @@ impl DatasetManager {
         let query_templates = self.generate_biomedical_query_templates();
         let statistics = self.calculate_dataset_statistics(&triples);
 
-        println!("✅ Generated biomedical dataset with {} triples", triples.len());
+        println!(
+            "✅ Generated biomedical dataset with {} triples",
+            triples.len()
+        );
 
         Ok(Dataset {
             config,
@@ -354,23 +375,23 @@ impl DatasetManager {
 
         let triple_count = self.get_triple_count_for_size(&config.size);
         let mut triples = Vec::with_capacity(triple_count);
-        let mut rng = Random::seed(789);
-        let uniform = Uniform::new(0, triple_count);
+        let mut rng = StdRng::seed_from_u64(789);
 
         // Generate synthetic entities and predicates for performance testing
-        let subjects = (0..triple_count/100)
+        let subjects = (0..triple_count / 100)
             .map(|i| format!("subj_{}", i))
             .collect::<Vec<_>>();
-        let predicates = (0..100)
-            .map(|i| format!("pred_{}", i))
-            .collect::<Vec<_>>();
-        let objects = (0..triple_count/50)
+        let predicates = (0..100).map(|i| format!("pred_{}", i)).collect::<Vec<_>>();
+        let objects = (0..triple_count / 50)
             .map(|i| format!("obj_{}", i))
             .collect::<Vec<_>>();
 
         for i in 0..triple_count {
             let subject = format!("synth:{}", subjects[rng.random_range(0..subjects.len())]);
-            let predicate = format!("synthprop:{}", predicates[rng.random_range(0..predicates.len())]);
+            let predicate = format!(
+                "synthprop:{}",
+                predicates[rng.random_range(0..predicates.len())]
+            );
             let object = format!("synth:{}", objects[rng.random_range(0..objects.len())]);
 
             triples.push(Triple {
@@ -385,7 +406,11 @@ impl DatasetManager {
         }
 
         let embeddings = if config.include_embeddings {
-            Some(self.generate_embeddings_for_triples(&triples, config.embedding_dimensions, &mut rng))
+            Some(self.generate_embeddings_for_triples(
+                &triples,
+                config.embedding_dimensions,
+                &mut rng,
+            ))
         } else {
             None
         };
@@ -393,7 +418,10 @@ impl DatasetManager {
         let query_templates = self.generate_synthetic_query_templates();
         let statistics = self.calculate_dataset_statistics(&triples);
 
-        println!("✅ Generated synthetic dataset with {} triples", triples.len());
+        println!(
+            "✅ Generated synthetic dataset with {} triples",
+            triples.len()
+        );
 
         Ok(Dataset {
             config,
@@ -414,10 +442,20 @@ impl DatasetManager {
         }
     }
 
-    fn generate_dbpedia_entities<R: rand::Rng>(&self, rng: &mut Random<R>, count: usize) -> Vec<String> {
+    fn generate_dbpedia_entities(&self, rng: &mut StdRng, count: usize) -> Vec<String> {
         let entity_types = vec![
-            "Person", "Place", "Organization", "Work", "Species", "Event",
-            "Device", "Food", "ChemicalSubstance", "Disease", "Book", "Film",
+            "Person",
+            "Place",
+            "Organization",
+            "Work",
+            "Species",
+            "Event",
+            "Device",
+            "Food",
+            "ChemicalSubstance",
+            "Disease",
+            "Book",
+            "Film",
         ];
 
         let mut entities = Vec::with_capacity(count);
@@ -453,8 +491,8 @@ impl DatasetManager {
         ]
     }
 
-    fn generate_dbpedia_literal<R: rand::Rng>(&self, rng: &mut Random<R>) -> String {
-        let literal_types = vec![
+    fn generate_dbpedia_literal(&self, rng: &mut StdRng) -> String {
+        let literal_types = [
             format!("\"{}\"^^xsd:string", self.generate_random_string(rng, 20)),
             format!("\"{}\"^^xsd:int", rng.random_range(1..10000)),
             format!("\"{}\"^^xsd:date", self.generate_random_date(rng)),
@@ -466,50 +504,62 @@ impl DatasetManager {
 
     fn generate_wikidata_properties(&self) -> Vec<String> {
         vec![
-            "P31".to_string(),  // instance of
-            "P279".to_string(), // subclass of
-            "P569".to_string(), // date of birth
-            "P570".to_string(), // date of death
-            "P19".to_string(),  // place of birth
-            "P20".to_string(),  // place of death
-            "P106".to_string(), // occupation
-            "P27".to_string(),  // country of citizenship
-            "P17".to_string(),  // country
-            "P131".to_string(), // located in
-            "P625".to_string(), // coordinate location
-            "P577".to_string(), // publication date
-            "P50".to_string(),  // author
-            "P57".to_string(),  // director
-            "P161".to_string(), // cast member
-            "P136".to_string(), // genre
-            "P175".to_string(), // performer
+            "P31".to_string(),   // instance of
+            "P279".to_string(),  // subclass of
+            "P569".to_string(),  // date of birth
+            "P570".to_string(),  // date of death
+            "P19".to_string(),   // place of birth
+            "P20".to_string(),   // place of death
+            "P106".to_string(),  // occupation
+            "P27".to_string(),   // country of citizenship
+            "P17".to_string(),   // country
+            "P131".to_string(),  // located in
+            "P625".to_string(),  // coordinate location
+            "P577".to_string(),  // publication date
+            "P50".to_string(),   // author
+            "P57".to_string(),   // director
+            "P161".to_string(),  // cast member
+            "P136".to_string(),  // genre
+            "P175".to_string(),  // performer
             "P1476".to_string(), // title
-            "P18".to_string(),  // image
-            "P154".to_string(), // logo image
+            "P18".to_string(),   // image
+            "P154".to_string(),  // logo image
         ]
     }
 
-    fn generate_wikidata_literal<R: rand::Rng>(&self, rng: &mut Random<R>) -> String {
-        let literal_types = vec![
+    fn generate_wikidata_literal(&self, rng: &mut StdRng) -> String {
+        let literal_types = [
             format!("\"{}\"", self.generate_random_string(rng, 30)),
             format!("{}", rng.random_range(1..1000000)),
-            format!("\"{}-{:02}-{:02}T00:00:00Z\"",
-                     rng.random_range(1900..2024),
-                     rng.random_range(1..13),
-                     rng.random_range(1..29)),
-            format!("+{}.{}/{}",
-                     rng.random_range(-90, 91),
-                     rng.random_range(-180, 181),
-                     "WGS84"),
+            format!(
+                "\"{}-{:02}-{:02}T00:00:00Z\"",
+                rng.random_range(1900..2024),
+                rng.random_range(1..13),
+                rng.random_range(1..29)
+            ),
+            format!(
+                "+{}.{}/{}",
+                rng.random_range(-90i32..91i32),
+                rng.random_range(-180i32..181i32),
+                "WGS84"
+            ),
         ];
 
         literal_types[rng.random_range(0..literal_types.len())].clone()
     }
 
-    fn generate_disease_entities<R: rand::Rng>(&self, rng: &mut Random<R>, count: usize) -> Vec<String> {
+    fn generate_disease_entities(&self, rng: &mut StdRng, count: usize) -> Vec<String> {
         let disease_prefixes = vec![
-            "cancer", "diabetes", "hypertension", "infection", "syndrome",
-            "disorder", "disease", "condition", "inflammation", "deficiency",
+            "cancer",
+            "diabetes",
+            "hypertension",
+            "infection",
+            "syndrome",
+            "disorder",
+            "disease",
+            "condition",
+            "inflammation",
+            "deficiency",
         ];
 
         (0..count)
@@ -520,7 +570,7 @@ impl DatasetManager {
             .collect()
     }
 
-    fn generate_drug_entities<R: rand::Rng>(&self, rng: &mut Random<R>, count: usize) -> Vec<String> {
+    fn generate_drug_entities(&self, rng: &mut StdRng, count: usize) -> Vec<String> {
         let drug_suffixes = vec![
             "ine", "ol", "ide", "ate", "ose", "cin", "mycin", "pril", "sartan", "statin",
         ];
@@ -533,7 +583,7 @@ impl DatasetManager {
             .collect()
     }
 
-    fn generate_gene_entities<R: rand::Rng>(&self, rng: &mut Random<R>, count: usize) -> Vec<String> {
+    fn generate_gene_entities(&self, rng: &mut StdRng, count: usize) -> Vec<String> {
         let gene_prefixes = vec![
             "BRCA", "TP53", "EGFR", "KRAS", "PIK3CA", "APC", "PTEN", "RB1", "MYC", "ATM",
         ];
@@ -546,10 +596,18 @@ impl DatasetManager {
             .collect()
     }
 
-    fn generate_protein_entities<R: rand::Rng>(&self, rng: &mut Random<R>, count: usize) -> Vec<String> {
+    fn generate_protein_entities(&self, rng: &mut StdRng, count: usize) -> Vec<String> {
         let protein_types = vec![
-            "kinase", "phosphatase", "receptor", "channel", "transporter",
-            "enzyme", "antibody", "cytokine", "hormone", "factor",
+            "kinase",
+            "phosphatase",
+            "receptor",
+            "channel",
+            "transporter",
+            "enzyme",
+            "antibody",
+            "cytokine",
+            "hormone",
+            "factor",
         ];
 
         (0..count)
@@ -585,11 +643,11 @@ impl DatasetManager {
         ]
     }
 
-    fn generate_embeddings_for_triples<R: rand::Rng>(
+    fn generate_embeddings_for_triples(
         &self,
         triples: &[Triple],
         dimensions: usize,
-        rng: &mut Random<R>,
+        rng: &mut StdRng,
     ) -> HashMap<String, Vec<f32>> {
         let mut embeddings = HashMap::new();
 
@@ -601,7 +659,10 @@ impl DatasetManager {
             entities.insert(&triple.object);
         }
 
-        println!("Generating embeddings for {} unique entities...", entities.len());
+        println!(
+            "Generating embeddings for {} unique entities...",
+            entities.len()
+        );
 
         for (i, entity) in entities.iter().enumerate() {
             let embedding: Vec<f32> = (0..dimensions)
@@ -628,7 +689,8 @@ impl DatasetManager {
                         ?subject ?predicate ?object .
                         FILTER(?subject = dbr:Person_1)
                     } LIMIT 100
-                "#.to_string(),
+                "#
+                .to_string(),
                 complexity: DatasetComplexity::Simple,
                 expected_result_count: Some(100),
                 estimated_execution_time_ms: Some(50),
@@ -645,7 +707,8 @@ impl DatasetManager {
                         ?birthPlace dbo:location ?country .
                         FILTER(?country = dbr:Place_1)
                     } LIMIT 1000
-                "#.to_string(),
+                "#
+                .to_string(),
                 complexity: DatasetComplexity::Complex,
                 expected_result_count: Some(1000),
                 estimated_execution_time_ms: Some(500),
@@ -660,7 +723,8 @@ impl DatasetManager {
                     } GROUP BY ?occupation
                     ORDER BY DESC(?count)
                     LIMIT 50
-                "#.to_string(),
+                "#
+                .to_string(),
                 complexity: DatasetComplexity::Medium,
                 expected_result_count: Some(50),
                 estimated_execution_time_ms: Some(200),
@@ -679,7 +743,8 @@ impl DatasetManager {
                         ?item ?property ?value .
                         FILTER(?item = wd:Q1)
                     } LIMIT 100
-                "#.to_string(),
+                "#
+                .to_string(),
                 complexity: DatasetComplexity::Simple,
                 expected_result_count: Some(100),
                 estimated_execution_time_ms: Some(75),
@@ -696,7 +761,8 @@ impl DatasetManager {
                         ?person wdt:P569 ?birthDate .
                         FILTER(YEAR(?birthDate) > 1950)
                     } LIMIT 5000
-                "#.to_string(),
+                "#
+                .to_string(),
                 complexity: DatasetComplexity::VeryComplex,
                 expected_result_count: Some(5000),
                 estimated_execution_time_ms: Some(2000),
@@ -716,7 +782,8 @@ impl DatasetManager {
                         ?disease bioprop:causedBy ?gene .
                         ?gene bioprop:associatedWith ?protein .
                     } LIMIT 1000
-                "#.to_string(),
+                "#
+                .to_string(),
                 complexity: DatasetComplexity::Complex,
                 expected_result_count: Some(1000),
                 estimated_execution_time_ms: Some(300),
@@ -732,7 +799,8 @@ impl DatasetManager {
                         ?pathway bioprop:regulatedBy ?regulatory_gene .
                         ?regulatory_gene bioprop:interactsWith ?gene .
                     } LIMIT 2000
-                "#.to_string(),
+                "#
+                .to_string(),
                 complexity: DatasetComplexity::VeryComplex,
                 expected_result_count: Some(2000),
                 estimated_execution_time_ms: Some(1500),
@@ -750,7 +818,8 @@ impl DatasetManager {
                     SELECT ?s ?p ?o WHERE {
                         ?s ?p ?o .
                     } LIMIT 10000
-                "#.to_string(),
+                "#
+                .to_string(),
                 complexity: DatasetComplexity::Simple,
                 expected_result_count: Some(10000),
                 estimated_execution_time_ms: Some(100),
@@ -767,7 +836,8 @@ impl DatasetManager {
                     } GROUP BY ?subj
                     ORDER BY DESC(?count)
                     LIMIT 100000
-                "#.to_string(),
+                "#
+                .to_string(),
                 complexity: DatasetComplexity::Medium,
                 expected_result_count: Some(100000),
                 estimated_execution_time_ms: Some(5000),
@@ -821,23 +891,23 @@ impl DatasetManager {
         }
     }
 
-    fn generate_random_string<R: rand::Rng>(&self, rng: &mut Random<R>, max_len: usize) -> String {
+    fn generate_random_string(&self, rng: &mut StdRng, max_len: usize) -> String {
         let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         let len = rng.random_range(5..max_len + 1);
         (0..len)
             .map(|_| {
                 let idx = rng.random_range(0..chars.len());
-                chars.chars().nth(idx).unwrap()
+                chars.chars().nth(idx).expect("idx bounded by chars.len()")
             })
             .collect()
     }
 
-    fn generate_random_text<R: rand::Rng>(&self, rng: &mut Random<R>, max_len: usize) -> String {
+    fn generate_random_text(&self, rng: &mut StdRng, _max_len: usize) -> String {
         let words = vec![
             "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
             "by", "from", "about", "through", "during", "before", "after", "above", "below",
-            "person", "place", "thing", "idea", "concept", "system", "process", "method",
-            "way", "time", "year", "day", "week", "month", "hour", "minute", "second",
+            "person", "place", "thing", "idea", "concept", "system", "process", "method", "way",
+            "time", "year", "day", "week", "month", "hour", "minute", "second",
         ];
 
         let word_count = rng.random_range(3..12);
@@ -848,7 +918,7 @@ impl DatasetManager {
         text_words.join(" ")
     }
 
-    fn generate_random_date<R: rand::Rng>(&self, rng: &mut Random<R>) -> String {
+    fn generate_random_date(&self, rng: &mut StdRng) -> String {
         let year = rng.random_range(1900..2024);
         let month = rng.random_range(1..13);
         let day = rng.random_range(1..29);
@@ -894,14 +964,21 @@ impl DatasetManager {
         Ok(())
     }
 
-    fn save_triples_to_file(&self, triples: &[Triple], path: &str, format: &DatasetFormat) -> Result<()> {
+    fn save_triples_to_file(
+        &self,
+        triples: &[Triple],
+        path: &str,
+        format: &DatasetFormat,
+    ) -> Result<()> {
         let mut content = String::new();
 
         match format {
             DatasetFormat::NTriples => {
                 for triple in triples {
-                    content.push_str(&format!("<{}> <{}> <{}> .\n",
-                                              triple.subject, triple.predicate, triple.object));
+                    content.push_str(&format!(
+                        "<{}> <{}> <{}> .\n",
+                        triple.subject, triple.predicate, triple.object
+                    ));
                 }
             }
             DatasetFormat::Turtle => {
@@ -911,15 +988,19 @@ impl DatasetManager {
                 content.push_str("@prefix wdt: <http://www.wikidata.org/prop/direct/> .\n\n");
 
                 for triple in triples {
-                    content.push_str(&format!("{} {} {} .\n",
-                                              triple.subject, triple.predicate, triple.object));
+                    content.push_str(&format!(
+                        "{} {} {} .\n",
+                        triple.subject, triple.predicate, triple.object
+                    ));
                 }
             }
             DatasetFormat::RdfXml | DatasetFormat::JsonLd => {
                 // For now, save as N-Triples
                 for triple in triples {
-                    content.push_str(&format!("<{}> <{}> <{}> .\n",
-                                              triple.subject, triple.predicate, triple.object));
+                    content.push_str(&format!(
+                        "<{}> <{}> <{}> .\n",
+                        triple.subject, triple.predicate, triple.object
+                    ));
                 }
             }
         }

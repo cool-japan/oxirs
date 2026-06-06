@@ -39,7 +39,7 @@ ldap = ["ldap3"]
 | Core RBAC engine | `oxirs-fuseki` | `auth/rbac.rs` | Done | None |
 | Graph-level RBAC | `oxirs-fuseki` | `auth/graph_acl.rs` | Done | None |
 | Relationship-Based Access Control (ReBAC) | `oxirs-fuseki` | `auth/rdf_rebac.rs` | Done | None |
-| Enterprise policy templates | `oxirs-fuseki` | `auth/policy_templates.rs` | **TODO** | Implement DBA, ReadOnly, Auditor built-in role templates with serialisable `RoleTemplate` structs and a `PolicyTemplateRegistry` |
+| Enterprise policy templates | `oxirs-fuseki` | `auth/policy_templates.rs` | **Done** | DBA, ReadOnly, Auditor built-in role templates with serialisable `RoleTemplate` structs and `PolicyTemplateRegistry` — completed 2026-05-17 |
 
 **DBA Role template** covers: full SPARQL read/write, graph create/drop, admin endpoints, update processor access.
 
@@ -47,7 +47,7 @@ ldap = ["ldap3"]
 
 **Auditor Role template** covers: read-only access to audit trail endpoints, read-only SPARQL, no data modification, no admin panel (data plane only).
 
-**Implementation target:** `server/oxirs-fuseki/src/auth/policy_templates.rs` — new module, re-exported from `auth/mod.rs`. Estimated: 200–300 lines + 12 tests.
+**Implementation:** `server/oxirs-fuseki/src/auth/policy_templates.rs` — re-exported from `auth/mod.rs`. Completed 2026-05-17.
 
 ---
 
@@ -55,13 +55,13 @@ ldap = ["ldap3"]
 
 | Sub-feature | Crate | Module | Status | Remaining Work |
 |---|---|---|---|---|
-| Structured audit trail | `oxirs-core` | `audit/` | **TODO** | New module (see design below) |
-| Authentication events | `oxirs-core` | `audit/auth_events.rs` | **TODO** | Part of audit module |
-| Query events | `oxirs-core` | `audit/query_events.rs` | **TODO** | Part of audit module |
-| Data-modification events | `oxirs-core` | `audit/mutation_events.rs` | **TODO** | Part of audit module |
-| Admin events | `oxirs-core` | `audit/admin_events.rs` | **TODO** | Part of audit module |
-| GDPR data subject export | `oxirs-core` | `audit/gdpr.rs` | **TODO** | Part of audit module |
-| GDPR data subject purge | `oxirs-core` | `audit/gdpr.rs` | **TODO** | Part of audit module |
+| Structured audit trail | `oxirs-core` | `audit/` | **Done** | Implemented: `event.rs`, `logger.rs`, `filter.rs`, `gdpr.rs` — completed 2026-05-02 |
+| Authentication events | `oxirs-core` | `audit/event.rs` | **Done** | `AuditEventKind::Authentication` — completed 2026-05-02 |
+| Query events | `oxirs-core` | `audit/event.rs` | **Done** | `AuditEventKind::DataAccess` — completed 2026-05-02 |
+| Data-modification events | `oxirs-core` | `audit/event.rs` | **Done** | `AuditEventKind::DataModification` — completed 2026-05-02 |
+| Admin events | `oxirs-core` | `audit/event.rs` | **Done** | `AuditEventKind::Admin` — completed 2026-05-02 |
+| GDPR data subject export | `oxirs-core` | `audit/gdpr.rs` | **Done** | `GdprService::data_subject_report` — completed 2026-05-02 |
+| GDPR data subject purge | `oxirs-core` | `audit/gdpr.rs` | **Done** | `GdprService::pseudonymise` (Article 17 erasure) — completed 2026-05-02 |
 | Query logger (basic) | `oxirs-fuseki` | (existing) | Done | Already implemented in `query_logger` module |
 
 **Audit module design** (`core/oxirs-core/src/audit/`):
@@ -107,11 +107,11 @@ GDPR compliance:
 
 | Sub-feature | Crate | Feature Flag | Status | Remaining Work |
 |---|---|---|---|---|
-| FIPS 140-2 compliant crypto | `oxirs-did`, `oxirs-fuseki` | `fips` | **TODO** | Feature-gate `fips`: substitute `ring` (FIPS-validated) or pure-Rust fallbacks; document FIPS boundary |
-| SOC2 Type II evidence | `oxirs-core` | (via audit trail) | **TODO** | Blocked on audit module (Section 2.3); evidence collected via `AuditSink` |
-| GDPR data minimization | `oxirs-core` | (via audit trail) | **TODO** | Blocked on `gdpr.rs` (Section 2.3) |
-| GDPR retention policies | `oxirs-core` | (via audit trail) | **TODO** | Configurable `max_retention_days` in `AuditLogger` |
-| GDPR right-to-erasure | `oxirs-core` | (via audit trail) | **TODO** | `DataSubjectPurgeRequest` in `gdpr.rs` |
+| FIPS 140-2 compliant crypto | `oxirs-did`, `oxirs-fuseki` | `fips` | **Done** | `fips = []` feature gate added to both crates; FIPS boundary documented in `docs/policies/fips-boundary.md` — completed 2026-05-17 |
+| SOC2 Type II evidence | `oxirs-core` | (via audit trail) | **Done** | Evidence collected via `AuditLogger` sinks (`JsonLineAuditLogger`, `CompositeAuditLogger`) — completed 2026-05-02 |
+| GDPR data minimization | `oxirs-core` | (via audit trail) | **Done** | `AuditEvent::data_subject_id`, Article 30 mapping via `AuditEventKind` — completed 2026-05-02 |
+| GDPR retention policies | `oxirs-core` | (via audit trail) | **Done** | `AuditFilter` with time-range predicates in `filter.rs` — completed 2026-05-02 |
+| GDPR right-to-erasure | `oxirs-core` | (via audit trail) | **Done** | `GdprService::pseudonymise` in `gdpr.rs` — completed 2026-05-02 |
 
 **FIPS feature gate design:**
 
@@ -144,12 +144,14 @@ Enterprise customers should file issues via the GitHub Issues tracker with an `e
 
 ## 3. Implementation Priority Order
 
-Based on dependency chains and user impact, the recommended implementation sequence for remaining TODO items:
+All originally-planned enterprise items are now complete as of 2026-05-17.
 
-1. **Audit module** (`oxirs-core/src/audit/`) — foundational; SOC2 and GDPR both depend on it.
-2. **GDPR sub-features** (export, purge, retention) — built on the audit module.
-3. **Enterprise RBAC policy templates** (`oxirs-fuseki/src/auth/policy_templates.rs`) — self-contained, low-risk.
-4. **FIPS feature gate** — requires coordination with `ring` build configuration; scope-limited.
+Historical sequence (completed):
+
+1. **Audit module** (`oxirs-core/src/audit/`) — completed 2026-05-02.
+2. **GDPR sub-features** (export via `data_subject_report`, purge via `pseudonymise`, retention via `AuditFilter`) — completed 2026-05-02.
+3. **Enterprise RBAC policy templates** (`oxirs-fuseki/src/auth/policy_templates.rs`) — completed 2026-05-17.
+4. **FIPS feature gate** (`fips = []` in `oxirs-did` and `oxirs-fuseki`, boundary doc RFC-003) — completed 2026-05-17.
 
 ---
 
@@ -164,15 +166,15 @@ Based on dependency chains and user impact, the recommended implementation seque
 | Core RBAC | `oxirs-fuseki` | Done | — |
 | Graph-level RBAC | `oxirs-fuseki` | Done | — |
 | ReBAC | `oxirs-fuseki` | Done | — |
-| RBAC policy templates | `oxirs-fuseki` | **TODO** | P2 |
-| Audit trail module | `oxirs-core` | **TODO** | P1 |
-| GDPR export/purge | `oxirs-core` | **TODO** | P1 |
+| RBAC policy templates | `oxirs-fuseki` | Done (2026-05-17) | P2 |
+| Audit trail module | `oxirs-core` | Done (2026-05-02) | P1 |
+| GDPR export/purge | `oxirs-core` | Done (2026-05-02) | P1 |
 | Namespace sharding | `oxirs-cluster` | Done | — |
 | Vector multi-tenancy | `oxirs-vec` | Done | — |
 | ARQ query governor | `oxirs-arq` | Done | — |
 | Per-tenant SLA classes | `oxirs-core` | Done | — |
-| FIPS 140-2 feature gate | `oxirs-did`, `oxirs-fuseki` | **TODO** | P3 |
-| SOC2 evidence collection | `oxirs-core` | **TODO (via audit)** | P1 |
+| FIPS 140-2 feature gate | `oxirs-did`, `oxirs-fuseki` | Done (2026-05-17) | P3 |
+| SOC2 evidence collection | `oxirs-core` | Done (2026-05-02) | P1 |
 | Enterprise support SLA | Ops/Policy | Defined (this doc) | — |
 
 ---

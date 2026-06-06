@@ -33,6 +33,9 @@ anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 reqwest.workspace = true  # HTTP client for triplestore migrations
+# Install the Pure Rust crypto provider (oxitls) as the rustls process default in main.
+rustls.workspace = true
+oxitls.workspace = true
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 uuid.workspace = true
 sysinfo = { workspace = true }    # System information
@@ -54,12 +57,16 @@ textwrap = "0.16"   # Text wrapping for help
 unicode-width = "0.2"  # Unicode text width
 terminal_size = "0.4"  # Terminal dimensions
 shlex = "1.3"       # Shell-like parsing
-ring.workspace = true
+# OxiCrypto (Pure Rust) — replaces `ring` for AEAD, hashing, and KDF
+oxicrypto-core.workspace = true   # Aead/Hash/StreamingHash traits + CryptoError
+oxicrypto-aead.workspace = true   # AES-256-GCM (seal_to_vec / open_to_vec)
+oxicrypto-hash.workspace = true   # SHA-256 one-shot + streaming
+oxicrypto-kdf.workspace = true    # PBKDF2-HMAC-SHA256 key derivation
 aes-gcm.workspace = true
 argon2.workspace = true
 chrono.workspace = true
 dialoguer = "0.12"  # Interactive prompts
-flate2.workspace = true
+oxiarc-deflate.workspace = true  # DEFLATE/gzip compression (Pure Rust)
 hostname = "0.4"    # System hostname for test reports
 md5.workspace = true
 hex.workspace = true         # Hex encoding for checksums
@@ -70,6 +77,7 @@ inferno = "0.12"    # Flame graph generation for profiling
 printpdf = { version = "0.9", optional = true }    # PDF generation for reports (feature-gated; requires pdf-export feature)
 handlebars.workspace = true  # Template engine for custom output formats
 oxilangtag.workspace = true  # BCP-47 language tag validation and normalization
+quick-xml.workspace = true   # XML parsing for SPARQL Results XML (SRX) format
 
 [dev-dependencies]
 criterion.workspace = true
@@ -93,7 +101,11 @@ system-keyring = ["dep:keyring-core", "dep:apple-native-keyring-store"]  # Enabl
 star = ["oxirs-star"]
 ai = ["oxirs-chat"] # oxirs-embed temporarily disabled
 cluster = ["oxirs-cluster"]
-text = ["tantivy"]
+# Propagate the non-default `full-text-search` gate to oxirs-tdb and oxirs-fuseki.
+# Enables Tantivy-backed full-text search (pulls C `zstd-sys`); off by default
+# per the COOLJAPAN Pure Rust default policy. `oxirs` itself does not use Tantivy
+# directly, so no direct `tantivy` dependency is required here.
+text = ["oxirs-tdb/full-text-search", "oxirs-fuseki/full-text-search"]
 geo = []
 vec = ["oxirs-vec"]
 # DuckDB-backed TSDB chunk inspection (`oxirs tsdb duck-db`). Pulls libduckdb
@@ -118,10 +130,6 @@ workspace = true
 optional = true
 
 [dependencies.oxirs-vec]
-workspace = true
-optional = true
-
-[dependencies.tantivy]
 workspace = true
 optional = true
 

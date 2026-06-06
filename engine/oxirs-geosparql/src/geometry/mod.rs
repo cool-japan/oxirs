@@ -6,6 +6,10 @@
 pub mod compressed_storage;
 pub mod coord3d;
 pub mod geometry3d;
+#[cfg(test)]
+mod geometry3d_tests;
+pub mod geometry3d_types;
+pub mod geometry3d_wkt;
 pub mod memory_pool;
 pub mod streaming;
 pub mod wkt_parser;

@@ -26,7 +26,7 @@ pub fn convert_algebra_triple_pattern(pattern: &AlgebraTriplePattern) -> TripleP
         TermPattern::BlankNode(bn) => Some(SubjectPattern::BlankNode(bn.clone())),
         TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
         TermPattern::Literal(_) => None, // Literals can't be subjects in RDF
-        TermPattern::QuotedTriple(_) => None, // RDF-star not yet fully implemented
+        TermPattern::QuotedTriple(qt) => Some(SubjectPattern::QuotedTriple(qt.clone())),
     };
 
     let predicate = match &pattern.predicate {
@@ -40,7 +40,7 @@ pub fn convert_algebra_triple_pattern(pattern: &AlgebraTriplePattern) -> TripleP
         TermPattern::BlankNode(bn) => Some(ObjectPattern::BlankNode(bn.clone())),
         TermPattern::Literal(lit) => Some(ObjectPattern::Literal(lit.clone())),
         TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
-        TermPattern::QuotedTriple(_) => None, // RDF-star not yet fully implemented
+        TermPattern::QuotedTriple(qt) => Some(ObjectPattern::QuotedTriple(qt.clone())),
     };
 
     TriplePattern::new(subject, predicate, object)
@@ -55,6 +55,7 @@ pub fn convert_to_algebra_pattern(
         Some(SubjectPattern::NamedNode(nn)) => TermPattern::NamedNode(nn.clone()),
         Some(SubjectPattern::BlankNode(bn)) => TermPattern::BlankNode(bn.clone()),
         Some(SubjectPattern::Variable(v)) => TermPattern::Variable(v.clone()),
+        Some(SubjectPattern::QuotedTriple(qt)) => TermPattern::QuotedTriple(qt.clone()),
         None => {
             return Err(OxirsError::Query(
                 "Subject pattern is required in algebra representation".to_string(),
@@ -77,6 +78,7 @@ pub fn convert_to_algebra_pattern(
         Some(ObjectPattern::BlankNode(bn)) => TermPattern::BlankNode(bn.clone()),
         Some(ObjectPattern::Literal(lit)) => TermPattern::Literal(lit.clone()),
         Some(ObjectPattern::Variable(v)) => TermPattern::Variable(v.clone()),
+        Some(ObjectPattern::QuotedTriple(qt)) => TermPattern::QuotedTriple(qt.clone()),
         None => {
             return Err(OxirsError::Query(
                 "Object pattern is required in algebra representation".to_string(),

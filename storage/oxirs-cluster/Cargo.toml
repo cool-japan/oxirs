@@ -53,26 +53,33 @@ parking_lot.workspace = true
 rustls.workspace = true
 tokio-rustls.workspace = true
 rustls-pemfile.workspace = true
-rcgen.workspace = true
 webpki-roots.workspace = true
-ring.workspace = true
+# Pure Rust TLS facade + certificate generation (replaces `rcgen`, which pulls `ring`).
+oxitls.workspace = true
+oxitls-rcgen.workspace = true
 aes-gcm.workspace = true
 x25519-dalek = "2.0"
 base64.workspace = true
+# Pure Rust cryptography (OxiCrypto) replaces ring for AEAD + CSPRNG.
+# Use leaf crates directly (not the `oxicrypto` facade) to avoid pulling in
+# `oxicrypto-sig`, whose 0.1.1 release is incompatible with the workspace's
+# resolved `ed448-goldilocks` pre-release.
+oxicrypto-core.workspace = true  # Aead trait + CryptoError
+oxicrypto-aead.workspace = true  # AES-256-GCM AEAD
+oxicrypto-rand.workspace = true  # CSPRNG (random_bytes / random_nonce)
 
 # Compression and serialization dependencies
-flate2.workspace = true
+oxiarc-deflate.workspace = true  # Pure Rust DEFLATE/gzip/zlib (replaces flate2)
 oxiarc-zstd.workspace = true
 oxiarc-lz4.workspace = true
-xz2 = "0.1"  # LZMA compression for high-ratio compression
+oxiarc-lzma.workspace = true  # Pure Rust LZMA (replaces xz2/lzma-sys)
 crc32fast.workspace = true
-snap.workspace = true
+oxiarc-snappy.workspace = true   # Pure Rust Snappy (replaces snap)
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 rmp-serde.workspace = true
 ciborium.workspace = true
 
 # Storage dependencies
-lmdb = "0.8"
 memmap2.workspace = true
 
 # OpenTelemetry for distributed tracing
@@ -84,8 +91,17 @@ tracing-opentelemetry.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 
 # Alerting and monitoring dependencies
-lettre = { version = "0.11", features = ["tokio1-native-tls"] }
-slack-hook2 = "0.10"
+# Pure Rust TLS: `tokio1-rustls` (NOT `tokio1-rustls-tls`, which force-enables `ring`).
+# Uses the process-default CryptoProvider installed as Pure Rust OxiTLS by oxirs-core's ctor.
+lettre = { version = "0.11", default-features = false, features = [
+    "tokio1",
+    "smtp-transport",
+    "builder",
+    "tokio1-rustls",
+    "rustls-no-provider",
+    "webpki-roots",
+] }
+# Slack alerts use a plain reqwest webhook POST (see alerting.rs) — no slack-hook2 (pulls native-tls).
 
 # Web dashboard dependencies
 axum = { workspace = true, features = ["macros"] }
@@ -117,8 +133,5 @@ s3-backup = []   # S3-compatible backup destination (Pure Rust; enables Destinat
 simulation = []  # In-memory cluster simulation harness for scalability testing (1000-node phase A)
 
 [package.metadata.docs.rs]
-# lmdb requires system library, but is always enabled (non-optional)
-# This crate may fail on docs.rs due to lmdb C library requirement
-# Consider making lmdb optional in the future
 rustdoc-args = ["--cfg", "docsrs"]
 

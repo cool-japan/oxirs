@@ -391,7 +391,19 @@ fn parse_iri_components(iri: &str) -> ToolResult<IriComponents> {
             path,
         })
     } else {
-        Err("IRI authority parsing not implemented for this format".into())
+        // IRIs without an authority component (e.g., mailto:user@host, urn:isbn:...,
+        // or path-only relative IRIs). Per RFC 3986 §3.3, such IRIs have no authority
+        // and their entire post-scheme portion is a path (or opaque data).
+        let path = if rest.is_empty() {
+            None
+        } else {
+            Some(rest.to_string())
+        };
+        Ok(IriComponents {
+            scheme,
+            authority: String::new(),
+            path,
+        })
     }
 }
 

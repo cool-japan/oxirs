@@ -27,7 +27,7 @@ use std::time::Instant;
 
 /// Snappy compression algorithm
 ///
-/// Uses the snap crate for pure Rust Snappy compression.
+/// Uses the oxiarc-snappy crate for pure Rust Snappy compression.
 /// Optimized for speed with reasonable compression ratios.
 #[derive(Debug, Clone)]
 pub struct SnappyCompressor {
@@ -88,16 +88,20 @@ impl CompressionAlgorithm for SnappyCompressor {
 
         let start = Instant::now();
 
-        // Compress using snap
+        // Compress using oxiarc-snappy (Pure Rust). Both the framed and raw
+        // Snappy formats are standard and preserved across the migration.
         let compressed = if self.use_framing {
             // Use framing format with checksums
-            let mut encoder = snap::write::FrameEncoder::new(Vec::new());
             use std::io::Write;
+            let mut encoder = oxiarc_snappy::FrameEncoder::new(Vec::new());
             encoder.write_all(data)?;
-            encoder.into_inner()?
+            encoder
+                .finish()
+                .map_err(|e| anyhow::anyhow!("Snappy frame finish failed: {}", e))?
         } else {
-            // Use raw format (faster, no checksums)
-            snap::raw::Encoder::new().compress_vec(data)?
+            // Use raw format (faster, no checksums). Raw Snappy compression is
+            // infallible in oxiarc-snappy.
+            oxiarc_snappy::compress(data)
         };
 
         let compression_time = start.elapsed();
@@ -138,17 +142,18 @@ impl CompressionAlgorithm for SnappyCompressor {
             .and_then(|v| v.parse().ok())
             .unwrap_or(self.use_framing);
 
-        // Decompress using snap
+        // Decompress using oxiarc-snappy (Pure Rust).
         let decompressed = if use_framing {
             // Use framing format with checksums
             use std::io::Read;
-            let mut decoder = snap::read::FrameDecoder::new(&compressed.data[..]);
+            let mut decoder = oxiarc_snappy::FrameDecoder::new(&compressed.data[..]);
             let mut result = Vec::new();
             decoder.read_to_end(&mut result)?;
             result
         } else {
             // Use raw format
-            snap::raw::Decoder::new().decompress_vec(&compressed.data)?
+            oxiarc_snappy::decompress(&compressed.data)
+                .map_err(|e| anyhow::anyhow!("Snappy decompression failed: {}", e))?
         };
 
         let decompression_time = start.elapsed();
@@ -211,6 +216,52 @@ mod tests {
         let compressed = compressor.compress(&original).unwrap();
         assert!(compressed.data.len() < original.len());
         assert_eq!(compressed.metadata.original_size, original.len() as u64);
+
+        let decompressed = compressor.decompress(&compressed).unwrap();
+        assert_eq!(decompressed, original);
+    }
+
+    #[test]
+    fn test_snappy_raw_format_fidelity() {
+        // The raw compressor must emit a standard raw Snappy block that the
+        // low-level oxiarc-snappy decoder can decompress directly.
+        let compressor = SnappyCompressor::raw();
+        let original = b"oxiarc raw snappy fidelity check ".repeat(40);
+
+        let compressed = compressor.compress(&original).unwrap();
+        let decoded = oxiarc_snappy::decompress(&compressed.data).unwrap();
+        assert_eq!(decoded, original);
+
+        // And a blob produced directly by oxiarc must decode via the compressor.
+        let direct = oxiarc_snappy::compress(&original);
+        let cd = CompressedData {
+            data: direct,
+            metadata: CompressionMetadata {
+                algorithm: AdvancedCompressionType::Adaptive,
+                original_size: original.len() as u64,
+                compressed_size: 0,
+                compression_time_us: 0,
+                metadata: {
+                    let mut m = std::collections::HashMap::new();
+                    m.insert("framing".to_string(), "false".to_string());
+                    m
+                },
+            },
+        };
+        assert_eq!(compressor.decompress(&cd).unwrap(), original);
+    }
+
+    #[test]
+    fn test_snappy_framed_format_fidelity() {
+        // Framed output must begin with the standard Snappy stream identifier
+        // chunk (0xFF followed by length 6 and the ASCII "sNaPpY" magic).
+        let compressor = SnappyCompressor::with_framing();
+        let original = b"oxiarc framed snappy fidelity check ".repeat(40);
+
+        let compressed = compressor.compress(&original).unwrap();
+        assert!(compressed.data.len() >= 10);
+        assert_eq!(compressed.data[0], 0xFF);
+        assert_eq!(&compressed.data[4..10], b"sNaPpY");
 
         let decompressed = compressor.decompress(&compressed).unwrap();
         assert_eq!(decompressed, original);

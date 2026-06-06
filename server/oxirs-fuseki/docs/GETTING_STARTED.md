@@ -81,7 +81,7 @@ query_timeout_secs = 300
 You should see:
 
 ```
-INFO  Starting OxiRS Fuseki v0.1.0
+INFO  Starting OxiRS Fuseki v0.3.1
 INFO  Binding to http://0.0.0.0:3030
 INFO  Admin UI available at http://localhost:3030
 INFO  Server started successfully

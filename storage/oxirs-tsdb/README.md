@@ -8,7 +8,7 @@ Time-series optimizations for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.2.3) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.3.1) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 
@@ -36,7 +36,7 @@ Time-series optimizations for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-tsdb = "0.3.0"
+oxirs-tsdb = "0.3.1"
 ```
 
 ### Basic Usage
