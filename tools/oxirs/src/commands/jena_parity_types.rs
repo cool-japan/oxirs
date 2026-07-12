@@ -1,8 +1,8 @@
 //! Core data types for the Jena parity verifier.
 //!
-//! Defines the taxonomy ([`ParityCategory`]), per-feature implementation status
-//! ([`FeatureStatus`]), the individual feature entry ([`ParityFeature`]) and the
-//! aggregate coverage statistics ([`ParitySummary`]).
+//! Defines the taxonomy ([`ParityCategory`](crate::commands::jena_parity_types::ParityCategory)), per-feature implementation status
+//! ([`FeatureStatus`](crate::commands::jena_parity_types::FeatureStatus)), the individual feature entry ([`ParityFeature`](crate::commands::jena_parity_types::ParityFeature)) and the
+//! aggregate coverage statistics ([`ParitySummary`](crate::commands::jena_parity_types::ParitySummary)).
 
 /// The category a parity feature belongs to, mirroring Jena sub-project taxonomy.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

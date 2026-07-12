@@ -85,29 +85,9 @@ impl GpuAccelerator {
 
     #[allow(unused_variables)]
     fn create_cuda_stream(device_id: i32) -> Result<*mut std::ffi::c_void> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            use cuda_runtime_sys::*;
-            unsafe {
-                let result = cudaSetDevice(device_id);
-                if result != cudaError_t::cudaSuccess {
-                    return Err(anyhow!("Failed to set CUDA device"));
-                }
-
-                let mut stream: cudaStream_t = std::ptr::null_mut();
-                let result = cudaStreamCreate(&mut stream);
-                if result != cudaError_t::cudaSuccess {
-                    return Err(anyhow!("Failed to create CUDA stream"));
-                }
-                Ok(stream as *mut std::ffi::c_void)
-            }
-        }
-
-        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-        {
-            // Fallback: return a dummy handle for testing
-            Ok(1 as *mut std::ffi::c_void)
-        }
+        // Pure Rust build: placeholder handle. Real CUDA streams are created by
+        // oxirs-vec-adapter-cuda.
+        Ok(1 as *mut std::ffi::c_void)
     }
 
     /// Compute similarity between query vectors and database vectors
@@ -176,48 +156,11 @@ impl GpuAccelerator {
         result_buffer: &GpuBuffer,
         params: &SimilarityKernelParams,
     ) -> Result<()> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            // Get or compile kernel
-            let kernel = self.get_or_compile_kernel(kernel_name)?;
-
-            // Calculate grid and block dimensions
-            let (blocks, threads) = self
-                .device
-                .calculate_optimal_block_config(params.query_count * params.db_count);
-
-            // Launch kernel
-            self.launch_kernel_impl(
-                &kernel,
-                blocks,
-                threads,
-                &[
-                    query_buffer.ptr() as *mut std::ffi::c_void,
-                    db_buffer.ptr() as *mut std::ffi::c_void,
-                    result_buffer.ptr() as *mut std::ffi::c_void,
-                    &params.query_count as *const usize as *mut std::ffi::c_void,
-                    &params.db_count as *const usize as *mut std::ffi::c_void,
-                    &params.dim as *const usize as *mut std::ffi::c_void,
-                ],
-            )?;
-        }
-
-        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-        {
-            // Fallback CPU implementation for testing
-            self.compute_similarity_cpu(
-                query_buffer,
-                db_buffer,
-                result_buffer,
-                params,
-                kernel_name,
-            )?;
-        }
-
-        Ok(())
+        // Pure Rust build computes on CPU. The CUDA kernel launch is provided by
+        // oxirs-vec-adapter-cuda.
+        self.compute_similarity_cpu(query_buffer, db_buffer, result_buffer, params, kernel_name)
     }
 
-    #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
     fn compute_similarity_cpu(
         &self,
         _query_buffer: &GpuBuffer,
@@ -252,7 +195,6 @@ impl GpuAccelerator {
         Ok(())
     }
 
-    #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
     fn compute_cosine_similarity(&self, a: &[f32], b: &[f32]) -> f32 {
         let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -265,7 +207,6 @@ impl GpuAccelerator {
         }
     }
 
-    #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
     fn compute_euclidean_distance(&self, a: &[f32], b: &[f32]) -> f32 {
         a.iter()
             .zip(b.iter())
@@ -305,66 +246,14 @@ impl GpuAccelerator {
         Ok(compiled_kernel)
     }
 
-    #[allow(unused_variables)]
-    fn compile_kernel(&self, name: &str, source: &str) -> Result<CudaKernel> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            // In a real implementation, this would use NVRTC or similar to compile CUDA kernels
-            // For now, return a dummy kernel
-            Ok(CudaKernel {
-                function: std::ptr::null_mut(),
-                module: std::ptr::null_mut(),
-                name: name.to_string(),
-            })
-        }
-
-        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-        {
-            Ok(CudaKernel {
-                function: std::ptr::null_mut(),
-                module: std::ptr::null_mut(),
-                name: name.to_string(),
-            })
-        }
-    }
-
-    #[cfg(all(feature = "cuda", cuda_runtime_available))]
-    fn launch_kernel_impl(
-        &self,
-        kernel: &CudaKernel,
-        blocks: i32,
-        threads: i32,
-        args: &[*mut std::ffi::c_void],
-    ) -> Result<()> {
-        use cuda_runtime_sys::*;
-        unsafe {
-            let result = cudaLaunchKernel(
-                kernel.function,
-                dim3 {
-                    x: blocks as u32,
-                    y: 1,
-                    z: 1,
-                },
-                dim3 {
-                    x: threads as u32,
-                    y: 1,
-                    z: 1,
-                },
-                args.as_ptr() as *mut *mut std::ffi::c_void,
-                0,
-                std::ptr::null_mut(),
-            );
-            if result != cudaError_t::cudaSuccess {
-                return Err(anyhow!("Failed to launch kernel"));
-            }
-
-            // Synchronize
-            let result = cudaDeviceSynchronize();
-            if result != cudaError_t::cudaSuccess {
-                return Err(anyhow!("Kernel execution failed"));
-            }
-        }
-        Ok(())
+    fn compile_kernel(&self, name: &str, _source: &str) -> Result<CudaKernel> {
+        // Kernel-compilation bookkeeping (Pure Rust). Real NVRTC compilation is
+        // provided by oxirs-vec-adapter-cuda.
+        Ok(CudaKernel {
+            function: std::ptr::null_mut(),
+            module: std::ptr::null_mut(),
+            name: name.to_string(),
+        })
     }
 
     /// Get device information
@@ -384,16 +273,7 @@ impl GpuAccelerator {
 
     /// Synchronize all operations
     pub fn synchronize(&self) -> Result<()> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            use cuda_runtime_sys::*;
-            unsafe {
-                let result = cudaDeviceSynchronize();
-                if result != cudaError_t::cudaSuccess {
-                    return Err(anyhow!("Failed to synchronize device"));
-                }
-            }
-        }
+        // No-op in the Pure Rust build; real device sync is in oxirs-vec-adapter-cuda.
         Ok(())
     }
 
@@ -404,56 +284,15 @@ impl GpuAccelerator {
 
     /// Get current GPU memory usage in bytes
     pub fn get_memory_usage(&self) -> Result<usize> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            use cuda_runtime_sys::*;
-            unsafe {
-                let mut free: usize = 0;
-                let mut total: usize = 0;
-                let result = cudaMemGetInfo(&mut free as *mut usize, &mut total as *mut usize);
-                if result != cudaError_t::cudaSuccess {
-                    return Err(anyhow!("Failed to get memory info"));
-                }
-                Ok(total - free)
-            }
-        }
-        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-        {
-            // Return dummy value for testing
-            Ok(0)
-        }
-    }
-}
-
-impl Drop for GpuAccelerator {
-    fn drop(&mut self) {
-        // Cleanup CUDA streams
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            for stream in &self.stream_pool {
-                unsafe {
-                    let _ = cuda_runtime_sys::cudaStreamDestroy(
-                        stream.handle as cuda_runtime_sys::cudaStream_t,
-                    );
-                }
-            }
-        }
+        // Pure Rust build reports zero; real CUDA memory usage is in oxirs-vec-adapter-cuda.
+        Ok(0)
     }
 }
 
 /// Check if GPU acceleration is available
 pub fn is_gpu_available() -> bool {
-    #[cfg(all(feature = "cuda", cuda_runtime_available))]
-    {
-        match crate::gpu::device::GpuDevice::get_all_devices() {
-            Ok(devices) => !devices.is_empty(),
-            Err(_) => false,
-        }
-    }
-    #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-    {
-        false
-    }
+    // Pure Rust build: no CUDA devices. Use oxirs-vec-adapter-cuda for real detection.
+    false
 }
 
 /// Create a default GPU accelerator configuration

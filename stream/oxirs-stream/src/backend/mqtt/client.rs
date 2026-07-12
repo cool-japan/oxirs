@@ -166,7 +166,8 @@ impl MqttClient {
                     qos: Self::convert_qos_from_rumqtt(publish.qos),
                     retain: publish.retain,
                     payload: publish.payload.to_vec(),
-                    properties: None, // TODO: Extract MQTT 5.0 properties
+                    properties: None, // MQTT 5.0 properties are protocol-level in rumqttc v5 API.
+                    // For v4/v5 bridge scenarios, use MqttClient::parse_properties_from_bytes().
                     received_at: Utc::now(),
                 };
 
@@ -379,6 +380,20 @@ impl MqttClient {
             RumqttQoS::AtLeastOnce => QoS::AtLeastOnce,
             RumqttQoS::ExactlyOnce => QoS::ExactlyOnce,
         }
+    }
+
+    /// Parse MQTT 5.0 properties from a raw byte slice.
+    ///
+    /// This is useful in v4/v5 bridge scenarios where an upstream MQTT 5.0 broker
+    /// embeds property data in the payload using the MQTT 5.0 binary encoding.
+    /// The slice must start with the Variable Byte Integer length prefix as defined
+    /// in the MQTT 5.0 specification (section 2.2.2).
+    ///
+    /// Returns the decoded [`super::types::MqttMessageProperties`] on success.
+    pub fn parse_properties_from_bytes(
+        data: &[u8],
+    ) -> StreamResult<super::types::MqttMessageProperties> {
+        super::properties::decode_mqtt5_properties(data).map(|(props, _)| props)
     }
 }
 

@@ -542,20 +542,22 @@ impl std::fmt::Debug for StringInterner {
     }
 }
 
-lazy_static::lazy_static! {
-    // Global interner instances for common string types
-    /// Global interner for IRI strings
-    pub static ref IRI_INTERNER: StringInterner = StringInterner::new();
+// Global interner instances for common string types
+/// Global interner for IRI strings
+pub static IRI_INTERNER: once_cell::sync::Lazy<StringInterner> =
+    once_cell::sync::Lazy::new(StringInterner::new);
 
-    /// Global interner for datatype IRIs
-    pub static ref DATATYPE_INTERNER: StringInterner = StringInterner::new();
+/// Global interner for datatype IRIs
+pub static DATATYPE_INTERNER: once_cell::sync::Lazy<StringInterner> =
+    once_cell::sync::Lazy::new(StringInterner::new);
 
-    /// Global interner for language tags
-    pub static ref LANGUAGE_INTERNER: StringInterner = StringInterner::new();
+/// Global interner for language tags
+pub static LANGUAGE_INTERNER: once_cell::sync::Lazy<StringInterner> =
+    once_cell::sync::Lazy::new(StringInterner::new);
 
-    /// Global interner for general strings (JSON-LD processing)
-    pub static ref STRING_INTERNER: StringInterner = StringInterner::new();
-}
+/// Global interner for general strings (JSON-LD processing)
+pub static STRING_INTERNER: once_cell::sync::Lazy<StringInterner> =
+    once_cell::sync::Lazy::new(StringInterner::new);
 
 /// An interned string that supports efficient comparison and hashing
 #[derive(Debug, Clone)]

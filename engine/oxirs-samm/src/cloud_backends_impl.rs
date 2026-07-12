@@ -1,11 +1,11 @@
 //! Backend implementations for the SAMM cloud storage subsystem.
 //!
 //! Provides concrete [`CloudStorageBackend`] implementations for:
-//! - AWS S3 and S3-compatible stores ([`S3Backend`])
-//! - Google Cloud Storage ([`GcsBackend`])
-//! - Azure Blob Storage ([`AzureBlobBackend`])
-//! - Generic HTTP REST backend ([`HttpBackend`])
-//! - Local filesystem adapter ([`LocalFsBackend`])
+//! - AWS S3 and S3-compatible stores ([`crate::cloud_backends_aws::S3Backend`])
+//! - Google Cloud Storage ([`crate::cloud_backends_gcp::GcsBackend`])
+//! - Azure Blob Storage ([`crate::cloud_backends_azure::AzureBlobBackend`])
+//! - Generic HTTP REST backend ([`crate::cloud_backends_http::HttpBackend`])
+//! - Local filesystem adapter ([`crate::cloud_backends_impl::LocalFsBackend`])
 //!
 //! All backends use async/await with `reqwest` (rustls TLS — no OpenSSL).
 

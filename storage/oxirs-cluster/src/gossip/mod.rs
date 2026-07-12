@@ -6,7 +6,7 @@
 //!
 //! # Sub-modules
 //!
-//! - [`fanout`] — `GossipFanout` enum: `Bounded`, `Sqrt`, `Unbounded` fanout
+//! - [`gossip::fanout`] — `GossipFanout` enum: `Bounded`, `Sqrt`, `Unbounded` fanout
 //!   policies with O(1) `resolve(N)` computation.
 
 pub mod fanout;

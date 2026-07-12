@@ -301,7 +301,7 @@ impl SpatialIndex {
         let tree = self.tree.read();
         let envelope = AABB::from_corners([min_x, min_y], [max_x, max_y]);
 
-        tree.locate_in_envelope_intersecting(&envelope)
+        tree.locate_in_envelope_intersecting(envelope)
             .map(|entry| entry.geometry.clone())
             .collect()
     }
@@ -342,7 +342,7 @@ impl SpatialIndex {
         let tree = self.tree.read();
         let envelope = AABB::from_corners([min_x, min_y], [max_x, max_y]);
 
-        tree.locate_in_envelope_intersecting(&envelope)
+        tree.locate_in_envelope_intersecting(envelope)
             .collect::<Vec<_>>()
             .par_iter()
             .map(|entry| entry.geometry.clone())
@@ -374,7 +374,7 @@ impl SpatialIndex {
         // Use bounding box query to filter candidates first (much faster)
         let bbox = AABB::from_corners([x - distance, y - distance], [x + distance, y + distance]);
 
-        tree.locate_in_envelope_intersecting(&bbox)
+        tree.locate_in_envelope_intersecting(bbox)
             .filter_map(|entry| {
                 let dist = Self::point_distance(&query_point, &entry.geometry);
                 if dist <= distance {
@@ -410,7 +410,7 @@ impl SpatialIndex {
         let query_point = [x, y];
 
         // Use R-tree's nearest neighbor query (much faster)
-        tree.nearest_neighbor(&query_point).map(|entry| {
+        tree.nearest_neighbor(query_point).map(|entry| {
             let point = geo_types::Point::new(x, y);
             let dist = Self::point_distance(&point, &entry.geometry);
             (entry.geometry.clone(), dist)
@@ -439,7 +439,7 @@ impl SpatialIndex {
         let query_point = [x, y];
         let geo_point = geo_types::Point::new(x, y);
 
-        tree.nearest_neighbor_iter(&query_point)
+        tree.nearest_neighbor_iter(query_point)
             .take(k)
             .map(|entry| {
                 let dist = Self::point_distance(&geo_point, &entry.geometry);
@@ -825,7 +825,7 @@ impl SpatialIndex3D {
         let tree = self.tree.read();
         let envelope = AABB::from_corners([min_x, min_y, min_z], [max_x, max_y, max_z]);
 
-        tree.locate_in_envelope_intersecting(&envelope)
+        tree.locate_in_envelope_intersecting(envelope)
             .map(|entry| entry.geometry.clone())
             .collect()
     }
@@ -862,7 +862,7 @@ impl SpatialIndex3D {
             [x + distance, y + distance, z + distance],
         );
 
-        tree.locate_in_envelope_intersecting(&bbox)
+        tree.locate_in_envelope_intersecting(bbox)
             .filter_map(|entry| {
                 // Calculate 3D distance
                 let dist = Self::point_distance_3d(x, y, z, &entry.geometry);
@@ -895,7 +895,7 @@ impl SpatialIndex3D {
         let tree = self.tree.read();
         let query_point = [x, y, z];
 
-        tree.nearest_neighbor(&query_point).map(|entry| {
+        tree.nearest_neighbor(query_point).map(|entry| {
             let dist = Self::point_distance_3d(x, y, z, &entry.geometry);
             (entry.geometry.clone(), dist)
         })
@@ -921,7 +921,7 @@ impl SpatialIndex3D {
         let tree = self.tree.read();
         let query_point = [x, y, z];
 
-        tree.nearest_neighbor_iter(&query_point)
+        tree.nearest_neighbor_iter(query_point)
             .take(k)
             .map(|entry| {
                 let dist = Self::point_distance_3d(x, y, z, &entry.geometry);

@@ -1,20 +1,19 @@
-//! GPU acceleration for vector operations using CUDA
+//! GPU acceleration abstractions for vector operations
 //!
-//! This module provides GPU acceleration for:
+//! This module provides GPU acceleration abstractions for:
 //! - Distance calculations (cosine, euclidean, etc.)
 //! - Batch vector operations
 //! - Parallel search algorithms
 //! - Matrix operations for embeddings
 //!
-//! # CUDA Feature Gating (Pure Rust Policy)
+//! # Pure Rust Policy (COOLJAPAN Pure Rust Policy v2)
 //!
-//! GPU acceleration is **optional** and properly feature-gated:
-//! - **Default build**: 100% Pure Rust, no CUDA required, CPU implementations only
-//! - **With `cuda` feature**: GPU acceleration when CUDA toolkit is installed
-//! - **With `cuda` feature but no toolkit**: Graceful fallback to CPU implementations
-//!
-//! All CUDA-dependent code is gated with `#[cfg(all(feature = "cuda", cuda_runtime_available))]`
-//! to ensure the crate builds successfully regardless of CUDA availability.
+//! This module is **100% Pure Rust**: all buffers, devices, streams and kernels
+//! here are CPU-backed reference implementations with no C FFI. Real NVIDIA CUDA
+//! acceleration (`cuda-runtime-sys`) is quarantined in the companion
+//! `oxirs-vec-adapter-cuda` crate (publish = false), which depends on this crate
+//! and reuses these public types. This keeps oxirs-vec's published
+//! `--all-features` surface free of `cuda-runtime-sys`.
 
 pub mod accelerator;
 pub mod buffer;

@@ -173,7 +173,9 @@ impl Runtime {
             ga_population_size: 50,
             ga_max_generations: 100,
             enable_parallel_evaluation: true,
-            parallel_workers: num_cpus::get(),
+            parallel_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
         };
         let adaptive_engine = AdaptiveExecutionEngine::new(adaptive_config)?;
         self.adaptive_execution_engine = Some(Arc::new(adaptive_engine));
@@ -237,7 +239,9 @@ impl Runtime {
             queue_timeout_secs: 300,
             enable_load_shedding: true,
             load_shedding_threshold: 0.9,
-            worker_threads: num_cpus::get(),
+            worker_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             enable_fair_scheduling: true,
         };
         let concurrency_manager = ConcurrencyManager::new(concurrency_config);

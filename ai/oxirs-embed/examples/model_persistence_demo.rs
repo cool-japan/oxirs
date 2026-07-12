@@ -116,7 +116,7 @@ async fn demonstrate_transe_persistence(model_dir: &Path) -> Result<()> {
 
     println!("\n  2. Saving model to disk...");
     let model_path = model_dir.join("transe_model.bin");
-    model.save(model_path.to_str().unwrap())?;
+    model.save(model_path.to_str().expect("path is valid UTF-8"))?;
 
     let file_size = std::fs::metadata(&model_path)?.len();
     println!(
@@ -127,7 +127,7 @@ async fn demonstrate_transe_persistence(model_dir: &Path) -> Result<()> {
 
     println!("\n  3. Loading model from disk...");
     let mut loaded_model = TransE::new(ModelConfig::default());
-    loaded_model.load(model_path.to_str().unwrap())?;
+    loaded_model.load(model_path.to_str().expect("path is valid UTF-8"))?;
 
     println!("     Model loaded successfully");
     println!("     Entities: {}", loaded_model.get_entities().len());
@@ -178,14 +178,14 @@ async fn demonstrate_hole_persistence(model_dir: &Path) -> Result<()> {
 
     println!("\n  2. Saving HolE model...");
     let model_path = model_dir.join("hole_model.bin");
-    model.save(model_path.to_str().unwrap())?;
+    model.save(model_path.to_str().expect("path is valid UTF-8"))?;
 
     let file_size = std::fs::metadata(&model_path)?.len();
     println!("     Model saved: {} KB", file_size / 1024);
 
     println!("\n  3. Loading HolE model...");
     let mut loaded_model = HoLE::new(HoLEConfig::default());
-    loaded_model.load(model_path.to_str().unwrap())?;
+    loaded_model.load(model_path.to_str().expect("path is valid UTF-8"))?;
 
     println!("     Model loaded successfully");
 
@@ -229,30 +229,30 @@ async fn demonstrate_checkpointing(model_dir: &Path) -> Result<()> {
     // Train for 30 epochs and checkpoint
     let checkpoint1_path = model_dir.join("checkpoint_epoch_30.bin");
     model.train(Some(30)).await?;
-    model.save(checkpoint1_path.to_str().unwrap())?;
+    model.save(checkpoint1_path.to_str().expect("path is valid UTF-8"))?;
     println!("     Checkpoint 1 saved at epoch 30");
 
     // Continue training for another 30 epochs
     let checkpoint2_path = model_dir.join("checkpoint_epoch_60.bin");
     model.train(Some(30)).await?;
-    model.save(checkpoint2_path.to_str().unwrap())?;
+    model.save(checkpoint2_path.to_str().expect("path is valid UTF-8"))?;
     println!("     Checkpoint 2 saved at epoch 60");
 
     // Final training
     let final_path = model_dir.join("final_model.bin");
     model.train(Some(40)).await?;
-    model.save(final_path.to_str().unwrap())?;
+    model.save(final_path.to_str().expect("path is valid UTF-8"))?;
     println!("     Final model saved at epoch 100");
 
     println!("\n  2. Comparing checkpoints:");
     let mut checkpoint1 = TransE::new(ModelConfig::default());
-    checkpoint1.load(checkpoint1_path.to_str().unwrap())?;
+    checkpoint1.load(checkpoint1_path.to_str().expect("path is valid UTF-8"))?;
 
     let mut checkpoint2 = TransE::new(ModelConfig::default());
-    checkpoint2.load(checkpoint2_path.to_str().unwrap())?;
+    checkpoint2.load(checkpoint2_path.to_str().expect("path is valid UTF-8"))?;
 
     let mut final_model = TransE::new(ModelConfig::default());
-    final_model.load(final_path.to_str().unwrap())?;
+    final_model.load(final_path.to_str().expect("path is valid UTF-8"))?;
 
     let score1 = checkpoint1.score_triple("paris", "capital_of", "france")?;
     let score2 = checkpoint2.score_triple("paris", "capital_of", "france")?;
@@ -275,7 +275,7 @@ async fn demonstrate_pretrained_inference(model_dir: &Path) -> Result<()> {
 
     let model_path = model_dir.join("final_model.bin");
     let mut model = TransE::new(ModelConfig::default());
-    model.load(model_path.to_str().unwrap())?;
+    model.load(model_path.to_str().expect("path is valid UTF-8"))?;
 
     println!("     Pre-trained model loaded");
     println!("     Ready for inference without training");

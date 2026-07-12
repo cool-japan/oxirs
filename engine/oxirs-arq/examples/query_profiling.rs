@@ -52,7 +52,7 @@ fn demo_basic_profiling() {
     profiler.record_cache_hit_rate(0.85);
 
     // End profiling
-    let stats = profiler.end_query().unwrap();
+    let stats = profiler.end_query().expect("invariant: value is valid");
 
     println!("✓ Query profiled successfully:");
     println!("{}\n", stats.report());
@@ -94,7 +94,7 @@ fn demo_phase_profiling() {
     profiler.end_phase(QueryPhase::Materialization);
     println!("✓ Materialization phase: 20ms");
 
-    let stats = profiler.end_query().unwrap();
+    let stats = profiler.end_query().expect("invariant: value is valid");
 
     println!("\n📊 Phase Breakdown:");
     println!(
@@ -179,7 +179,9 @@ fn demo_performance_comparison() {
     profiler_cached.record_triples(1000);
     profiler_cached.record_results(100);
     profiler_cached.record_cache_hit_rate(0.95); // High cache hit
-    let cached_stats = profiler_cached.end_query().unwrap();
+    let cached_stats = profiler_cached
+        .end_query()
+        .expect("invariant: value is valid");
 
     // Simulate uncached query
     profiler_uncached.start_query("SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 100".to_string());
@@ -187,7 +189,9 @@ fn demo_performance_comparison() {
     profiler_uncached.record_triples(1000);
     profiler_uncached.record_results(100);
     profiler_uncached.record_cache_hit_rate(0.10); // Low cache hit
-    let uncached_stats = profiler_uncached.end_query().unwrap();
+    let uncached_stats = profiler_uncached
+        .end_query()
+        .expect("invariant: value is valid");
 
     println!("📊 Cached vs Uncached Query:");
     println!("\nWith Cache (95% hit rate):");

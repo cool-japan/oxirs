@@ -40,7 +40,10 @@ fn main() -> Result<()> {
     {
         let json = profiler.export_json();
         println!("\n📊 JSON Export:");
-        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json).expect("invariant: value is valid")
+        );
     }
 
     // Performance recommendations
@@ -105,7 +108,7 @@ fn demo_operations_profiling(profiler: &mut Profiler) -> Result<()> {
     let _diff = difference(&poly1, &poly2)?;
     profiler.stop("difference");
 
-    #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
+    #[cfg(feature = "rust-buffer")]
     {
         profiler.start("buffer");
         let _buffer_geom = buffer(&poly1, 1.0)?;
@@ -131,7 +134,8 @@ fn demo_indexing_profiling(profiler: &mut Profiler) -> Result<()> {
         .map(|i| {
             let lat = 37.7 + (i as f64 / 1000.0) * 0.1;
             let lon = -122.4 + (i as f64 / 1000.0) * 0.1;
-            Geometry::from_wkt(&format!("POINT({} {})", lon, lat)).unwrap()
+            Geometry::from_wkt(&format!("POINT({} {})", lon, lat))
+                .expect("invariant: value is valid")
         })
         .collect();
     profiler.stop("data_generation");

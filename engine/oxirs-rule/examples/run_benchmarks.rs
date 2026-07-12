@@ -99,10 +99,11 @@ fn analyze_sparql_performance(results: &[oxirs_rule::integration_benchmarks::Ben
     println!("  └─────────────────────────────────┴──────────────┴──────────────┘");
 
     // Find fastest and slowest modes
-    if let Some(fastest) = sparql_results
-        .iter()
-        .max_by(|a, b| a.ops_per_sec.partial_cmp(&b.ops_per_sec).unwrap())
-    {
+    if let Some(fastest) = sparql_results.iter().max_by(|a, b| {
+        a.ops_per_sec
+            .partial_cmp(&b.ops_per_sec)
+            .expect("float values are not NaN")
+    }) {
         println!(
             "\n  ⚡ Fastest: {} ({:.2} ops/sec)",
             fastest.name.replace("SPARQL - ", ""),
@@ -110,10 +111,11 @@ fn analyze_sparql_performance(results: &[oxirs_rule::integration_benchmarks::Ben
         );
     }
 
-    if let Some(slowest) = sparql_results
-        .iter()
-        .min_by(|a, b| a.ops_per_sec.partial_cmp(&b.ops_per_sec).unwrap())
-    {
+    if let Some(slowest) = sparql_results.iter().min_by(|a, b| {
+        a.ops_per_sec
+            .partial_cmp(&b.ops_per_sec)
+            .expect("float values are not NaN")
+    }) {
         println!(
             "  🐌 Slowest: {} ({:.2} ops/sec)",
             slowest.name.replace("SPARQL - ", ""),
@@ -279,7 +281,11 @@ fn provide_optimization_recommendations(
 
     // Find slowest operations
     let mut sorted_results = results.to_vec();
-    sorted_results.sort_by(|a, b| b.avg_time_us.partial_cmp(&a.avg_time_us).unwrap());
+    sorted_results.sort_by(|a, b| {
+        b.avg_time_us
+            .partial_cmp(&a.avg_time_us)
+            .expect("float values are not NaN")
+    });
 
     println!("  Top 5 Performance Bottlenecks:");
     println!("  ┌────┬──────────────────────────────────┬──────────────┐");
@@ -355,20 +361,22 @@ fn print_overall_statistics(results: &[oxirs_rule::integration_benchmarks::Bench
     println!("  Average Latency:       {:.2} μs/op", avg_time_us);
 
     // Find extreme values
-    if let Some(fastest) = results
-        .iter()
-        .max_by(|a, b| a.ops_per_sec.partial_cmp(&b.ops_per_sec).unwrap())
-    {
+    if let Some(fastest) = results.iter().max_by(|a, b| {
+        a.ops_per_sec
+            .partial_cmp(&b.ops_per_sec)
+            .expect("float values are not NaN")
+    }) {
         println!(
             "\n  ⚡ Fastest Operation:    {} ({:.2} ops/sec)",
             fastest.name, fastest.ops_per_sec
         );
     }
 
-    if let Some(slowest) = results
-        .iter()
-        .min_by(|a, b| a.ops_per_sec.partial_cmp(&b.ops_per_sec).unwrap())
-    {
+    if let Some(slowest) = results.iter().min_by(|a, b| {
+        a.ops_per_sec
+            .partial_cmp(&b.ops_per_sec)
+            .expect("float values are not NaN")
+    }) {
         println!(
             "  🐌 Slowest Operation:   {} ({:.2} ops/sec)",
             slowest.name, slowest.ops_per_sec

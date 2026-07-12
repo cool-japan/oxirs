@@ -57,8 +57,11 @@ impl Default for BufferParams {
 /// Create a buffer around a geometry with default parameters
 ///
 /// This function uses different backends based on available features:
-/// - For Polygon/MultiPolygon: prefers `rust-buffer` (pure Rust), falls back to `geos-backend`
-/// - For Point/LineString: requires `geos-backend`
+/// - For Polygon/MultiPolygon: uses `rust-buffer` (pure Rust) when that feature is
+///   enabled; otherwise returns an error.
+/// - For Point/LineString and custom cap/join styles: requires GEOS, provided by the
+///   quarantined `oxirs-geosparql-adapter-geos` crate (call its `buffer` /
+///   `buffer_with_params`).
 pub fn buffer(geom: &Geometry, distance: f64) -> Result<Geometry> {
     // Try pure Rust implementation first for Polygon/MultiPolygon
     #[cfg(feature = "rust-buffer")]
@@ -77,74 +80,27 @@ pub fn buffer(geom: &Geometry, distance: f64) -> Result<Geometry> {
     buffer_with_params(geom, distance, &BufferParams::default())
 }
 
-/// Create a buffer around a geometry with custom parameters
-#[cfg(feature = "geos-backend")]
-pub fn buffer_with_params(
-    geom: &Geometry,
-    distance: f64,
-    params: &BufferParams,
-) -> Result<Geometry> {
-    use geos::{BufferParams as GeosBufferParams, Geom, Geometry as GeosGeometry};
-
-    // Convert our geometry to GEOS geometry
-    let wkt = geom.to_wkt();
-    let geos_geom = GeosGeometry::new_from_wkt(&wkt).map_err(|e| {
-        GeoSparqlError::GeometryOperationFailed(format!("GEOS conversion failed: {}", e))
-    })?;
-
-    // Convert our BufferParams to GEOS BufferParams using builder pattern
-    let cap_style = match params.cap_style {
-        CapStyle::Round => geos::CapStyle::Round,
-        CapStyle::Flat => geos::CapStyle::Flat,
-        CapStyle::Square => geos::CapStyle::Square,
-    };
-
-    let join_style = match params.join_style {
-        JoinStyle::Round => geos::JoinStyle::Round,
-        JoinStyle::Mitre => geos::JoinStyle::Mitre,
-        JoinStyle::Bevel => geos::JoinStyle::Bevel,
-    };
-
-    let geos_params = GeosBufferParams::builder()
-        .end_cap_style(cap_style)
-        .join_style(join_style)
-        .quadrant_segments(params.quadrant_segments)
-        .mitre_limit(params.mitre_limit)
-        .build()
-        .map_err(|e| {
-            GeoSparqlError::GeometryOperationFailed(format!(
-                "Failed to create buffer params: {}",
-                e
-            ))
-        })?;
-
-    // Create buffer with parameters
-    let buffered = geos_geom
-        .buffer_with_params(distance, &geos_params)
-        .map_err(|e| {
-            GeoSparqlError::GeometryOperationFailed(format!("Buffer operation failed: {}", e))
-        })?;
-
-    // Convert back to our geometry type
-    let result_wkt = buffered.to_wkt().map_err(|e| {
-        GeoSparqlError::GeometryOperationFailed(format!("WKT conversion failed: {}", e))
-    })?;
-
-    let result_geom = Geometry::from_wkt(&result_wkt)?;
-
-    // Preserve CRS from original geometry
-    Ok(Geometry::with_crs(result_geom.geom, geom.crs.clone()))
-}
-
-/// Create a buffer around a geometry with custom parameters (fallback when GEOS is not available)
-#[cfg(not(feature = "geos-backend"))]
+/// Create a buffer around a geometry with custom parameters.
+///
+/// This is the GEOS-backed entry point for buffering arbitrary geometry types
+/// (Point/LineString/etc.) and for the full OGC cap/join styles. The GEOS C FFI
+/// has been quarantined into the `oxirs-geosparql-adapter-geos` crate
+/// (publish = false) under the COOLJAPAN Pure Rust Policy v2, so this published
+/// crate keeps a 100% Pure-Rust dependency surface. Call
+/// `oxirs_geosparql_adapter_geos::buffer_with_params` for the working GEOS
+/// implementation. (Pure-Rust Polygon/MultiPolygon buffering is still available
+/// here via the `rust-buffer` feature: see [`buffer`] / `buffer_rust`.)
 pub fn buffer_with_params(
     _geom: &Geometry,
     _distance: f64,
     _params: &BufferParams,
 ) -> Result<Geometry> {
     Err(GeoSparqlError::UnsupportedOperation(
-        "Buffer operation requires the 'geos-backend' feature to be enabled".to_string(),
+        "Buffer with custom parameters (Point/LineString buffering, cap/join styles) requires \
+         GEOS; it is provided by the quarantined `oxirs-geosparql-adapter-geos` crate \
+         (oxirs_geosparql_adapter_geos::buffer_with_params). Pure-Rust Polygon/MultiPolygon \
+         buffering is available via the `rust-buffer` feature."
+            .to_string(),
     ))
 }
 
@@ -181,7 +137,7 @@ pub fn buffer_rust(geom: &Geometry, distance: f64) -> Result<Geometry> {
         }
         _ => {
             return Err(GeoSparqlError::UnsupportedOperation(format!(
-                "Pure Rust buffer only supports Polygon and MultiPolygon (got {}). Use geos-backend for other types.",
+                "Pure Rust buffer only supports Polygon and MultiPolygon (got {}). Use the oxirs-geosparql-adapter-geos crate for other types.",
                 geom.geometry_type()
             )))
         }
@@ -304,36 +260,18 @@ fn create_extended_z_coords(
 /// - LineString: the two end points
 /// - Polygon: the exterior and interior rings
 /// - MultiPoint/MultiLineString/MultiPolygon: union of boundaries of components
-#[cfg(feature = "geos-backend")]
-pub fn boundary(geom: &Geometry) -> Result<Geometry> {
-    use geos::{Geom, Geometry as GeosGeometry};
-
-    // Convert our geometry to GEOS geometry
-    let wkt = geom.to_wkt();
-    let geos_geom = GeosGeometry::new_from_wkt(&wkt).map_err(|e| {
-        GeoSparqlError::GeometryOperationFailed(format!("GEOS conversion failed: {}", e))
-    })?;
-
-    // Calculate boundary
-    let boundary_geom = geos_geom.boundary().map_err(|e| {
-        GeoSparqlError::GeometryOperationFailed(format!("Boundary operation failed: {}", e))
-    })?;
-
-    // Convert back to our geometry type
-    let result_wkt = boundary_geom.to_wkt().map_err(|e| {
-        GeoSparqlError::GeometryOperationFailed(format!("WKT conversion failed: {}", e))
-    })?;
-
-    let result_geom = Geometry::from_wkt(&result_wkt)?;
-
-    // Preserve CRS from original geometry
-    Ok(Geometry::with_crs(result_geom.geom, geom.crs.clone()))
-}
-
-/// Calculate the boundary of a geometry (fallback when GEOS is not available)
-#[cfg(not(feature = "geos-backend"))]
+///
+/// The GEOS C FFI that backs this operation has been quarantined into the
+/// `oxirs-geosparql-adapter-geos` crate (publish = false) under the COOLJAPAN
+/// Pure Rust Policy v2. Call `oxirs_geosparql_adapter_geos::boundary` for the
+/// working GEOS implementation. (A Pure-Rust OGC SFA boundary also exists at
+/// [`crate::functions::de9im::boundary`].)
 pub fn boundary(_geom: &Geometry) -> Result<Geometry> {
     Err(GeoSparqlError::UnsupportedOperation(
-        "Boundary operation requires the 'geos-backend' feature to be enabled".to_string(),
+        "Boundary operation requires GEOS; it is provided by the quarantined \
+         `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::boundary). \
+         A Pure-Rust OGC SFA boundary is also available at \
+         oxirs_geosparql::functions::de9im::boundary."
+            .to_string(),
     ))
 }

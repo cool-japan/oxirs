@@ -123,7 +123,10 @@ impl ShapeLearner {
         let limited_classes: Vec<_> = classes.into_iter().take(self.config.max_shapes).collect();
 
         // Use thread pool for parallel processing
-        let num_threads = num_cpus::get().clamp(1, limited_classes.len());
+        let num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .clamp(1, limited_classes.len());
         let pool = threadpool::ThreadPool::new(num_threads);
 
         tracing::info!("Using {} threads for parallel shape learning", num_threads);

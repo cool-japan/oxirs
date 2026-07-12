@@ -137,7 +137,9 @@ pub struct BatchProcessingConfig {
 impl Default for BatchProcessingConfig {
     fn default() -> Self {
         Self {
-            max_workers: num_cpus::get(),
+            max_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             chunk_size: 1000,
             enable_incremental: true,
             checkpoint_frequency: 10,
@@ -1071,7 +1073,12 @@ mod tests {
         let manager =
             BatchProcessingManager::new(config, cache_manager, temp_dir.path().to_path_buf());
 
-        assert_eq!(manager.config.max_workers, num_cpus::get());
+        assert_eq!(
+            manager.config.max_workers,
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+        );
         assert_eq!(manager.config.chunk_size, 1000);
     }
 
@@ -1168,9 +1175,14 @@ mod tests {
         // Test basic functionality
         let processor =
             ParallelBatchProcessor::new(ParallelBatchConfig::default()).expect("should succeed");
-        // Should use system's num_cpus
+        // Should use the system's available parallelism
         assert!(processor.num_workers() > 0);
-        assert!(processor.num_workers() <= num_cpus::get());
+        assert!(
+            processor.num_workers()
+                <= std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1)
+        );
     }
 }
 
@@ -1205,7 +1217,9 @@ pub struct ParallelBatchConfig {
 impl Default for ParallelBatchConfig {
     fn default() -> Self {
         Self {
-            num_workers: num_cpus::get(),
+            num_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             chunk_size: 1000,
             adaptive_balancing: true,
             memory_threshold_mb: 512,

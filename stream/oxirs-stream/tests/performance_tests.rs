@@ -222,7 +222,7 @@ fn create_performance_stream_config(backend: StreamBackendType) -> StreamConfig 
             health_check_interval: Duration::from_secs(5),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         },
     }
@@ -295,48 +295,6 @@ mod throughput_tests {
         assert!(
             metrics.average_throughput() >= min_throughput,
             "Throughput should be >= {min_throughput} events/sec"
-        );
-
-        Ok(())
-    }
-
-    #[cfg(feature = "kafka")]
-    #[tokio::test]
-    #[ignore] // Requires external services
-    async fn test_kafka_backend_high_throughput() -> Result<()> {
-        let config = create_performance_stream_config(StreamBackendType::Kafka {
-            brokers: vec!["localhost:9092".to_string()],
-            security_protocol: None,
-            sasl_config: None,
-        });
-
-        let test_config = PerformanceTestConfig {
-            event_count: 100_000,
-            concurrent_producers: 10,
-            concurrent_consumers: 10,
-            test_duration: Duration::from_secs(60),
-            target_throughput: 50_000.0,
-            ..Default::default()
-        };
-
-        let metrics = run_throughput_test(config, test_config).await?;
-
-        println!("Kafka Backend Throughput Test Results:");
-        println!("  Total events sent: {}", metrics.total_events_sent);
-        println!(
-            "  Average throughput: {:.0} events/sec",
-            metrics.average_throughput()
-        );
-        println!("  Success rate: {:.4}%", metrics.success_rate() * 100.0);
-
-        // Kafka should handle high throughput
-        assert!(
-            metrics.average_throughput() >= 25_000.0,
-            "Kafka throughput should be >= 25K events/sec"
-        );
-        assert!(
-            metrics.success_rate() >= 0.995,
-            "Kafka success rate should be >= 99.5%"
         );
 
         Ok(())
@@ -543,111 +501,6 @@ mod latency_tests {
 
         Ok(())
     }
-
-    #[cfg(feature = "kafka")]
-    #[tokio::test]
-    #[ignore] // Requires Kafka
-    async fn test_kafka_latency_under_load() -> Result<()> {
-        let config = create_performance_stream_config(StreamBackendType::Kafka {
-            brokers: vec!["localhost:9092".to_string()],
-            security_protocol: None,
-            sasl_config: None,
-        });
-
-        let mut producer = Stream::new(config.clone()).await?;
-        let mut consumer = Stream::new(config).await?;
-
-        // Background load to simulate real-world conditions
-        let background_config = create_performance_stream_config(StreamBackendType::Kafka {
-            brokers: vec!["localhost:9092".to_string()],
-            security_protocol: None,
-            sasl_config: None,
-        });
-
-        let load_generator = tokio::spawn(async move {
-            let mut load_stream = Stream::new(background_config).await?;
-
-            for i in 0..10_000 {
-                let event = create_performance_test_events(1, i)[0].clone();
-                let _ = load_stream.publish(event).await;
-
-                if i % 100 == 0 {
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                }
-            }
-
-            load_stream.close().await?;
-            Ok::<(), anyhow::Error>(())
-        });
-
-        // Measure latency under load
-        let mut latencies = Vec::new();
-        let latency_test_count = 500;
-
-        tokio::time::sleep(Duration::from_millis(100)).await; // Let background load start
-
-        for i in 0..latency_test_count {
-            let start = Instant::now();
-
-            let event = StreamEvent::TripleAdded {
-                subject: format!("http://kafka.latency.test/subject_{i}"),
-                predicate: "http://kafka.latency.test/predicate".to_string(),
-                object: format!("\"Kafka latency test data {i}\""),
-                graph: None,
-                metadata: EventMetadata {
-                    event_id: format!("kafka_latency_test_{i}"),
-                    timestamp: Utc::now(),
-                    source: "kafka_latency_test".to_string(),
-                    user: None,
-                    context: None,
-                    caused_by: None,
-                    version: "1.0".to_string(),
-                    properties: HashMap::new(),
-                    checksum: None,
-                },
-            };
-
-            producer.publish(event).await?;
-
-            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(10), consumer.consume()).await {
-                let latency = start.elapsed();
-                latencies.push(latency);
-            }
-
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-
-        load_generator.abort();
-        producer.close().await?;
-        consumer.close().await?;
-
-        // Analyze results
-        latencies.sort();
-        let count = latencies.len();
-
-        if count > 0 {
-            let p50 = latencies[count / 2];
-            let p95 = latencies[(count * 95) / 100];
-            let p99 = latencies[(count * 99) / 100];
-
-            println!("Kafka Latency Under Load Results (n={count}):");
-            println!("  P50: {p50:?}");
-            println!("  P95: {p95:?}");
-            println!("  P99: {p99:?}");
-
-            // Kafka under load should still maintain reasonable latencies
-            assert!(
-                p99 < Duration::from_millis(1000),
-                "P99 latency should be under 1s even under load"
-            );
-            assert!(
-                p95 < Duration::from_millis(500),
-                "P95 latency should be under 500ms under load"
-            );
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -800,55 +653,6 @@ mod scalability_tests {
                 "Should handle messages of size {size} bytes"
             );
         }
-
-        Ok(())
-    }
-
-    #[cfg(feature = "kafka")]
-    #[tokio::test]
-    #[ignore] // Requires external infrastructure
-    async fn test_partition_scaling() -> Result<()> {
-        // Test Kafka with different partition counts
-        let partition_counts = vec![1, 4, 8, 16];
-        let mut results = Vec::new();
-
-        for &partitions in &partition_counts {
-            // This would require creating Kafka topics with different partition counts
-            let _topic_name = format!("partition-scale-test-{partitions}");
-
-            let config = create_performance_stream_config(StreamBackendType::Kafka {
-                brokers: vec!["localhost:9092".to_string()],
-                security_protocol: None,
-                sasl_config: None,
-            });
-
-            let test_config = PerformanceTestConfig {
-                event_count: 50_000,
-                concurrent_producers: partitions,
-                concurrent_consumers: partitions,
-                test_duration: Duration::from_secs(30),
-                ..Default::default()
-            };
-
-            let metrics = run_throughput_test(config, test_config).await?;
-
-            println!(
-                "Partitions: {}, Throughput: {:.0} events/sec",
-                partitions,
-                metrics.average_throughput()
-            );
-
-            results.push((partitions, metrics.average_throughput()));
-        }
-
-        // Check for scaling with partitions
-        let single_partition_throughput = results[0].1;
-        let max_partition_throughput = results.last().unwrap().1;
-
-        assert!(
-            max_partition_throughput > single_partition_throughput,
-            "Throughput should increase with more partitions"
-        );
 
         Ok(())
     }

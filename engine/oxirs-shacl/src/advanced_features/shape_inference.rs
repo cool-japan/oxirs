@@ -213,11 +213,30 @@ impl ShapeInferenceEngine {
         Ok(inferred)
     }
 
-    /// Collect all instances of a class (stub)
-    #[allow(unused_variables)]
+    /// Collect all instances of a class by querying for `?inst rdf:type class` triples.
     fn collect_class_instances(&self, class: &NamedNode, store: &dyn Store) -> Result<Vec<Term>> {
-        // TODO: Query store for instances
-        Ok(Vec::new())
+        use oxirs_core::model::{Object, Predicate, Subject as SubjectModel};
+
+        let rdf_type = NamedNode::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        let type_pred = Predicate::from(rdf_type);
+        let class_obj = Object::from(class.clone());
+
+        let quads = store
+            .find_quads(None, Some(&type_pred), Some(&class_obj), None)
+            .map_err(|e| {
+                crate::ShaclError::ValidationEngine(format!("Failed to query store: {e}"))
+            })?;
+
+        let instances: Vec<Term> = quads
+            .into_iter()
+            .filter_map(|quad| match quad.subject().clone() {
+                SubjectModel::NamedNode(n) => Some(Term::NamedNode(n)),
+                SubjectModel::BlankNode(b) => Some(Term::BlankNode(b)),
+                _ => None,
+            })
+            .collect();
+
+        Ok(instances)
     }
 
     /// Sample instances using SciRS2 random sampling
@@ -1358,5 +1377,41 @@ mod tests {
 
         // Should detect no anomalies
         assert!(anomalies.is_empty());
+    }
+
+    #[test]
+    fn test_collect_class_instances() {
+        use oxirs_core::{
+            model::{GraphName, Object, Predicate, Quad, Subject},
+            ConcreteStore,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let person = NamedNode::new_unchecked("http://example.org/Person");
+        let alice = NamedNode::new_unchecked("http://example.org/Alice");
+        let rdf_type = NamedNode::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        store
+            .insert(&Quad::new(
+                Subject::NamedNode(alice.clone()),
+                Predicate::NamedNode(rdf_type),
+                Object::NamedNode(person.clone()),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert");
+
+        let engine = ShapeInferenceEngine::default_config();
+        let instances = engine
+            .collect_class_instances(&person, &store)
+            .expect("collect");
+        assert_eq!(
+            instances.len(),
+            1,
+            "Should find exactly one Person instance"
+        );
+        assert!(
+            instances.iter().any(
+                |t| matches!(t, Term::NamedNode(n) if n.as_str() == "http://example.org/Alice")
+            ),
+            "Alice should be in instances"
+        );
     }
 }

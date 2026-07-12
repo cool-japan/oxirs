@@ -1,6 +1,6 @@
 //! Comprehensive certification module for `oxirs-cluster`.
 //!
-//! This module provides a [`CertificationSuite`] that validates the operational
+//! This module provides a [`certification::CertificationSuite`] that validates the operational
 //! correctness guarantees of the cluster crate through a series of in-memory
 //! simulations.  No real network sockets are used — all simulation is
 //! deterministic and synchronous (std::sync::mpsc channels; no tokio runtime
@@ -10,10 +10,10 @@
 //!
 //! | Module | Checks |
 //! |--------|--------|
-//! | [`consistency`] | Read-your-writes, linearizability probes, convergence |
-//! | [`partition`] | Island formation, quorum loss/recovery, split-brain prevention |
-//! | [`raft`] | Leader uniqueness, log monotonicity, safety invariants |
-//! | [`sla`] | Read/write p99 latency bounds, throughput floor |
+//! | [`certification::consistency`] | Read-your-writes, linearizability probes, convergence |
+//! | [`certification::partition`] | Island formation, quorum loss/recovery, split-brain prevention |
+//! | [`certification::raft`] | Leader uniqueness, log monotonicity, safety invariants |
+//! | [`certification::sla`] | Read/write p99 latency bounds, throughput floor |
 //!
 //! # Example
 //!

@@ -1,10 +1,10 @@
 //! Multi-backend synchronization for the SAMM cloud storage subsystem.
 //!
 //! Provides:
-//! - [`MultiBackendSync`] — replicate objects across two or more backends
-//! - [`SyncPolicy`] — conflict-resolution and versioning strategy
-//! - [`DeltaSyncState`] — tracks which keys have been propagated
-//! - [`ScheduledReplication`] — configuration for timed sync jobs
+//! - [`crate::cloud_backends_sync::MultiBackendSync`] — replicate objects across two or more backends
+//! - [`crate::cloud_backends_sync::SyncPolicy`] — conflict-resolution and versioning strategy
+//! - [`crate::cloud_backends_sync::DeltaSyncState`] — tracks which keys have been propagated
+//! - [`crate::cloud_backends_sync::ScheduledReplication`] — configuration for timed sync jobs
 //!
 //! All network I/O is delegated to the provider-specific backends in
 //! [`crate::cloud_backends_impl`].

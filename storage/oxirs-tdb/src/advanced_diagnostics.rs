@@ -16,6 +16,6 @@
 //! - `advanced_diagnostics_engine`: the [`AdvancedDiagnosticEngine`] implementation
 //! - `advanced_diagnostics_tests`: unit tests for the public API
 //!
-//! [`AdvancedDiagnosticEngine`]: crate::advanced_diagnostics_engine::AdvancedDiagnosticEngine
+//! [`AdvancedDiagnosticEngine`]: crate::advanced_diagnostics_types::AdvancedDiagnosticEngine
 
 pub use crate::advanced_diagnostics_types::*;

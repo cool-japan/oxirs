@@ -1279,7 +1279,10 @@ impl Default for BatchProcessingOptimizer {
 impl BatchProcessingOptimizer {
     /// Create new batch processing optimizer
     pub fn new() -> Self {
-        let max_threads = num_cpus::get().min(8); // Limit to 8 threads max
+        let max_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .min(8); // Limit to 8 threads max
 
         Self {
             optimal_batch_size: 50, // Start with 50 patterns per batch

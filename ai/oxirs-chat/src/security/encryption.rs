@@ -74,14 +74,16 @@ impl Encryptor {
     ///
     /// Returns the ciphertext with the 12-byte nonce prepended.
     pub fn encrypt(&self, data: &[u8]) -> Result<Vec<u8>> {
-        let key = Key::<Aes256Gcm>::from_slice(&self.key);
+        let key = <&Key<Aes256Gcm>>::try_from(&self.key[..])
+            .map_err(|_| anyhow!("Invalid key length for AES-256-GCM"))?;
         let cipher = Aes256Gcm::new(key);
 
         // Generate random 12-byte nonce
         use scirs2_core::random::Random;
         let mut rng = Random::default();
         let nonce_bytes: Vec<u8> = (0..12).map(|_| rng.gen_range(0u8..=255u8)).collect();
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce =
+            <&Nonce<_>>::try_from(&nonce_bytes[..]).map_err(|_| anyhow!("Invalid nonce length"))?;
 
         // Encrypt
         let ciphertext = cipher
@@ -105,12 +107,14 @@ impl Encryptor {
             ));
         }
 
-        let key = Key::<Aes256Gcm>::from_slice(&self.key);
+        let key = <&Key<Aes256Gcm>>::try_from(&self.key[..])
+            .map_err(|_| anyhow!("Invalid key length for AES-256-GCM"))?;
         let cipher = Aes256Gcm::new(key);
 
         // Extract 12-byte nonce
         let (nonce_bytes, ciphertext) = encrypted_data.split_at(12);
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let nonce =
+            <&Nonce<_>>::try_from(nonce_bytes).map_err(|_| anyhow!("Invalid nonce length"))?;
 
         // Decrypt
         let plaintext = cipher

@@ -2,32 +2,14 @@
 //!
 //! Detailed tests for each streaming backend's unique features and capabilities.
 
-#[cfg(any(
-    feature = "kafka",
-    feature = "nats",
-    feature = "redis",
-    feature = "pulsar",
-    feature = "kinesis"
-))]
+#[cfg(any(feature = "nats", feature = "redis", feature = "kinesis"))]
 use anyhow::Result;
 use chrono::Utc;
 use oxirs_stream::*;
 use std::collections::HashMap;
-#[cfg(any(
-    feature = "kafka",
-    feature = "nats",
-    feature = "redis",
-    feature = "pulsar",
-    feature = "kinesis"
-))]
+#[cfg(any(feature = "nats", feature = "redis", feature = "kinesis"))]
 use std::time::Duration;
-#[cfg(any(
-    feature = "kafka",
-    feature = "nats",
-    feature = "redis",
-    feature = "pulsar",
-    feature = "kinesis"
-))]
+#[cfg(any(feature = "nats", feature = "redis", feature = "kinesis"))]
 use tokio::time::timeout;
 use uuid::Uuid;
 
@@ -55,313 +37,6 @@ fn create_test_event_with_metadata(id: &str, data: &str) -> StreamEvent {
             },
             checksum: Some(format!("checksum_{id}")),
         },
-    }
-}
-
-#[cfg(test)]
-#[cfg(feature = "kafka")]
-mod kafka_specific_tests {
-    use super::*;
-
-    #[tokio::test]
-    #[ignore] // Requires Kafka
-    async fn test_kafka_partitioning() -> Result<()> {
-        let test_id = Uuid::new_v4();
-        let config = StreamConfig {
-            backend: StreamBackendType::Kafka {
-                brokers: vec!["localhost:9092".to_string()],
-                security_protocol: None,
-                sasl_config: None,
-            },
-            topic: format!("partition-test-{test_id}"),
-            batch_size: 1,
-            flush_interval_ms: 100,
-            max_connections: 5,
-            connection_timeout: Duration::from_secs(10),
-            enable_compression: true,
-            compression_type: CompressionType::Snappy,
-            retry_config: RetryConfig {
-                max_retries: 3,
-                initial_backoff: Duration::from_millis(100),
-                max_backoff: Duration::from_secs(5),
-                backoff_multiplier: 2.0,
-                jitter: true,
-            },
-            circuit_breaker: CircuitBreakerConfig {
-                enabled: true,
-                failure_threshold: 5,
-                timeout: Duration::from_secs(60),
-                success_threshold: 3,
-                half_open_max_calls: 2,
-            },
-            security: SecurityConfig {
-                enable_tls: false,
-                verify_certificates: true,
-                client_cert_path: None,
-                client_key_path: None,
-                ca_cert_path: None,
-                sasl_config: None,
-            },
-            performance: StreamPerformanceConfig {
-                enable_batching: true,
-                enable_pipelining: true,
-                buffer_size: 2048,
-                prefetch_count: 32,
-                enable_zero_copy: false,
-                enable_simd: false,
-                parallel_processing: true,
-                worker_threads: Some(2),
-            },
-            monitoring: MonitoringConfig {
-                enable_metrics: true,
-                enable_tracing: true,
-                metrics_interval: Duration::from_secs(5),
-                health_check_interval: Duration::from_secs(10),
-                enable_profiling: false,
-                prometheus_endpoint: None,
-                jaeger_endpoint: None,
-                log_level: "info".to_string(),
-            },
-        };
-
-        let mut producer = Stream::new(config.clone()).await?;
-
-        // Test partition key distribution
-        let events = vec![
-            ("partition1", "data1"),
-            ("partition2", "data2"),
-            ("partition1", "data3"), // Same partition as first
-            ("partition3", "data4"),
-        ];
-
-        for (partition_key, data) in &events {
-            let mut event = create_test_event_with_metadata(partition_key, data);
-
-            // Add partition key to metadata
-            if let StreamEvent::TripleAdded {
-                ref mut metadata, ..
-            } = event
-            {
-                metadata
-                    .properties
-                    .insert("partition_key".to_string(), partition_key.to_string());
-            }
-
-            producer.publish(event).await?;
-        }
-
-        // Test multiple consumers for parallel processing
-        let mut consumer1 = Stream::new(config.clone()).await?;
-        let mut consumer2 = Stream::new(config).await?;
-
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        let mut consumer1_events = Vec::new();
-        let mut consumer2_events = Vec::new();
-
-        // Consume from both consumers
-        for _ in 0..2 {
-            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(2), consumer1.consume()).await
-            {
-                consumer1_events.push(event);
-            }
-            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(2), consumer2.consume()).await
-            {
-                consumer2_events.push(event);
-            }
-        }
-
-        let total_consumed = consumer1_events.len() + consumer2_events.len();
-        assert!(
-            total_consumed >= 2,
-            "Should consume at least 2 events across consumers"
-        );
-
-        // Note: Stream objects don't require explicit cleanup
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore] // Requires Kafka with SASL
-    async fn test_kafka_sasl_authentication() -> Result<()> {
-        let config = StreamConfig {
-            backend: StreamBackendType::Kafka {
-                brokers: vec!["localhost:9093".to_string()], // SASL port
-                security_protocol: Some("SASL_SSL".to_string()),
-                sasl_config: None, // Will be set below
-            },
-            topic: "sasl-test-topic".to_string(),
-            batch_size: 10,
-            flush_interval_ms: 1000,
-            max_connections: 3,
-            connection_timeout: Duration::from_secs(15),
-            enable_compression: false,
-            compression_type: CompressionType::None,
-            retry_config: RetryConfig {
-                max_retries: 5,
-                initial_backoff: Duration::from_millis(200),
-                max_backoff: Duration::from_secs(10),
-                backoff_multiplier: 2.0,
-                jitter: true,
-            },
-            circuit_breaker: CircuitBreakerConfig {
-                enabled: true,
-                failure_threshold: 3,
-                timeout: Duration::from_secs(30),
-                success_threshold: 2,
-                half_open_max_calls: 1,
-            },
-            security: SecurityConfig {
-                enable_tls: true,
-                verify_certificates: true,
-                client_cert_path: Some("/etc/kafka/certs/client.crt".to_string()),
-                client_key_path: Some("/etc/kafka/certs/client.key".to_string()),
-                ca_cert_path: Some("/etc/kafka/certs/ca.crt".to_string()),
-                sasl_config: None, // SASL config will be set separately
-            },
-            performance: StreamPerformanceConfig {
-                enable_batching: true,
-                enable_pipelining: true,
-                buffer_size: 1024,
-                prefetch_count: 32,
-                enable_zero_copy: false,
-                enable_simd: false,
-                parallel_processing: true,
-                worker_threads: Some(2),
-            },
-            monitoring: MonitoringConfig {
-                enable_metrics: true,
-                enable_tracing: false,
-                metrics_interval: Duration::from_secs(5),
-                health_check_interval: Duration::from_secs(15),
-                enable_profiling: false,
-                prometheus_endpoint: None,
-                jaeger_endpoint: None,
-                log_level: "info".to_string(),
-            },
-        };
-
-        let mut stream = Stream::new(config).await?;
-
-        let event = create_test_event_with_metadata("sasl_test", "authenticated_data");
-        stream.publish(event).await?;
-
-        if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(10), stream.consume()).await {
-            let _event = event;
-            println!("SASL authentication successful");
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore] // Requires Kafka
-    async fn test_kafka_schema_registry_integration() -> Result<()> {
-        // This would test integration with Confluent Schema Registry
-        // for Avro/JSON Schema validation of RDF events
-
-        let config = StreamConfig {
-            backend: StreamBackendType::Kafka {
-                brokers: vec!["localhost:9092".to_string()],
-                security_protocol: None,
-                sasl_config: None,
-            },
-            topic: "schema-test-topic".to_string(),
-            batch_size: 5,
-            flush_interval_ms: 500,
-            max_connections: 3,
-            connection_timeout: Duration::from_secs(10),
-            enable_compression: true,
-            compression_type: CompressionType::Gzip,
-            retry_config: RetryConfig {
-                max_retries: 3,
-                initial_backoff: Duration::from_millis(100),
-                max_backoff: Duration::from_secs(5),
-                backoff_multiplier: 2.0,
-                jitter: false,
-            },
-            circuit_breaker: CircuitBreakerConfig {
-                enabled: true,
-                failure_threshold: 5,
-                timeout: Duration::from_secs(60),
-                success_threshold: 3,
-                half_open_max_calls: 2,
-            },
-            security: SecurityConfig {
-                enable_tls: false,
-                verify_certificates: true,
-                client_cert_path: None,
-                client_key_path: None,
-                ca_cert_path: None,
-                sasl_config: None,
-            },
-            performance: StreamPerformanceConfig {
-                buffer_size: 1024,
-                enable_pipelining: true,
-                prefetch_count: 32,
-                enable_batching: true,
-                enable_zero_copy: false,
-                enable_simd: false,
-                parallel_processing: true,
-                worker_threads: Some(2),
-            },
-            monitoring: MonitoringConfig {
-                enable_metrics: true,
-                enable_tracing: false,
-                metrics_interval: Duration::from_secs(5),
-                health_check_interval: Duration::from_secs(10),
-                enable_profiling: false,
-                prometheus_endpoint: None,
-                jaeger_endpoint: None,
-                log_level: "info".to_string(),
-            },
-        };
-
-        let mut stream = Stream::new(config).await?;
-
-        // Test with structured RDF data
-        let rdf_event = StreamEvent::TripleAdded {
-            subject: "http://schema.org/Person/123".to_string(),
-            predicate: "http://schema.org/name".to_string(),
-            object: "\"John Doe\"".to_string(),
-            graph: Some("http://example.org/people".to_string()),
-            metadata: EventMetadata {
-                event_id: Uuid::new_v4().to_string(),
-                timestamp: Utc::now(),
-                source: "schema_registry_test".to_string(),
-                user: Some("schema_user".to_string()),
-                context: Some("schema_validation".to_string()),
-                caused_by: None,
-                version: "2.0".to_string(),
-                properties: {
-                    let mut props = HashMap::new();
-                    props.insert("schema_type".to_string(), "person".to_string());
-                    props.insert("validation_required".to_string(), "true".to_string());
-                    props
-                },
-                checksum: Some("schema_checksum_123".to_string()),
-            },
-        };
-
-        stream.publish(rdf_event).await?;
-
-        if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(5), stream.consume()).await {
-            match event {
-                StreamEvent::TripleAdded {
-                    subject,
-                    predicate,
-                    object,
-                    ..
-                } => {
-                    assert!(subject.contains("schema.org"));
-                    assert!(predicate.contains("name"));
-                    assert!(object.contains("John Doe"));
-                }
-                _ => panic!("Expected TripleAdded event"),
-            }
-        }
-
-        Ok(())
     }
 }
 
@@ -425,7 +100,7 @@ mod nats_specific_tests {
                 health_check_interval: Duration::from_secs(5),
                 enable_profiling: false,
                 prometheus_endpoint: None,
-                jaeger_endpoint: None,
+                otlp_endpoint: None,
                 log_level: "info".to_string(),
             },
         };
@@ -527,7 +202,7 @@ mod nats_specific_tests {
                 health_check_interval: Duration::from_secs(10),
                 enable_profiling: false,
                 prometheus_endpoint: None,
-                jaeger_endpoint: None,
+                otlp_endpoint: None,
                 log_level: "info".to_string(),
             },
         };
@@ -609,7 +284,7 @@ mod nats_specific_tests {
                 health_check_interval: Duration::from_secs(10),
                 enable_profiling: false,
                 prometheus_endpoint: None,
-                jaeger_endpoint: None,
+                otlp_endpoint: None,
                 log_level: "info".to_string(),
             },
         };
@@ -687,7 +362,7 @@ mod redis_specific_tests {
                 health_check_interval: Duration::from_secs(10),
                 enable_profiling: false,
                 prometheus_endpoint: None,
-                jaeger_endpoint: None,
+                otlp_endpoint: None,
                 log_level: "info".to_string(),
             },
         };
@@ -794,7 +469,7 @@ mod redis_specific_tests {
                 health_check_interval: Duration::from_secs(10),
                 enable_profiling: false,
                 prometheus_endpoint: None,
-                jaeger_endpoint: None,
+                otlp_endpoint: None,
                 log_level: "info".to_string(),
             },
         };
@@ -819,196 +494,6 @@ mod redis_specific_tests {
         }
 
         assert!(received_count > 0, "Should receive events from cluster");
-
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-#[cfg(feature = "pulsar")]
-mod pulsar_specific_tests {
-    use super::*;
-
-    #[tokio::test]
-    #[ignore] // Requires Pulsar
-    async fn test_pulsar_namespace_isolation() -> Result<()> {
-        let config1 = StreamConfig {
-            backend: StreamBackendType::Pulsar {
-                service_url: "pulsar://localhost:6650".to_string(),
-                auth_config: None,
-            },
-            topic: "isolation-test-1".to_string(),
-            batch_size: 3,
-            flush_interval_ms: 200,
-            max_connections: 2,
-            connection_timeout: Duration::from_secs(10),
-            enable_compression: true,
-            compression_type: CompressionType::Zstd,
-            retry_config: RetryConfig {
-                max_retries: 3,
-                initial_backoff: Duration::from_millis(100),
-                max_backoff: Duration::from_secs(5),
-                backoff_multiplier: 2.0,
-                jitter: false,
-            },
-            circuit_breaker: CircuitBreakerConfig {
-                enabled: true,
-                failure_threshold: 3,
-                timeout: Duration::from_secs(30),
-                success_threshold: 2,
-                half_open_max_calls: 1,
-            },
-            security: SecurityConfig {
-                enable_tls: false,
-                verify_certificates: true,
-                client_cert_path: None,
-                client_key_path: None,
-                ca_cert_path: None,
-                sasl_config: None,
-            },
-            performance: StreamPerformanceConfig {
-                enable_batching: true,
-                enable_pipelining: true,
-                buffer_size: 1024,
-                prefetch_count: 32,
-                enable_zero_copy: false,
-                enable_simd: false,
-                parallel_processing: true,
-                worker_threads: Some(2),
-            },
-            monitoring: MonitoringConfig {
-                enable_metrics: true,
-                enable_tracing: false,
-                metrics_interval: Duration::from_secs(5),
-                health_check_interval: Duration::from_secs(10),
-                enable_profiling: false,
-                prometheus_endpoint: None,
-                jaeger_endpoint: None,
-                log_level: "info".to_string(),
-            },
-        };
-
-        let config2 = StreamConfig {
-            backend: StreamBackendType::Pulsar {
-                service_url: "pulsar://localhost:6650".to_string(),
-                auth_config: None,
-            },
-            ..config1.clone()
-        };
-
-        let mut stream1 = Stream::new(config1).await?;
-        let mut stream2 = Stream::new(config2).await?;
-
-        // Send events to different namespaces
-        let event1 = create_test_event_with_metadata("ns1", "namespace1_data");
-        let event2 = create_test_event_with_metadata("ns2", "namespace2_data");
-
-        stream1.publish(event1).await?;
-        stream2.publish(event2).await?;
-
-        tokio::time::sleep(Duration::from_millis(300)).await;
-
-        // Each stream should only receive its own namespace events
-        if let Ok(Ok(Some(StreamEvent::TripleAdded { object, .. }))) =
-            timeout(Duration::from_secs(5), stream1.consume()).await
-        {
-            assert!(object.contains("namespace1_data"));
-        }
-
-        if let Ok(Ok(Some(StreamEvent::TripleAdded { object, .. }))) =
-            timeout(Duration::from_secs(5), stream2.consume()).await
-        {
-            assert!(object.contains("namespace2_data"));
-        }
-
-        stream1.close().await?;
-        stream2.close().await?;
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore] // Requires Pulsar with BookKeeper
-    async fn test_pulsar_message_deduplication() -> Result<()> {
-        let config = StreamConfig {
-            backend: StreamBackendType::Pulsar {
-                service_url: "pulsar://localhost:6650".to_string(),
-                auth_config: None,
-            },
-            topic: "dedup-test".to_string(),
-            batch_size: 1,
-            flush_interval_ms: 100,
-            max_connections: 2,
-            connection_timeout: Duration::from_secs(10),
-            enable_compression: false,
-            compression_type: CompressionType::None,
-            retry_config: RetryConfig {
-                max_retries: 3,
-                initial_backoff: Duration::from_millis(100),
-                max_backoff: Duration::from_secs(3),
-                backoff_multiplier: 1.5,
-                jitter: true,
-            },
-            circuit_breaker: CircuitBreakerConfig {
-                enabled: true,
-                failure_threshold: 5,
-                timeout: Duration::from_secs(30),
-                success_threshold: 3,
-                half_open_max_calls: 2,
-            },
-            security: SecurityConfig {
-                enable_tls: false,
-                verify_certificates: true,
-                client_cert_path: None,
-                client_key_path: None,
-                ca_cert_path: None,
-                sasl_config: None,
-            },
-            performance: StreamPerformanceConfig {
-                buffer_size: 512,
-                enable_pipelining: true,
-                prefetch_count: 32,
-                enable_batching: false,
-                enable_zero_copy: false,
-                enable_simd: false,
-                parallel_processing: true,
-                worker_threads: Some(2),
-            },
-            monitoring: MonitoringConfig {
-                enable_metrics: true,
-                enable_tracing: false,
-                metrics_interval: Duration::from_secs(5),
-                health_check_interval: Duration::from_secs(10),
-                enable_profiling: false,
-                prometheus_endpoint: None,
-                jaeger_endpoint: None,
-                log_level: "info".to_string(),
-            },
-        };
-
-        let mut stream = Stream::new(config).await?;
-
-        // Send the same event multiple times (simulate duplicates)
-        let event = create_test_event_with_metadata("dedup_test", "duplicate_data");
-
-        stream.publish(event.clone()).await?;
-        stream.publish(event.clone()).await?;
-        stream.publish(event).await?;
-
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        // Should only receive one copy due to deduplication
-        let mut received_count = 0;
-        for _ in 0..3 {
-            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(500), stream.consume()).await {
-                received_count += 1;
-            }
-        }
-
-        // Pulsar's deduplication should prevent duplicates
-        assert!(
-            received_count <= 2,
-            "Deduplication should prevent excessive duplicates"
-        );
 
         Ok(())
     }
@@ -1074,7 +559,7 @@ mod kinesis_specific_tests {
                 health_check_interval: Duration::from_secs(30),
                 enable_profiling: false,
                 prometheus_endpoint: None,
-                jaeger_endpoint: None,
+                otlp_endpoint: None,
                 log_level: "info".to_string(),
             },
         };
@@ -1165,7 +650,7 @@ mod kinesis_specific_tests {
                 health_check_interval: Duration::from_secs(20),
                 enable_profiling: false,
                 prometheus_endpoint: None,
-                jaeger_endpoint: None,
+                otlp_endpoint: None,
                 log_level: "info".to_string(),
             },
         };

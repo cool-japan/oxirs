@@ -1,36 +1,38 @@
 # OxiRS SHACL 🔍
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
-A high-performance SHACL (Shapes Constraint Language) validator for RDF data, implemented in Rust as part of the OxiRS ecosystem. Currently in active development with core constraint support implemented.
+A high-performance SHACL (Shapes Constraint Language) validator for RDF data, implemented in Rust as part of the OxiRS ecosystem, with full W3C SHACL Core compliance (27/27 constraint types).
 
 ## 🎯 Features
 
 ### ✅ Implemented
-- **Core SHACL Constraints** - All basic constraint types (class, datatype, cardinality, etc.)
-- **Property Path Support** - Sequence, alternative, inverse, and Kleene paths
+- **SHACL Core** - Complete constraint validation: 27/27 W3C constraint types (class, datatype, cardinality, range, string, logical, shape-based, and more)
+- **Property Path Support** - Sequence, alternative, inverse, and Kleene (zero-or-more, one-or-more, zero-or-one) paths
 - **Logical Constraints** - Full support for `sh:and`, `sh:or`, `sh:not`, `sh:xone`
 - **Shape-based Constraints** - Nested shape validation and qualified cardinality
-- **Target Selection** - Class, node, and property-based targeting
-- **Basic Validation Engine** - Core validation logic and reporting
-
-### 🚧 In Development
-- **W3C Test Suite Compliance** - Working toward full specification compliance
-- **Performance Optimization** - Constraint evaluation caching and parallelization
-- **SHACL-SPARQL Extensions** - Advanced SPARQL-based constraints
-- **Validation Reports** - Multiple output formats and detailed violation information
-- **API Stabilization** - Builder patterns and comprehensive error handling
+- **Target Selection** - Class, node, and property-based targeting, plus SPARQL-based (`sh:target`) and single-hop property-path targets that execute against the store
+- **Subclass-Aware Class Targeting** - Reflexive+transitive `rdfs:subClassOf` closure (`advanced_features::subclass_closure`, Floyd–Warshall over a boolean adjacency matrix), so `sh:class` and implicit-class targets honor subclassing instead of exact-type matching only
+- **SHACL-SPARQL / SHACL-AF** - SPARQL-based constraints, SPARQL targets, and ASK validators
+- **W3C Test Suite Compliance** - 27/27 W3C SHACL Core constraint types; 47/47 real conformance tests passing
+- **Performance Optimization** - Constraint evaluation caching, parallelization, and incremental validation
+- **Validation Reports** - W3C-compliant violation reports; JUnit, TAP, SARIF, and JSON output for CI/CD integration
+- **Distributed Validation** - Coordinator-worker architecture
+- **Cross-Module Integration** - GraphQL, Fuseki, Stream, and AI modules
+- **Constraint Component Library** - 30+ pre-built validators
+- **ShEx Migration** - ShEx to SHACL migration tool
+- **LSP Integration** - Language Server Protocol support for IDE tooling
+- **Interactive Designer** - Step-by-step shape creation wizard
+- **API Stability** - Public APIs are stable; semantic versioning enforced
 
 ### 🔮 Planned
 - **Streaming Validation** - Real-time validation for RDF streams
-- **Enterprise Features** - Analytics, security hardening, and federation support
-- **Integration Tools** - CLI utilities and ecosystem integration
 
 ## 🚀 Quick Start
 
@@ -38,55 +40,64 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-shacl = "0.3.1"
-oxirs-core = "0.3.1"
+oxirs-shacl = "0.3.2"
+oxirs-core = "0.3.2"
 ```
 
 ### Basic Usage
 
-> ⚠️ **Note**: API is still under development and subject to change.
-
 ```rust
-use oxirs_shacl::{ValidationEngine, ValidationConfig, Shape};
-use oxirs_core::store::Store;
+use indexmap::IndexMap;
+use oxirs_core::{NamedNode, RdfStore};
+use oxirs_shacl::{
+    constraints::{cardinality_constraints::MinCountConstraint, Constraint},
+    ConstraintComponentId, Shape, ShapeId, Target, ValidationConfig, ValidationEngine,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // This example shows the intended API - implementation in progress
-    
-    // Create shapes and validation configuration
-    let shapes = vec![/* shapes loaded from RDF */];
+    // Build a shape: every ex:Person must have at least one value for the target property
+    let mut person_shape =
+        Shape::node_shape(ShapeId("http://example.org/PersonShape".to_string()));
+    person_shape.add_target(Target::class(NamedNode::new_unchecked(
+        "http://example.org/Person",
+    )));
+    person_shape.add_constraint(
+        ConstraintComponentId::new("sh:minCount"),
+        Constraint::MinCount(MinCountConstraint { min_count: 1 }),
+    );
+
+    let mut shapes = IndexMap::new();
+    shapes.insert(person_shape.id.clone(), person_shape);
+
+    // Validate an RDF store against the shapes
     let config = ValidationConfig::default();
-    
-    // Create validation engine
-    let engine = ValidationEngine::new(&shapes, config);
-    
-    // Create and populate RDF store
-    let store = Store::new()?;
-    // store.load_from_reader(...)?;
-    
-    // Validate data (API under development)
-    // let report = engine.validate_store(&store)?;
-    
+    let mut engine = ValidationEngine::new(&shapes, config);
+    let store = RdfStore::new()?;
+    let report = engine.validate_store(&store)?;
+    println!("Conforms: {}", report.conforms());
+
     Ok(())
 }
 ```
 
-For current implementation details, see the [source code](src/) and [tests](tests/).
+For more complete, runnable examples, see [`examples/basic_validation.rs`](examples/basic_validation.rs)
+and [`examples/parallel_validation.rs`](examples/parallel_validation.rs), plus the
+[source code](src/) and [tests](tests/).
 
 ## 🏗️ Current Development Status
 
-This crate is actively under development. The core constraint types and validation engine architecture are implemented, but the public API is still being finalized.
+This crate is production-ready. Core constraint types, the validation engine, and the public API are stable and covered by 2,140 passing tests (`--all-features`).
 
 ### Implementation Progress
 - ✅ Core constraint types (class, datatype, cardinality, range, string, etc.)
-- ✅ Property path evaluation engine  
+- ✅ Property path evaluation engine
 - ✅ Logical constraints (and, or, not, xone)
-- ✅ Basic validation engine architecture
-- 🚧 W3C SHACL test suite compliance
-- 🚧 Public API stabilization
-- 🚧 Performance optimization
-- 🔮 SHACL-SPARQL extensions
-- 🔮 Comprehensive validation reports
+- ✅ Validation engine architecture, with SPARQL-based and property-path targets executing against the store
+- ✅ W3C SHACL test suite compliance (27/27 constraint types, 47/47 conformance tests)
+- ✅ Public API stabilization
+- ✅ Performance optimization (caching, parallelization, incremental validation)
+- ✅ SHACL-SPARQL extensions
+- ✅ Comprehensive validation reports (JUnit, TAP, SARIF, JSON)
 
 ## 🧪 Development & Testing
 
@@ -133,11 +144,11 @@ cargo bench
 
 ## 🤝 Contributing
 
-This crate is under active development. Contributions are welcome! Current priorities:
+This crate is production-ready; contributions are still welcome! Current priorities:
 
-1. **W3C SHACL test suite compliance** - Help fix failing tests
-2. **Performance optimization** - Constraint evaluation improvements  
-3. **API stabilization** - Builder patterns and error handling
+1. **Streaming validation** - Real-time validation for RDF streams
+2. **Further W3C SHACL-AF conformance breadth** - continued coverage beyond SHACL Core
+3. **Performance optimization** - Constraint evaluation improvements
 4. **Documentation** - Examples and API documentation
 
 ### Development Setup

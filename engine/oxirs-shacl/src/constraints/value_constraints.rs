@@ -46,7 +46,7 @@
 use serde::{Deserialize, Serialize};
 
 use oxirs_core::{
-    model::{NamedNode, Quad, Term, Triple},
+    model::{NamedNode, Term},
     Store,
 };
 
@@ -111,12 +111,7 @@ impl ConstraintEvaluator for ClassConstraint {
     ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it's an instance of the required class
         for value in &context.values {
-            println!(
-                "DEBUG ClassConstraint: Checking if value {:?} is instance of class {}",
-                value, self.class_iri
-            );
             let is_instance = self.check_class_membership(store, value)?;
-            println!("DEBUG ClassConstraint: Value {value:?} is_instance: {is_instance}");
             if !is_instance {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -133,46 +128,51 @@ impl ConstraintEvaluator for ClassConstraint {
 
 impl ClassConstraint {
     fn check_class_membership(&self, store: &dyn Store, value: &Term) -> Result<bool> {
-        // Check if the value is an instance of the class
-        // This involves checking for rdf:type triples and possibly rdfs:subClassOf inference
-        match value {
-            Term::NamedNode(node) => {
-                // Query for ?value rdf:type ?class where ?class is self.class_iri or a subclass
-                let type_predicate =
-                    NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").map_err(
-                        |e| ShaclError::ConstraintValidation(format!("Invalid RDF type IRI: {e}")),
-                    )?;
+        use crate::advanced_features::subclass_closure::build_rdfs_subclass_closure;
+        use oxirs_core::model::{Object, Predicate, Subject};
 
-                // Check direct type assertion
-                let triple =
-                    Triple::new(node.clone(), type_predicate.clone(), self.class_iri.clone());
-                let quad: Quad = triple.into();
-                let subject = quad.subject();
-                let predicate = quad.predicate();
-                let object = quad.object();
-                let graph_name = quad.graph_name();
-                if !store
-                    .find_quads(
-                        Some(subject),
-                        Some(predicate),
-                        Some(object),
-                        Some(graph_name),
-                    )
-                    .unwrap_or_default()
-                    .is_empty()
-                {
+        let Term::NamedNode(node) = value else {
+            // Blank nodes and literals cannot be instances of classes in standard RDF
+            return Ok(false);
+        };
+
+        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            .map_err(|e| ShaclError::ConstraintValidation(format!("Invalid RDF type IRI: {e}")))?;
+        let type_pred = Predicate::from(rdf_type);
+        let class_obj = Object::from(self.class_iri.clone());
+        let node_subj = Subject::from(node.clone());
+
+        // Direct type assertion
+        let direct = store
+            .find_quads(Some(&node_subj), Some(&type_pred), Some(&class_obj), None)
+            .map_err(|e| ShaclError::ConstraintValidation(format!("Store query failed: {e}")))?;
+        if !direct.is_empty() {
+            return Ok(true);
+        }
+
+        // Subclass-aware check: find all classes that are rdfs:subClassOf self.class_iri
+        // (i.e., classes where self.class_iri appears in their closure)
+        let closure = build_rdfs_subclass_closure(store)?;
+        // We want subclasses of self.class_iri: those C where closure[C] contains self.class_iri
+        for (sub_class, superclasses) in &closure {
+            if sub_class == &self.class_iri {
+                // self.class_iri itself is handled by direct check above
+                continue;
+            }
+            if superclasses.contains(&self.class_iri) {
+                // sub_class is a subclass of self.class_iri; check if node is typed as sub_class
+                let sub_obj = Object::from(sub_class.clone());
+                let members = store
+                    .find_quads(Some(&node_subj), Some(&type_pred), Some(&sub_obj), None)
+                    .map_err(|e| {
+                        ShaclError::ConstraintValidation(format!("Store query failed: {e}"))
+                    })?;
+                if !members.is_empty() {
                     return Ok(true);
                 }
-
-                // TODO: Check subclass relationships using RDFS reasoning
-                // For now, we only check direct type assertions
-                Ok(false)
-            }
-            _ => {
-                // Blank nodes and literals cannot be instances of classes in standard RDF
-                Ok(false)
             }
         }
+        Ok(false)
     }
 }
 
@@ -817,6 +817,52 @@ mod tests {
             node_kind: NodeKind::IriOrLiteral,
         };
         assert!(constraint.validate().is_ok());
+    }
+
+    #[test]
+    fn test_class_constraint_subclass_instance_satisfied() {
+        use oxirs_core::model::{GraphName, Object, Predicate, Quad, Subject};
+        // Animal rdfs:subClassOf Thing; Bob rdf:type Animal
+        // => ClassConstraint(sh:class Thing) on Bob should PASS
+        let thing_class = NamedNode::new("http://example.org/Thing").expect("valid IRI");
+        let animal_class = NamedNode::new("http://example.org/Animal").expect("valid IRI");
+        let constraint = ClassConstraint {
+            class_iri: thing_class.clone(),
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let bob = NamedNode::new("http://example.org/Bob").expect("valid IRI");
+        let rdf_type =
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
+        let rdfs_sco =
+            NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").expect("valid IRI");
+
+        store
+            .insert(&Quad::new(
+                Subject::NamedNode(animal_class.clone()),
+                Predicate::NamedNode(rdfs_sco),
+                Object::NamedNode(thing_class),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert subclass");
+        store
+            .insert(&Quad::new(
+                Subject::NamedNode(bob.clone()),
+                Predicate::NamedNode(rdf_type),
+                Object::NamedNode(animal_class),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert type");
+
+        let bob_term = Term::NamedNode(bob);
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![bob_term]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Subclass instance should satisfy class constraint"
+        );
     }
 
     // ---- Violation message content ----

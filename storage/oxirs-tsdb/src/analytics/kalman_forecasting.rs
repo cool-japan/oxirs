@@ -15,8 +15,11 @@ use serde::{Deserialize, Serialize};
 
 /// Serialisable snapshot of a scalar Kalman filter's core state.
 ///
-/// Use [`KalmanForecaster::save_state`] / [`KalmanForecaster::load_state`] to
-/// persist the learned state across calls without re-feeding the entire history.
+/// Use [`KalmanForecaster::save_state`] to capture the state and
+/// [`KalmanForecaster::forecast_from_state`] to resume from it and forecast
+/// without re-feeding the entire history. `KalmanState` itself derives
+/// `Serialize`/`Deserialize`, so it can be persisted to disk or a database
+/// between calls without any dedicated load method.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KalmanState {
     /// Current state estimate x̂.
@@ -33,7 +36,7 @@ pub struct KalmanState {
 // KalmanForecaster
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Time-series forecaster built on an [`AdaptiveKalmanFilter`].
+/// Time-series forecaster built on an [`AdaptiveKalmanFilter`](crate::analytics::kalman::AdaptiveKalmanFilter).
 ///
 /// The filter is run over the supplied history to produce a smoothed posterior
 /// estimate, then projected forward for `horizon` steps.  Prediction intervals

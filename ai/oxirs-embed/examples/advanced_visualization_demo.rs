@@ -320,7 +320,7 @@ async fn main() -> Result<()> {
                 })
                 .collect();
 
-            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("values are comparable floats"));
 
             for (neighbor, dist) in distances.iter().take(3) {
                 println!("    {} (distance: {:.3})", neighbor, dist);

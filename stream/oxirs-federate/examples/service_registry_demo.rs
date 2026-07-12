@@ -85,7 +85,10 @@ async fn demo_service_registry() -> Result<()> {
     }
 
     // Get registry statistics
-    let stats = registry.get_stats().await.unwrap();
+    let stats = registry
+        .get_stats()
+        .await
+        .expect("invariant: value is valid");
     info!("📊 Registry Stats:");
     info!(
         "  - Total services: {}",

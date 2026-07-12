@@ -6,7 +6,7 @@
 //! call execution, and pagination / ordering operators.
 //!
 //! Built-in function bodies live in
-//! [`super::node_expr_builtins`](super::node_expr_builtins) so this module can
+//! [`super::node_expr_builtins`] so this module can
 //! stay focused on evaluation control flow without growing past the workspace
 //! 2000-line refactor threshold.
 

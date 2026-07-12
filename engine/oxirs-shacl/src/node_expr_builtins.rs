@@ -3,7 +3,7 @@
 //! Each built-in receives evaluated argument lists (a `Vec` per argument
 //! position, since node expressions are set-valued) and returns the set of
 //! result terms. Registration is performed by
-//! [`register_builtins`], invoked from the evaluator constructor.
+//! `register_builtins`, invoked from the evaluator constructor.
 
 use std::collections::HashMap;
 

@@ -18,7 +18,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 scirs2-core = { workspace = true }
-scirs2-graph = { workspace = true }
 oxirs-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -27,8 +26,7 @@ thiserror.workspace = true
 tracing.workspace = true
 regex.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util"] }
-lazy_static.workspace = true
-num_cpus.workspace = true
+once_cell.workspace = true
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 
 [dev-dependencies]
@@ -36,7 +34,6 @@ criterion.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber.workspace = true
-once_cell.workspace = true
 
 [features]
 default = ["rdfs"]

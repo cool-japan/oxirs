@@ -120,11 +120,14 @@ fn main() -> Result<()> {
 
     // 7. Calculate distances between specific POIs
     println!("\n7. Distances between specific locations:");
-    let library = pois.iter().find(|p| p.name == "Central Library").unwrap();
+    let library = pois
+        .iter()
+        .find(|p| p.name == "Central Library")
+        .expect("invariant: element exists in collection");
     let starbucks = pois
         .iter()
         .find(|p| p.name == "Starbucks - Main St")
-        .unwrap();
+        .expect("invariant: value is valid");
 
     let lib_to_sb_dist = distance(&library.geometry, &starbucks.geometry)?;
     println!(
@@ -158,7 +161,8 @@ fn main() -> Result<()> {
         })
         .collect();
 
-    restaurants_with_dist.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    restaurants_with_dist
+        .sort_by(|a, b| a.1.partial_cmp(&b.1).expect("values are comparable floats"));
 
     for (i, (poi, dist)) in restaurants_with_dist.iter().take(3).enumerate() {
         let meters = dist * 111000.0;

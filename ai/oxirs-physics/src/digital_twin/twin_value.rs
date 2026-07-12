@@ -4,7 +4,7 @@
 //! minimal digital twin property store (`Twin`) intended for use by protocol bridge
 //! implementations such as `oxirs-canbus`'s J1939 ↔ DTDL bridge.
 //!
-//! Unlike the fuller [`super::DigitalTwin`] (which tracks sensor/actuator state,
+//! Unlike the fuller [`DigitalTwin`](crate::digital_twin::DigitalTwin) (which tracks sensor/actuator state,
 //! sync reports, and DTDL v2 interface definitions), `Twin` here is intentionally
 //! minimal: it holds a flat map of named properties and a monotonically increasing
 //! version counter that advances on every write.

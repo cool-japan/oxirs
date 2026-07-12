@@ -3,7 +3,7 @@
 //! OxiRS uses `reqwest` configured with the `rustls-no-provider` feature so that
 //! the Pure Rust TLS stack is selected without pulling in `aws-lc-sys`/`ring`.
 //! That feature means `reqwest` (and `rustls` in general) relies on the
-//! **process-default** [`CryptoProvider`], which must be installed at runtime
+//! **process-default** [`CryptoProvider`](rustls::crypto::CryptoProvider), which must be installed at runtime
 //! before any TLS client is constructed.
 //!
 //! Application binaries normally install it in `main()`, but unit/integration

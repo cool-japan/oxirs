@@ -376,7 +376,7 @@ pub struct MappingRule {
 }
 
 impl MappingRule {
-    /// Create a minimal mapping rule (use [`MappingRuleBuilder`] for ergonomic construction)
+    /// Create a minimal mapping rule (use [`crate::MappingRuleBuilder`] for ergonomic construction)
     pub fn new(name: impl Into<String>, source: DataSource, subject_template: Template) -> Self {
         Self {
             name: name.into(),

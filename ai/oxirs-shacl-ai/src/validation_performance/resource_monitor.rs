@@ -157,7 +157,9 @@ impl ResourceMonitor {
     fn estimate_heap_usage() -> f64 {
         // Conservative memory estimation based on typical validation workloads
         let base_memory = 50.0; // 50MB base
-        let cores = num_cpus::get() as f64;
+        let cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1) as f64;
         let estimated = base_memory + (cores * 10.0); // 10MB per core
         estimated
     }
@@ -165,7 +167,9 @@ impl ResourceMonitor {
     /// Estimate CPU usage when system APIs are unavailable
     fn estimate_cpu_usage() -> f64 {
         // Use thread pool activity as CPU usage indicator
-        let active_cores = num_cpus::get() as f64;
+        let active_cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1) as f64;
         let estimated_usage = (active_cores * 0.3).min(95.0); // Conservative estimate
         estimated_usage
     }
@@ -242,7 +246,9 @@ impl ResourceMonitor {
     /// Get current thread count
     fn get_thread_count(&self) -> usize {
         // This is an approximation - in reality we'd need to track actual thread usage
-        num_cpus::get()
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
     }
 
     /// Get memory usage history

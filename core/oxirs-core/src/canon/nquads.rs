@@ -1,8 +1,8 @@
 //! N-Quads serialization for URDNA2015 canonical form.
 //!
 //! Implements the canonical N-Quads serialization as described in
-//! https://www.w3.org/TR/n-quads/ and used by URDNA2015
-//! (https://www.w3.org/TR/rdf-canon/#serialize-canonical-form).
+//! <https://www.w3.org/TR/n-quads/> and used by URDNA2015
+//! (<https://www.w3.org/TR/rdf-canon/#serialize-canonical-form>).
 //!
 //! Key rules for canonical N-Quads:
 //! - Blank nodes are replaced by their canonical identifier (e.g. `_:c14n0`)

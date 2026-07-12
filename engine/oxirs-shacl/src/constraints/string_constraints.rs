@@ -438,7 +438,11 @@ impl ConstraintEvaluator for LanguageInConstraint {
             match value {
                 Term::Literal(literal) => {
                     if let Some(lang) = literal.language() {
-                        if !self.languages.contains(&lang.to_string()) {
+                        if !self
+                            .languages
+                            .iter()
+                            .any(|r| language_range_matches(r, lang))
+                        {
                             return Ok(ConstraintEvaluationResult::violated(
                                 Some(value.clone()),
                                 Some(format!(
@@ -467,6 +471,23 @@ impl ConstraintEvaluator for LanguageInConstraint {
         }
         Ok(ConstraintEvaluationResult::satisfied())
     }
+}
+
+/// Test whether `tag` (a language tag like "de-CH") matches a basic language
+/// range entry from `allowed`.
+///
+/// RFC 4647 §3.3 basic filtering rules:
+/// - `*` matches any tag.
+/// - Otherwise the range must equal the tag (case-insensitive) or be a
+///   case-insensitive prefix of the tag followed by `-`.
+pub(crate) fn language_range_matches(range: &str, tag: &str) -> bool {
+    if range == "*" {
+        return true;
+    }
+    let range_lc = range.to_lowercase();
+    let tag_lc = tag.to_lowercase();
+    // Exact match or prefix match (range == tag prefix before a `-` separator)
+    tag_lc == range_lc || tag_lc.starts_with(&format!("{range_lc}-"))
 }
 
 /// SHACL `sh:uniqueLang` constraint that ensures unique language tags across values.
@@ -913,5 +934,57 @@ mod tests {
         let store = ConcreteStore::new().expect("store");
         let ctx = ctx_with_values(vec![plain_lit("hello")]); // exactly 5 chars
         assert!(c.evaluate(&store, &ctx).expect("eval").is_satisfied());
+    }
+
+    // ---- BCP47 language_range_matches tests ----
+
+    #[test]
+    fn test_language_range_wildcard_matches_all() {
+        assert!(language_range_matches("*", "de"));
+        assert!(language_range_matches("*", "de-CH"));
+        assert!(language_range_matches("*", "en-US-x-twain"));
+    }
+
+    #[test]
+    fn test_language_range_prefix_matching() {
+        assert!(language_range_matches("de", "de"));
+        assert!(language_range_matches("de", "de-CH"));
+        assert!(language_range_matches("de", "de-DE-1996"));
+        assert!(!language_range_matches("de", "en"));
+        assert!(!language_range_matches("de", "den")); // must be prefix before `-`
+    }
+
+    #[test]
+    fn test_language_range_case_insensitive() {
+        assert!(language_range_matches("DE", "de-CH"));
+        assert!(language_range_matches("en", "EN-US"));
+    }
+
+    #[test]
+    fn test_language_in_constraint_bcp47_range() {
+        // "de" should match "de-CH" and "de-DE-1996"
+        let constraint = LanguageInConstraint {
+            languages: vec!["de".to_string()],
+        };
+        let store = ConcreteStore::new().expect("store");
+        let focus = make_focus_node();
+        let shape = make_shape_id();
+        let path = make_property_path();
+
+        // "de-CH" should be accepted by range "de"
+        let de_ch_lit = lang_lit("Grüezi", "de-CH");
+        let ctx = ConstraintContext::new(focus.clone(), shape.clone())
+            .with_path(path.clone())
+            .with_values(vec![de_ch_lit]);
+        let result = constraint.evaluate(&store, &ctx).expect("eval");
+        assert!(result.is_satisfied(), "de-CH must match range 'de'");
+
+        // "en" should NOT be accepted by range "de"
+        let en_lit = lang_lit("Hello", "en");
+        let ctx2 = ConstraintContext::new(focus, shape)
+            .with_path(path)
+            .with_values(vec![en_lit]);
+        let result2 = constraint.evaluate(&store, &ctx2).expect("eval");
+        assert!(result2.is_violated(), "en must NOT match range 'de'");
     }
 }

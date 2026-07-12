@@ -2,18 +2,18 @@
 //!
 //! This module implements selectivity-aware index selection for vector
 //! search.  Given (data_size, dim, requested_recall, query_density) the
-//! [`index_dispatcher::OptimizerDispatcher`] picks the lowest-cost index
+//! [`index_dispatcher::OptimizerDispatcher`](crate::optimizer::index_dispatcher::OptimizerDispatcher) picks the lowest-cost index
 //! family that meets the recall floor, with a fallback chain when an
 //! observed recall trips the SLA.
 //!
 //! Component split:
 //!
-//! - [`cost_model`] — explicit per-index cost formulas (HNSW: `O(log n × M × ef)`,
+//! - [`cost_model`](crate::optimizer::cost_model) — explicit per-index cost formulas (HNSW: `O(log n × M × ef)`,
 //!   IVF: `O(n / nprobe + n_clusters)`, LSH: `O(K × L × dim + L × bucket)`,
 //!   PQ: `O(centroids × subquantizers + n × subquantizers)`).
-//! - [`index_dispatcher`] — execution-agnostic brain that consults the cost
+//! - [`index_dispatcher`](crate::optimizer::index_dispatcher) — execution-agnostic brain that consults the cost
 //!   model and chooses a primary + fallback chain.
-//! - [`query_stats`] — persisted per-family observation aggregates feeding
+//! - [`query_stats`](crate::optimizer::query_stats) — persisted per-family observation aggregates feeding
 //!   online cost-weight learning.
 //!
 //! The crate-level [`crate::index_dispatcher::IndexDispatcher`] wires this

@@ -17,15 +17,16 @@ workspace = true
 
 [dependencies]
 # Core dependencies
-scirs2-core = { workspace = true }
+# `gpu` ungates `scirs2_core::gpu` (pure Rust, no extra deps), used unconditionally by
+# `src/gpu_kg_embeddings.rs`. It was previously enabled transitively via
+# oxirs-arq -> scirs2-optimize; declare it explicitly now that scirs2-optimize is gone.
+scirs2-core = { workspace = true, features = ["gpu"] }
 oxirs-core.workspace = true
 oxirs-arq.workspace = true
 oxirs-shacl.workspace = true
 
 # HTTP server framework
 tokio = { workspace = true, features = ["full"] }
-tokio-util.workspace = true
-hyper = { workspace = true, features = ["full"] }
 axum = { workspace = true, features = ["ws", "multipart"] }
 axum-extra = { version = "0.12", features = ["typed-header"] }
 tower = { workspace = true, features = ["timeout", "load-shed", "buffer"] }
@@ -33,11 +34,10 @@ tower-http = { workspace = true, features = ["cors", "trace", "timeout", "compre
 
 # TLS/SSL support
 # `rustls` is non-optional so the process-default Pure Rust crypto provider can be
-# installed at startup (needed by reqwest/OAuth and the metrics push-gateway even
-# when the `tls` feature is off). `oxitls` supplies that provider.
+# installed at startup (needed by reqwest/OAuth even when the `tls` feature is off).
+# `oxitls` supplies that provider.
 rustls = { workspace = true }
 oxitls.workspace = true
-tokio-rustls = { workspace = true, optional = true }
 rustls-pemfile = { workspace = true, optional = true }
 axum-server = { version = "0.8", features = ["tls-rustls"], optional = true }
 
@@ -46,7 +46,6 @@ clap = { workspace = true, features = ["derive", "env"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 serde_yaml.workspace = true
-serde_urlencoded = "0.7"
 toml.workspace = true
 config.workspace = true
 figment = { version = "0.10", features = ["toml", "yaml", "env"] }
@@ -61,10 +60,6 @@ md5.workspace = true
 # Logging and tracing
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "json", "chrono"] }
-tracing-opentelemetry = { workspace = true, optional = true }
-opentelemetry = { workspace = true, features = ["trace"] }
-opentelemetry-otlp = { workspace = true }
-opentelemetry_sdk = { workspace = true, features = ["trace"] }
 
 # Authentication and security
 uuid.workspace = true
@@ -75,7 +70,6 @@ sha2.workspace = true
 base64.workspace = true
 
 # Pure-Rust cryptography (replaces `ring` per COOLJAPAN Pure Rust policy)
-oxicrypto-core.workspace = true
 oxicrypto-mac.workspace = true
 oxicrypto-hash.workspace = true
 oxicrypto-rand.workspace = true
@@ -88,19 +82,9 @@ rsa = { workspace = true, optional = true }
 # Time and dates
 chrono.workspace = true
 
-# HTTP utilities
-headers = "0.4"
-mime = "0.3"
-http-body-util.workspace = true
-
 # Metrics and monitoring
 prometheus = { workspace = true, optional = true }
-axum-prometheus = { version = "0.10", optional = true }
 metrics.workspace = true
-# `push-gateway-no-tls-provider` keeps the push-gateway + scrape endpoint but routes
-# TLS through the process-default (Pure Rust) crypto provider instead of pulling
-# `hyper-rustls/aws-lc-rs` (C/C++). See `oxitls::pure_provider()` install in main.rs.
-metrics-exporter-prometheus = { version = "0.18", default-features = false, features = ["http-listener", "push-gateway-no-tls-provider"] }
 
 # Caching
 lru.workspace = true
@@ -117,11 +101,8 @@ dashmap.workspace = true
 parking_lot.workspace = true
 
 # Streaming
-rdkafka = { workspace = true, optional = true }
-async-nats = { workspace = true, optional = true }
 bytes = { workspace = true }
 oxiarc-brotli.workspace = true  # Pure-Rust Brotli (replaces `brotli` per COOLJAPAN policy)
-num_cpus.workspace = true
 
 # Validation
 validator = { version = "0.20", features = ["derive"] }
@@ -141,7 +122,6 @@ syn = { workspace = true }
 quote = { workspace = true }
 
 # Additional dependencies for MFA and authentication
-urlencoding.workspace = true
 base32 = "0.5"
 qrcode = "0.14"
 hmac.workspace = true
@@ -160,11 +140,7 @@ httpdate = "1.0"
 # xmlsec has compatibility issues with newer OpenSSL - disabled for now
 # samael = { version = "0.0.19", optional = true, default-features = false }
 
-# LDAP authentication
-ldap3 = { version = "0.12", optional = true }
-
 # System utilities
-libc.workspace = true
 sysinfo.workspace = true  # System monitoring
 
 # Kubernetes operator support (optional)
@@ -180,21 +156,15 @@ async-trait.workspace = true
 
 # GraphQL
 async-graphql.workspace = true
-async-graphql-axum = "7.2"
 
 # OpenAPI
-utoipa = { version = "5.4", features = ["chrono"] }
-utoipa-swagger-ui = { version = "9.0", features = ["axum", "vendored"] }
+utoipa = { version = "5.5", features = ["chrono"] }
 
 # DNS resolution for service discovery (migrated from trust-dns to hickory-dns)
 hickory-resolver = "0.26.1"
 
 # X.509 certificate parsing for client authentication
 x509-parser = "0.18"
-der-parser = "10.0"
-
-# ACME/Let's Encrypt certificate automation (optional)
-instant-acme = { version = "0.8", optional = true }
 
 # Certificate generation for self-signed certs (optional)
 rcgen = { workspace = true, optional = true }
@@ -202,25 +172,12 @@ rcgen = { workspace = true, optional = true }
 # File watching for hot reload
 notify = { version = "8.2", optional = true }
 
-# Template engine for admin UI
-askama = { version = "0.16", optional = true }
-
-# Environment
-dotenv = "0.15"
-
 [dev-dependencies]
 criterion = { workspace = true, features = ["html_reports"] }
-tokio-test.workspace = true
-axum-test = "20"
+axum-test = "21"
 http = { workspace = true }
-http-body-util.workspace = true
 tower = { version = "0.5", features = ["util"] }
 tempfile.workspace = true
-rstest = "0.26"
-insta = "1.47"
-serial_test.workspace = true
-proptest.workspace = true
-wiremock.workspace = true
 
 [features]
 default = ["metrics", "auth"]
@@ -231,16 +188,15 @@ default = ["metrics", "auth"]
 # that are FIPS 140-2 validated (AES-GCM, ECDSA P-256/P-384, RSA, HMAC-SHA-2,
 # SHA-2). See docs/policies/fips-boundary.md (RFC-003).
 fips = []
-metrics = ["prometheus", "axum-prometheus"]
+metrics = ["prometheus"]
 auth = ["jsonwebtoken", "bcrypt"]
-admin-ui = ["askama"]
-tracing = ["tracing-opentelemetry"]
+# Marker features: they gate routes/handlers in src (e.g. src/server/types.rs) that are
+# implemented with in-tree pure-Rust code, so no external dependency is required.
+admin-ui = []
 rate-limit = []
-tls = ["tokio-rustls", "rustls-pemfile", "axum-server"]
-kafka = ["rdkafka"]
-nats = ["async-nats"]
+tls = ["rustls-pemfile", "axum-server"]
 hot-reload = ["notify"]
-ldap = ["ldap3"]
+ldap = []
 saml = ["dep:quick-xml", "dep:rsa"]  # SAML authentication support via pure-Rust XML parsing
 # Tantivy-backed full-text search (`TantivyTextIndex`). NOT in default: Tantivy
 # pulls C `zstd-sys`, violating the COOLJAPAN Pure Rust default policy. Without
@@ -249,16 +205,16 @@ saml = ["dep:quick-xml", "dep:rsa"]  # SAML authentication support via pure-Rust
 # needs `dep:tantivy`; the `oxirs-tdb/full-text-search` gate is propagated by the
 # `oxirs` CLI's `text` feature (which depends on both crates).
 full-text-search = ["dep:tantivy"]
-development = ["admin-ui", "tracing"]
+development = ["admin-ui"]
 production = ["metrics", "auth", "rate-limit", "tls", "ldap"]
 k8s = ["kube", "k8s-openapi", "schemars"]  # Kubernetes operator support
-acme = ["instant-acme", "rcgen"]  # ACME/Let's Encrypt certificate automation
+acme = ["rcgen"]  # ACME/Let's Encrypt certificate automation
 memory_management = []  # SciRS2-Core advanced memory leak detection
 
 [package.metadata.docs.rs]
 # Exclude features requiring system libraries not available on docs.rs
-features = ["metrics", "auth", "admin-ui", "tracing", "rate-limit", "tls", "hot-reload", "acme"]
-# Exclude: kafka (rdkafka), nats (async-nats has build issues), ldap, k8s (kube/k8s-openapi)
+features = ["metrics", "auth", "admin-ui", "rate-limit", "tls", "hot-reload", "acme"]
+# Exclude: ldap (marker feature), k8s (kube/k8s-openapi)
 rustdoc-args = ["--cfg", "docsrs"]
 
 [[bin]]

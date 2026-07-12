@@ -1,0 +1,6 @@
+# Crates to skip when running doc tests across the workspace (see
+# ~/work/doctest-parallel.sh). One crate name per line; '#' starts a comment.
+
+# Tauri desktop-app crate: binary target only (src/main.rs), no lib.rs,
+# so it structurally cannot have doc tests.
+oxirs-tauri

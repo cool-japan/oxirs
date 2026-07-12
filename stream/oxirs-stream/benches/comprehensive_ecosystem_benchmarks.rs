@@ -183,7 +183,11 @@ impl EcosystemBenchmarkSuite {
     pub fn new(config: BenchmarkConfig) -> Self {
         let runtime = Arc::new(
             tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(num_cpus::get())
+                .worker_threads(
+                    std::thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or(1),
+                )
                 .enable_all()
                 .build()
                 .expect("Failed to create Tokio runtime"),

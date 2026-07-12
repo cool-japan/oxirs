@@ -55,7 +55,10 @@ mod graph_summarizer_impl {
     pub struct GraphSummary {
         /// Representative entity IRIs (one per community, by in-degree centrality).
         pub entities: Vec<String>,
-        /// Selected triples involving representative nodes and top predicates.
+        /// Selected triples involving representative nodes and top
+        /// predicates, ordered by predicate frequency (most frequent
+        /// first; ties break alphabetically by predicate, then by input
+        /// order).
         pub relations: Vec<(String, String, String)>,
         /// Human-readable label for each detected community.
         pub community_labels: Vec<String>,
@@ -115,9 +118,12 @@ mod graph_summarizer_impl {
     ///
     /// Pipeline:
     /// 1. Community detection via Leiden (reusing `src/graph/community.rs`).
-    /// 2. Per-community representative selection by in-degree centrality.
+    /// 2. Per-community representative selection by in-degree centrality
+    ///    (ties break deterministically on the lexicographically smallest
+    ///    entity IRI).
     /// 3. Predicate frequency ranking.
-    /// 4. Triple selection and truncation.
+    /// 4. Triple selection, truncation, and frequency-ordered output
+    ///    (most frequent predicate first).
     pub struct GraphSummarizer {
         pub max_nodes: usize,
         pub max_triples: usize,
@@ -165,6 +171,9 @@ mod graph_summarizer_impl {
 
             // ── Per-community: pick representative by max in-degree ───────────
             // Use rayon for parallel centroid selection when there are many communities.
+            // Ties on in-degree break deterministically on the lexicographically
+            // smallest entity, so the result does not depend on the (hash-based)
+            // iteration order of the community's entity list.
             let representatives: Vec<(String, String)> = communities
                 .par_iter()
                 .enumerate()
@@ -172,7 +181,11 @@ mod graph_summarizer_impl {
                     let rep = comm
                         .entities
                         .iter()
-                        .max_by_key(|e| in_degree.get(e.as_str()).copied().unwrap_or(0))
+                        .max_by(|a, b| {
+                            let deg_a = in_degree.get(a.as_str()).copied().unwrap_or(0);
+                            let deg_b = in_degree.get(b.as_str()).copied().unwrap_or(0);
+                            deg_a.cmp(&deg_b).then_with(|| b.as_str().cmp(a.as_str()))
+                        })
                         .cloned()?;
                     let label = format!("Community {} ({} entities)", idx, comm.entities.len());
                     Some((rep, label))
@@ -184,7 +197,8 @@ mod graph_summarizer_impl {
             for (_, p, _) in triples {
                 *pred_freq.entry(p.as_str()).or_insert(0) += 1;
             }
-            let mut pred_ranked: Vec<(&str, usize)> = pred_freq.into_iter().collect();
+            let mut pred_ranked: Vec<(&str, usize)> =
+                pred_freq.iter().map(|(p, c)| (*p, *c)).collect();
             pred_ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
             let top_predicates: std::collections::HashSet<&str> =
                 pred_ranked.iter().take(10).map(|(p, _)| *p).collect();
@@ -223,6 +237,16 @@ mod graph_summarizer_impl {
                     }
                 }
             }
+
+            // ── Order relations by the predicate frequency ranking ───────────
+            // Most frequent predicate first; ties break alphabetically by
+            // predicate, and the stable sort preserves input order within the
+            // same predicate.
+            selected.sort_by(|a, b| {
+                let freq_a = pred_freq.get(a.1.as_str()).copied().unwrap_or(0);
+                let freq_b = pred_freq.get(b.1.as_str()).copied().unwrap_or(0);
+                freq_b.cmp(&freq_a).then_with(|| a.1.cmp(&b.1))
+            });
 
             let community_labels: Vec<String> = representatives
                 .iter()

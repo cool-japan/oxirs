@@ -2,9 +2,9 @@
 //!
 //! Re-exports all optimization types. Implementation details live in:
 //!
-//! - [`super::core_engine`] — ConstraintCache, BatchConstraintEvaluator,
+//! - `super::core_engine` — ConstraintCache, BatchConstraintEvaluator,
 //!   ValidationOptimizationEngine + config/metrics
-//! - [`super::core_strategies`] — ConstraintDependencyAnalyzer, AdvancedConstraintEvaluator,
+//! - `super::core_strategies` — ConstraintDependencyAnalyzer, AdvancedConstraintEvaluator,
 //!   StreamingValidationEngine, IncrementalValidationEngine,
 //!   and all change/delta types
 

@@ -25,13 +25,24 @@ scirs2-core.workspace = true
 # Cryptography
 ed25519-dalek.workspace = true
 curve25519-dalek = { workspace = true, optional = true }
+# NOTE (cargo-upgrade sweep, 2026-07-02): PINNED to sha2 0.10 + hmac 0.12 (digest
+# 0.10 generation). sha2 0.11 / hmac 0.13 implement the digest 0.11 traits, but this
+# crate's bls12_381_plus 0.8.18 (via elliptic-curve 0.13.8's ExpandMsgXmd in
+# signatures/bbs_plus.rs) and rsa 0.9.10 (signatures/rs256.rs SigningKey<Sha256>)
+# BOTH still require the digest 0.10 traits (BlockSizeUser/FixedOutput/HashMarker) on
+# Sha256 — a genuinely incompatible-Sha256-type diamond. No stable upstream escape
+# exists: bls12_381_plus 0.8.18 is the latest, and rsa's only digest-0.11 release is
+# the pre-release 0.10.0-rc.18 (not shippable for RSA signing). Sha256 is also paired
+# with hmac in kms/mod.rs (`Hmac<Sha256>`), so hmac must stay on the same (0.12)
+# digest generation. Reverted DIRECT (not workspace) so the other 13 workspace crates
+# keep sha2 0.11. sha3 stays workspace 0.12 (used standalone as Keccak256 in
+# did/methods/did_ethr.rs — not entangled with the digest-0.10 consumers). Re-eval
+# 2026-08-02 (when rsa 0.10 goes stable + bls12_381_plus adopts elliptic-curve 0.14).
 sha2 = "0.10"
 sha3.workspace = true
-digest = "0.10"
 hmac = "0.12"
 base64.workspace = true
 hex.workspace = true
-k256.workspace = true
 p256.workspace = true
 bls12_381_plus.workspace = true
 # rsa provides the pure-Rust RS256 (RSASSA-PKCS1-v1_5) signing and verification
@@ -40,13 +51,11 @@ bls12_381_plus.workspace = true
 rsa.workspace = true
 
 # Multiformat encoding
-multibase.workspace = true
 bs58.workspace = true
 
 # Async runtime
 tokio.workspace = true
 async-trait.workspace = true
-futures.workspace = true
 
 # HTTP client (for did:web resolution)
 reqwest = { workspace = true, optional = true }
@@ -57,21 +66,15 @@ serde_json.workspace = true
 
 # Error handling
 thiserror.workspace = true
-anyhow.workspace = true
-
-# Logging
-tracing.workspace = true
 
 # Utilities
 uuid.workspace = true
 chrono.workspace = true
 lru.workspace = true
 url.workspace = true
-once_cell.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
-tempfile.workspace = true
 
 [features]
 default = ["did-key", "vc-data-model-2", "did-ethr", "did-ion", "bbs-plus", "zkp"]

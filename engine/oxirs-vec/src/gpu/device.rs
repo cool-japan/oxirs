@@ -1,7 +1,10 @@
 //! GPU device information and management
+//!
+//! The published `oxirs-vec` build reports a simulated device (Pure Rust). Real
+//! CUDA device enumeration (`cudaGetDeviceProperties`, `cudaMemGetInfo`, ...) lives
+//! in the quarantined `oxirs-vec-adapter-cuda` crate (publish = false) per the
+//! COOLJAPAN Pure Rust Policy v2.
 
-#[cfg(all(feature = "cuda", cuda_runtime_available))]
-use anyhow::anyhow;
 use anyhow::Result;
 
 /// GPU device information
@@ -20,7 +23,7 @@ pub struct GpuDevice {
 }
 
 impl GpuDevice {
-    /// Create a simulated GPU device for testing or when CUDA device is unavailable
+    /// Create a simulated GPU device for testing or when no CUDA device is available
     fn simulated(device_id: i32) -> Self {
         Self {
             device_id,
@@ -38,101 +41,18 @@ impl GpuDevice {
 
     /// Get information about a specific GPU device
     pub fn get_device_info(device_id: i32) -> Result<Self> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            use cuda_runtime_sys::*;
-            unsafe {
-                let result = cudaSetDevice(device_id);
-                if result != cudaError_t::cudaSuccess {
-                    // Device not available - fall back to simulated device
-                    tracing::warn!(
-                        "CUDA device {} not available - using simulated GPU device",
-                        device_id
-                    );
-                    return Ok(Self::simulated(device_id));
-                }
-
-                let mut props: cudaDeviceProp = std::mem::zeroed();
-                let result = cudaGetDeviceProperties(&mut props, device_id);
-                if result != cudaError_t::cudaSuccess {
-                    tracing::warn!(
-                        "Failed to get properties for CUDA device {} - using simulated GPU device",
-                        device_id
-                    );
-                    return Ok(Self::simulated(device_id));
-                }
-
-                let mut free_mem: usize = 0;
-                let mut total_mem: usize = 0;
-                let result = cudaMemGetInfo(&mut free_mem, &mut total_mem);
-                if result != cudaError_t::cudaSuccess {
-                    tracing::warn!(
-                        "Failed to get memory info for CUDA device {} - using simulated GPU device",
-                        device_id
-                    );
-                    return Ok(Self::simulated(device_id));
-                }
-
-                Ok(Self {
-                    device_id,
-                    name: std::ffi::CStr::from_ptr(props.name.as_ptr())
-                        .to_string_lossy()
-                        .to_string(),
-                    compute_capability: (props.major, props.minor),
-                    total_memory: total_mem,
-                    free_memory: free_mem,
-                    max_threads_per_block: props.maxThreadsPerBlock,
-                    max_blocks_per_grid: props.maxGridSize[0],
-                    warp_size: props.warpSize,
-                    memory_bandwidth: props.memoryBusWidth as f32
-                        * props.memoryClockRate as f32
-                        * 2.0
-                        / 8.0
-                        / 1e6,
-                    peak_flops: props.clockRate as f64
-                        * props.multiProcessorCount as f64
-                        * props.maxThreadsPerMultiProcessor as f64
-                        / 1e6,
-                })
-            }
-        }
-
-        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-        {
-            // Fallback for testing without CUDA or when CUDA toolkit not installed
-            tracing::warn!("CUDA not available - using simulated GPU device");
-            Ok(Self::simulated(device_id))
-        }
+        // Pure Rust build: report a simulated device. CUDA-backed device
+        // enumeration is provided by oxirs-vec-adapter-cuda.
+        tracing::warn!("CUDA not available - using simulated GPU device");
+        Ok(Self::simulated(device_id))
     }
 
     /// Get information about all available GPU devices
     pub fn get_all_devices() -> Result<Vec<Self>> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            use cuda_runtime_sys::*;
-            unsafe {
-                let mut device_count: i32 = 0;
-                let result = cudaGetDeviceCount(&mut device_count);
-                if result != cudaError_t::cudaSuccess {
-                    return Err(anyhow!("Failed to get device count"));
-                }
-
-                let mut devices = Vec::new();
-                for i in 0..device_count {
-                    if let Ok(device) = Self::get_device_info(i) {
-                        devices.push(device);
-                    }
-                }
-                Ok(devices)
-            }
-        }
-
-        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-        {
-            // Fallback: simulate 2 GPUs for testing when CUDA not available
-            tracing::warn!("CUDA not available - using simulated GPU devices");
-            Ok(vec![Self::get_device_info(0)?, Self::get_device_info(1)?])
-        }
+        // Pure Rust build: simulate two GPUs. CUDA-backed enumeration is provided
+        // by oxirs-vec-adapter-cuda.
+        tracing::warn!("CUDA not available - using simulated GPU devices");
+        Ok(vec![Self::get_device_info(0)?, Self::get_device_info(1)?])
     }
 
     /// Check if this device supports a specific compute capability

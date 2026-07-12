@@ -598,7 +598,7 @@ mod tests {
     }
 
     #[test]
-    fn test_lazy_static_initialization() {
+    fn test_lazy_initialization() {
         // Test that lazy statics are properly initialized and reused
         let type1 = &*rdf::TYPE;
         let type2 = &*rdf::TYPE;

@@ -5,6 +5,7 @@
 
 use crate::RuleAtom;
 use anyhow::{anyhow, Result};
+use once_cell::sync::Lazy;
 use scirs2_core::metrics::{Counter, Timer};
 use scirs2_core::random::{Distribution, Uniform};
 use std::collections::{HashMap, HashSet};
@@ -15,11 +16,10 @@ use super::problog_types::{
 };
 
 // Global metrics for ProbLog
-lazy_static::lazy_static! {
-    static ref PROBLOG_QUERIES: Counter = Counter::new("problog_queries".to_string());
-    static ref PROBLOG_INFERENCES: Counter = Counter::new("problog_inferences".to_string());
-    static ref PROBLOG_QUERY_TIME: Timer = Timer::new("problog_query_time".to_string());
-}
+static PROBLOG_QUERIES: Lazy<Counter> = Lazy::new(|| Counter::new("problog_queries".to_string()));
+static PROBLOG_INFERENCES: Lazy<Counter> =
+    Lazy::new(|| Counter::new("problog_inferences".to_string()));
+static PROBLOG_QUERY_TIME: Lazy<Timer> = Lazy::new(|| Timer::new("problog_query_time".to_string()));
 
 /// Probabilistic Datalog engine
 pub struct ProbLogEngine {

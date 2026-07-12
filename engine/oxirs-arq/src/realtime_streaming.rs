@@ -7,16 +7,16 @@
 use crate::algebra::{Algebra, Binding, Solution, Term, TriplePattern, Variable};
 use crate::executor::{Dataset, ExecutionContext, QueryExecutor};
 use anyhow::Result;
-use scirs2_core::array;  // Beta.3 array macro convenience
+use scirs2_core::array; // Beta.3 array macro convenience
 use scirs2_core::error::CoreError;
 // Native SciRS2 APIs (beta.4+)
 use scirs2_core::metrics::{Counter, Gauge, Histogram, Timer};
-use scirs2_core::profiling::Profiler;
 use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1};
 use scirs2_core::parallel_ops::ParallelIterator;
+use scirs2_core::profiling::Profiler;
 use scirs2_core::random::{
-    Rng, Random, seeded_rng, ThreadLocalRngPool, ScientificSliceRandom,
-    distributions::{Beta, MultivariateNormal}
+    distributions::{Beta, MultivariateNormal},
+    seeded_rng, Random, Rng, ScientificSliceRandom, ThreadLocalRngPool,
 };
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
@@ -53,7 +53,9 @@ impl Default for StreamingConfig {
             slide_interval: Duration::from_millis(100),
             enable_signal_processing: true,
             watermark_strategy: WatermarkStrategy::ProcessingTime,
-            parallelism: num_cpus::get(),
+            parallelism: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             adaptive_sampling: true,
             signal_pipeline: SignalPipelineConfig::default(),
         }
@@ -409,7 +411,11 @@ impl StreamingSparqlProcessor {
     }
 
     /// Register continuous SPARQL query
-    pub async fn register_query(&self, query_id: String, algebra: Algebra) -> Result<broadcast::Receiver<WindowedResult>> {
+    pub async fn register_query(
+        &self,
+        query_id: String,
+        algebra: Algebra,
+    ) -> Result<broadcast::Receiver<WindowedResult>> {
         self.profiler.start("query_registration");
 
         // Create streaming window for this query
@@ -468,16 +474,18 @@ impl StreamingSparqlProcessor {
 
         // Temporal freshness contribution
         let now = SystemTime::now();
-        let age = now.duration_since(triple.timestamp)
+        let age = now
+            .duration_since(triple.timestamp)
             .unwrap_or(Duration::ZERO)
             .as_secs_f64();
 
         let freshness_contribution = (-age / 300.0).exp(); // 5-minute half-life
 
         // Combined quality score
-        let adaptive_quality = (base_quality * 0.4 + signal_contribution * 0.3 + freshness_contribution * 0.3)
-            .min(1.0)
-            .max(0.0);
+        let adaptive_quality =
+            (base_quality * 0.4 + signal_contribution * 0.3 + freshness_contribution * 0.3)
+                .min(1.0)
+                .max(0.0);
 
         Ok(adaptive_quality)
     }
@@ -617,12 +625,8 @@ impl StreamingSparqlProcessor {
         }
 
         // Extract signal values
-        let signal_values: Array1<f64> = Array1::from_vec(
-            triples
-                .iter()
-                .map(|t| t.metadata.signal_strength)
-                .collect()
-        );
+        let signal_values: Array1<f64> =
+            Array1::from_vec(triples.iter().map(|t| t.metadata.signal_strength).collect());
 
         let avg_signal_strength = signal_values.mean().unwrap_or(0.0);
 
@@ -635,21 +639,28 @@ impl StreamingSparqlProcessor {
         };
 
         // Frequency analysis if enabled
-        let dominant_frequencies = if config.signal_pipeline.enable_fft && signal_values.len() >= 8 {
+        let dominant_frequencies = if config.signal_pipeline.enable_fft && signal_values.len() >= 8
+        {
             Self::analyze_frequencies(&signal_values).await?
         } else {
             Vec::new()
         };
 
         // Pattern detection
-        let patterns = if config.signal_pipeline.pattern_detection.enable_temporal_patterns {
+        let patterns = if config
+            .signal_pipeline
+            .pattern_detection
+            .enable_temporal_patterns
+        {
             Self::detect_patterns(&signal_values, &config.signal_pipeline.pattern_detection).await?
         } else {
             Vec::new()
         };
 
         // Anomaly detection
-        let anomalies = Self::detect_anomalies(&signal_values, &config.signal_pipeline.anomaly_detection).await?;
+        let anomalies =
+            Self::detect_anomalies(&signal_values, &config.signal_pipeline.anomaly_detection)
+                .await?;
 
         Ok(SignalMetrics {
             avg_signal_strength,
@@ -755,9 +766,12 @@ impl StreamingSparqlProcessor {
             if z_score.abs() > config.statistical_threshold {
                 anomalies.push(AnomalyIndicator {
                     anomaly_type: AnomalyType::Statistical,
-                    severity: (z_score.abs() - config.statistical_threshold) / config.statistical_threshold,
+                    severity: (z_score.abs() - config.statistical_threshold)
+                        / config.statistical_threshold,
                     timestamp: SystemTime::now(),
-                    description: format!("Statistical outlier at position {i} with z-score {z_score:.2}"),
+                    description: format!(
+                        "Statistical outlier at position {i} with z-score {z_score:.2}"
+                    ),
                 });
             }
         }
@@ -1003,7 +1017,9 @@ mod tests {
             object: Term::Variable(Variable::new("o")),
         }]);
 
-        let receiver = processor.register_query("test_query".to_string(), algebra).await;
+        let receiver = processor
+            .register_query("test_query".to_string(), algebra)
+            .await;
         assert!(receiver.is_ok());
     }
 

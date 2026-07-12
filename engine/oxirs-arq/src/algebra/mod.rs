@@ -177,6 +177,9 @@ pub struct TriplePattern {
     pub object: Term,
 }
 
+/// Type alias for triple patterns used as ground triples (same structure)
+pub type Triple = TriplePattern;
+
 impl fmt::Display for TriplePattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.subject, self.predicate, self.object)

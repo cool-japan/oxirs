@@ -1,4 +1,8 @@
 //! CUDA runtime types and utilities
+//!
+//! Pure-Rust handle types kept for API compatibility. Real CUDA streams and
+//! kernels live in the quarantined `oxirs-vec-adapter-cuda` crate
+//! (publish = false) per the COOLJAPAN Pure Rust Policy v2.
 
 use std::time::Duration;
 
@@ -14,43 +18,17 @@ unsafe impl Sync for CudaStream {}
 
 impl CudaStream {
     pub fn new(device_id: i32) -> anyhow::Result<Self> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            let _ = device_id;
-            // CUDA functionality temporarily disabled for compilation compatibility
-            // TODO: Implement proper CUDA runtime integration
-            Err(anyhow::anyhow!("CUDA support needs proper implementation"))
-        }
-
-        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-        {
-            Ok(Self {
-                handle: std::ptr::null_mut(),
-                device_id,
-            })
-        }
+        // Pure Rust build: placeholder handle. Real streams are created by
+        // oxirs-vec-adapter-cuda.
+        Ok(Self {
+            handle: std::ptr::null_mut(),
+            device_id,
+        })
     }
 
     pub fn synchronize(&self) -> anyhow::Result<()> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            // CUDA functionality temporarily disabled
-            Err(anyhow::anyhow!("CUDA support needs proper implementation"))
-        }
-
-        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-        {
-            Ok(())
-        }
-    }
-}
-
-impl Drop for CudaStream {
-    fn drop(&mut self) {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            // CUDA cleanup temporarily disabled
-        }
+        // No-op in the Pure Rust build.
+        Ok(())
     }
 }
 
@@ -66,31 +44,14 @@ unsafe impl Send for CudaKernel {}
 unsafe impl Sync for CudaKernel {}
 
 impl CudaKernel {
-    #[allow(unused_variables)]
-    pub fn load(ptx_code: &str, function_name: &str) -> anyhow::Result<Self> {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            // CUDA functionality temporarily disabled for compilation compatibility
-            Err(anyhow::anyhow!("CUDA support needs proper implementation"))
-        }
-
-        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
-        {
-            Ok(Self {
-                function: std::ptr::null_mut(),
-                module: std::ptr::null_mut(),
-                name: function_name.to_string(),
-            })
-        }
-    }
-}
-
-impl Drop for CudaKernel {
-    fn drop(&mut self) {
-        #[cfg(all(feature = "cuda", cuda_runtime_available))]
-        {
-            // CUDA cleanup temporarily disabled
-        }
+    pub fn load(_ptx_code: &str, function_name: &str) -> anyhow::Result<Self> {
+        // Pure Rust build: placeholder handle. Real PTX loading is provided by
+        // oxirs-vec-adapter-cuda.
+        Ok(Self {
+            function: std::ptr::null_mut(),
+            module: std::ptr::null_mut(),
+            name: function_name.to_string(),
+        })
     }
 }
 

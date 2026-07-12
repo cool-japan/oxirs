@@ -333,7 +333,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
+    pairs.sort_by(|a, b| b.2.partial_cmp(&a.2).expect("values are comparable floats"));
 
     println!("\n  Most similar entity pairs:");
     for (e1, e2, sim) in pairs.iter().take(3) {

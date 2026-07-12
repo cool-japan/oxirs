@@ -43,15 +43,14 @@
 //! ```
 
 pub mod config;
+pub mod consistency;
+pub mod coordination;
+pub mod monitoring;
 pub mod pipeline;
 pub mod streaming;
 pub mod traits;
 pub mod types;
-// TODO: Implement these modules
-// pub mod coordination;
-// pub mod monitoring;
-// pub mod versioning;
-// pub mod consistency;
+pub mod versioning;
 
 // Re-export commonly used types
 pub use config::{
@@ -77,16 +76,20 @@ pub use types::{
     UpdatePriority, UpdateStats, VersioningStrategy,
 };
 
+pub use consistency::{
+    ConsistencyConfig, ConsistencyManager, ConsistencyStatistics, DefaultRepairStrategy,
+    InconsistencyRepairEngine,
+};
+pub use coordination::{CoordinationConfig, CoordinationStatistics, UpdateCoordinator};
+pub use monitoring::{
+    AlertManager, ConsoleAlertHandler, InMemoryMetricsStorage, MetricsCollector,
+    PipelinePerformanceMonitor,
+};
 pub use pipeline::RealTimeEmbeddingPipeline;
 pub use streaming::{StreamProcessor, StreamProcessorConfig};
-// TODO: Uncomment when modules are implemented
-// pub use coordination::{UpdateCoordinator, CoordinationConfig};
-// pub use monitoring::{
-//     PipelinePerformanceMonitor, AlertManager, MetricsCollector,
-//     MonitoringConfig as PipelineMonitoringConfig,
-// };
-// pub use versioning::{VersionManager, VersionManagerConfig};
-// pub use consistency::{ConsistencyManager, ConsistencyConfig};
+pub use versioning::{
+    InMemoryVersionStorage, VersionManager, VersionManagerConfig, VersionManagerStatistics,
+};
 
 // Re-export error types
 pub use anyhow::{Context, Error, Result};

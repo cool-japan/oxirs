@@ -1,6 +1,6 @@
 # OxiRS SAMM - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
@@ -21,7 +21,7 @@ OxiRS SAMM provides comprehensive support for the Semantic Aspect Meta Model (SA
 - **Graph Analytics** - Dependency analysis with scirs2-graph integration
 - **Graph Visualization** - DOT format generation with Graphviz rendering
 - **SciRS2 Integration** - Full compliance with SciRS2 policy
-- **1409 tests passing** with zero warnings
+- **1549 tests passing** with zero warnings
 
 ### Key Capabilities
 
@@ -71,7 +71,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS SAMM v0.2.3 - Semantic Aspect Meta Model support*
+*OxiRS SAMM v0.3.2 - Semantic Aspect Meta Model support*
 
 ## Proposed follow-ups
 
@@ -91,4 +91,4 @@ Top-3 `Missing` features from the updated ESMF SDK 2.x parity matrix (see `docs/
 
 - [ ] **Cross-model reference validation** — validate external URN references that span independently loaded SAMM model files, so that `oxirs-samm` can report errors when a property references a type defined in a separately resolved model. Affects: `validator`. Reference: <https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#cross-model-reference>
 - [ ] **Pagination extension in OpenAPI output** — emit the `x-samm-pagination` extension block in OpenAPI specs generated from Collection-type aspects, enabling pagination-aware clients. Affects: `codegen::openapi`. Reference: <https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#open-api-generation>
-- [ ] **JSON-LD compaction / framing** — implement the JSON-LD 1.1 compaction algorithm and framing API so that emitted JSON-LD documents can be reshaped into application-specific frames. Affects: `generators::jsonld`, `serializer::jsonld`. Reference: <https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#mapping-to-json-ld>
+- [x] **JSON-LD compaction / framing** — implemented the JSON-LD 1.1 compaction algorithm and framing API so that emitted JSON-LD documents can be reshaped into application-specific frames. Landed as `src/jsonld/compaction.rs` (IRI compaction against a `@context`) and `src/jsonld/framing.rs` (reshapes a flat `@graph` into a nested, application-specific tree), rather than under the originally anticipated `generators::jsonld`/`serializer::jsonld` paths. Reference: <https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#mapping-to-json-ld>

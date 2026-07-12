@@ -79,7 +79,10 @@ fn test_louvain_baseline() {
         / louvain_communities.len().max(1) as f64;
 
     println!("Louvain modularity: {:.3}", louvain_modularity);
-    assert!(louvain_modularity > 0.0);
+    // Louvain is guaranteed to never score below the trivial single-community
+    // partition (modularity 0.0 at resolution=1.0); it can land exactly on
+    // that floor on small graphs, so use >= like test_leiden_vs_louvain_comparison.
+    assert!(louvain_modularity >= 0.0);
 }
 
 /// Test 3: Improvement - Leiden >10% better than Louvain (aspirational)

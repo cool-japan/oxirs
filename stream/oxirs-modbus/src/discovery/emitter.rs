@@ -4,6 +4,8 @@
 //! [`TypeInferrer`] into a [`CandidateRegisterMap`] that can be serialised to
 //! JSON or a human-readable YAML-like format, and consumed by
 //! `register_validator` or stored in a device profile.
+//!
+//! [`CandidateRegisterMap`]: crate::discovery::emitter::CandidateRegisterMap
 
 use serde::{Deserialize, Serialize};
 

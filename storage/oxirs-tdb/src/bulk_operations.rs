@@ -60,7 +60,7 @@ impl BulkTripleProcessor {
     ///
     /// # Arguments
     /// * `batch_size` - Number of triples per batch (default: 10000)
-    /// * `num_workers` - Number of parallel workers (default: num_cpus)
+    /// * `num_workers` - Number of parallel workers (default: available parallelism)
     pub fn new(batch_size: usize, num_workers: usize) -> Self {
         Self {
             batch_size,

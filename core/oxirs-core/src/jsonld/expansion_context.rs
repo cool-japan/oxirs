@@ -26,6 +26,10 @@ pub enum JsonLdEvent {
     EndList,
     StartSet,
     EndSet,
+    /// Carries the `@index` key value for expanded objects produced by an index map.
+    /// Per JSON-LD spec §8.2, `@index` maps to no RDF concept; consumers should
+    /// use this annotation only for compaction or other non-RDF purposes.
+    IndexValue(String),
 }
 
 /// JSON-LD value types
@@ -50,11 +54,13 @@ pub(crate) enum JsonLdExpansionState {
         active_property: Option<String>,
         container: &'static [&'static str],
         reverse: bool,
+        index_key: Option<String>,
     },
     ObjectOrContainerStartStreaming {
         active_property: Option<String>,
         container: &'static [&'static str],
         reverse: bool,
+        index_key: Option<String>,
     },
     Context {
         buffer: Vec<JsonEvent<'static>>,
@@ -69,6 +75,7 @@ pub(crate) enum JsonLdExpansionState {
         seen_id: bool,
         active_property: Option<String>,
         reverse: bool,
+        index_key: Option<String>,
     },
     ObjectType {
         types: Vec<String>,
@@ -76,12 +83,23 @@ pub(crate) enum JsonLdExpansionState {
         is_array: bool,
         active_property: Option<String>,
         reverse: bool,
+        /// Pending `@index` container annotation (see `ObjectStart`) threaded
+        /// through `@type` processing so it survives to reach `ObjectStart`/
+        /// `ObjectId` again and eventually gets emitted as `IndexValue`.
+        index_key: Option<String>,
     },
     ObjectId {
         types: Vec<String>,
         id: Option<String>,
         from_start: bool,
         reverse: bool,
+        /// Pending `@index` container annotation (see `ObjectStart`) threaded
+        /// through `@id` processing so it survives to reach `ObjectStart`
+        /// again and eventually gets emitted as `IndexValue`. Only meaningful
+        /// when `from_start` is `true`; when `@id` is encountered later in the
+        /// object (via the `Object` state) the index was already emitted
+        /// before `ObjectId` was ever pushed, so it's always `None` there.
+        index_key: Option<String>,
     },
     Object {
         in_property: bool,
@@ -116,6 +134,12 @@ pub(crate) enum JsonLdExpansionState {
         end_event: Option<JsonLdEvent>,
     },
     IndexContainer {
+        active_property: Option<String>,
+    },
+    /// Interceptor state that captures the first JSON event for a value in an
+    /// index map and arranges to inject `IndexValue` into the expanded object.
+    IndexContainerEntry {
+        index_key: String,
         active_property: Option<String>,
     },
     LanguageContainer,

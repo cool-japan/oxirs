@@ -59,6 +59,8 @@ pub struct OxiRSStore {
     triple_list: Vec<InternalTriple>,
     /// Namespace prefix bindings
     prefixes: HashMap<String, String>,
+    /// Ceiling on intermediate solutions per pattern (None = unlimited)
+    solution_budget: Option<usize>,
 }
 
 #[wasm_bindgen]
@@ -73,7 +75,30 @@ impl OxiRSStore {
             object_index: HashMap::new(),
             triple_list: Vec::new(),
             prefixes: HashMap::new(),
+            solution_budget: None,
         }
+    }
+
+    /// Cap the number of intermediate solutions a single query may produce.
+    ///
+    /// A join is evaluated left to right, so an unselective pattern early in a
+    /// WHERE clause can build a huge intermediate result before a later pattern
+    /// cuts it back down — the join is what costs, not the rows returned, and a
+    /// LIMIT cannot bound it because it applies at the end. A caller that
+    /// answers queries under a time or CPU budget (an endpoint on a serverless
+    /// platform, say) sets this so that such a query fails fast with a query
+    /// error instead of running to completion.
+    ///
+    /// Unset by default: queries are unbounded.
+    #[wasm_bindgen(js_name = setSolutionBudget)]
+    pub fn set_solution_budget(&mut self, budget: usize) {
+        self.solution_budget = Some(budget);
+    }
+
+    /// Remove the solution budget set by [`OxiRSStore::set_solution_budget`].
+    #[wasm_bindgen(js_name = clearSolutionBudget)]
+    pub fn clear_solution_budget(&mut self) {
+        self.solution_budget = None;
     }
 
     /// Load Turtle data
@@ -321,6 +346,68 @@ impl OxiRSStore {
 
     pub(crate) fn all_triples(&self) -> impl Iterator<Item = &InternalTriple> {
         self.triples.iter()
+    }
+
+    /// The ceiling on intermediate solutions, if one was set.
+    pub(crate) fn solution_budget(&self) -> Option<usize> {
+        self.solution_budget
+    }
+
+    /// Triples with this subject, via the subject index.
+    pub(crate) fn triples_with_subject(&self, term: &str) -> Vec<&InternalTriple> {
+        self.lookup(&self.subject_index, term)
+    }
+
+    /// Triples with this predicate, via the predicate index.
+    pub(crate) fn triples_with_predicate(&self, term: &str) -> Vec<&InternalTriple> {
+        self.lookup(&self.predicate_index, term)
+    }
+
+    /// Triples with this object, via the object index.
+    pub(crate) fn triples_with_object(&self, term: &str) -> Vec<&InternalTriple> {
+        self.lookup(&self.object_index, term)
+    }
+
+    /// Look a term up in an index under both of the forms an IRI can be held
+    /// in: `<iri>` as the parsers produce it, and bare `iri` as
+    /// [`OxiRSStore::insert`] accepts it.
+    fn lookup<'a>(
+        &'a self,
+        index: &'a HashMap<String, Vec<usize>>,
+        term: &str,
+    ) -> Vec<&'a InternalTriple> {
+        let mut hits = self.lookup_exact(index, term);
+        if let Some(alternate) = alternate_iri_form(term) {
+            hits.extend(self.lookup_exact(index, &alternate));
+        }
+        hits
+    }
+
+    /// The index maps a term to positions in `triple_list`, which `delete` does
+    /// not compact — so every hit is checked against the live triple set.
+    fn lookup_exact<'a>(
+        &'a self,
+        index: &'a HashMap<String, Vec<usize>>,
+        term: &str,
+    ) -> Vec<&'a InternalTriple> {
+        match index.get(term) {
+            Some(positions) => positions
+                .iter()
+                .filter_map(|&i| self.triple_list.get(i))
+                .filter(|triple| self.triples.contains(*triple))
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+}
+
+/// `<iri>` ↔ `iri`: the other spelling of the same IRI, or None for a literal
+/// or a blank node, which have only one form.
+fn alternate_iri_form(term: &str) -> Option<String> {
+    match term.strip_prefix('<').and_then(|t| t.strip_suffix('>')) {
+        Some(body) => Some(body.to_string()),
+        None if !term.starts_with('"') && !term.starts_with("_:") => Some(format!("<{}>", term)),
+        None => None,
     }
 }
 

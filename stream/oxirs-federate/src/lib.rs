@@ -1,9 +1,9 @@
 //! # OxiRS Federation - Federated Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-federate/badge.svg)](https://docs.rs/oxirs-federate)
 //!
-//! **Status**: Production Release (v0.3.1)
+//! **Status**: Production Release (v0.3.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Federated query processing capabilities for SPARQL and GraphQL with service discovery,
@@ -93,6 +93,7 @@ pub mod fault;
 pub mod fault_tolerance;
 pub mod federated_cache;
 pub mod federation_topology;
+#[cfg(feature = "gpu")]
 pub mod gpu_accelerated_query;
 pub mod graph_algorithms;
 pub mod graphql;
@@ -301,6 +302,7 @@ pub use external_ml_integration::{
     ModelVersion, ONNXAdapter, OptimizationConfig, OptimizationResult, PerformanceMetrics,
     PyTorchAdapter, RegisteredModel, TensorFlowAdapter, TensorSpec,
 };
+#[cfg(feature = "gpu")]
 pub use gpu_accelerated_query::{
     FilterCondition, FilterOperator, GpuAccelerationConfig, GpuBackendType, GpuJoinProcessor,
     GpuProcessingResult, GpuProcessingStats, GpuQueryProcessor, QueryBatch,

@@ -31,7 +31,7 @@ async fn do_shacl(
     graph: Option<&str>,
 ) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
     let uri = match graph {
-        Some(g) => format!("/shacl?graph={}", urlencoding::encode(g)),
+        Some(g) => format!("/shacl?graph={}", oxirs_core::encoding::percent_encode(g)),
         None => "/shacl".to_string(),
     };
 

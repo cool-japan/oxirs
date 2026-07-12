@@ -71,7 +71,9 @@ pub struct BatchConfig {
 
 impl Default for BatchConfig {
     fn default() -> Self {
-        let num_cpus = num_cpus::get();
+        let num_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
         BatchConfig {
             num_threads: None,
             batch_size: 1000,
@@ -85,7 +87,9 @@ impl Default for BatchConfig {
 impl BatchConfig {
     /// Create a config optimized for the current system
     pub fn auto() -> Self {
-        let num_cpus = num_cpus::get();
+        let num_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
         let total_memory = sys_info::mem_info()
             .map(|info| info.total)
             .unwrap_or(8 * 1024 * 1024); // 8GB default
@@ -232,7 +236,11 @@ impl ParallelBatchProcessor {
         R: Send + 'static,
     {
         let start_time = Instant::now();
-        let num_threads = self.config.num_threads.unwrap_or_else(num_cpus::get);
+        let num_threads = self.config.num_threads.unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+        });
         let barrier = Arc::new(Barrier::new(num_threads + 1));
         let executor = Arc::new(executor);
         let results = Arc::new(Mutex::new(Vec::new()));
@@ -385,7 +393,11 @@ impl ParallelBatchProcessor {
 
         // Configure rayon thread pool
         let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(self.config.num_threads.unwrap_or_else(num_cpus::get))
+            .num_threads(self.config.num_threads.unwrap_or_else(|| {
+                std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1)
+            }))
             .build()
             .map_err(|e| OxirsError::Store(format!("Failed to build thread pool: {e}")))?;
 

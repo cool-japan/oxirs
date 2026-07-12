@@ -59,11 +59,15 @@ fn demonstrate_histogram_cardinality() -> Result<(), Box<dyn std::error::Error>>
     let optimizer = CostBasedOptimizer::new();
 
     // Create a pattern that we'll execute multiple times
-    let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
+    let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("literal IRI is valid");
     let pattern = AlgebraTriplePattern {
-        subject: TermPattern::Variable(Variable::new("person").unwrap()),
+        subject: TermPattern::Variable(
+            Variable::new("person").expect("literal variable name is valid"),
+        ),
         predicate: TermPattern::NamedNode(foaf_name),
-        object: TermPattern::Variable(Variable::new("name").unwrap()),
+        object: TermPattern::Variable(
+            Variable::new("name").expect("literal variable name is valid"),
+        ),
     };
 
     println!("Query Pattern: ?person foaf:name ?name\n");
@@ -136,19 +140,27 @@ fn demonstrate_join_selectivity_learning() -> Result<(), Box<dyn std::error::Err
     let optimizer = CostBasedOptimizer::new();
 
     // Create two patterns for a join
-    let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
-    let foaf_mbox = NamedNode::new("http://xmlns.com/foaf/0.1/mbox").unwrap();
+    let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("literal IRI is valid");
+    let foaf_mbox = NamedNode::new("http://xmlns.com/foaf/0.1/mbox").expect("literal IRI is valid");
 
     let pattern1 = GraphPattern::Bgp(vec![AlgebraTriplePattern {
-        subject: TermPattern::Variable(Variable::new("person").unwrap()),
+        subject: TermPattern::Variable(
+            Variable::new("person").expect("literal variable name is valid"),
+        ),
         predicate: TermPattern::NamedNode(foaf_name),
-        object: TermPattern::Variable(Variable::new("name").unwrap()),
+        object: TermPattern::Variable(
+            Variable::new("name").expect("literal variable name is valid"),
+        ),
     }]);
 
     let pattern2 = GraphPattern::Bgp(vec![AlgebraTriplePattern {
-        subject: TermPattern::Variable(Variable::new("person").unwrap()),
+        subject: TermPattern::Variable(
+            Variable::new("person").expect("literal variable name is valid"),
+        ),
         predicate: TermPattern::NamedNode(foaf_mbox),
-        object: TermPattern::Variable(Variable::new("email").unwrap()),
+        object: TermPattern::Variable(
+            Variable::new("email").expect("literal variable name is valid"),
+        ),
     }]);
 
     println!("Join Query:");
@@ -230,11 +242,16 @@ fn demonstrate_execution_history() -> Result<(), Box<dyn std::error::Error>> {
     let optimizer = CostBasedOptimizer::new();
 
     // Create a pattern
-    let foaf_knows = NamedNode::new("http://xmlns.com/foaf/0.1/knows").unwrap();
+    let foaf_knows =
+        NamedNode::new("http://xmlns.com/foaf/0.1/knows").expect("literal IRI is valid");
     let pattern = AlgebraTriplePattern {
-        subject: TermPattern::Variable(Variable::new("person").unwrap()),
+        subject: TermPattern::Variable(
+            Variable::new("person").expect("literal variable name is valid"),
+        ),
         predicate: TermPattern::NamedNode(foaf_knows),
-        object: TermPattern::Variable(Variable::new("friend").unwrap()),
+        object: TermPattern::Variable(
+            Variable::new("friend").expect("literal variable name is valid"),
+        ),
     };
 
     println!("Query Pattern: ?person foaf:knows ?friend\n");
@@ -296,27 +313,39 @@ fn demonstrate_learning_cycle() -> Result<(), Box<dyn std::error::Error>> {
     println!("Complete Learning Cycle: Training → Optimization → Execution → Feedback\n");
 
     // Create a realistic query with multiple patterns
-    let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
-    let foaf_person = NamedNode::new("http://xmlns.com/foaf/0.1/Person").unwrap();
-    let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
-    let foaf_mbox = NamedNode::new("http://xmlns.com/foaf/0.1/mbox").unwrap();
+    let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        .expect("literal IRI is valid");
+    let foaf_person =
+        NamedNode::new("http://xmlns.com/foaf/0.1/Person").expect("literal IRI is valid");
+    let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("literal IRI is valid");
+    let foaf_mbox = NamedNode::new("http://xmlns.com/foaf/0.1/mbox").expect("literal IRI is valid");
 
     let pattern1 = AlgebraTriplePattern {
-        subject: TermPattern::Variable(Variable::new("person").unwrap()),
+        subject: TermPattern::Variable(
+            Variable::new("person").expect("literal variable name is valid"),
+        ),
         predicate: TermPattern::NamedNode(rdf_type),
         object: TermPattern::NamedNode(foaf_person),
     };
 
     let pattern2 = AlgebraTriplePattern {
-        subject: TermPattern::Variable(Variable::new("person").unwrap()),
+        subject: TermPattern::Variable(
+            Variable::new("person").expect("literal variable name is valid"),
+        ),
         predicate: TermPattern::NamedNode(foaf_name),
-        object: TermPattern::Variable(Variable::new("name").unwrap()),
+        object: TermPattern::Variable(
+            Variable::new("name").expect("literal variable name is valid"),
+        ),
     };
 
     let pattern3 = AlgebraTriplePattern {
-        subject: TermPattern::Variable(Variable::new("person").unwrap()),
+        subject: TermPattern::Variable(
+            Variable::new("person").expect("literal variable name is valid"),
+        ),
         predicate: TermPattern::NamedNode(foaf_mbox),
-        object: TermPattern::Variable(Variable::new("email").unwrap()),
+        object: TermPattern::Variable(
+            Variable::new("email").expect("literal variable name is valid"),
+        ),
     };
 
     let complex_pattern = GraphPattern::Bgp(vec![pattern1, pattern2, pattern3]);

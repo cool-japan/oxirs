@@ -31,8 +31,6 @@ pub struct TracingConfig {
     pub service_name: String,
     /// OTLP exporter endpoint
     pub otlp_endpoint: Option<String>,
-    /// Jaeger exporter endpoint  
-    pub jaeger_endpoint: Option<String>,
     /// Sampling rate (0.0 - 1.0)
     pub sampling_rate: f64,
     /// Maximum trace duration before auto-completion
@@ -53,7 +51,6 @@ impl Default for TracingConfig {
             enabled: true,
             service_name: "oxirs-federate".to_string(),
             otlp_endpoint: None,
-            jaeger_endpoint: None,
             sampling_rate: 0.1,                           // Sample 10% of traces
             max_trace_duration: Duration::from_secs(300), // 5 minutes
             enable_detailed_attributes: true,

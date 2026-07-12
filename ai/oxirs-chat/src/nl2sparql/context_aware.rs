@@ -7,6 +7,32 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info};
 
+/// Entity type for rich entity extraction
+#[derive(Debug, Clone, PartialEq)]
+pub enum EntityType {
+    /// An IRI/URI (http://... or <...>)
+    Iri,
+    /// A prefixed name like schema:Person
+    PrefixedName,
+    /// A quoted string literal
+    Literal,
+    /// A concept: two or more consecutive capitalized words
+    Concept,
+}
+
+/// A richly-typed entity extracted from text
+#[derive(Debug, Clone)]
+pub struct ExtractedEntity {
+    /// Byte offset (start, end) in the original input string
+    pub span: (usize, usize),
+    /// The text of the entity
+    pub text: String,
+    /// The type of this entity
+    pub entity_type: EntityType,
+    /// Confidence score between 0.0 and 1.0
+    pub confidence: f64,
+}
+
 use super::types::SPARQLGenerationResult;
 
 /// Context-aware generation configuration
@@ -248,6 +274,205 @@ impl ContextAwareGenerator {
         entities.dedup();
 
         Ok(entities)
+    }
+
+    /// Extract entities with type and span information using rule-based heuristics
+    pub fn extract_entities_rich(&self, text: &str) -> Vec<ExtractedEntity> {
+        let mut results: Vec<ExtractedEntity> = Vec::new();
+
+        // 1. Detect full URIs: http://... or https://... (standalone or in angle brackets)
+        {
+            let bytes = text.as_bytes();
+            let len = bytes.len();
+            let mut i = 0;
+            while i < len {
+                // Check for angle-bracket IRI: <http... or <https...>
+                if bytes[i] == b'<' {
+                    if let Some(end_pos) = text[i + 1..].find('>') {
+                        let inner = &text[i + 1..i + 1 + end_pos];
+                        if inner.starts_with("http://") || inner.starts_with("https://") {
+                            results.push(ExtractedEntity {
+                                span: (i, i + end_pos + 2),
+                                text: text[i..i + end_pos + 2].to_string(),
+                                entity_type: EntityType::Iri,
+                                confidence: 1.0,
+                            });
+                            i += end_pos + 2;
+                            continue;
+                        }
+                    }
+                }
+                // Check for bare URI: http:// or https://
+                if text[i..].starts_with("http://") || text[i..].starts_with("https://") {
+                    // Extend until whitespace or common delimiters
+                    let end = text[i..]
+                        .find(|c: char| {
+                            c.is_whitespace()
+                                || c == '>'
+                                || c == '"'
+                                || c == '\''
+                                || c == ')'
+                                || c == ','
+                        })
+                        .map(|p| i + p)
+                        .unwrap_or(len);
+                    results.push(ExtractedEntity {
+                        span: (i, end),
+                        text: text[i..end].to_string(),
+                        entity_type: EntityType::Iri,
+                        confidence: 1.0,
+                    });
+                    i = end;
+                    continue;
+                }
+                i += text[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+            }
+        }
+
+        // 2. Detect quoted string literals: "..."
+        {
+            let mut search_from = 0;
+            while let Some(start_rel) = text[search_from..].find('"') {
+                let start = search_from + start_rel;
+                if let Some(end_rel) = text[start + 1..].find('"') {
+                    let end = start + 1 + end_rel + 1; // include closing quote
+                                                       // Skip empty strings ""
+                    if end > start + 2 {
+                        results.push(ExtractedEntity {
+                            span: (start, end),
+                            text: text[start..end].to_string(),
+                            entity_type: EntityType::Literal,
+                            confidence: 0.8,
+                        });
+                    }
+                    search_from = end;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // 3. Detect prefixed names: lowercase_prefix:UpperOrMixed (avoid http:// already matched)
+        {
+            // Match pattern: word boundary, 1+ lowercase letters, colon, identifier
+            let mut i = 0;
+            let chars: Vec<char> = text.chars().collect();
+            let n = chars.len();
+            while i < n {
+                // Must be at word boundary (start or preceded by non-alnum)
+                let at_boundary = i == 0 || !chars[i - 1].is_alphanumeric();
+                if at_boundary && chars[i].is_ascii_lowercase() {
+                    // Collect prefix
+                    let prefix_start = i;
+                    while i < n && chars[i].is_ascii_lowercase() {
+                        i += 1;
+                    }
+                    // Check for colon
+                    if i < n && chars[i] == ':' && (i + 1) < n && chars[i + 1] != '/' {
+                        // Avoid http:// https://
+                        let colon_pos = i;
+                        i += 1; // skip colon
+                        let local_start = i;
+                        while i < n
+                            && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == '-')
+                        {
+                            i += 1;
+                        }
+                        if i > local_start {
+                            // Compute byte offsets
+                            let byte_start: usize =
+                                chars[..prefix_start].iter().map(|c| c.len_utf8()).sum();
+                            let byte_end: usize = chars[..i].iter().map(|c| c.len_utf8()).sum();
+                            let span_text = text[byte_start..byte_end].to_string();
+                            // Only add if not already covered by IRI detection
+                            let already_covered = results
+                                .iter()
+                                .any(|e| e.span.0 <= byte_start && byte_end <= e.span.1);
+                            if !already_covered {
+                                results.push(ExtractedEntity {
+                                    span: (byte_start, byte_end),
+                                    text: span_text,
+                                    entity_type: EntityType::PrefixedName,
+                                    confidence: 0.8,
+                                });
+                            }
+                            continue;
+                        }
+                        // Backtrack if no local name
+                        i = colon_pos + 1;
+                    }
+                } else {
+                    i += 1;
+                }
+            }
+        }
+
+        // 4. Detect Concept: 2+ consecutive capitalized words
+        {
+            let question_words: &[&str] = &[
+                "How", "What", "Where", "When", "Who", "Which", "Why", "Is", "Are", "Do", "Does",
+                "Did", "Can", "Could", "Would", "Should", "Will", "The", "A", "An", "Of", "In",
+                "On", "At", "By", "For", "And", "Or",
+            ];
+            // Collect word positions: (byte_start, byte_end, word_str)
+            let mut word_spans: Vec<(usize, usize, &str)> = Vec::new();
+            let mut byte_pos = 0;
+            for word in text.split_whitespace() {
+                if let Some(start) = text[byte_pos..].find(word) {
+                    let abs_start = byte_pos + start;
+                    let abs_end = abs_start + word.len();
+                    word_spans.push((abs_start, abs_end, word));
+                    byte_pos = abs_end;
+                }
+            }
+
+            let mut i = 0;
+            while i < word_spans.len() {
+                let (ws, _we, word) = word_spans[i];
+                // Strip trailing punctuation for the check
+                let cleaned: &str = word.trim_end_matches(|c: char| !c.is_alphanumeric());
+                let is_cap = cleaned
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false);
+                if is_cap && !question_words.contains(&cleaned) && cleaned.len() > 1 {
+                    // Try to extend the run
+                    let mut run_end = i + 1;
+                    while run_end < word_spans.len() {
+                        let (_, _, w2) = word_spans[run_end];
+                        let c2 = w2.trim_end_matches(|c: char| !c.is_alphanumeric());
+                        let cap2 = c2.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+                        if cap2 && !question_words.contains(&c2) && c2.len() > 1 {
+                            run_end += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    let run_len = run_end - i;
+                    if run_len >= 2 {
+                        let span_start = ws;
+                        let (_, span_end, _last_word) = word_spans[run_end - 1];
+                        let already_covered = results
+                            .iter()
+                            .any(|e| e.span.0 <= span_start && span_end <= e.span.1);
+                        if !already_covered {
+                            results.push(ExtractedEntity {
+                                span: (span_start, span_end),
+                                text: text[span_start..span_end].to_string(),
+                                entity_type: EntityType::Concept,
+                                confidence: 0.6,
+                            });
+                        }
+                        i = run_end;
+                        continue;
+                    }
+                }
+                i += 1;
+            }
+        }
+
+        results
     }
 
     /// Update tracked entities
@@ -581,5 +806,34 @@ mod tests {
         assert!(sparql.contains("COUNT"));
         // Entity extraction may produce lowercase "movie" or "movies"
         assert!(sparql.to_lowercase().contains("movie"));
+    }
+
+    #[test]
+    fn test_extract_entities_rich_uri() {
+        let generator = ContextAwareGenerator::new(ContextAwareConfig::default());
+        let results = generator.extract_entities_rich("Find <http://example.org/Thing> in data");
+        assert!(!results.is_empty());
+        let uri = results
+            .iter()
+            .find(|e| matches!(e.entity_type, EntityType::Iri));
+        assert!(uri.is_some());
+        assert!(uri.expect("should exist").confidence >= 0.8);
+    }
+
+    #[test]
+    fn test_extract_entities_rich_literal() {
+        let generator = ContextAwareGenerator::new(ContextAwareConfig::default());
+        let results = generator.extract_entities_rich(r#"Find "Alice" in graph"#);
+        let lit = results
+            .iter()
+            .find(|e| matches!(e.entity_type, EntityType::Literal));
+        assert!(lit.is_some());
+    }
+
+    #[test]
+    fn test_extract_entities_rich_empty() {
+        let generator = ContextAwareGenerator::new(ContextAwareConfig::default());
+        let results = generator.extract_entities_rich("");
+        assert!(results.is_empty());
     }
 }

@@ -911,7 +911,9 @@ impl ParallelExecutor {
     fn detect_numa_topology_windows() -> Vec<usize> {
         // Windows NUMA detection would use GetNumaHighestNodeNumber and related APIs
         // For now, use simple heuristic based on processor groups
-        let logical_cpus = num_cpus::get();
+        let logical_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
         let numa_nodes = if logical_cpus > 64 {
             // Assume one NUMA node per 64 logical processors
             (0..(logical_cpus / 64 + 1)).collect()

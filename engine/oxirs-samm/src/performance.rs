@@ -179,7 +179,9 @@ impl BatchProcessor {
 
         // Determine number of workers for parallel processing
         let num_workers = if config.num_workers == 0 {
-            num_cpus::get()
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
         } else {
             config.num_workers
         };
@@ -432,7 +434,12 @@ mod tests {
             .expect("operation should succeed");
 
         assert_eq!(results.len(), 2);
-        assert_eq!(processor.num_workers(), num_cpus::get());
+        assert_eq!(
+            processor.num_workers(),
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+        );
     }
 
     #[test]

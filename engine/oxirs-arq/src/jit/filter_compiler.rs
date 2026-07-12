@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use cranelift_codegen::ir::{
-    condcodes::FloatCC, types, AbiParam, InstBuilder, MemFlags, Signature, Value,
+    condcodes::FloatCC, types, AbiParam, InstBuilder, MemFlagsData, Signature, Value,
 };
 use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings::{self, Configurable};
@@ -555,9 +555,11 @@ fn emit_expr(
             // SAFETY (documented at the call site in `CompiledFilter::evaluate`):
             //   - ptr_val points to a slice of at least `var_map.len()` f64 values.
             //   - `byte_offset` is within bounds because `idx < var_map.len()`.
+            // cranelift 0.133: the old `MemFlags::trusted()` value type is now
+            // `MemFlagsData` (InstBuilder interns it into the DFG's MemFlagsSet).
             let val = builder
                 .ins()
-                .load(types::F64, MemFlags::trusted(), ptr_val, byte_offset);
+                .load(types::F64, MemFlagsData::trusted(), ptr_val, byte_offset);
             Ok(val)
         }
 

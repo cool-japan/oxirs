@@ -5,10 +5,10 @@
 //! directive rules, argument rules, type coercion, and field-merge conflict detection.
 //!
 //! The implementation is split across sibling modules:
-//! - [`operations`]: operation/type/variable rules + shared helpers
-//! - [`fragments`]: fragment rules
-//! - [`directives`]: directive/argument/value/field-merge rules
-//! - [`tests`]: integration tests (cfg(test) only)
+//! - `operations`: operation/type/variable rules + shared helpers
+//! - `fragments`: fragment rules
+//! - `directives`: directive/argument/value/field-merge rules
+//! - `tests`: integration tests (cfg(test) only)
 
 mod directives;
 mod fragments;

@@ -85,7 +85,9 @@ impl Default for AdvancedSciRS2Config {
             enable_gpu: true,
             gpu_backend: GpuBackend::Cuda,
             enable_simd: true,
-            parallel_workers: num_cpus::get(),
+            parallel_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             enable_mmap: true,
             memory_limit_mb: 4096, // 4GB default
             enable_profiling: true,
@@ -305,7 +307,12 @@ mod tests {
     #[tokio::test]
     async fn test_engine_creation() {
         let engine = AdvancedSciRS2Engine::new().expect("should succeed");
-        assert_eq!(engine.config().parallel_workers, num_cpus::get());
+        assert_eq!(
+            engine.config().parallel_workers,
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+        );
     }
 
     #[tokio::test]
@@ -481,7 +488,9 @@ mod tests {
             enable_simd: true,
             enable_profiling: true,
             enable_metrics: true,
-            parallel_workers: num_cpus::get(),
+            parallel_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             memory_limit_mb: 8192, // 8GB
             ..Default::default()
         };

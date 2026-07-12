@@ -1,10 +1,10 @@
 # OxiRS Modbus - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
-OxiRS Modbus v0.3.1 provides industrial Modbus protocol support with RDF mapping for factory automation, energy management, and IoT integration.
+OxiRS Modbus v0.3.2 provides industrial Modbus protocol support with RDF mapping for factory automation, energy management, and IoT integration.
 
 ### Features
 - ✅ Modbus TCP client implementation
@@ -27,14 +27,14 @@ OxiRS Modbus v0.3.1 provides industrial Modbus protocol support with RDF mapping
 - ✅ Modbus over TLS (security extensions)
 - ✅ Register watcher for change detection
 - ✅ Register encoder and validator
-- ✅ 1095 tests passing
+- ✅ 1237 tests passing
 
 ## Roadmap
 
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ Modbus TCP/RTU, register mapping, RDF generation, 40 tests
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Additional function codes (Read Coils 0x01, Read Discrete Inputs 0x02)
 - ✅ Write Multiple Registers (0x10) and Write Multiple Coils (0x0F)
 - ✅ SAMM aspect model integration
@@ -45,7 +45,7 @@ OxiRS Modbus v0.3.1 provides industrial Modbus protocol support with RDF mapping
 - ✅ Diagnostic monitor, register watcher, register encoder
 - ✅ 1095 tests passing
 
-### v0.3.0 - Planned (Q2 2026)
+### v0.3.0 - Released (May 4, 2026)
 - [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] Enterprise integration features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Terminal UI register browser (ratatui, feature "tui", completed 2026-05-02)
@@ -105,7 +105,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Modbus v0.3.1 - Industrial IoT for semantic web*
+*OxiRS Modbus v0.3.2 - Industrial IoT for semantic web*
 
 ## Proposed follow-ups
 

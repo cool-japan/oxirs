@@ -44,15 +44,14 @@
 //! ```
 
 use anyhow::{anyhow, Result};
-use scirs2_core::metrics::{Counter, Gauge};
+use once_cell::sync::Lazy;
+use scirs2_core::metrics::Counter;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 // Global metrics for tableaux reasoning
-lazy_static::lazy_static! {
-    static ref TABLEAUX_EXPANSIONS: Counter = Counter::new("tableaux_expansions".to_string());
-    static ref TABLEAUX_CLASHES: Counter = Counter::new("tableaux_clashes".to_string());
-    static ref TABLEAUX_NODE_COUNT: Gauge = Gauge::new("tableaux_node_count".to_string());
-}
+static TABLEAUX_EXPANSIONS: Lazy<Counter> =
+    Lazy::new(|| Counter::new("tableaux_expansions".to_string()));
+static TABLEAUX_CLASHES: Lazy<Counter> = Lazy::new(|| Counter::new("tableaux_clashes".to_string()));
 
 /// Description Logic concept
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

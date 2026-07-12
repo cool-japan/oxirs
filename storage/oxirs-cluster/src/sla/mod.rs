@@ -3,22 +3,22 @@
 //! Reuses the shared per-tenant SLA primitives from
 //! [`oxirs_core::sla`] and wraps them in cluster-aware abstractions:
 //!
-//! * [`SlaAdmissionConfig`] — per-class quotas (`max_qps_per_class`,
+//! * [`sla::admission::SlaAdmissionConfig`] — per-class quotas (`max_qps_per_class`,
 //!   `max_concurrent_per_class`).
-//! * [`admission::ClusterAdmissionController`] — token-bucket admission keyed
+//! * [`sla::admission::ClusterAdmissionController`] — token-bucket admission keyed
 //!   on [`oxirs_core::sla::SlaClass`] (one synthetic tenant per class on the
 //!   shared `AdmissionController`) plus a strict
 //!   `max_concurrent_per_class` semaphore-style counter.
-//! * [`proposer_gate::SlaProposerGate`] — wraps a Raft log proposer; rejects
+//! * [`sla::proposer_gate::SlaProposerGate`] — wraps a Raft log proposer; rejects
 //!   writes that exceed the per-class admission budget.
-//! * [`reader_gate::SlaReaderGate`] — wraps a read-replica handler; rejects
+//! * [`sla::reader_gate::SlaReaderGate`] — wraps a read-replica handler; rejects
 //!   reads that exceed the per-class admission budget.
 //!
 //! ## Integration
 //!
 //! The gates are *additive* — existing call sites continue to work unmodified.
-//! New call sites that opt in obtain an [`SlaProposerGate`] (or
-//! [`SlaReaderGate`]) and dispatch through it.
+//! New call sites that opt in obtain an [`sla::SlaProposerGate`] (or
+//! [`sla::SlaReaderGate`]) and dispatch through it.
 //!
 //! ## Example
 //!

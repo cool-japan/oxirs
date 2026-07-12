@@ -32,7 +32,7 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 use cranelift_codegen::ir::{
-    condcodes::FloatCC, types, AbiParam, InstBuilder, MemFlags, Signature,
+    condcodes::FloatCC, types, AbiParam, InstBuilder, MemFlagsData, Signature,
 };
 use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings::{self, Configurable};
@@ -304,12 +304,14 @@ fn emit_col_comparison(
     let offset = col_byte_offset(spec.col_idx)?;
 
     // Load both f64 values.
+    // cranelift 0.133: the old `MemFlags::trusted()` value type is now `MemFlagsData`
+    // (InstBuilder interns it into the DFG's MemFlagsSet internally).
     let lv = builder
         .ins()
-        .load(types::F64, MemFlags::trusted(), left_ptr, offset);
+        .load(types::F64, MemFlagsData::trusted(), left_ptr, offset);
     let rv = builder
         .ins()
-        .load(types::F64, MemFlags::trusted(), right_ptr, offset);
+        .load(types::F64, MemFlagsData::trusted(), right_ptr, offset);
 
     // fcmp returns I8 (0 or 1) in modern Cranelift — no bint needed.
     // NaN comparisons: LessThan → false (0), Equal → false (0), so NaN compares

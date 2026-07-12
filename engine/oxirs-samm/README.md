@@ -1,11 +1,11 @@
 # OxiRS SAMM - Semantic Aspect Meta Model for Rust
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](../../../LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1%2C409%20passing-brightgreen)](./TODO.md)
+[![Tests](https://img.shields.io/badge/tests-1%2C549%20passing-brightgreen)](./TODO.md)
 [![Documentation](https://img.shields.io/badge/docs-100%25-brightgreen)](./src/lib.rs)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 ✅ APIs stable. Ready for production use with backward compatibility guarantees.
 
 ## Overview
@@ -47,7 +47,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-samm = "0.3.1"
+oxirs-samm = "0.3.2"
 ```
 
 ### Basic Usage
@@ -403,7 +403,7 @@ oxirs aspect Movement.ttl to aas --format xml
 
 ### AAS Integration - Industry 4.0 Support
 
-OxiRS v0.2.3 includes bidirectional AAS (Asset Administration Shell) integration:
+OxiRS includes bidirectional AAS (Asset Administration Shell) integration:
 
 ```bash
 # Convert AAS Submodel Templates to SAMM Aspect Models
@@ -420,13 +420,13 @@ oxirs aas file.json to aspect       # JSON format
 oxirs aas file.aasx to aspect       # AASX (default)
 ```
 
-**Implementation Status** (v0.2.3):
+**Implementation Status**:
 - ✅ CLI command structure and routing
 - ✅ File format detection (XML/JSON/AASX)
 - ✅ Java ESMF SDK compatible syntax
-- 🚧 AAS parser implementation (in progress)
-- 🚧 Submodel template extraction (in progress)
-- 🚧 AAS to SAMM conversion logic (in progress)
+- ✅ AAS parser implementation (`aas_parser`: AASX/XML/JSON readers and submodel model types)
+- ✅ Submodel template extraction
+- ✅ AAS to SAMM conversion logic (`aas_parser::converter::convert_environment_to_aspects`)
 
 **Complete command comparison**: See [SAMM_CLI_COMPARISON.md](./SAMM_CLI_COMPARISON.md)
 
@@ -434,7 +434,7 @@ oxirs aas file.aasx to aspect       # AASX (default)
 
 ### Test Coverage
 
-**1,409 tests passing (100% pass rate)**:
+**1,549 tests passing (100% pass rate)**:
 - 245 unit tests (including 10 DTDL generator tests, 11 DTDL parser tests)
 - 16 advanced integration tests
 - 13 fuzz tests
@@ -514,7 +514,7 @@ Robust fuzz testing for parser resilience:
 
 ## Development Status
 
-### ✅ v0.2.3 Production-Ready
+### ✅ v0.3.2 Production-Ready
 
 **All major features complete and tested**:
 - [x] SAMM 2.0.0-2.3.0 full specification support
@@ -527,21 +527,20 @@ Robust fuzz testing for parser resilience:
 - [x] Performance optimizations (parallel, streaming)
 - [x] Production metrics and health checks
 - [x] BAMM to SAMM migration
-- [x] Comprehensive testing (1,409 tests)
+- [x] Comprehensive testing (1,549 tests)
 - [x] API stability guarantees
 - [x] Migration guide for Java users
 - [x] 6 runnable examples
 - [x] Multi-file code generation
 
-### 🎯 Toward GA Release (v0.2.3)
+### 🎯 Ongoing Priorities
 
-Remaining items for General Availability:
 - [ ] Community feedback and API refinement
 - [ ] Performance benchmarking on large models (>10K triples)
-- [ ] Documentation website (docs.rs ready)
-- [ ] Crate publication to crates.io
+- [x] Documentation website (docs.rs ready; crate is published)
+- [x] Crate publication to crates.io
 
-### 📅 Future Enhancements (v0.2.3+)
+### 📅 Future Enhancements
 
 - [ ] Plugin architecture for custom generators
 - [ ] Visual model editor integration

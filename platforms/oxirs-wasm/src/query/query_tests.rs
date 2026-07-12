@@ -565,3 +565,145 @@ fn test_construct() {
     let triples = execute_construct(sparql, &store).expect("construct");
     assert_eq!(triples.len(), 1);
 }
+
+// ---- Parsed (N-Triples) data: terms carry their N-Triples serialisation ----
+//
+// `loadNTriples` stores terms as `<iri>` / `"lit"@lang`, while a query writes
+// them as `<iri>` and `OxiRSStore::insert` accepts a bare `iri`. Matching has
+// to bridge the two forms, otherwise every pattern with a concrete IRI in it
+// silently returns zero rows.
+
+fn make_store_from_ntriples() -> OxiRSStore {
+    let mut store = OxiRSStore::new();
+    let nt = concat!(
+        "<http://ex/Gemini> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex/Sign> .\n",
+        "<http://ex/Gemini> <http://ex/element> <http://ex/air> .\n",
+        "<http://ex/Gemini> <http://ex/modality> <http://ex/mutable> .\n",
+        "<http://ex/Gemini> <http://ex/label> \"Gemini\"@en .\n",
+        "<http://ex/Libra> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex/Sign> .\n",
+        "<http://ex/Libra> <http://ex/element> <http://ex/air> .\n",
+        "<http://ex/Libra> <http://ex/modality> <http://ex/cardinal> .\n",
+    );
+    store.load_ntriples(nt).expect("N-Triples load");
+    store
+}
+
+#[test]
+fn test_ntriples_concrete_object_matches() {
+    let store = make_store_from_ntriples();
+    let results = execute_select(
+        "SELECT ?s WHERE { ?s <http://ex/element> <http://ex/air> }",
+        &store,
+    )
+    .expect("execute");
+    assert_eq!(results.len(), 2);
+}
+
+#[test]
+fn test_ntriples_join_on_two_concrete_objects() {
+    let store = make_store_from_ntriples();
+    let results = execute_select(
+        "SELECT ?s WHERE { ?s <http://ex/element> <http://ex/air> . \
+         ?s <http://ex/modality> <http://ex/mutable> }",
+        &store,
+    )
+    .expect("execute");
+    assert_eq!(results.len(), 1);
+    assert_eq!(
+        results[0].get("s").expect("s"),
+        "<http://ex/Gemini>",
+        "bindings keep the store's N-Triples form"
+    );
+}
+
+#[test]
+fn test_ntriples_type_shorthand_a() {
+    let store = make_store_from_ntriples();
+    let via_a = execute_select("SELECT ?s WHERE { ?s a <http://ex/Sign> }", &store).expect("a");
+    let via_iri = execute_select(
+        "SELECT ?s WHERE { ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex/Sign> }",
+        &store,
+    )
+    .expect("rdf:type");
+    assert_eq!(via_a.len(), 2);
+    assert_eq!(via_a.len(), via_iri.len());
+}
+
+#[test]
+fn test_ntriples_fully_bound_pattern() {
+    let store = make_store_from_ntriples();
+    assert!(
+        execute_ask(
+            "ASK { <http://ex/Gemini> <http://ex/element> <http://ex/air> }",
+            &store
+        )
+        .expect("ask"),
+        "a pattern with no variables must still match"
+    );
+    assert!(!execute_ask(
+        "ASK { <http://ex/Gemini> <http://ex/element> <http://ex/fire> }",
+        &store
+    )
+    .expect("ask"));
+}
+
+#[test]
+fn test_ntriples_literal_keeps_language_tag() {
+    let store = make_store_from_ntriples();
+    let results = execute_select(
+        "SELECT ?l WHERE { <http://ex/Gemini> <http://ex/label> ?l }",
+        &store,
+    )
+    .expect("execute");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].get("l").expect("l"), "\"Gemini\"@en");
+}
+
+#[test]
+fn test_construct_instantiates_its_template() {
+    let store = make_store_from_ntriples();
+    let sparql = concat!(
+        "PREFIX ex: <http://ex/>\n",
+        "CONSTRUCT { ?s ex:hasElement ?e }\n",
+        "WHERE { ?s ex:element ?e }"
+    );
+    let triples = execute_construct(sparql, &store).expect("construct");
+    assert_eq!(triples.len(), 2, "one triple per solution");
+    for triple in &triples {
+        // The CONSTRUCT subsystem emits template IRIs bare; the serializers
+        // wrap them. Compare on the IRI body so either form is accepted.
+        assert_eq!(iri_body(&triple.predicate()), "http://ex/hasElement");
+        assert_eq!(iri_body(&triple.object()), "http://ex/air");
+    }
+}
+
+// ---- Solution budget ----
+
+#[test]
+fn test_solution_budget_stops_a_broad_join() {
+    let mut store = OxiRSStore::new();
+    // Two stars of 40 subjects each: joined without a shared variable they
+    // would produce 1600 intermediate solutions.
+    for i in 0..40 {
+        store.insert(&format!("http://s{i}"), "http://p", &format!("http://o{i}"));
+    }
+    store.set_solution_budget(500);
+
+    let cross = "SELECT ?a ?b WHERE { ?a <http://p> ?x . ?b <http://p> ?y }";
+    let err = execute_select(cross, &store).expect_err("the budget must stop this join");
+    assert!(err.to_string().contains("solution budget"), "{err}");
+
+    // A join that stays inside the budget is unaffected.
+    let narrow = "SELECT ?a WHERE { ?a <http://p> <http://o7> }";
+    assert_eq!(execute_select(narrow, &store).expect("narrow").len(), 1);
+}
+
+#[test]
+fn test_without_a_budget_a_broad_join_still_runs() {
+    let mut store = OxiRSStore::new();
+    for i in 0..20 {
+        store.insert(&format!("http://s{i}"), "http://p", &format!("http://o{i}"));
+    }
+    let cross = "SELECT ?a ?b WHERE { ?a <http://p> ?x . ?b <http://p> ?y }";
+    assert_eq!(execute_select(cross, &store).expect("no budget set").len(), 400);
+}

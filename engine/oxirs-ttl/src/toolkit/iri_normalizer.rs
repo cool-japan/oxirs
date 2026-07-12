@@ -481,8 +481,8 @@ fn get_default_port(scheme: &str) -> Option<u16> {
 }
 
 // Default ports for common schemes
-lazy_static::lazy_static! {
-    static ref DEFAULT_PORTS: HashMap<&'static str, u16> = {
+static DEFAULT_PORTS: once_cell::sync::Lazy<HashMap<&'static str, u16>> =
+    once_cell::sync::Lazy::new(|| {
         let mut m = HashMap::new();
         m.insert("http", 80);
         m.insert("https", 443);
@@ -498,8 +498,7 @@ lazy_static::lazy_static! {
         m.insert("ws", 80);
         m.insert("wss", 443);
         m
-    };
-}
+    });
 
 /// Check if a string is a valid scheme
 fn is_valid_scheme(scheme: &str) -> bool {

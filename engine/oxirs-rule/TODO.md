@@ -1,10 +1,10 @@
 # OxiRS Rule - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Current Status
 
-OxiRS Rule v0.3.1 is production-ready, providing rule-based reasoning with RDFS/OWL support and advanced rule formats.
+OxiRS Rule v0.3.2 is production-ready, providing rule-based reasoning with RDFS/OWL support and advanced rule formats.
 
 ### Production Features
 - ✅ **RDFS Reasoning** - Complete RDFS entailment support
@@ -13,7 +13,7 @@ OxiRS Rule v0.3.1 is production-ready, providing rule-based reasoning with RDFS/
 - ✅ **RIF Support** - Rule Interchange Format for cross-engine compatibility
 - ✅ **CHR Support** - Constraint Handling Rules for declarative constraint solving
 - ✅ **ASP Support** - Answer Set Programming for combinatorial optimization
-- ✅ **2072 tests passing** with zero warnings
+- ✅ **2240 tests passing** with zero warnings
 
 ## Roadmap
 
@@ -48,4 +48,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Rule v0.2.3 - Rule-based reasoning engine*
+*OxiRS Rule v0.3.2 - Rule-based reasoning engine*

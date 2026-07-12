@@ -69,9 +69,13 @@ fn demo_j1939_pgn() -> CanbusResult<()> {
 
     let id = CanId::extended(0x0CF00400)?;
 
-    let pgn = id.extract_j1939_pgn().unwrap();
-    let priority = id.extract_j1939_priority().unwrap();
-    let source_addr = id.extract_j1939_source_address().unwrap();
+    let pgn = id.extract_j1939_pgn().expect("invariant: value is valid");
+    let priority = id
+        .extract_j1939_priority()
+        .expect("invariant: value is valid");
+    let source_addr = id
+        .extract_j1939_source_address()
+        .expect("invariant: value is valid");
 
     println!("  CAN ID: 0x{:08X}", id.as_raw());
     println!(
@@ -102,11 +106,15 @@ fn demo_signal_extraction() -> CanbusResult<()> {
     let frame = CanFrame::new(id, data)?;
 
     // Extract engine speed (bytes 0-1, little-endian)
-    let speed_raw = frame.extract_value_le(0, 2).unwrap();
+    let speed_raw = frame
+        .extract_value_le(0, 2)
+        .expect("invariant: value is valid");
     let speed_rpm = speed_raw as f64 * 0.125;
 
     // Extract engine torque (bytes 2-3, little-endian)
-    let torque_raw = frame.extract_value_le(2, 2).unwrap();
+    let torque_raw = frame
+        .extract_value_le(2, 2)
+        .expect("invariant: value is valid");
     let torque_nm = torque_raw as f64;
 
     println!("  CAN ID: 0x{:03X}", id.as_raw());

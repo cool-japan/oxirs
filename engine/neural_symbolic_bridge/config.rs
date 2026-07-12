@@ -4,10 +4,10 @@
 //! supporting both neural and symbolic components with adaptive tuning.
 
 use crate::neural_symbolic_bridge::types::*;
+use chrono::Duration;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use chrono::Duration;
 
 /// Main configuration for neural-symbolic bridge
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -279,7 +279,9 @@ impl Default for PerformanceConfig {
     fn default() -> Self {
         Self {
             max_memory_mb: 4096,
-            max_cpu_threads: num_cpus::get(),
+            max_cpu_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             request_timeout: Duration::seconds(30),
             cache_size: 10000,
             enable_monitoring: true,
@@ -433,7 +435,9 @@ impl NeuralSymbolicConfig {
             return Err("Vector dimension must be greater than 0".to_string());
         }
 
-        if self.vector_config.similarity_threshold < 0.0 || self.vector_config.similarity_threshold > 1.0 {
+        if self.vector_config.similarity_threshold < 0.0
+            || self.vector_config.similarity_threshold > 1.0
+        {
             return Err("Similarity threshold must be between 0.0 and 1.0".to_string());
         }
 

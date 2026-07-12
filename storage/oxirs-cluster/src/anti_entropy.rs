@@ -4,7 +4,7 @@
 //! data detection, bidirectional reconciliation, conflict resolution (LWW and
 //! vector clocks), sync scheduling, bandwidth throttling, progress tracking,
 //! incremental Merkle tree updates, and concurrency throttling via
-//! [`AntiEntropyThrottle`].
+//! [`anti_entropy::AntiEntropyThrottle`].
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;

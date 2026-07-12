@@ -396,28 +396,34 @@ impl DistributedDeadlockDetector {
         match self.config.victim_selection {
             VictimSelectionStrategy::YoungestTransaction => {
                 // Find transaction with latest start time (youngest)
-                Ok(cycle
-                    .transactions
-                    .last()
-                    .expect("deadlock cycle must contain at least 2 transactions")
-                    .clone())
+                cycle.transactions.last().cloned().ok_or_else(|| {
+                    TdbError::Other(
+                        "deadlock cycle must contain at least 2 transactions".to_string(),
+                    )
+                })
             }
             VictimSelectionStrategy::OldestTransaction => {
                 // Find transaction with earliest start time (oldest)
-                Ok(cycle
-                    .transactions
-                    .first()
-                    .expect("deadlock cycle must contain at least 2 transactions")
-                    .clone())
+                cycle.transactions.first().cloned().ok_or_else(|| {
+                    TdbError::Other(
+                        "deadlock cycle must contain at least 2 transactions".to_string(),
+                    )
+                })
             }
             VictimSelectionStrategy::LeastWork => {
-                // For now, default to youngest
-                // TODO: Implement actual work tracking
-                Ok(cycle
+                // Victim = transaction in cycle with fewest outgoing wait-for edges
+                // (proxy for "least work done"). Transport is in-process simulation.
+                let graph = self.wait_graph.read();
+                cycle
                     .transactions
-                    .last()
-                    .expect("deadlock cycle must contain at least 2 transactions")
-                    .clone())
+                    .iter()
+                    .min_by_key(|txn| graph.get(*txn).map(|edges| edges.len()).unwrap_or(0))
+                    .cloned()
+                    .ok_or_else(|| {
+                        TdbError::Other(
+                            "deadlock cycle must contain at least one transaction".to_string(),
+                        )
+                    })
             }
             VictimSelectionStrategy::Random => {
                 // Use scirs2-core's random for selection
@@ -843,5 +849,64 @@ mod tests {
         assert_eq!(stats.total_detections, 1);
         assert_eq!(stats.total_deadlocks, 0);
         assert!(stats.avg_detection_time_ms >= 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_three_way_cycle_detection_and_victim_selection() {
+        let config = DeadlockDetectorConfig {
+            victim_selection: VictimSelectionStrategy::LeastWork,
+            ..Default::default()
+        };
+        let mut detector = DistributedDeadlockDetector::new("d1".to_string(), config);
+        detector.register_node("n1".to_string()).await.unwrap();
+        detector.register_node("n2".to_string()).await.unwrap();
+        detector.register_node("n3".to_string()).await.unwrap();
+
+        // 3-way cycle: txn-a -> txn-b -> txn-c -> txn-a
+        detector
+            .add_wait_edge(
+                "n1".to_string(),
+                "txn-a".to_string(),
+                "txn-b".to_string(),
+                "n2".to_string(),
+            )
+            .await
+            .unwrap();
+        detector
+            .add_wait_edge(
+                "n2".to_string(),
+                "txn-b".to_string(),
+                "txn-c".to_string(),
+                "n3".to_string(),
+            )
+            .await
+            .unwrap();
+        detector
+            .add_wait_edge(
+                "n3".to_string(),
+                "txn-c".to_string(),
+                "txn-a".to_string(),
+                "n1".to_string(),
+            )
+            .await
+            .unwrap();
+
+        let cycles = detector.detect_deadlocks().await.unwrap();
+        assert_eq!(cycles.len(), 1);
+
+        let cycle = &cycles[0];
+        assert_eq!(cycle.transactions.len(), 3);
+        // Victim must be one of the cycle members
+        let victim = cycle.victim.as_ref().unwrap();
+        assert!(cycle.transactions.contains(victim));
+
+        // Abort the victim and verify edge cleanup
+        detector.abort_victim(victim).await.unwrap();
+        let stats = detector.stats();
+        assert_eq!(stats.total_victims_aborted, 1);
+
+        // After abort, no more cycle
+        let cycles_after = detector.detect_deadlocks().await.unwrap();
+        assert_eq!(cycles_after.len(), 0);
     }
 }

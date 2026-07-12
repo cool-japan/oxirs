@@ -17,7 +17,7 @@ use anyhow::{anyhow, Result};
 use scirs2_core::metrics::{Counter, Gauge, Histogram};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Semaphore};
 use tokio::task::JoinSet;
@@ -45,7 +45,10 @@ impl Default for ParallelResolutionConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            max_concurrency: num_cpus::get() * 2,
+            max_concurrency: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                * 2,
             min_fields_for_parallel: 3,
             adaptive_concurrency: true,
             enable_work_stealing: true,
@@ -295,6 +298,14 @@ pub struct ParallelFieldResolver {
     total_resolutions: Arc<Counter>,
     resolution_time: Arc<Histogram>,
     parallelization_rate: Arc<Gauge>,
+    // `std::sync::RwLock`, not `tokio::sync::RwLock`: `get_metrics()` below is a
+    // plain sync fn that must be callable from within an async/Tokio context
+    // (e.g. from a `#[tokio::test]`), and only ever holds the lock for a couple
+    // of arithmetic ops (no `.await` inside the critical section anywhere it's
+    // used), so a short OS-thread block is safe and avoids
+    // `tokio::sync::RwLock::blocking_read()`'s documented panic when called
+    // from a thread that is currently driving a Tokio runtime.
+    timing_accumulator: Arc<StdRwLock<(f64, u64)>>,
 }
 
 impl ParallelFieldResolver {
@@ -313,6 +324,7 @@ impl ParallelFieldResolver {
             parallelization_rate: Arc::new(Gauge::new(
                 "parallel_resolver_parallelization_rate".to_string(),
             )),
+            timing_accumulator: Arc::new(StdRwLock::new((0.0, 0))),
             config,
         }
     }
@@ -445,6 +457,18 @@ impl ParallelFieldResolver {
             results.push(field_result);
         }
 
+        // Update timing accumulator from parallel results
+        {
+            let mut acc = self
+                .timing_accumulator
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            for r in &results {
+                acc.0 += r.execution_time.as_millis() as f64;
+                acc.1 += 1;
+            }
+        }
+
         // Calculate parallelization metrics
         let total_time = start_time.elapsed();
         let sequential_time: Duration = results.iter().map(|r| r.execution_time).sum();
@@ -479,6 +503,14 @@ impl ParallelFieldResolver {
             let execution_time = start.elapsed();
             self.resolution_time
                 .observe(execution_time.as_millis() as f64);
+            {
+                let mut acc = self
+                    .timing_accumulator
+                    .write()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                acc.0 += execution_time.as_millis() as f64;
+                acc.1 += 1;
+            }
 
             results.push(FieldResolutionResult {
                 field_id: task.field_id,
@@ -497,7 +529,17 @@ impl ParallelFieldResolver {
         ParallelResolverMetrics {
             active_resolutions: self.active_resolutions.get() as usize,
             total_resolutions: self.total_resolutions.get() as usize,
-            avg_resolution_time_ms: 0.0, // TODO: Track average in the resolver
+            avg_resolution_time_ms: {
+                let acc = self
+                    .timing_accumulator
+                    .read()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                if acc.1 > 0 {
+                    acc.0 / acc.1 as f64
+                } else {
+                    0.0
+                }
+            },
             parallelization_rate: self.parallelization_rate.get(),
         }
     }
@@ -890,5 +932,64 @@ mod tests {
         assert!(config.adaptive_concurrency);
         assert!(config.enable_work_stealing);
         assert!(config.min_fields_for_parallel >= 2);
+    }
+
+    #[tokio::test]
+    async fn test_avg_resolution_time_tracked() {
+        let config = ParallelResolutionConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let resolver = ParallelFieldResolver::new(config);
+
+        let field1 = FieldId::new("Query".to_string(), "f1".to_string());
+        let field2 = FieldId::new("Query".to_string(), "f2".to_string());
+        let field3 = FieldId::new("Query".to_string(), "f3".to_string());
+
+        let tasks = vec![
+            FieldResolutionTask {
+                field_id: field1,
+                resolver: Arc::new(|| {
+                    std::thread::sleep(Duration::from_millis(5));
+                    Ok(1)
+                }),
+                dependencies: vec![FieldDependency::Independent],
+                estimated_cost: 1.0,
+                priority: 0,
+            },
+            FieldResolutionTask {
+                field_id: field2,
+                resolver: Arc::new(|| {
+                    std::thread::sleep(Duration::from_millis(5));
+                    Ok(2)
+                }),
+                dependencies: vec![FieldDependency::Independent],
+                estimated_cost: 1.0,
+                priority: 0,
+            },
+            FieldResolutionTask {
+                field_id: field3,
+                resolver: Arc::new(|| {
+                    std::thread::sleep(Duration::from_millis(5));
+                    Ok(3)
+                }),
+                dependencies: vec![FieldDependency::Independent],
+                estimated_cost: 1.0,
+                priority: 0,
+            },
+        ];
+
+        let graph = Arc::new(DependencyGraph::new());
+        let _ = resolver
+            .resolve_fields(tasks, graph)
+            .await
+            .expect("should succeed");
+
+        let metrics = resolver.get_metrics();
+        assert!(metrics.avg_resolution_time_ms > 0.0, "avg should be > 0");
+        assert!(
+            metrics.avg_resolution_time_ms < 500.0,
+            "avg should be < 500ms"
+        );
     }
 }

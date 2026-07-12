@@ -1167,6 +1167,7 @@ impl JsonLdContextProcessor {
                     // 27.1)
                     if definition.iri_mapping != previous_definition.iri_mapping
                         || definition.prefix_flag != previous_definition.prefix_flag
+                        || definition.protected != previous_definition.protected
                         || definition.reverse_property != previous_definition.reverse_property
                         || definition.base_url != previous_definition.base_url
                         || definition.context != previous_definition.context
@@ -1177,7 +1178,6 @@ impl JsonLdContextProcessor {
                         || definition.nest_value != previous_definition.nest_value
                         || definition.type_mapping != previous_definition.type_mapping
                     {
-                        // TODO: make sure it's full
                         errors.push(JsonLdSyntaxError::msg_and_code(
                             format!("Overriding the protected term {term}"),
                             JsonLdErrorCode::ProtectedTermRedefinition,
@@ -1478,5 +1478,97 @@ fn after_to_node_event(
             None
         }
         None => Some(new_value),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jsonld::context_types::JsonLdContextProcessor;
+    use crate::jsonld::profile::JsonLdProcessingMode;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    fn make_processor() -> JsonLdContextProcessor {
+        JsonLdContextProcessor {
+            processing_mode: JsonLdProcessingMode::JsonLd1_1,
+            lenient: false,
+            max_context_recursion: 10,
+            remote_context_cache: Arc::new(Mutex::new(HashMap::new())),
+            load_document_callback: None,
+        }
+    }
+
+    /// Build a [`JsonNode::Object`] from a slice of `(&str, JsonNode)` pairs.
+    fn obj(pairs: &[(&str, JsonNode)]) -> JsonNode {
+        let map: HashMap<String, JsonNode> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), v.clone()))
+            .collect();
+        JsonNode::Object(map)
+    }
+
+    #[test]
+    fn test_protected_term_redefinition_rejected() {
+        let processor = make_processor();
+
+        // First context: define "foo" as protected with @id "http://example.org/foo"
+        let first_ctx = obj(&[(
+            "foo",
+            obj(&[
+                ("@id", JsonNode::String("http://example.org/foo".into())),
+                ("@protected", JsonNode::Boolean(true)),
+            ]),
+        )]);
+
+        let base_context = processor.process_context(
+            &JsonLdContext::new_empty(None),
+            first_ctx,
+            None,
+            &mut Vec::new(),
+            false,
+            true,
+            true,
+            &mut Vec::new(),
+        );
+
+        // Verify that "foo" is marked protected in the resulting context
+        assert!(
+            base_context
+                .term_definitions
+                .get("foo")
+                .is_some_and(|d| d.protected),
+            "foo should be protected after first context"
+        );
+
+        // Second context: attempt to redefine "foo" with a different @id
+        let second_ctx = obj(&[(
+            "foo",
+            obj(&[("@id", JsonNode::String("http://example.org/bar".into()))]),
+        )]);
+
+        let mut errors: Vec<crate::jsonld::error::JsonLdSyntaxError> = Vec::new();
+        let _ = processor.process_context(
+            &base_context,
+            second_ctx,
+            None,
+            &mut Vec::new(),
+            false,
+            true,
+            true,
+            &mut errors,
+        );
+
+        // The override must be rejected with ProtectedTermRedefinition
+        let has_protected_err = errors.iter().any(|e| {
+            matches!(
+                e.code(),
+                Some(crate::jsonld::error::JsonLdErrorCode::ProtectedTermRedefinition)
+            )
+        });
+        assert!(
+            has_protected_err,
+            "Expected ProtectedTermRedefinition error but got: {errors:?}"
+        );
     }
 }

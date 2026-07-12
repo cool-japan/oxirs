@@ -36,7 +36,7 @@
 
 use crate::error::{Result, TdbError};
 use aes_gcm::{
-    aead::{rand_core::RngCore, Aead, KeyInit, OsRng},
+    aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
 use pbkdf2::pbkdf2_hmac;
@@ -233,9 +233,9 @@ impl BackupEncryption {
 
     /// Encrypt data
     pub fn encrypt(&mut self, plaintext: &[u8]) -> Result<EncryptedData> {
-        // Generate random salt
-        let mut salt = vec![0u8; SALT_SIZE];
-        OsRng.fill_bytes(&mut salt);
+        // Generate random salt from OS entropy (oxicrypto-rand -> getrandom)
+        let salt = oxicrypto_rand::random_bytes(SALT_SIZE)
+            .map_err(|e| TdbError::Other(format!("Failed to generate random salt: {}", e)))?;
 
         // Derive encryption key using PBKDF2
         let key = self.derive_key(&salt)?;
@@ -244,10 +244,11 @@ impl BackupEncryption {
         let cipher = Aes256Gcm::new_from_slice(&key)
             .map_err(|e| TdbError::Other(format!("Failed to create cipher: {}", e)))?;
 
-        // Generate random nonce
-        let mut nonce_bytes = vec![0u8; NONCE_SIZE];
-        OsRng.fill_bytes(&mut nonce_bytes);
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        // Generate random nonce from OS entropy (oxicrypto-rand -> getrandom)
+        let nonce_bytes = oxicrypto_rand::random_bytes(NONCE_SIZE)
+            .map_err(|e| TdbError::Other(format!("Failed to generate random nonce: {}", e)))?;
+        let nonce = <&Nonce<_>>::try_from(&nonce_bytes[..])
+            .map_err(|_| TdbError::Other("Invalid nonce length".to_string()))?;
 
         // Optionally compress data before encryption
         let data_to_encrypt = if self.config.compress_before_encrypt {
@@ -280,7 +281,8 @@ impl BackupEncryption {
             .map_err(|e| TdbError::Other(format!("Failed to create cipher: {}", e)))?;
 
         // Create nonce
-        let nonce = Nonce::from_slice(&encrypted.nonce);
+        let nonce = <&Nonce<_>>::try_from(&encrypted.nonce[..])
+            .map_err(|_| TdbError::Other("Invalid nonce length".to_string()))?;
 
         // Decrypt
         let plaintext = cipher

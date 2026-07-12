@@ -31,7 +31,7 @@ async fn do_upload(
     let mut uri = "/upload".to_string();
     let mut query_parts: Vec<String> = Vec::new();
     if let Some(g) = graph {
-        query_parts.push(format!("graph={}", urlencoding::encode(g)));
+        query_parts.push(format!("graph={}", oxirs_core::encoding::percent_encode(g)));
     }
     if let Some(f) = format_hint {
         query_parts.push(format!("format={}", f));

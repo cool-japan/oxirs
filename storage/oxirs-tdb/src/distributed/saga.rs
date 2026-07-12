@@ -180,6 +180,65 @@ impl Default for SagaConfig {
     }
 }
 
+/// Registry for saga step callbacks — not serializable, held separately from step metadata.
+pub struct SagaCallbackRegistry {
+    /// Forward action callbacks: step_name -> action
+    actions: HashMap<String, Box<dyn Fn() -> crate::error::Result<()> + Send + Sync>>,
+    /// Compensating transaction callbacks: step_name -> compensation
+    compensations: HashMap<String, Box<dyn Fn() -> crate::error::Result<()> + Send + Sync>>,
+}
+
+impl SagaCallbackRegistry {
+    /// Create an empty registry
+    pub fn new() -> Self {
+        Self {
+            actions: HashMap::new(),
+            compensations: HashMap::new(),
+        }
+    }
+
+    /// Register a forward action for a step
+    pub fn register_action(
+        &mut self,
+        step_name: impl Into<String>,
+        action: impl Fn() -> crate::error::Result<()> + Send + Sync + 'static,
+    ) {
+        self.actions.insert(step_name.into(), Box::new(action));
+    }
+
+    /// Register a compensating transaction for a step
+    pub fn register_compensation(
+        &mut self,
+        step_name: impl Into<String>,
+        compensation: impl Fn() -> crate::error::Result<()> + Send + Sync + 'static,
+    ) {
+        self.compensations
+            .insert(step_name.into(), Box::new(compensation));
+    }
+
+    /// Call the forward action for a step (no-op if none registered)
+    pub fn call_action(&self, step_name: &str) -> crate::error::Result<()> {
+        match self.actions.get(step_name) {
+            Some(action) => action(),
+            None => Ok(()),
+        }
+    }
+
+    /// Call the compensating transaction for a step (no-op if none registered)
+    pub fn call_compensation(&self, step_name: &str) -> crate::error::Result<()> {
+        match self.compensations.get(step_name) {
+            Some(comp) => comp(),
+            None => Ok(()),
+        }
+    }
+}
+
+impl Default for SagaCallbackRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Saga Orchestrator
 ///
 /// Coordinates the execution of a saga including forward execution
@@ -199,6 +258,8 @@ pub struct SagaOrchestrator {
     start_time: DateTime<Utc>,
     /// Statistics
     stats: Arc<Mutex<SagaStats>>,
+    /// Callback registry for step execution and compensation
+    callback_registry: Arc<Mutex<SagaCallbackRegistry>>,
 }
 
 /// Saga execution statistics
@@ -235,7 +296,21 @@ impl SagaOrchestrator {
             status: Arc::new(RwLock::new(SagaStatus::Created)),
             start_time: Utc::now(),
             stats: Arc::new(Mutex::new(SagaStats::default())),
+            callback_registry: Arc::new(Mutex::new(SagaCallbackRegistry::new())),
         }
+    }
+
+    /// Register callbacks for a saga step
+    pub fn register_step_callbacks(
+        &mut self,
+        step_name: impl Into<String>,
+        action: impl Fn() -> crate::error::Result<()> + Send + Sync + 'static,
+        compensation: impl Fn() -> crate::error::Result<()> + Send + Sync + 'static,
+    ) {
+        let step_name_str = step_name.into();
+        let mut registry = self.callback_registry.lock();
+        registry.register_action(step_name_str.clone(), action);
+        registry.register_compensation(step_name_str, compensation);
     }
 
     /// Add a step to the saga
@@ -356,29 +431,33 @@ impl SagaOrchestrator {
         {
             let mut steps = self.steps.write();
             let step = &mut steps[step_idx];
-
             step.status = StepStatus::Executing;
             step.started_at = Some(Utc::now());
         }
 
-        // Simulate step execution
-        // TODO: Implement actual step execution with callbacks
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        // Get step name for registry lookup
+        let step_name = {
+            let steps = self.steps.read();
+            steps[step_idx].name.clone()
+        };
 
-        // Simulate success (always succeed for now to avoid recursion)
-        let success = true;
+        // Call the registered action (or no-op if none registered)
+        let result = {
+            let registry = self.callback_registry.lock();
+            registry.call_action(&step_name)
+        };
 
-        {
-            let mut steps = self.steps.write();
-            let step = &mut steps[step_idx];
-
-            if success {
+        let mut steps = self.steps.write();
+        let step = &mut steps[step_idx];
+        match result {
+            Ok(_) => {
                 step.status = StepStatus::Completed;
                 step.completed_at = Some(Utc::now());
                 Ok(())
-            } else {
+            }
+            Err(e) => {
                 step.status = StepStatus::Failed;
-                Err(TdbError::Other(format!("Step {} failed", step.name)))
+                Err(e)
             }
         }
     }
@@ -414,22 +493,37 @@ impl SagaOrchestrator {
 
     /// Compensate a single step
     async fn compensate_step(&self, step_idx: usize) -> Result<()> {
+        // Get step name for registry lookup
+        let step_name = {
+            let steps = self.steps.read();
+            steps[step_idx].name.clone()
+        };
+
+        // Set compensating status
+        {
+            let mut steps = self.steps.write();
+            steps[step_idx].status = StepStatus::Compensating;
+        }
+
+        // Call the registered compensation (or no-op if none registered)
+        let result = {
+            let registry = self.callback_registry.lock();
+            registry.call_compensation(&step_name)
+        };
+
         {
             let mut steps = self.steps.write();
             let step = &mut steps[step_idx];
-            step.status = StepStatus::Compensating;
+            match result {
+                Ok(_) => {
+                    step.status = StepStatus::Compensated;
+                }
+                Err(_) => {
+                    step.status = StepStatus::CompensationFailed;
+                }
+            }
         }
-
-        // Simulate compensation
-        // TODO: Implement actual compensation with callbacks
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-
-        {
-            let mut steps = self.steps.write();
-            let step = &mut steps[step_idx];
-            step.status = StepStatus::Compensated;
-        }
-
+        // Return Ok even if compensation failed (already marked CompensationFailed)
         Ok(())
     }
 
@@ -609,5 +703,169 @@ mod tests {
         let saga = SagaOrchestrator::new("saga-007".to_string(), config);
 
         assert_eq!(saga.current_step_index(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_saga_callback_registry_action_and_compensation() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let mut registry = SagaCallbackRegistry::new();
+        let forward_called = Arc::new(AtomicBool::new(false));
+        let comp_called = Arc::new(AtomicBool::new(false));
+
+        let fc = Arc::clone(&forward_called);
+        registry.register_action("step1", move || {
+            fc.store(true, Ordering::SeqCst);
+            Ok(())
+        });
+
+        let cc = Arc::clone(&comp_called);
+        registry.register_compensation("step1", move || {
+            cc.store(true, Ordering::SeqCst);
+            Ok(())
+        });
+
+        registry.call_action("step1").unwrap();
+        registry.call_compensation("step1").unwrap();
+
+        assert!(forward_called.load(Ordering::SeqCst));
+        assert!(comp_called.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn test_saga_with_callbacks_full_success() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+
+        let config = SagaConfig::default();
+        let mut saga = SagaOrchestrator::new("saga-cb-001".to_string(), config);
+
+        for i in 0..3_usize {
+            let name = format!("step{}", i);
+            let cc = Arc::clone(&call_count);
+            let cc2 = Arc::clone(&call_count);
+            saga.add_step(SagaStep {
+                name: name.clone(),
+                compensatable: true,
+                ..Default::default()
+            });
+            saga.register_step_callbacks(
+                name,
+                move || {
+                    cc.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                },
+                move || {
+                    cc2.fetch_add(10, Ordering::SeqCst);
+                    Ok(())
+                },
+            );
+        }
+
+        let result = saga.execute().await.unwrap();
+        assert!(result, "Saga should complete successfully");
+        assert_eq!(saga.status(), SagaStatus::Completed);
+        assert_eq!(call_count.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn test_saga_with_callbacks_failure_triggers_compensation_in_reverse() {
+        use std::sync::Mutex as StdMutex;
+
+        let execution_log: Arc<StdMutex<Vec<String>>> = Arc::new(StdMutex::new(Vec::new()));
+
+        let config = SagaConfig {
+            strategy: SagaStrategy::ForwardRecovery,
+            compensation_delay: Duration::from_millis(0),
+            ..Default::default()
+        };
+        let mut saga = SagaOrchestrator::new("saga-cb-002".to_string(), config);
+
+        // Step 0: succeeds
+        {
+            let log = Arc::clone(&execution_log);
+            let log2 = Arc::clone(&execution_log);
+            saga.add_step(SagaStep {
+                name: "step0".to_string(),
+                compensatable: true,
+                ..Default::default()
+            });
+            saga.register_step_callbacks(
+                "step0",
+                move || {
+                    log.lock().unwrap().push("fwd:step0".to_string());
+                    Ok(())
+                },
+                move || {
+                    log2.lock().unwrap().push("comp:step0".to_string());
+                    Ok(())
+                },
+            );
+        }
+        // Step 1: succeeds
+        {
+            let log = Arc::clone(&execution_log);
+            let log2 = Arc::clone(&execution_log);
+            saga.add_step(SagaStep {
+                name: "step1".to_string(),
+                compensatable: true,
+                ..Default::default()
+            });
+            saga.register_step_callbacks(
+                "step1",
+                move || {
+                    log.lock().unwrap().push("fwd:step1".to_string());
+                    Ok(())
+                },
+                move || {
+                    log2.lock().unwrap().push("comp:step1".to_string());
+                    Ok(())
+                },
+            );
+        }
+        // Step 2: fails
+        {
+            let log = Arc::clone(&execution_log);
+            let log2 = Arc::clone(&execution_log);
+            saga.add_step(SagaStep {
+                name: "step2".to_string(),
+                compensatable: true,
+                ..Default::default()
+            });
+            saga.register_step_callbacks(
+                "step2",
+                move || {
+                    log.lock().unwrap().push("fwd:step2".to_string());
+                    Err(TdbError::Other("step2 intentionally fails".to_string()))
+                },
+                move || {
+                    log2.lock().unwrap().push("comp:step2".to_string());
+                    Ok(())
+                },
+            );
+        }
+
+        let result = saga.execute().await.unwrap();
+        assert!(!result, "Saga should be compensated");
+        assert_eq!(saga.status(), SagaStatus::Compensated);
+
+        let log = execution_log.lock().unwrap();
+        assert!(log.contains(&"fwd:step0".to_string()));
+        assert!(log.contains(&"fwd:step1".to_string()));
+        assert!(log.contains(&"fwd:step2".to_string()));
+        // Compensation in reverse order: step1 before step0
+        let comp_idx_0 = log
+            .iter()
+            .position(|e| e == "comp:step0")
+            .unwrap_or(usize::MAX);
+        let comp_idx_1 = log
+            .iter()
+            .position(|e| e == "comp:step1")
+            .unwrap_or(usize::MAX);
+        assert!(
+            comp_idx_1 < comp_idx_0,
+            "step1 should be compensated before step0 (reverse order)"
+        );
     }
 }

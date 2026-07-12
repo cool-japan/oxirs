@@ -35,18 +35,17 @@ Physics-informed digital twin simulation bridge for OxiRS semantic web platform.
                 │
                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    SciRS2 Simulation Engine                     │
+│                    Physics Simulation Engine                    │
 │                                                                 │
-│  Thermal:     Heat diffusion (scirs2-integrate ODE)             │
-│  Mechanical:  Structural FEM (scirs2-linalg)                    │
-│  Fluid:       Navier-Stokes CFD (scirs2-neural)                 │
-│  Electrical:  Circuit analysis (scirs2-optimize)                │
-│  Coupled:     Multi-physics (scirs2-parallel)                   │
+│  Thermal:     Heat diffusion (scirs2-integrate ODE, RK4)        │
+│  Mechanical:  Structural FEM, modal & vibration analysis        │
+│  Fluid:       Navier-Stokes CFD, pipe flow, Bernoulli, drag     │
+│  Electrical:  Modified Nodal Analysis circuit simulation        │
+│  Coupled:     Statistical mech., thermo., celestial, quantum    │
 │                                                                 │
-│  Features:                                                      │
-│  • GPU acceleration (scirs2-core::gpu)                          │
-│  • SIMD vectorization (scirs2-core::simd)                       │
-│  • Parallel execution (scirs2-core::parallel)                   │
+│  Features (in-house on scirs2-core, opt-in):                    │
+│  • GPU acceleration (scirs2-core::gpu, feature `gpu`)            │
+│  • PINN residual correction (feature `pinn_correction`)         │
 └───────────────┬─────────────────────────────────────────────────┘
                 │ SimulationResult
                 ▼
@@ -80,23 +79,24 @@ Physics-informed digital twin simulation bridge for OxiRS semantic web platform.
 
 ### Core Features (Implemented)
 
-- **Simulation Orchestration**: `SimulationOrchestrator` coordinates extract → run → inject workflow
-- **Thermal Simulation**: 1D heat diffusion using SciRS2 ODE solvers (Runge-Kutta 4)
-- **Conservation Laws**: Energy conservation validation for physics results
-- **Provenance Tracking**: Full simulation metadata (software version, parameters hash, execution time)
+- **Simulation Orchestration**: `SimulationOrchestrator` coordinates extract → run → inject workflow across registered simulation backends
+- **Multi-Domain Simulations**: Thermal (1D heat diffusion, RK4), structural (FEM stress analysis, modal analysis, vibration analysis), fluid dynamics (Navier-Stokes, pipe flow, Bernoulli, drag), electromagnetics (Modified Nodal Analysis), statistical mechanics, thermodynamics, celestial mechanics (N-body, Kepler, vis-viva), quantum mechanics (particle-in-box, QHO, tunneling, spin), optics (Snell, Fresnel, thin lens, diffraction), control systems (PID/cascade), kinematics, and 1D/2D wave propagation (FDTD)
+- **RDF / SPARQL Integration**: SPARQL-based parameter extraction (`rdf::sparql_builder`, `simulation::parameter_extraction`) and SPARQL UPDATE result injection (`simulation::result_injection`), with RDF literal parsing and SI unit conversion (`rdf::literal_parser`)
+- **SAMM Aspect Model Bridge**: Parses SAMM Aspect Model TTL and bridges it to simulation parameter types (`samm::physics_aspect`, `samm::fem_bridge`)
+- **Physics Constraint Validation**: Conservation laws (energy, momentum, mass, with angular momentum/entropy checkers), Buckingham Pi dimensional analysis (`constraints::buckingham_pi`), and type-safe SI quantities via the `uom` crate (`simulation` feature)
+- **Digital Twin & Bidirectional Sync**: RDF ↔ physics-state synchronization (`sync::rdf_to_state`, `sync::state_to_rdf`, `sync::bidirectional`) and a minimal versioned twin property store (`digital_twin::twin_value`)
+- **DTDL v3 Support**: Parses Microsoft Digital Twin Definition Language v3 documents and maps them to/from RDF (`dtdl::{parser,mapper,validator,types}`)
+- **Predictive Maintenance**: Remaining-useful-life prediction and anomaly detection (`predictive_maintenance`)
+- **Material Property Database**: Reference material properties shared across simulation domains (`material_database`)
+- **FEM & Adaptive Mesh Refinement**: Finite-element assembly and adaptive mesh refinement for structural/thermal analysis (`fem`, `mesh_refinement`)
+- **Provenance Tracking**: Full simulation metadata (software version, parameters hash, execution time) attached to every result
 - **Error Handling**: Comprehensive error types for physics operations
+- **GPU-Accelerated Kernels** *(opt-in, `gpu` feature)*: FEM stress assembly, Navier-Stokes pressure solve, and heat-diffusion stencils dispatched to `scirs2_core::gpu`, with automatic CPU fallback (`GpuError::BackendUnavailable`) when no device is present
+- **PINN Residual Correction** *(opt-in, `pinn_correction` feature)*: Pure-Rust feed-forward residual network applied online as a correction term to solver output (`pinn`) — no external ML framework dependency
 
-### Planned Features
+### Planned / Future Work
 
-See [TODO.md](TODO.md) for detailed roadmap.
-
-- **Additional Simulation Types**: Mechanical, fluid dynamics, electrical, multi-physics
-- **RDF Integration**: Full SPARQL parameter extraction and result injection
-- **SAMM Support**: Parse SAMM Aspect Models for structured parameters
-- **Advanced Constraints**: Full dimensional analysis with type-safe units
-- **GPU Acceleration**: Large-scale simulations using scirs2-core::gpu
-- **Streaming**: Real-time simulation updates via oxirs-stream
-- **Hybrid Physics-ML**: Neural network corrections using oxirs-embed
+See [TODO.md](TODO.md) for the detailed roadmap. Remaining open areas include real-time streaming integration (e.g. via `oxirs-stream`) and expanding PINN correction beyond the current single-residual-network scope.
 
 ## Installation
 
@@ -104,18 +104,21 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-physics = { version = "0.3.1", features = ["simulation"] }
+oxirs-physics = { version = "0.3.2", features = ["simulation"] }
 ```
 
 ### Feature Flags
 
-| Feature       | Description                              | Dependencies                    |
-|--------------|------------------------------------------|---------------------------------|
-| `simulation` | SciRS2-based physics simulations         | scirs2-integrate, scirs2-optimize, uom |
-| `embeddings` | Neural network hybrid models             | scirs2-neural, oxirs-embed      |
-| `samm`       | SAMM Aspect Model support                | oxirs-samm                      |
-| `streaming`  | Real-time simulation updates             | oxirs-stream                    |
-| `full`       | All features enabled                     | All of the above                |
+| Feature          | Default | Description                                          | Dependencies              |
+|------------------|:-------:|-------------------------------------------------------|----------------------------|
+| `simulation`     |         | SciRS2 ODE solvers + type-safe `uom` quantities        | `scirs2-integrate`, `uom` |
+| `gpu`             |         | GPU-accelerated FEM/Navier-Stokes/heat-diffusion kernels (CPU fallback always available) | `scirs2-core/gpu` |
+| `pinn_correction` |         | Pure-Rust PINN residual correction network             | — (in-house)               |
+| `full`            |         | Currently aliases `simulation`                          | `simulation`               |
+
+Note: `samm`, `rdf`, `dtdl`, `sync`, and the various simulation-domain modules
+(mechanical, fluid, electromagnetic, etc.) are unconditionally compiled — they
+are not behind feature flags.
 
 ## Usage
 
@@ -201,28 +204,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use oxirs_physics::constraints::{ConservationChecker, ConservationLaw};
+use oxirs_physics::simulation::result_injection::StateVector;
 use std::collections::HashMap;
 
-fn validate_energy_conservation() -> Result<(), Box<dyn std::error::Error>> {
-    let checker = ConservationChecker::new();
+fn validate_energy_conservation() {
+    // Checks Energy + Mass by default; add further laws with `add_law`.
+    let mut checker = ConservationChecker::new(1e-6); // relative tolerance
+    checker.add_law(ConservationLaw::Momentum);
 
-    let mut initial_state = HashMap::new();
-    initial_state.insert("kinetic_energy".to_string(), 100.0);
-    initial_state.insert("potential_energy".to_string(), 50.0);
+    // A trajectory where total energy and mass stay constant across time steps.
+    let trajectory: Vec<StateVector> = (0..10)
+        .map(|i| {
+            let mut state = HashMap::new();
+            state.insert("energy".to_string(), 150.0); // kinetic + potential, constant
+            state.insert("mass".to_string(), 50.0);
+            StateVector { time: i as f64, state }
+        })
+        .collect();
 
-    let mut final_state = HashMap::new();
-    final_state.insert("kinetic_energy".to_string(), 75.0);
-    final_state.insert("potential_energy".to_string(), 75.0);
-
-    // Check energy conservation (should pass)
-    checker.check(
-        ConservationLaw::Energy,
-        &initial_state,
-        &final_state,
-        1e-6  // tolerance
-    )?;
-
-    Ok(())
+    // No violations: energy and mass conservation hold within tolerance.
+    let violations = checker.check(&trajectory);
+    assert!(violations.is_empty());
 }
 ```
 
@@ -233,9 +235,12 @@ $ tokei .
 ===============================================================================
  Language            Files        Lines         Code     Comments       Blanks
 ===============================================================================
- Rust                   11          906          725           20          161
- |- Markdown            11          128           12          103           13
- (Total)                           1034          737          123          174
+ JSON                    3           98           98            0            0
+ Markdown                2          348            0          272           76
+ Rust                   78        36358        29562         2077         4719
+ TOML                    1           57           34           12           11
+-------------------------------------------------------------------------------
+ Total                  84        36861        29694         2361         4806
 ===============================================================================
 ```
 
@@ -246,18 +251,37 @@ oxirs-physics/
 ├── src/
 │   ├── lib.rs                           # Public API and module declarations
 │   ├── error.rs                         # Error types (PhysicsError)
-│   ├── simulation/
-│   │   ├── mod.rs                       # SimulationOrchestrator
-│   │   ├── parameter_extraction.rs      # RDF → SimulationParameters
-│   │   ├── result_injection.rs          # SimulationResult → RDF
-│   │   ├── simulation_runner.rs         # PhysicsSimulation trait
-│   │   └── scirs2_thermal.rs            # Thermal simulation (SciRS2 ODE)
-│   ├── constraints/
-│   │   ├── mod.rs                       # Physics constraint API
-│   │   ├── conservation_laws.rs         # Energy/momentum/mass conservation
-│   │   └── dimensional_analysis.rs      # Unit checking (WIP)
-│   └── digital_twin/
-│       └── mod.rs                       # Digital twin management (WIP)
+│   ├── simulation/                      # SimulationOrchestrator, parameter extraction,
+│   │   │                                # result injection, thermal (SciRS2 ODE / RK4)
+│   │   └── {mod,parameter_extraction,result_injection,samm_parser,scirs2_thermal,simulation_runner}.rs
+│   ├── constraints/                     # Conservation laws, Buckingham Pi, dimensional
+│   │   └── {mod,buckingham_pi,conservation_laws,dimensional_analysis,physical_bounds}.rs
+│   ├── conservation/                    # Extended conservation checkers (entropy, angular momentum)
+│   │   └── {mod,checkers,checkers_impl,checkers_types,checkers_validator}.rs
+│   ├── digital_twin/                    # Digital twin state + minimal versioned property store
+│   │   └── {mod,twin_value}.rs
+│   ├── dtdl/                            # DTDL v3 parser, RDF mapper, validator
+│   │   └── {mod,parser,mapper,validator,types}.rs
+│   ├── rdf/                             # SPARQL builder, RDF literal parsing/serialization
+│   │   └── {mod,sparql_builder,literal_parser,physics_rdf*}.rs
+│   ├── rdf_extraction/                  # RDF-graph parameter extraction helpers
+│   ├── samm/                            # SAMM Aspect Model TTL → simulation bridge
+│   │   └── {mod,physics_aspect,fem_bridge}.rs
+│   ├── sync/                            # Bidirectional RDF ↔ physics-state synchronization
+│   │   └── {mod,rdf_to_state,state_to_rdf,bidirectional}.rs
+│   ├── gpu/                             # GPU kernels (feature `gpu`): FEM stress, Navier-Stokes, heat
+│   │   └── {mod,stress_assembly,navier_stokes_kernel,heat_kernel}.rs
+│   ├── pinn/                            # PINN residual correction (feature `pinn_correction`)
+│   │   └── {mod,residual_model,loader,corrector}.rs
+│   ├── fem/, mesh_refinement.rs         # Finite-element assembly + adaptive mesh refinement
+│   ├── predictive_maintenance/          # RUL prediction, anomaly detection
+│   ├── material_database.rs             # Reference material properties
+│   ├── uom_quantities.rs                # Type-safe SI quantities via `uom` (feature `simulation`)
+│   └── {celestial_mechanics,control_systems,electromagnetics,fluid_dynamics,
+│         heat_transfer,kinematics,modal_analysis,optics,quantum_mechanics,
+│         signal_processing,statistical_mechanics,stress_analysis,
+│         thermal_analysis,thermal_system,thermodynamics,vibration_analysis,
+│         wave_propagation}.rs           # Per-domain physics simulation modules
 ├── Cargo.toml                           # Dependencies and features
 ├── README.md                            # This file
 └── TODO.md                              # Development roadmap
@@ -269,14 +293,14 @@ oxirs-physics/
 
 ### Core Dependencies
 
-| SciRS2 Crate         | Usage in oxirs-physics                          |
-|---------------------|-------------------------------------------------|
-| `scirs2-core`       | Array operations, random, SIMD, GPU, parallel   |
-| `scirs2-integrate`  | ODE/PDE solvers for thermal/mechanical sims     |
-| `scirs2-optimize`   | Parameter optimization, inverse problems        |
-| `scirs2-neural`     | Neural network corrections for simulations      |
-| `scirs2-linalg`     | Linear algebra for FEM/structural analysis      |
-| `scirs2-stats`      | Statistical validation of simulation results    |
+| SciRS2 Crate         | Usage in oxirs-physics                                    |
+|---------------------|--------------------------------------------------------------|
+| `scirs2-core`       | Array operations, random, SIMD, GPU (feature `gpu`), parallel |
+| `scirs2-integrate`  | ODE solvers for thermal/mechanical sims (feature `simulation`) |
+
+FEM/structural analysis, statistical mechanics, and the PINN residual
+corrector are implemented directly on `scirs2-core` (no `scirs2-optimize`,
+`scirs2-neural`, `scirs2-linalg`, or `scirs2-stats` dependency).
 
 ### Full SciRS2 Usage Examples
 
@@ -335,7 +359,7 @@ cargo bench --features simulation
 
 ## Digital Twin Definition Language (DTDL)
 
-`oxirs-physics` will support Azure Digital Twins' DTDL for standardized twin definitions. See [TODO.md](TODO.md) for implementation roadmap.
+`oxirs-physics` parses Azure Digital Twins' DTDL v3 documents and maps them to/from RDF (`dtdl::{parser, mapper, validator, types}`) for standardized twin definitions. See [TODO.md](TODO.md) for the roadmap.
 
 Example DTDL integration:
 
@@ -401,6 +425,6 @@ Same as OxiRS parent project (see repository root).
 
 ## Version
 
-Current version: `0.2.3`
+Current version: `0.3.2` (1,292 tests passing)
 
 Part of the OxiRS semantic web platform.

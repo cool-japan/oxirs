@@ -1,10 +1,10 @@
 # OxiRS DID - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
-OxiRS DID v0.3.1 provides W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) support for secure, decentralized identity management in semantic web applications.
+OxiRS DID v0.3.2 provides W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) support for secure, decentralized identity management in semantic web applications.
 
 ### Features
 - ✅ W3C DID Core specification compliance
@@ -19,29 +19,30 @@ OxiRS DID v0.3.1 provides W3C Decentralized Identifiers (DID) and Verifiable Cre
 - ✅ JWS signature support (JsonWebSignature2020)
 - ✅ Key rotation mechanism
 - ✅ Revocation lists (W3C Status List 2021)
-- ✅ Credential store (W3C VC storage)
-- ✅ Access control for DID operations
 - ✅ Trust chain verification
 - ✅ Presentation builder and VC presenter
 - ✅ VC verifier, presentation request
-- ✅ Key derivation and key manager
-- ✅ 1043 tests passing
+- ✅ Key manager (lifecycle: generation, rotation, status, purposes)
+- ✅ Key agreement (ECDH shared secret derivation)
+- ✅ BBS+ signatures for selective disclosure (feature `bbs-plus`, default)
+- ✅ ZKP-based selective disclosure with Pedersen commitments (feature `zkp`, default)
+- ✅ 1123 tests passing
 
 ## Roadmap
 
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ DID Core, did:key/web, Ed25519, VC issuance/verification, 8 core features
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Additional DID methods (did:ethr, did:ion, did:pkh)
 - ✅ JWS signature support (JsonWebSignature2020)
 - ✅ Key rotation mechanism
 - ✅ Revocation lists
-- ✅ Credential store, trust chain, presentation builder
-- ✅ Key derivation, key manager, access control
+- ✅ Trust chain, presentation builder
+- ✅ Key manager, key agreement
 - ✅ 1043 tests passing
 
-### v0.3.0 - Planned (Q2 2026)
+### v0.3.0 - Released
 - [x] W3C test suite compliance (planned 2026-04-17)
   - **Goal:** Build automated W3C DID test suite runner using official test vectors covering all MUST/SHOULD assertions; add JWT-VC and SD-JWT credential format support for W3C alignment
   - **Design:** Embed official W3C DID Core 1.0 and VC Data Model 2.0 test vectors as static JSON/CBOR; automated assertion runner validates all MUST requirements; compliance matrix report; JWT-VC encoding/decoding; SD-JWT (Selective Disclosure JWT) implementation per IETF draft
@@ -65,10 +66,15 @@ OxiRS DID v0.3.1 provides W3C Decentralized Identifiers (DID) and Verifiable Cre
   - **Tests:** Pedersen binding soundness (adversary cannot open commitment to different value); hiding property (indistinguishability); selective disclosure round-trip; BBS+ unlinkability test
   - **Risk:** Breaking change to commitment scheme; provide migration utility and document in changelog
 
+### v0.3.2 - Current Release (July 12, 2026)
+- ✅ Dependency hygiene: removed unused direct/workspace dependencies (`digest`, `k256`, `multibase`, `futures`, `anyhow`, `tracing`, `once_cell`, `tempfile`); `sha2`/`hmac` pinned to the digest-0.10 generation with documented rationale (bls12_381_plus's BBS+ path and rsa's RS256 signing both still require it)
+- ✅ Example hygiene: replaced `unwrap()` with `expect()` + explanatory messages in `examples/simple_vc.rs`
+- ✅ 1123 tests passing
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS DID v0.2.3 - Decentralized identity for semantic web*
+*OxiRS DID v0.3.2 - Decentralized identity for semantic web*

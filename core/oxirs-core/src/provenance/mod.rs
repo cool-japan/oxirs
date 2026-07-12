@@ -11,10 +11,10 @@
 //! # Module layout
 //!
 //! The implementation is split across sibling modules:
-//! - [`provenance_types`]: namespace constants, [`AgentType`], and the core
+//! - `provenance_types`: namespace constants, [`AgentType`], and the core
 //!   PROV-O classes [`ProvEntity`], [`ProvActivity`], [`ProvAgent`],
 //!   [`ProvRelationKind`], and [`ProvRelation`].
-//! - [`provenance_bundle`]: [`ProvBundle`] and [`QueryProvenanceTracker`].
+//! - `provenance_bundle`: [`ProvBundle`] and [`QueryProvenanceTracker`].
 
 mod provenance_bundle;
 mod provenance_types;

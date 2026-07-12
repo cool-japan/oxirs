@@ -18,7 +18,7 @@ memchr = "2.8"
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
-lazy_static.workspace = true
+once_cell.workspace = true
 serde_json = { workspace = true }
 
 # Optional async support
@@ -35,7 +35,6 @@ parallel = ["rayon"]
 rdf-12 = ["oxirs-core/rdf-12"]  # RDF 1.2 features (quoted triples, directional language tags)
 
 [dev-dependencies]
-tokio-test.workspace = true
 criterion.workspace = true
 proptest.workspace = true
 tempfile.workspace = true

@@ -156,7 +156,9 @@ pub struct ResourceCapacity {
 impl Default for ResourceCapacity {
     fn default() -> Self {
         Self {
-            cpu_cores: num_cpus::get() as u32,
+            cpu_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1) as u32,
             memory_bytes: 8 * 1024 * 1024 * 1024, // 8GB default
             disk_bytes: 100 * 1024 * 1024 * 1024, // 100GB default
             network_bandwidth: 1_000_000_000,     // 1Gbps default

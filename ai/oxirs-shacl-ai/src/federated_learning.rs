@@ -6,9 +6,9 @@
 //!
 //! # Module layout
 //!
-//! - [`federated_learning_types`]: All structs, enums, and data model types.
-//! - [`federated_learning_trainer`]: Training coordinator, consensus, BFT, and HoneyBadger BFT.
-//! - [`federated_learning_privacy`]: Differential privacy, SMPC, and noise mechanisms.
+//! - [`crate::federated_learning_types`]: All structs, enums, and data model types.
+//! - [`crate::federated_learning_trainer`]: Training coordinator, consensus, BFT, and HoneyBadger BFT.
+//! - [`crate::federated_learning_privacy`]: Differential privacy, SMPC, and noise mechanisms.
 
 // Re-export all public types from the sub-modules so existing code
 // that imports from `federated_learning` continues to compile.

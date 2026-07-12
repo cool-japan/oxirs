@@ -51,7 +51,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -491,14 +491,97 @@ impl QueryBatcher {
         results.into_iter().collect()
     }
 
-    /// Execute queries adaptively
+    /// Analyze batch dependencies: returns query_id -> list of query_ids it depends on
+    pub fn analyze_batch_dependencies(queries: &[BatchedQuery]) -> HashMap<String, Vec<String>> {
+        // Build a map from operation_name -> query_id for lookup
+        let name_to_id: HashMap<String, String> = queries
+            .iter()
+            .filter_map(|q| q.operation_name.as_ref().map(|n| (n.clone(), q.id.clone())))
+            .collect();
+
+        let mut dep_map: HashMap<String, Vec<String>> = HashMap::new();
+
+        for query in queries {
+            let mut deps = Vec::new();
+            if let Some(ref vars) = query.variables {
+                if let Some(dep_name) = vars.get("$depends_on").and_then(|v| v.as_str()) {
+                    if let Some(dep_id) = name_to_id.get(dep_name) {
+                        deps.push(dep_id.clone());
+                    }
+                }
+            }
+            dep_map.insert(query.id.clone(), deps);
+        }
+
+        dep_map
+    }
+
+    /// Execute queries adaptively with real dependency analysis and topological sort
     async fn execute_adaptive(
         &self,
         queries: Vec<BatchedQuery>,
     ) -> Result<Vec<QueryResult>, String> {
-        // For now, use parallel execution
-        // TODO: Implement dependency analysis
-        self.execute_parallel(queries).await
+        let dep_map = Self::analyze_batch_dependencies(&queries);
+
+        // Build a map from query_id -> BatchedQuery for lookup
+        let mut query_map: HashMap<String, BatchedQuery> =
+            queries.into_iter().map(|q| (q.id.clone(), q)).collect();
+
+        // Track which query_ids have completed
+        let mut completed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut all_results: Vec<QueryResult> = Vec::new();
+
+        // Topological BFS: process waves of queries whose dependencies are satisfied
+        let mut queue: VecDeque<String> = VecDeque::new();
+
+        // Seed queue with queries that have no dependencies
+        for (id, deps) in &dep_map {
+            if deps.is_empty() {
+                queue.push_back(id.clone());
+            }
+        }
+
+        while !queue.is_empty() {
+            // Drain the current wave
+            let mut wave: Vec<BatchedQuery> = Vec::new();
+            while let Some(id) = queue.pop_front() {
+                if let Some(q) = query_map.remove(&id) {
+                    wave.push(q);
+                }
+            }
+
+            if wave.is_empty() {
+                break;
+            }
+
+            // Execute this wave in parallel
+            let wave_results = self.execute_parallel(wave.clone()).await?;
+
+            // Mark all executed queries as completed
+            for q in &wave {
+                completed.insert(q.id.clone());
+            }
+            all_results.extend(wave_results);
+
+            // Find queries whose dependencies are now all satisfied
+            for (id, deps) in &dep_map {
+                if !completed.contains(id)
+                    && query_map.contains_key(id)
+                    && deps.iter().all(|d| completed.contains(d))
+                {
+                    queue.push_back(id.clone());
+                }
+            }
+        }
+
+        // Any remaining queries with unresolvable deps: execute them anyway
+        if !query_map.is_empty() {
+            let remaining: Vec<BatchedQuery> = query_map.into_values().collect();
+            let remaining_results = self.execute_parallel(remaining).await?;
+            all_results.extend(remaining_results);
+        }
+
+        Ok(all_results)
     }
 
     /// Execute queries by priority
@@ -851,5 +934,47 @@ mod tests {
         let stats = stats.expect("should succeed");
         assert_eq!(stats.total_queries, 2);
         assert_eq!(stats.executed_queries, 2);
+    }
+
+    #[tokio::test]
+    async fn test_adaptive_dependency_analysis() {
+        let config = BatchConfig::default().with_strategy(ExecutionStrategy::Adaptive);
+        let batcher = QueryBatcher::new(config);
+        let batch_id = batcher.create_batch().await;
+
+        let q_a = BatchedQuery::new("{ a }".to_string()).with_operation_name("A".to_string());
+        let q_b = BatchedQuery::new("{ b }".to_string())
+            .with_operation_name("B".to_string())
+            .with_variables(serde_json::json!({"$depends_on": "A"}));
+        let q_c = BatchedQuery::new("{ c }".to_string())
+            .with_operation_name("C".to_string())
+            .with_variables(serde_json::json!({"$depends_on": "B"}));
+
+        let queries = vec![q_a.clone(), q_b.clone(), q_c.clone()];
+        let dep_map = QueryBatcher::analyze_batch_dependencies(&queries);
+
+        // A has no deps, B depends on A, C depends on B
+        assert!(dep_map[&q_a.id].is_empty(), "A should have no deps");
+        assert!(!dep_map[&q_b.id].is_empty(), "B should depend on A");
+        assert!(!dep_map[&q_c.id].is_empty(), "C should depend on B");
+
+        batcher
+            .add_query(&batch_id, q_a)
+            .await
+            .expect("should succeed");
+        batcher
+            .add_query(&batch_id, q_b)
+            .await
+            .expect("should succeed");
+        batcher
+            .add_query(&batch_id, q_c)
+            .await
+            .expect("should succeed");
+
+        let result = batcher
+            .execute_batch(&batch_id)
+            .await
+            .expect("should succeed");
+        assert_eq!(result.results.len(), 3, "all 3 results should be returned");
     }
 }

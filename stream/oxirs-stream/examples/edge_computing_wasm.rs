@@ -373,6 +373,10 @@ fn select_optimal_edge_location(
     // Simple latency-based selection
     locations
         .iter()
-        .min_by(|a, b| a.latency_ms.partial_cmp(&b.latency_ms).unwrap())
-        .unwrap()
+        .min_by(|a, b| {
+            a.latency_ms
+                .partial_cmp(&b.latency_ms)
+                .expect("values are comparable floats")
+        })
+        .expect("invariant: value is valid")
 }

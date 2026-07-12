@@ -663,7 +663,9 @@ pub enum PrefetchStrategy {
 impl Default for ThreadPoolConfig {
     fn default() -> Self {
         Self {
-            worker_threads: num_cpus::get(),
+            worker_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             stack_size: 2 * 1024 * 1024, // 2MB
             priority: ThreadPriority::Normal,
             work_stealing: true,
@@ -696,8 +698,13 @@ impl Default for AsyncRuntimeConfig {
 impl Default for AsyncWorkerConfig {
     fn default() -> Self {
         Self {
-            core_threads: num_cpus::get(),
-            max_threads: num_cpus::get() * 4,
+            core_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
+            max_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                * 4,
             keep_alive: Duration::from_secs(60),
             thread_name_prefix: "oxirs-async".to_string(),
         }

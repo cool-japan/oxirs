@@ -268,9 +268,15 @@ fn relationship_constraint_example() -> Result<(), Box<dyn std::error::Error>> {
             // Show first 5
             println!(
                 "  Start: {}, End: {}, Duration: {} days",
-                binding.get(&Variable::new("startDate")?).unwrap(),
-                binding.get(&Variable::new("endDate")?).unwrap(),
-                binding.get(&Variable::new("duration")?).unwrap(),
+                binding
+                    .get(&Variable::new("startDate")?)
+                    .expect("invariant: value is valid"),
+                binding
+                    .get(&Variable::new("endDate")?)
+                    .expect("invariant: value is valid"),
+                binding
+                    .get(&Variable::new("duration")?)
+                    .expect("invariant: value is valid"),
             );
         }
         count += 1;

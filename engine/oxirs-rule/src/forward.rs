@@ -5,16 +5,18 @@
 
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
+use once_cell::sync::Lazy;
 use scirs2_core::metrics::{Counter, Gauge};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, info, trace, warn};
 
 // Global metrics for memory tracking
-lazy_static::lazy_static! {
-    static ref SUBSTITUTION_CLONES: Counter = Counter::new("forward_chain_substitution_clones".to_string());
-    static ref FACT_SET_CLONES: Counter = Counter::new("forward_chain_fact_set_clones".to_string());
-    static ref ACTIVE_SUBSTITUTIONS: Gauge = Gauge::new("forward_chain_active_substitutions".to_string());
-}
+static SUBSTITUTION_CLONES: Lazy<Counter> =
+    Lazy::new(|| Counter::new("forward_chain_substitution_clones".to_string()));
+static FACT_SET_CLONES: Lazy<Counter> =
+    Lazy::new(|| Counter::new("forward_chain_fact_set_clones".to_string()));
+static ACTIVE_SUBSTITUTIONS: Lazy<Gauge> =
+    Lazy::new(|| Gauge::new("forward_chain_active_substitutions".to_string()));
 
 /// Variable substitution mapping
 pub type Substitution = HashMap<String, Term>;

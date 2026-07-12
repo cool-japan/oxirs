@@ -22,7 +22,7 @@ pub struct MonitoringConfig {
     pub health_check_interval: Duration,
     pub enable_profiling: bool,
     pub prometheus_endpoint: Option<String>,
-    pub jaeger_endpoint: Option<String>,
+    pub otlp_endpoint: Option<String>,
     pub log_level: String,
 }
 
@@ -1002,7 +1002,7 @@ mod tests {
             health_check_interval: Duration::from_millis(100),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         };
 
@@ -1035,7 +1035,7 @@ mod tests {
             health_check_interval: Duration::from_secs(30),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         };
 
@@ -1066,7 +1066,7 @@ mod tests {
             health_check_interval: Duration::from_secs(30),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         };
 
@@ -1113,7 +1113,7 @@ mod tests {
             health_check_interval: Duration::from_secs(30),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         };
 
@@ -1149,7 +1149,7 @@ mod tests {
             health_check_interval: Duration::from_secs(30),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         };
 

@@ -121,7 +121,10 @@ impl Default for StreamingConfig {
     fn default() -> Self {
         Self {
             chunk_size: 64 * 1024, // 64KB adaptive starting point
-            max_concurrent_threads: num_cpus::get() * 2,
+            max_concurrent_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                * 2,
             buffer_size: 1024 * 1024, // 1MB buffer
             enable_simd: true,
             context_cache_size: 10000,

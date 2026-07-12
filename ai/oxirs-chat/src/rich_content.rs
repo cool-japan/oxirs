@@ -18,7 +18,7 @@
 //!   the shared [`ChatError`] / [`ChatResult`] aliases.
 //! - [`crate::rich_content_renderer`] — [`RichMessage`] composer with
 //!   Markdown / HTML rendering plus the [`RichContentProcessor`] pass.
-//! - [`crate::rich_content_tests`] — `#[cfg(test)]` unit tests for the
+//! - `rich_content_tests` — `#[cfg(test)]` unit tests for the
 //!   above.
 
 pub use crate::rich_content_renderer::{RichContentProcessor, RichMessage};

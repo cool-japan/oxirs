@@ -24,12 +24,12 @@
 //! - <https://w3c.github.io/sparql-star/>
 //!
 //! This module is a thin facade. The implementation is split across:
-//! - [`rdf_star_terms`] — the term types [`QuotedTriple`], [`StarSubject`],
+//! - `rdf_star_terms` — the term types [`QuotedTriple`], [`StarSubject`],
 //!   [`StarPredicate`], [`StarObject`], [`Annotation`] and their conversions.
-//! - [`rdf_star_operator`] — the [`StarPattern`] annotation pattern and the
+//! - `rdf_star_operator` — the [`StarPattern`] annotation pattern and the
 //!   [`StarOperator`] query-plan operators.
-//! - [`rdf_star_store`] — the in-memory [`RdfStarStore`] and [`AnnotatedTriple`].
-//! - [`rdf_star_binding`] — [`StarBinding`], pattern binding, CONSTRUCT
+//! - `rdf_star_store` — the in-memory [`RdfStarStore`] and [`AnnotatedTriple`].
+//! - `rdf_star_binding` — [`StarBinding`], pattern binding, CONSTRUCT
 //!   instantiation, and the [`sparql_star_builtins`] functions.
 
 mod rdf_star_binding;

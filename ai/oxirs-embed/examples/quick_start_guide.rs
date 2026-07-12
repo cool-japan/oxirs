@@ -183,11 +183,11 @@ async fn main() -> Result<()> {
     let temp_dir = std::env::temp_dir();
     let model_path = temp_dir.join("transe_model.bin");
 
-    transe_model.save(model_path.to_str().unwrap())?;
+    transe_model.save(model_path.to_str().expect("path is valid UTF-8"))?;
     println!("  ✓ Model saved to: {}", model_path.display());
 
     let mut loaded_model = TransE::new(ModelConfig::default());
-    loaded_model.load(model_path.to_str().unwrap())?;
+    loaded_model.load(model_path.to_str().expect("path is valid UTF-8"))?;
     println!("  ✓ Model loaded successfully");
 
     // Verify loaded model works

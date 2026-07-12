@@ -24,9 +24,13 @@ fn demo_basic_operations(graph: &Arc<ConcurrentGraph>) {
 
     // Insert a triple
     let triple = Triple::new(
-        Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap()),
-        Predicate::NamedNode(NamedNode::new("http://example.org/knows").unwrap()),
-        Object::NamedNode(NamedNode::new("http://example.org/bob").unwrap()),
+        Subject::NamedNode(
+            NamedNode::new("http://example.org/alice").expect("literal IRI is valid"),
+        ),
+        Predicate::NamedNode(
+            NamedNode::new("http://example.org/knows").expect("literal IRI is valid"),
+        ),
+        Object::NamedNode(NamedNode::new("http://example.org/bob").expect("literal IRI is valid")),
     );
 
     match graph.insert(triple.clone()) {
@@ -55,7 +59,7 @@ fn demo_concurrent_writes(graph: &Arc<ConcurrentGraph>) {
     println!("-------------------------");
 
     // Clear the graph first
-    graph.clear().unwrap();
+    graph.clear().expect("invariant: clear succeeds");
 
     let num_threads = 4;
     let triples_per_thread = 1000;
@@ -70,14 +74,19 @@ fn demo_concurrent_writes(graph: &Arc<ConcurrentGraph>) {
                 for i in 0..triples_per_thread {
                     let triple = Triple::new(
                         Subject::NamedNode(
-                            NamedNode::new(format!("http://thread{thread_id}/entity{i}")).unwrap(),
+                            NamedNode::new(format!("http://thread{thread_id}/entity{i}"))
+                                .expect("invariant: value is valid"),
                         ),
                         Predicate::NamedNode(
-                            NamedNode::new("http://example.org/property").unwrap(),
+                            NamedNode::new("http://example.org/property")
+                                .expect("literal IRI is valid"),
                         ),
-                        Object::NamedNode(NamedNode::new(format!("http://value{i}")).unwrap()),
+                        Object::NamedNode(
+                            NamedNode::new(format!("http://value{i}"))
+                                .expect("invariant: value is valid"),
+                        ),
                     );
-                    graph.insert(triple).unwrap();
+                    graph.insert(triple).expect("invariant: insert succeeds");
                 }
             })
         })
@@ -85,7 +94,7 @@ fn demo_concurrent_writes(graph: &Arc<ConcurrentGraph>) {
 
     // Wait for all threads to complete
     for handle in handles {
-        handle.join().unwrap();
+        handle.join().expect("thread completed without panic");
     }
 
     let duration = start.elapsed();
@@ -101,7 +110,7 @@ fn demo_pattern_matching(graph: &Arc<ConcurrentGraph>) {
     println!("------------------------");
 
     // Insert some test data
-    graph.clear().unwrap();
+    graph.clear().expect("invariant: clear succeeds");
 
     let subjects = ["alice", "bob", "charlie"];
     let predicates = ["knows", "likes", "follows"];
@@ -112,16 +121,19 @@ fn demo_pattern_matching(graph: &Arc<ConcurrentGraph>) {
                 if subj != obj {
                     let triple = Triple::new(
                         Subject::NamedNode(
-                            NamedNode::new(format!("http://example.org/{subj}")).unwrap(),
+                            NamedNode::new(format!("http://example.org/{subj}"))
+                                .expect("invariant: value is valid"),
                         ),
                         Predicate::NamedNode(
-                            NamedNode::new(format!("http://example.org/{pred}")).unwrap(),
+                            NamedNode::new(format!("http://example.org/{pred}"))
+                                .expect("invariant: value is valid"),
                         ),
                         Object::NamedNode(
-                            NamedNode::new(format!("http://example.org/{obj}")).unwrap(),
+                            NamedNode::new(format!("http://example.org/{obj}"))
+                                .expect("invariant: value is valid"),
                         ),
                     );
-                    graph.insert(triple).unwrap();
+                    graph.insert(triple).expect("invariant: insert succeeds");
                 }
             }
         }
@@ -130,8 +142,12 @@ fn demo_pattern_matching(graph: &Arc<ConcurrentGraph>) {
     println!("Total triples: {}", graph.len());
 
     // Query: Who does Alice know?
-    let alice = Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
-    let knows = Predicate::NamedNode(NamedNode::new("http://example.org/knows").unwrap());
+    let alice = Subject::NamedNode(
+        NamedNode::new("http://example.org/alice").expect("literal IRI is valid"),
+    );
+    let knows = Predicate::NamedNode(
+        NamedNode::new("http://example.org/knows").expect("literal IRI is valid"),
+    );
 
     let matches = graph.match_pattern(Some(&alice), Some(&knows), None);
     println!("\nAlice knows:");
@@ -140,7 +156,8 @@ fn demo_pattern_matching(graph: &Arc<ConcurrentGraph>) {
     }
 
     // Query: Who knows Bob?
-    let bob = Object::NamedNode(NamedNode::new("http://example.org/bob").unwrap());
+    let bob =
+        Object::NamedNode(NamedNode::new("http://example.org/bob").expect("literal IRI is valid"));
     let matches = graph.match_pattern(None, Some(&knows), Some(&bob));
     println!("\nWho knows Bob:");
     for triple in matches {
@@ -154,7 +171,7 @@ fn demo_performance(graph: &Arc<ConcurrentGraph>) {
     println!("4. Performance Comparison Demo");
     println!("------------------------------");
 
-    graph.clear().unwrap();
+    graph.clear().expect("invariant: clear succeeds");
 
     // Measure concurrent performance
     let num_operations = 10000;
@@ -171,19 +188,24 @@ fn demo_performance(graph: &Arc<ConcurrentGraph>) {
                     let triple = Triple::new(
                         Subject::NamedNode(
                             NamedNode::new(format!("http://s{}", thread_id * ops_per_thread + i))
-                                .unwrap(),
+                                .expect("invariant: value is valid"),
                         ),
-                        Predicate::NamedNode(NamedNode::new("http://p").unwrap()),
-                        Object::NamedNode(NamedNode::new(format!("http://o{i}")).unwrap()),
+                        Predicate::NamedNode(
+                            NamedNode::new("http://p").expect("literal IRI is valid"),
+                        ),
+                        Object::NamedNode(
+                            NamedNode::new(format!("http://o{i}"))
+                                .expect("invariant: value is valid"),
+                        ),
                     );
-                    graph.insert(triple).unwrap();
+                    graph.insert(triple).expect("invariant: insert succeeds");
                 }
             })
         })
         .collect();
 
     for handle in handles {
-        handle.join().unwrap();
+        handle.join().expect("thread completed without panic");
     }
     let concurrent_duration = start.elapsed();
 
@@ -203,7 +225,10 @@ fn demo_performance(graph: &Arc<ConcurrentGraph>) {
         })
         .collect();
 
-    let total_reads: usize = handles.into_iter().map(|h| h.join().unwrap()).sum();
+    let total_reads: usize = handles
+        .into_iter()
+        .map(|h| h.join().expect("thread completed without panic"))
+        .sum();
     let read_duration = start.elapsed();
 
     println!("Concurrent write performance:");

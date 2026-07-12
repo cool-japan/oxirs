@@ -16,9 +16,13 @@ rust-version.workspace = true
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+# humantime-serde is used via string attribute `#[serde(with = "humantime_serde")]`
+# in src/config.rs, which cargo-machete cannot detect.
+ignored = ["humantime-serde"]
+
 [dependencies]
 oxirs-core.workspace = true
-oxirs-tdb.workspace = true
 scirs2-core.workspace = true
 
 tokio = { workspace = true, features = ["fs", "io-util", "time", "sync", "rt-multi-thread"] }
@@ -28,20 +32,16 @@ serde_json.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 arrow = { workspace = true, features = ["prettyprint"], optional = true }
 parquet = { workspace = true, features = ["arrow"], optional = true }
-duckdb = { workspace = true, optional = true, features = ["bundled", "vtab-arrow", "appender-arrow"] }
 crc32fast = { workspace = true }
 bit-vec.workspace = true
-oxiarc-lz4 = { workspace = true }
 lru.workspace = true
 humantime-serde.workspace = true
 
 thiserror.workspace = true
-anyhow.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
-tokio-test.workspace = true
 
 [features]
 default = ["compression"]
@@ -51,11 +51,10 @@ arrow-export = ["arrow", "parquet"]
 # activated and GpuAggregator dispatches to real GPU kernels on supported
 # hardware; otherwise every call falls back silently to the CPU path.
 gpu = ["scirs2-core/gpu"]
-# DuckDB integration. Requires `duckdb` crate which has C dependencies (libduckdb
-# is bundled and built from source). Default off per COOLJAPAN Pure Rust Policy.
-# Implies `arrow-export` because the bridge uses Arrow `RecordBatch` for zero-copy
-# data exchange with DuckDB's vtab-arrow engine.
-duckdb = ["dep:duckdb", "arrow-export"]
+# NOTE: The former `duckdb` feature (which pulled the C `libduckdb-sys` via the
+# `duckdb` crate) has been removed per COOLJAPAN Pure Rust Policy v2. The DuckDB
+# ↔ TSDB bridge now lives in the `publish = false` crate
+# `oxirs-tsdb-adapter-duckdb`; depend on it directly to use embedded DuckDB SQL.
 
 [[bench]]
 name = "write_throughput"

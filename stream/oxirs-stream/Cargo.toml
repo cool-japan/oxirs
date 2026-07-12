@@ -20,8 +20,6 @@ oxirs-core.workspace = true
 oxirs-cluster.workspace = true
 
 # SciRS2 dependencies for streaming analysis
-scirs2-signal = { workspace = true }
-scirs2-stats = { workspace = true }
 scirs2-core = { workspace = true }
 tokio.workspace = true
 serde.workspace = true
@@ -29,7 +27,8 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-rdkafka = { workspace = true, optional = true }
+# NOTE: the Kafka (rdkafka) backend was quarantined into the `oxirs-stream-adapter-rdkafka`
+# crate (publish=false) per COOLJAPAN Pure Rust Policy v2 — it pulled rdkafka-sys + libz-sys.
 async-nats = { workspace = true, optional = true }
 chrono.workspace = true
 uuid.workspace = true
@@ -40,18 +39,19 @@ async-trait.workspace = true
 parking_lot.workspace = true
 bytes = { workspace = true }
 fastrand.workspace = true
-bumpalo.workspace = true
-quick-xml.workspace = true
 rayon.workspace = true
 aws-config = { version = "1.8", optional = true }
-aws-sdk-kinesis = { version = "1.104", optional = true }
-aws-smithy-types = { version = "1.4", optional = true }
+aws-sdk-kinesis = { version = "1.109", optional = true }
+aws-smithy-types = { version = "1.5", optional = true }
 redis = { workspace = true, features = ["tokio-comp", "connection-manager", "cluster-async", "streams"], optional = true }
-pulsar = { version = "6.7", optional = true }
-lapin = { version = "4.7", optional = true, features = ["native-tls"] }
+# NOTE: the Pulsar backend was quarantined into the `oxirs-stream-adapter-pulsar` crate
+# (publish=false) per COOLJAPAN Pure Rust Policy v2 — pulsar 6.x has no Pure-Rust TLS option
+# (every runtime needs native-tls/aws-lc-rs/ring) and its default compression pulls lz4-sys.
+# Pure Rust TLS: `default-features = false` drops lapin's default `rustls` bundle (which forces `aws_lc_rs` → aws-lc-sys)
+# and `default-runtime`; we re-add `tokio` + `rustls-webpki-roots-certs` (rustls + webpki roots, no C/asm provider). Provider = process-default Pure Rust OxiTLS.
+lapin = { version = "4.10", optional = true, default-features = false, features = ["tokio", "rustls-webpki-roots-certs"] }
 rumqttc = { version = "0.25", optional = true, features = ["use-rustls"] }
-async-opcua = { version = "0.18", optional = true, features = ["client"] }
-time = { version = "0.3.47", optional = true }  # CVE-2026-25727 fix
+time = { version = "0.3.53", optional = true }  # CVE-2026-25727 fix
 toml.workspace = true
 base64.workspace = true
 rmp-serde.workspace = true
@@ -65,7 +65,6 @@ sha2.workspace = true
 hex.workspace = true
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 prost = "0.14"
-prost-types = "0.14"
 apache-avro = "0.21"
 tokio-stream.workspace = true
 oxiarc-lz4.workspace = true
@@ -73,17 +72,13 @@ oxiarc-snappy.workspace = true
 oxiarc-brotli.workspace = true
 crc32fast.workspace = true
 dashmap.workspace = true
-num_cpus.workspace = true
 nalgebra.workspace = true
 num-complex.workspace = true
 # OpenTelemetry for enhanced observability (optional)
 opentelemetry = { workspace = true, optional = true }
-opentelemetry-jaeger = { workspace = true, optional = true }
-opentelemetry_sdk = { workspace = true, optional = true }
-opentelemetry-semantic-conventions = { workspace = true, optional = true }
 sysinfo.workspace = true  # Updated to 0.33 to fix objc2-core-foundation conflict
-wasmparser = "0.248"
-wasmtime = { version = "44", optional = true }  # Multiple CVE fixes (CVE-2024-xxxx series)
+wasmparser = "0.252"
+wasmtime = { version = "46", optional = true }  # Multiple CVE fixes (CVE-2024-xxxx series)
 ed25519-dalek.workspace = true
 rsa = { workspace = true, optional = true }  # RUSTSEC-2023-0071 (Marvin Attack): only enable via the `wasm-rsa` feature; orphaned wasm_edge_processor.rs uses this for WASM module signature verification
 # Post-quantum cryptography (C-backed — must remain optional to satisfy Pure Rust Policy)
@@ -106,28 +101,34 @@ tracing-subscriber.workspace = true
 [features]
 default = ["memory"]
 memory = []
-kafka = ["rdkafka"]
+# `kafka` backend moved to the `oxirs-stream-adapter-rdkafka` crate (publish=false).
 nats = ["async-nats", "time"]
 kinesis = ["aws-config", "aws-sdk-kinesis", "aws-smithy-types"]
 redis = ["dep:redis"]
-pulsar = ["dep:pulsar"]
+# `pulsar` backend moved to the `oxirs-stream-adapter-pulsar` crate (publish=false).
 rabbitmq = ["dep:lapin", "time"]
 mqtt = ["dep:rumqttc"]
-opcua = ["dep:async-opcua"]
+opcua = []
 sparkplug = ["mqtt", "dep:prost-build"]
 industry40 = ["mqtt", "opcua", "sparkplug"]
 compression = []
-opentelemetry = ["dep:opentelemetry", "dep:opentelemetry-jaeger", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
-all-backends = ["kafka", "nats", "kinesis", "redis", "pulsar", "rabbitmq", "mqtt", "opcua"]
+# GPU acceleration via scirs2-core's Pure-Rust `gpu` feature (`gpu = ["std"]`, no GPU FFI).
+# Off by default: the `gpu_acceleration` module needs `scirs2_core::gpu`, which is itself
+# feature-gated in scirs2-core. Enabling this here turns that on (see src/lib.rs).
+gpu = ["scirs2-core/gpu"]
+opentelemetry = ["dep:opentelemetry"]
+# Kafka/Pulsar are NOT here: they live in the publish=false adapter crates (Pure Rust Policy v2).
+all-backends = ["nats", "kinesis", "redis", "rabbitmq", "mqtt", "opcua"]
 wasm = ["dep:wasmtime"]
 wasm-rsa = ["dep:rsa"]  # RUSTSEC-2023-0071: opt-in only; enables RSA WASM module signature verification (wasm_edge_processor.rs)
 # Post-quantum cryptography: Dilithium, Falcon, SPHINCS+, Kyber KEM (C-backed, not in default features)
 post-quantum = ["dep:pqcrypto-dilithium", "dep:pqcrypto-falcon", "dep:pqcrypto-sphincsplus", "dep:pqcrypto-kyber", "dep:pqcrypto-traits"]
 
 [package.metadata.docs.rs]
-# Use memory backend only for docs.rs (avoids rdkafka, async-nats system deps)
+# Use memory backend only for docs.rs (avoids async-nats system deps)
 features = ["memory", "compression"]
-# Exclude: kafka (rdkafka), nats, kinesis, redis, pulsar, rabbitmq, wasm (wasmtime)
+# Exclude: nats, kinesis, redis, rabbitmq, wasm (wasmtime). Kafka/Pulsar live in the
+# publish=false oxirs-stream-adapter-{rdkafka,pulsar} crates.
 rustdoc-args = ["--cfg", "docsrs"]
 
 [[bench]]

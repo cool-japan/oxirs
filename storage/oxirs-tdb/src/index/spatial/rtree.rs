@@ -165,7 +165,7 @@ impl SpatialIndex {
             AABB::from_corners([bbox.min_lon, bbox.min_lat], [bbox.max_lon, bbox.max_lat]);
 
         self.rtree
-            .locate_in_envelope_intersecting(&envelope)
+            .locate_in_envelope_intersecting(envelope)
             .map(|entry| SpatialQueryResult {
                 node_id: entry.node_id,
                 geometry: entry.geometry.clone(),
@@ -179,7 +179,7 @@ impl SpatialIndex {
         let envelope = AABB::from_corners([point.lon, point.lat], [point.lon, point.lat]);
 
         self.rtree
-            .locate_in_envelope_intersecting(&envelope)
+            .locate_in_envelope_intersecting(envelope)
             .filter(|entry| entry.geometry.contains(point))
             .map(|entry| SpatialQueryResult {
                 node_id: entry.node_id,

@@ -202,7 +202,9 @@ impl EdgeDevice {
             name: "Edge Device".to_string(),
             platform: DevicePlatform::ARM,
             cpu_arch: std::env::consts::ARCH.to_string(),
-            cpu_cores: num_cpus::get(),
+            cpu_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             cpu_freq_mhz: 1800.0,
             total_ram_bytes: 4 * 1024 * 1024 * 1024, // 4 GB
             available_ram_bytes: 2 * 1024 * 1024 * 1024, // 2 GB

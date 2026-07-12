@@ -5,10 +5,10 @@
 
 use crate::algebra::{Literal, Term as AlgebraTerm, TriplePattern, Variable};
 use crate::path::PropertyPath;
+use crate::total_float::{TotalF32, TotalF64};
 use anyhow::{anyhow, bail, Result};
 use base64::Engine;
 use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, Timelike};
-use ordered_float::OrderedFloat;
 use oxirs_core::model::NamedNode;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -94,9 +94,9 @@ enum ParsedValue {
     String(String),
     Boolean(bool),
     Integer(i64),
-    Decimal(OrderedFloat<f64>),
-    Float(OrderedFloat<f32>),
-    Double(OrderedFloat<f64>),
+    Decimal(TotalF64),
+    Float(TotalF32),
+    Double(TotalF64),
     DateTime(i64), // Unix timestamp in nanoseconds
     Date(i32),     // Days since epoch
     Time(i64),     // Nanoseconds since midnight
@@ -241,19 +241,19 @@ impl LiteralValue {
                 let d = value
                     .parse::<f64>()
                     .map_err(|_| anyhow!("Invalid decimal value: {value}"))?;
-                ParsedValue::Decimal(OrderedFloat(d))
+                ParsedValue::Decimal(TotalF64(d))
             }
             xsd::FLOAT => {
                 let f = value
                     .parse::<f32>()
                     .map_err(|_| anyhow!("Invalid float value: {value}"))?;
-                ParsedValue::Float(OrderedFloat(f))
+                ParsedValue::Float(TotalF32(f))
             }
             xsd::DOUBLE => {
                 let d = value
                     .parse::<f64>()
                     .map_err(|_| anyhow!("Invalid double value: {value}"))?;
-                ParsedValue::Double(OrderedFloat(d))
+                ParsedValue::Double(TotalF64(d))
             }
             xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
                 let dt = DateTime::parse_from_rfc3339(value)

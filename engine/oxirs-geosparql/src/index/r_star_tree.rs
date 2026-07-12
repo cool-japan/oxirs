@@ -211,7 +211,7 @@ impl SpatialIndexTrait for RStarTree {
         let tree = self.tree.read();
         let geometries = self.geometries.read();
 
-        tree.locate_in_envelope_intersecting(&envelope)
+        tree.locate_in_envelope_intersecting(envelope)
             .filter_map(|entry| geometries.get(&entry.data).cloned())
             .collect()
     }
@@ -235,7 +235,7 @@ impl SpatialIndexTrait for RStarTree {
         let tree = self.tree.read();
         let geometries = self.geometries.read();
 
-        tree.nearest_neighbor(&[x, y]).and_then(|entry| {
+        tree.nearest_neighbor([x, y]).and_then(|entry| {
             geometries.get(&entry.data).map(|geom| {
                 let dist = ((entry.geom()[0] - x).powi(2) + (entry.geom()[1] - y).powi(2)).sqrt();
                 (geom.clone(), dist)
@@ -248,7 +248,7 @@ impl SpatialIndexTrait for RStarTree {
         let geometries = self.geometries.read();
 
         let mut results: Vec<_> = tree
-            .nearest_neighbor_iter(&[x, y])
+            .nearest_neighbor_iter([x, y])
             .take(k)
             .filter_map(|entry| {
                 geometries.get(&entry.data).map(|geom| {

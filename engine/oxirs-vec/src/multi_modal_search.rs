@@ -59,6 +59,8 @@ pub struct MultiModalSearchEngine {
     modality_stores: HashMap<Modality, Arc<RwLock<VectorStore>>>,
     query_cache: Arc<RwLock<HashMap<String, Vec<SearchResult>>>>,
     total_indexed: Arc<RwLock<usize>>,
+    cache_hits: Arc<std::sync::atomic::AtomicU64>,
+    cache_queries: Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// Configuration for multi-modal search
@@ -273,6 +275,8 @@ impl MultiModalSearchEngine {
             modality_stores,
             query_cache: Arc::new(RwLock::new(HashMap::new())),
             total_indexed: Arc::new(RwLock::new(0)),
+            cache_hits: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            cache_queries: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         })
     }
 
@@ -308,10 +312,16 @@ impl MultiModalSearchEngine {
 
     /// Search with a multi-modal query
     pub fn search(&self, query: &MultiModalQuery, k: usize) -> Result<Vec<SearchResult>> {
+        // Track total queries
+        self.cache_queries
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         // Check cache first
         if self.config.enable_caching {
             let cache_key = self.compute_cache_key(query);
             if let Some(cached_results) = self.query_cache.read().get(&cache_key) {
+                self.cache_hits
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 return Ok(cached_results.clone());
             }
         }
@@ -772,7 +782,17 @@ impl MultiModalSearchEngine {
             total_vectors: num_vectors,
             modality_counts,
             cache_size: self.query_cache.read().len(),
-            cache_hit_rate: 0.0, // TODO: implement cache hit tracking
+            cache_hit_rate: {
+                let hits = self.cache_hits.load(std::sync::atomic::Ordering::Relaxed);
+                let queries = self
+                    .cache_queries
+                    .load(std::sync::atomic::Ordering::Relaxed);
+                if queries == 0 {
+                    0.0_f32
+                } else {
+                    hits as f32 / queries as f32
+                }
+            },
         }
     }
 }

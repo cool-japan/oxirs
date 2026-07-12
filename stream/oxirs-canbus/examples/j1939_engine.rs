@@ -232,9 +232,15 @@ fn demo_pgn_breakdown() -> CanbusResult<()> {
     // Example: EEC1 CAN ID = 0x0CF00400
     let can_id = CanId::extended(0x0CF00400)?;
 
-    let priority = can_id.extract_j1939_priority().unwrap();
-    let pgn = can_id.extract_j1939_pgn().unwrap();
-    let source = can_id.extract_j1939_source_address().unwrap();
+    let priority = can_id
+        .extract_j1939_priority()
+        .expect("invariant: value is valid");
+    let pgn = can_id
+        .extract_j1939_pgn()
+        .expect("invariant: value is valid");
+    let source = can_id
+        .extract_j1939_source_address()
+        .expect("invariant: value is valid");
 
     println!("  CAN ID: 0x{:08X}", can_id.as_raw());
     println!("  Binary: {:029b}", can_id.as_raw());

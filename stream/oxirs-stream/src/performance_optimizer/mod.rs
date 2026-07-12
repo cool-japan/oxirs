@@ -251,9 +251,20 @@ impl AutoTuner {
         }
 
         // Tune parallel workers if latency is high
-        if avg_latency > 20.0 && self.config.parallel_workers < num_cpus::get() * 2 {
+        if avg_latency > 20.0
+            && self.config.parallel_workers
+                < std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1)
+                    * 2
+        {
             let old_workers = self.config.parallel_workers as f64;
-            let new_workers = (old_workers + 1.0).min(num_cpus::get() as f64 * 2.0);
+            let new_workers = (old_workers + 1.0).min(
+                std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1) as f64
+                    * 2.0,
+            );
 
             decisions.push(TuningDecision {
                 parameter: "parallel_workers".to_string(),

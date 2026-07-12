@@ -40,7 +40,7 @@ impl PaginationConfig {
     }
 }
 
-/// Target OpenAPI specification version for [`OpenApiGenerator`].
+/// Target OpenAPI specification version for [`crate::codegen::OpenApiGenerator`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OpenApiVersion {
     /// OpenAPI 3.0.3 (default, maximum compatibility).
@@ -78,7 +78,7 @@ impl HttpMethod {
     }
 }
 
-/// Configuration for [`OpenApiGenerator`].
+/// Configuration for [`crate::codegen::OpenApiGenerator`].
 #[derive(Debug, Clone)]
 pub struct OpenApiOptions {
     /// Target OpenAPI specification version (3.0 or 3.1).

@@ -241,22 +241,37 @@ impl DensePassageRetriever {
         Ok(results)
     }
 
+    fn encode_text(&self, text: &str) -> Result<Vec<f32>> {
+        const DIM: usize = 512;
+        let mut vector = vec![0.0f32; DIM];
+        let terms: Vec<&str> = text.split_whitespace().collect();
+        let total = terms.len();
+        if total == 0 {
+            return Ok(vector);
+        }
+        // Count term frequencies
+        let mut tf: HashMap<&str, usize> = HashMap::new();
+        for term in &terms {
+            *tf.entry(term).or_insert(0) += 1;
+        }
+        // Map each term to a vector dimension via polynomial hash
+        for (term, count) in &tf {
+            let mut h: u64 = 5381;
+            for byte in term.bytes() {
+                h = h.wrapping_mul(33).wrapping_add(u64::from(byte));
+            }
+            let idx = (h % DIM as u64) as usize;
+            vector[idx] += *count as f32 / total as f32;
+        }
+        Ok(vector)
+    }
+
     fn encode_query(&self, query: &str) -> Result<Vec<f32>> {
-        // Simplified encoding - use actual embedding model in production
-        Ok(query
-            .split_whitespace()
-            .enumerate()
-            .map(|(i, _)| (i as f32 + 1.0) / query.split_whitespace().count() as f32)
-            .collect())
+        self.encode_text(query)
     }
 
     fn encode_passage(&self, passage: &str) -> Result<Vec<f32>> {
-        // Simplified encoding - use actual embedding model in production
-        Ok(passage
-            .split_whitespace()
-            .enumerate()
-            .map(|(i, _)| (i as f32 + 1.0) / passage.split_whitespace().count() as f32)
-            .collect())
+        self.encode_text(passage)
     }
 
     fn compute_similarity(&self, query_emb: &[f32], doc_emb: &[f32]) -> f64 {
@@ -651,5 +666,43 @@ mod tests {
         assert!(expanded.contains("search"));
         assert!(expanded.contains("person"));
         assert!(expanded.split_whitespace().count() > 2);
+    }
+
+    #[tokio::test]
+    async fn test_dpr_retrieval_ranks_best_match_first() {
+        use chrono::Utc;
+        let dpr = DensePassageRetriever::new();
+        let docs = vec![
+            RagDocument {
+                id: "irrelevant".to_string(),
+                content: "weather forecast sunny clouds rain".to_string(),
+                embedding: None,
+                metadata: HashMap::new(),
+                timestamp: Utc::now(),
+                source: "test".to_string(),
+            },
+            RagDocument {
+                id: "target".to_string(),
+                content: "machine learning neural network deep learning".to_string(),
+                embedding: None,
+                metadata: HashMap::new(),
+                timestamp: Utc::now(),
+                source: "test".to_string(),
+            },
+            RagDocument {
+                id: "partial".to_string(),
+                content: "machine tools hardware workshop".to_string(),
+                embedding: None,
+                metadata: HashMap::new(),
+                timestamp: Utc::now(),
+                source: "test".to_string(),
+            },
+        ];
+        let results = dpr
+            .retrieve("machine learning neural", &docs)
+            .await
+            .expect("should succeed");
+        assert!(!results.is_empty());
+        assert_eq!(results[0].document.id, "target");
     }
 }

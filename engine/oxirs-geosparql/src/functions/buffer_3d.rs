@@ -524,25 +524,8 @@ mod tests {
         assert_eq!(params.quadrant_segments, 16);
     }
 
-    #[test]
-    #[cfg(feature = "geos-backend")]
-    fn test_buffer_3d_point() {
-        let geom = Geometry::from_wkt("POINT Z (1 2 3)").expect("should succeed");
-        let buffered = buffer_3d(&geom, 10.0).expect("should succeed");
-
-        assert!(buffered.is_3d());
-        assert!(buffered.coord3d.has_z());
-    }
-
-    #[test]
-    #[cfg(feature = "geos-backend")]
-    fn test_buffer_3d_with_params() {
-        let geom = Geometry::from_wkt("POINT Z (1 2 3)").expect("should succeed");
-        let params = BufferParams3D::anisotropic(10.0, 5.0);
-        let buffered = buffer_3d_with_params(&geom, &params).expect("should succeed");
-
-        assert!(buffered.is_3d());
-    }
+    // (test_buffer_3d_point / test_buffer_3d_with_params buffered a Point Z, whose 2D
+    // step needs GEOS; that capability is quarantined into oxirs-geosparql-adapter-geos.)
 
     #[test]
     fn test_buffer_3d_requires_3d_geometry() {

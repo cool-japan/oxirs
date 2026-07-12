@@ -1,8 +1,8 @@
 # OxiRS SHACL-AI - AI-Enhanced SHACL Validation
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -33,10 +33,13 @@ AI-powered SHACL validation combining traditional constraint checking with machi
 Add to your `Cargo.toml`:
 
 ```toml
-# Experimental feature
 [dependencies]
-oxirs-shacl-ai = "0.3.1"
-oxirs-shacl = "0.3.1"
+oxirs-shacl-ai = "0.3.2"
+oxirs-shacl = "0.3.2"
+
+# Optional: network-based LLM providers (OpenAI, Anthropic) for the `explainer` /
+# `shape_nl_generator` modules. Default features stay 100% offline.
+oxirs-shacl-ai = { version = "0.3.2", features = ["llm-network"] }
 ```
 
 ## Quick Start
@@ -44,30 +47,25 @@ oxirs-shacl = "0.3.1"
 ### Automatic Shape Learning
 
 ```rust
-use oxirs_shacl_ai::{ShapeLearner, LearningConfig};
-use oxirs_core::Dataset;
+use oxirs_shacl_ai::{LearningConfig, ShapeLearner};
+use oxirs_core::RdfStore;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load training data
-    let dataset = Dataset::from_file("training_data.ttl")?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Load an RDF store (see oxirs-core for parsing Turtle/N-Triples/etc. into it)
+    let store = RdfStore::new()?;
 
-    // Configure shape learner
+    // Configure the shape learner
     let config = LearningConfig {
         min_confidence: 0.8,
         max_shapes: 50,
-        include_optional: true,
-        learn_datatypes: true,
+        enable_training: true,
+        ..Default::default()
     };
+    let mut learner = ShapeLearner::with_config(config);
 
     // Learn shapes from data
-    let learner = ShapeLearner::new(config);
-    let learned_shapes = learner.learn_shapes(&dataset).await?;
-
+    let learned_shapes = learner.learn_shapes_from_store(&store, None)?;
     println!("Learned {} shapes", learned_shapes.len());
-
-    // Export as SHACL
-    learned_shapes.save_to_file("learned_shapes.ttl")?;
 
     Ok(())
 }
@@ -75,35 +73,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### AI-Enhanced Validation
 
+The main entry point is `ShaclAiAssistant`, which wraps shape learning, quality
+assessment, and insight generation over a `Store`:
+
 ```rust
-use oxirs_shacl_ai::AiValidator;
-use oxirs_shacl::ValidationEngine;
+use oxirs_shacl_ai::ShaclAiAssistant;
+use oxirs_core::Store;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create AI-enhanced validator
-    let ai_validator = AiValidator::builder()
-        .shapes_file("shapes.ttl")
-        .enable_anomaly_detection(true)
-        .enable_suggestions(true)
-        .confidence_threshold(0.7)
-        .build()
-        .await?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    # let store: &dyn Store = unimplemented!();
+    let mut assistant = ShaclAiAssistant::new();
 
-    // Validate with AI enhancements
-    let dataset = Dataset::from_file("data.ttl")?;
-    let report = ai_validator.validate(&dataset).await?;
+    // 1. Learn shapes from existing data
+    let shapes = assistant.learn_shapes(store, None)?;
+    println!("Discovered {} data patterns", shapes.len());
 
-    // Process results with confidence scores
-    for result in report.results() {
-        println!("Violation: {} (confidence: {:.2})",
-            result.message,
-            result.confidence
-        );
+    // 2. Assess current data quality against the learned shapes
+    let quality_report = assistant.assess_quality(store, &shapes)?;
+    println!("Overall quality score: {:.2}%", quality_report.overall_score * 100.0);
 
-        if let Some(suggestion) = result.suggestion {
-            println!("  Suggested fix: {}", suggestion);
-        }
+    // 3. Generate improvement recommendations
+    let insights = assistant.generate_insights(store, &shapes, &[])?;
+    for recommendation in &insights.recommendations {
+        println!("Recommendation: {}", recommendation.description);
     }
 
     Ok(())
@@ -114,250 +106,278 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Automatic Discovery
 
-```rust
-use oxirs_shacl_ai::{ShapeLearner, DiscoveryMode};
-
-let learner = ShapeLearner::builder()
-    .mode(DiscoveryMode::Automatic)
-    .min_support(0.1)  // 10% of entities must match
-    .build();
-
-let shapes = learner.discover_shapes(&dataset).await?;
-```
-
-### Guided Learning
+`ShapeLearner` scans every RDF class it finds in the store and learns a shape per
+class; `LearningConfig::min_support` controls how much evidence a pattern needs
+before it becomes part of a shape:
 
 ```rust
-use oxirs_shacl_ai::{ShapeLearner, TargetClass};
+use oxirs_shacl_ai::{LearningConfig, ShapeLearner};
 
-// Learn shapes for specific classes
-let learner = ShapeLearner::builder()
-    .target_class("http://xmlns.com/foaf/0.1/Person")
-    .learn_property_shapes(true)
-    .learn_cardinality(true)
-    .learn_value_ranges(true)
-    .build();
+let config = LearningConfig {
+    min_support: 0.1, // 10% of entities must match a pattern
+    max_shapes: 100,
+    ..Default::default()
+};
+let mut learner = ShapeLearner::with_config(config);
+let shapes = learner.learn_shapes_from_store(&store, None)?;
 
-let shapes = learner.learn(&dataset).await?;
+// For larger graphs, the parallel variant scales across classes
+let shapes_parallel = learner.learn_shapes_from_store_parallel(&store, None)?;
 ```
 
 ### Interactive Refinement
 
+`InteractiveLabelingInterface` implements human-in-the-loop annotation: queue
+uncertain shapes/patterns as tasks, assign them to annotators, and collect labels
+back:
+
 ```rust
-use oxirs_shacl_ai::InteractiveLearner;
+use oxirs_shacl_ai::interactive_labeling::{
+    Annotator, AnnotatorStats, InteractiveLabelingInterface, LabelingConfig,
+};
 
-let mut learner = InteractiveLearner::new();
+let mut interface = InteractiveLabelingInterface::with_config(LabelingConfig::default());
 
-// Initial learning
-let candidate_shapes = learner.propose_shapes(&dataset).await?;
+interface.register_annotator(Annotator {
+    id: "reviewer-1".to_string(),
+    name: "Alice".to_string(),
+    email: "alice@example.org".to_string(),
+    expertise_level: 0.9,
+    stats: AnnotatorStats {
+        total_annotations: 0,
+        avg_time_per_annotation: 0.0,
+        agreement_rate: 0.0,
+        quality_score: 0.0,
+        validated_annotations: 0,
+        rejected_annotations: 0,
+    },
+    is_active: true,
+})?;
 
-// Review and refine
-for shape in candidate_shapes {
-    println!("Proposed shape: {}", shape);
-    println!("Confidence: {:.2}", shape.confidence);
-    println!("Examples: {:?}", shape.examples);
-
-    // User feedback
-    let accept = prompt_user("Accept this shape? (y/n)")?;
-    learner.provide_feedback(shape.id, accept);
+// `add_task`/`add_tasks_batch` enqueue AnnotationTask values built from
+// low-confidence learner output; `get_next_task` hands the highest-priority
+// task to an annotator, and `submit_annotation` records their decision.
+if let Some(task) = interface.get_next_task("reviewer-1") {
+    println!("Review task {}: confidence={:.2}", task.id, task.confidence);
 }
-
-let refined_shapes = learner.finalize().await?;
 ```
 
 ## Anomaly Detection
 
 ### Statistical Anomalies
 
+`AnomalyDetector::detect` takes a numeric feature vector (e.g. property-value
+distributions, embedding norms, or other statistics extracted from your graph) —
+not raw RDF — so plan on a feature-extraction step upstream:
+
 ```rust
-use oxirs_shacl_ai::AnomalyDetector;
+use oxirs_shacl_ai::{AnomalyConfig, AnomalyDetector, DetectorType};
+use scirs2_core::ndarray_ext::Array1;
 
-let detector = AnomalyDetector::builder()
-    .method(AnomalyMethod::Statistical)
-    .threshold(2.5)  // Z-score threshold
-    .build();
+let config = AnomalyConfig {
+    detector_type: DetectorType::StatisticalOutlier,
+    threshold: 2.5, // z-score-style threshold
+    ..Default::default()
+};
+let detector = AnomalyDetector::new(config);
 
-let anomalies = detector.detect(&dataset).await?;
+let data: Array1<f64> = extract_feature_vector(store);
+let result = detector.detect(&data)?;
 
-for anomaly in anomalies {
-    println!("Anomaly: {} at {}", anomaly.description, anomaly.entity);
-    println!("  Score: {:.2}", anomaly.score);
+for anomaly in result.anomalies {
+    println!("Anomaly: {}", anomaly.description);
+    println!("  Affected: {:?}", anomaly.affected_entities);
+    println!("  Score: {:.2}", anomaly.score.score);
 }
 ```
 
 ### ML-Based Detection
 
 ```rust
-use oxirs_shacl_ai::{AnomalyDetector, AnomalyMethod};
+use oxirs_shacl_ai::{AnomalyConfig, AnomalyDetector, DetectorType};
 
-// Train on normal data
-let detector = AnomalyDetector::builder()
-    .method(AnomalyMethod::Autoencoder)
-    .train_on(&normal_dataset)
-    .await?;
+let config = AnomalyConfig {
+    detector_type: DetectorType::Autoencoder,
+    enable_drift_detection: true,
+    enable_novelty_detection: true,
+    ..Default::default()
+};
+let detector = AnomalyDetector::new(config);
 
-// Detect anomalies in new data
-let anomalies = detector.detect(&new_dataset).await?;
+let result = detector.detect(&data)?;
+println!("{} anomalies found in {:?}", result.anomalies.len(), result.metrics);
 ```
 
 ## Model Training
 
 ### Custom Training
 
-```rust
-use oxirs_shacl_ai::{ModelTrainer, ModelConfig};
+Training happens directly on `ShapeLearner` via `train_model`, which runs a
+mini-batch gradient-descent classifier over feature/label pairs:
 
-let config = ModelConfig {
-    model_type: ModelType::NeuralNetwork,
-    hidden_layers: vec![128, 64, 32],
-    learning_rate: 0.001,
-    epochs: 100,
-    batch_size: 32,
+```rust
+use oxirs_shacl_ai::learning::types::ShapeTrainingData;
+use oxirs_shacl_ai::{LearningConfig, ShapeLearner};
+
+let mut config = LearningConfig::default();
+config.enable_training = true;
+let mut learner = ShapeLearner::with_config(config);
+
+let training_data = ShapeTrainingData {
+    features: vec![vec![0.8, 0.2, 0.5], vec![0.3, 0.9, 0.1]],
+    labels: vec!["valid".to_string(), "invalid".to_string()],
+    validation_features: vec![],
+    validation_labels: vec![],
 };
 
-let trainer = ModelTrainer::new(config);
-
-// Train on labeled data
-let model = trainer.train(
-    &training_dataset,
-    &validation_dataset
-).await?;
-
-// Save model
-model.save_to_file("./models/validation_model.bin")?;
+let result = learner.train_model(&training_data)?;
+println!(
+    "Trained {} epochs, accuracy={:.2}%, loss={:.4}",
+    result.epochs_trained,
+    result.accuracy * 100.0,
+    result.loss
+);
 ```
 
 ### Transfer Learning
 
 ```rust
-use oxirs_shacl_ai::TransferLearning;
+use oxirs_shacl_ai::{TransferLearner, TransferLearningConfig, TransferStrategy};
+use oxirs_core::Store;
+use oxirs_shacl::Shape;
 
-// Load pre-trained model
-let base_model = Model::load("pretrained_model.bin")?;
+let config = TransferLearningConfig {
+    strategy: TransferStrategy::FineTuning,
+    source_domain: "generic".to_string(),
+    target_domain: "healthcare".to_string(),
+    ..Default::default()
+};
+let mut transfer = TransferLearner::new(config)?;
 
-// Fine-tune on your data
-let transfer = TransferLearning::new(base_model);
-let fine_tuned = transfer.fine_tune(
-    &your_dataset,
-    epochs: 20
-).await?;
+// Adapt to a new domain using a handful of target-domain shape examples
+# let target_store: &dyn Store = unimplemented!();
+# let target_samples: &[Shape] = &[];
+transfer.adapt_to_domain(target_store, target_samples, None)?;
+println!("{:?}", transfer.get_stats());
 ```
 
 ## Validation Suggestions
 
+`SuggestionEngine` turns `GeneratedConstraint`s (produced upstream by
+`ConstraintGenerator`) into ranked, human-readable `ConstraintSuggestion`s:
+
 ```rust
-use oxirs_shacl_ai::ValidationSuggester;
+use oxirs_shacl_ai::{GeneratedConstraint, SuggestionEngine};
 
-let suggester = ValidationSuggester::builder()
-    .enable_auto_fix(true)
-    .suggest_alternatives(true)
-    .build();
+// e.g. from `ConstraintGenerator::generate_for_class`/`generate_for_properties`
+let generated_constraints: Vec<GeneratedConstraint> = generate_constraints_upstream();
 
-for violation in validation_report.violations() {
-    let suggestions = suggester.suggest_fixes(&violation).await?;
+let engine = SuggestionEngine::new().with_min_confidence(0.7);
+let suggestions = engine.generate_suggestions(generated_constraints);
 
-    for suggestion in suggestions {
-        println!("Suggestion (confidence {:.2}):", suggestion.confidence);
-        println!("  {}", suggestion.description);
-        println!("  Apply: {}", suggestion.sparql_update);
-    }
+for suggestion in suggestions {
+    println!(
+        "[priority {}] {:?}: {}",
+        suggestion.priority, suggestion.confidence, suggestion.recommendation
+    );
 }
 ```
 
 ## Explainability
 
+`ConstraintExplainer` (module `explainer`, part of the `llm` provider stack — see
+[`examples/explain_violation.rs`](examples/explain_violation.rs)) turns a raw SHACL
+violation summary into a plain-English explanation via a pluggable `CompletionProvider`.
+The default `LocalProvider` is fully offline (deterministic, no network/API key):
+
 ```rust
-use oxirs_shacl_ai::Explainer;
+use oxirs_shacl_ai::{CompletionProvider, ConstraintExplainer, LocalProvider};
+use std::sync::Arc;
 
-let explainer = Explainer::new(&ai_model);
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = Arc::new(LocalProvider::new());
+    let explainer = ConstraintExplainer::new(provider.clone());
 
-// Explain why a shape was learned
-let explanation = explainer.explain_shape(&shape).await?;
-println!("Shape learned because:");
-for reason in explanation.reasons {
-    println!("  - {} (weight: {:.2})", reason.description, reason.weight);
-}
+    let explanation = explainer
+        .explain("sh:minCount violation: foaf:name must appear at least once on node <http://example.org/Alice>")
+        .await?;
+    println!("Explanation: {explanation}");
 
-// Explain validation decision
-let explanation = explainer.explain_violation(&violation).await?;
-println!("Contributing factors:");
-for factor in explanation.factors {
-    println!("  - {}: {}", factor.name, factor.contribution);
+    Ok(())
 }
 ```
 
+With the optional `llm-network` feature, `OpenAiProvider`/`AnthropicProvider` can be
+swapped in wherever a `CompletionProvider` is expected.
+
 ## Integration with oxirs-shacl
 
+Run the deterministic `oxirs-shacl` engine and the AI-assisted pipeline side by side:
+
 ```rust
-use oxirs_shacl::ValidationEngine;
-use oxirs_shacl_ai::AiEnhancer;
+use oxirs_shacl::{ValidationConfig, ValidationEngine};
+use oxirs_shacl_ai::ShaclAiAssistant;
+use oxirs_core::Store;
 
-// Standard SHACL validation
-let shacl_engine = ValidationEngine::new(&shapes, config);
-let mut report = shacl_engine.validate(&dataset)?;
+# fn example(shapes: &indexmap::IndexMap<oxirs_shacl::ShapeId, oxirs_shacl::Shape>, store: &dyn Store) -> anyhow::Result<()> {
+// Standard, deterministic SHACL validation
+let mut engine = ValidationEngine::new(shapes, ValidationConfig::default());
+let report = engine.validate_store(store)?;
+println!("{} violations (deterministic engine)", report.violations().len());
 
-// Enhance with AI
-let ai_enhancer = AiEnhancer::new()?;
-ai_enhancer.enhance_report(&mut report).await?;
-
-// Now includes confidence scores and suggestions
-for result in report.results() {
-    println!("{} (confidence: {:.2})", result.message, result.confidence);
-}
+// AI-assisted pass: shape learning + a data-quality score alongside it
+let mut assistant = ShaclAiAssistant::new();
+let learned_shapes = assistant.learn_shapes(store, None)?;
+let quality_report = assistant.assess_quality(store, &learned_shapes)?;
+println!("AI quality score: {:.2}%", quality_report.overall_score * 100.0);
+# Ok(())
+# }
 ```
 
 ## Performance
 
-### Shape Learning Performance
+Run the criterion suite for up-to-date numbers on your own hardware:
 
-| Dataset Size | Classes | Learning Time | Shapes Generated |
-|-------------|---------|---------------|------------------|
-| 10K triples | 10 | 5s | 25 |
-| 100K triples | 50 | 45s | 120 |
-| 1M triples | 200 | 8m | 500 |
-
-### Validation Performance
-
-Standard SHACL validation + AI enhancements adds approximately 10-20% overhead.
+```bash
+cargo bench -p oxirs-shacl-ai --bench performance_benchmarks
+cargo bench -p oxirs-shacl-ai --bench advanced_scirs2_benchmarks --features gpu
+```
 
 ## Configuration
 
+`ShaclAiConfig` aggregates one sub-config per subsystem (learning, quality,
+prediction, optimization, patterns, analytics) plus global settings; every
+piece implements `Default`:
+
 ```rust
-use oxirs_shacl_ai::AiConfig;
+use oxirs_shacl_ai::ShaclAiConfig;
+use oxirs_shacl_ai::LearningConfig;
 
-let config = AiConfig {
-    // Shape learning
-    min_confidence: 0.8,
-    max_shapes_per_class: 50,
-    enable_cardinality_learning: true,
-    enable_value_range_learning: true,
-
-    // Anomaly detection
-    anomaly_threshold: 0.7,
-    statistical_method: true,
-    ml_method: true,
-
-    // Model settings
-    model_cache_dir: Some("./models".into()),
-    use_gpu: false,
-
-    // Suggestions
-    max_suggestions_per_violation: 5,
-    suggest_auto_fixes: true,
+let config = ShaclAiConfig {
+    learning: LearningConfig {
+        min_confidence: 0.8,
+        max_shapes: 50,
+        enable_training: true,
+        ..Default::default()
+    },
+    ..Default::default()
 };
+
+let mut assistant = ShaclAiAssistant::with_config(config);
 ```
 
 ## Status
 
-### Production Release (v0.3.1)
-- ✅ Shape learning with persisted dataset snapshots and CLI integration
-- ✅ Neural network validation leveraging SciRS2 telemetry for drift detection
-- ✅ Anomaly detection with vector-based similarity checks
-- ✅ Confidence scoring and remediation guidance integrated into Fuseki UI
-- 🚧 Explainability features (saliency reporting) – in progress
-- 🚧 Transfer learning (cross-dataset models) – in progress
-- ⏳ Auto-fix suggestions (planned for future release)
-- ⏳ Active learning (planned for v0.2.3)
+### Production Release (v0.3.2)
+- ✅ Shape learning (`ShapeLearner`) with store-parallel and pattern-driven discovery
+- ✅ ML model certification suite (`certification` module — precision/recall/F1/MCC vs. the deterministic engine)
+- ✅ Anomaly detection (statistical, autoencoder, drift, novelty, ensemble) via `AnomalyDetector`
+- ✅ Constraint suggestions (`SuggestionEngine`) and LLM-backed violation explanations (`ConstraintExplainer`, offline by default)
+- ✅ Transfer learning (`TransferLearner`) and model zoo (`model_zoo`, SHA256-verified shape-learning models)
+- ✅ `optimization_engine` for validation strategy/performance optimization
+- ✅ GPU acceleration behind the optional, Pure-Rust `gpu` feature (gates `advanced_scirs2_integration`)
+- 🚧 Auto-fix application (suggestions are generated; automatic SPARQL Update application is not yet wired in)
 
 ## Research
 

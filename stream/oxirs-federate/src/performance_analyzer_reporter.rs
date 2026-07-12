@@ -1,7 +1,7 @@
 //! Performance analyzer reporting and ML-driven query plan optimizer.
 //!
 //! Provides recommendation generation for the
-//! [`PerformanceAnalyzer`](crate::performance_analyzer_collector::PerformanceAnalyzer)
+//! [`PerformanceAnalyzer`]
 //! as well as the [`QueryPlanOptimizer`], an ML-driven query-plan selection
 //! engine that predicts execution time, memory usage, and success rate.
 

@@ -16,10 +16,7 @@ rust-version.workspace = true
 oxirs-core.workspace = true
 
 # SciRS2 dependencies for distributed processing with full feature support
-scirs2-cluster = { workspace = true }
-scirs2-optimize = { workspace = true }
 scirs2-stats = { workspace = true }
-scirs2-graph = { workspace = true }
 scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
 # oxirs-tdb = { path = "../oxirs-tdb" }  # Temporarily commented out due to compilation issues
 openraft = { workspace = true, optional = true }
@@ -34,7 +31,6 @@ uuid.workspace = true
 async-trait.workspace = true
 reqwest = { workspace = true }
 futures.workspace = true
-num_cpus.workspace = true
 rayon.workspace = true  # Parallel processing for SIMD-accelerated operations
 
 # Byzantine fault tolerance dependencies
@@ -53,12 +49,10 @@ parking_lot.workspace = true
 rustls.workspace = true
 tokio-rustls.workspace = true
 rustls-pemfile.workspace = true
-webpki-roots.workspace = true
 # Pure Rust TLS facade + certificate generation (replaces `rcgen`, which pulls `ring`).
 oxitls.workspace = true
 oxitls-rcgen.workspace = true
 aes-gcm.workspace = true
-x25519-dalek = "2.0"
 base64.workspace = true
 # Pure Rust cryptography (OxiCrypto) replaces ring for AEAD + CSPRNG.
 # Use leaf crates directly (not the `oxicrypto` facade) to avoid pulling in
@@ -87,7 +81,6 @@ opentelemetry.workspace = true
 opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
 opentelemetry-semantic-conventions.workspace = true
-tracing-opentelemetry.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 
 # Alerting and monitoring dependencies
@@ -120,6 +113,7 @@ harness = false
 criterion.workspace = true
 tempfile.workspace = true
 proptest.workspace = true
+tokio-test.workspace = true
 
 [features]
 default = []
@@ -127,8 +121,16 @@ raft = ["openraft"]
 bft = []
 test-support = []
 leak_detection = []
-cuda = []        # GPU acceleration with CUDA (NVIDIA)
-metal = []       # GPU acceleration with Metal (Apple Silicon)
+# GPU acceleration via scirs2-core's Pure-Rust `gpu` abstraction (`gpu = ["std"]`, no GPU FFI).
+# `gpu_acceleration.rs` imports `scirs2_core::gpu`, which scirs2-core gates behind its own `gpu`
+# feature; enabling this turns that module on. Mirrors oxirs-stream's `gpu = ["scirs2-core/gpu"]`.
+gpu = ["scirs2-core/gpu"]
+# `cuda`/`metal` are backend selectors consumed by gpu_acceleration.rs. They pull in the pure
+# `scirs2_core::gpu` module so the `use scirs2_core::gpu::{...}` imports resolve, WITHOUT enabling
+# scirs2-core's CUDA (`dep:cudarc`) or Metal (`dep:metal`/`objc2`) FFI backends (Pure Rust Policy v2).
+# Shape mirrors oxirs-geosparql's `cuda = ["gpu", ...]` / `metal = ["gpu", ...]`.
+cuda = ["gpu"]   # GPU acceleration with CUDA (NVIDIA) — resolves pure scirs2_core::gpu (no cudarc FFI)
+metal = ["gpu"]  # GPU acceleration with Metal (Apple Silicon) — resolves pure scirs2_core::gpu (no metal FFI)
 s3-backup = []   # S3-compatible backup destination (Pure Rust; enables DestinationConfig::S3)
 simulation = []  # In-memory cluster simulation harness for scalability testing (1000-node phase A)
 

@@ -314,7 +314,7 @@ pub struct GbtConfig {
     pub learning_rate: f64,
     /// Number of buffered observations used to fit each new stump.
     pub fit_buffer_size: usize,
-    /// Minimum number of total observations before [`predict`] returns.
+    /// Minimum number of total observations before [`StreamingGradientBoostedRegressor::predict`] returns.
     pub min_samples: u64,
 }
 

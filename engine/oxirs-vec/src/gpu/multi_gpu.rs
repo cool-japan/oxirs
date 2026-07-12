@@ -11,10 +11,10 @@
 //! - `LoadBalancer`: Strategy-based dispatcher (round-robin or workload-aware)
 //! - `MultiGpuTask`: Task type enum for different GPU operations
 //!
-//! # Feature Gating
+//! # Pure Rust Policy
 //!
-//! All CUDA runtime interactions are gated with `#[cfg(feature = "cuda")]`.
-//! The load balancing logic itself is Pure Rust.
+//! The load balancing logic is 100% Pure Rust. Real CUDA runtime interactions
+//! live in the quarantined `oxirs-vec-adapter-cuda` crate (publish = false).
 
 use anyhow::{anyhow, Result};
 use parking_lot::{Mutex, RwLock};

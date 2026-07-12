@@ -59,7 +59,8 @@ pub fn is_measured(geom: &Geometry) -> Result<bool> {
 /// - `MultiPoint` / `MultiLineString` / `MultiPolygon`: valid iff each component is valid
 /// - `GeometryCollection`: valid iff each element is valid
 ///
-/// This is a pure-Rust implementation. For full OGC SFA validity use the `geos-backend` feature.
+/// This is a pure-Rust implementation. For full OGC SFA validity backed by GEOS, use
+/// the quarantined `oxirs-geosparql-adapter-geos` crate.
 pub fn is_valid(geom: &Geometry) -> Result<bool> {
     Ok(is_valid_recursive(&geom.geom))
 }
@@ -101,7 +102,8 @@ fn is_valid_recursive(geom: &GeoGeometry<f64>) -> bool {
                     }
                 }
             }
-            // Note: full self-intersection detection requires GEOS (geos-backend feature).
+            // Note: full self-intersection detection requires GEOS (the quarantined
+            // oxirs-geosparql-adapter-geos crate).
             // This pure-Rust implementation validates structural validity (closure, ring count).
             true
         }

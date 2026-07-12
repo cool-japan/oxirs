@@ -2,7 +2,7 @@
 //!
 //! Provides the hash primitive required by the W3C RDF Dataset Normalization
 //! Algorithm (URDNA2015 / RDNA 2015). SHA-256 is used as specified in the W3C
-//! RDF Canonicalization specification (https://www.w3.org/TR/rdf-canon/).
+//! RDF Canonicalization specification (<https://www.w3.org/TR/rdf-canon/>).
 
 use sha2::{Digest, Sha256};
 

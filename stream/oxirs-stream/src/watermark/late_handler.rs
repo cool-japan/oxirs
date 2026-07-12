@@ -1,7 +1,7 @@
 //! Late event handler with drop / re-assign / side-output policies.
 //!
 //! This file is the dedicated home for the [`LateDataHandler`] type and its
-//! related enums.  The original implementation lives in [`super::mod`] and is
+//! related enums.  The original implementation lives in the parent module and is
 //! re-exported through this module so callers can import a stable path:
 //!
 //! ```rust

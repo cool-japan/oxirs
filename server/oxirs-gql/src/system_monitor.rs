@@ -62,7 +62,9 @@ impl Default for SystemMetrics {
             total_memory_mb: 0.0,
             available_memory_mb: 0.0,
             system_cpu_usage_percent: 0.0,
-            cpu_cores: num_cpus::get(),
+            cpu_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             process_id: std::process::id(),
             timestamp: Duration::from_secs(0),
         }

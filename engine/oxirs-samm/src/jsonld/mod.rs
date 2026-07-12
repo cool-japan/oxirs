@@ -6,9 +6,9 @@
 //!
 //! ## Modules
 //!
-//! - [`compaction`] – IRI compaction algorithm: replaces expanded IRIs with
+//! - [`crate::jsonld::compaction`] – IRI compaction algorithm: replaces expanded IRIs with
 //!   compact prefix:localname representations from a `@context`.
-//! - [`framing`] – Document framing algorithm: reshapes a flat `@graph` into
+//! - [`crate::jsonld::framing`] – Document framing algorithm: reshapes a flat `@graph` into
 //!   a nested, application-specific tree structure.
 //!
 //! ## Quick start

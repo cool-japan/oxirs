@@ -1,4 +1,5 @@
-//! J1939 SPN value extraction and conversion to DTDL [`TwinValue`].
+//! J1939 SPN value extraction and conversion to DTDL
+//! [`oxirs_physics::digital_twin::twin_value::TwinValue`].
 //!
 //! SAE J1939 defines two global "not-available" indicators that sensors transmit
 //! when a measurement cannot be taken:
@@ -6,8 +7,10 @@
 //! - `0xFE` — *parameter-specific indicator* (a device-defined condition)
 //! - `0xFF` — *not available* (the sensor is not installed or not responding)
 //!
-//! When either indicator appears in byte 0 of the data field, [`extract_spn`]
-//! returns [`SpnValue::NotAvailable`] and [`spn_to_twin_value`] returns `None`,
+//! When either indicator appears in byte 0 of the data field,
+//! [`crate::digital_twin::mapper::extract_spn`] returns
+//! [`crate::digital_twin::mapper::SpnValue::NotAvailable`] and
+//! [`crate::digital_twin::mapper::spn_to_twin_value`] returns `None`,
 //! so the bridge skips the write rather than propagating a meaningless value.
 //!
 //! # Byte-offset simplification

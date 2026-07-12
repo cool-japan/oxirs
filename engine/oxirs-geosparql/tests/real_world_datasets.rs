@@ -206,21 +206,24 @@ mod osm_road_network_scenarios {
     /// Simulate road buffering for noise pollution analysis
     /// Real-world use: Environmental impact assessments
     #[test]
-    #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
+    #[cfg(feature = "rust-buffer")]
     fn test_road_noise_buffer_zone() {
-        let highway = Geometry::from_wkt("LINESTRING(0 0, 10 0, 10 10)").unwrap();
+        // Point/LineString buffering needs GEOS (quarantined into
+        // oxirs-geosparql-adapter-geos), so model the road as a thin polygon corridor
+        // and buffer it via the Pure-Rust rust-buffer path.
+        let road_area = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 1, 0 1, 0 0))").unwrap();
 
-        // Create 100m buffer zone (noise impact area)
-        let buffer_distance = 0.001; // ~100m in degrees
-        let noise_zone = buffer(&highway, buffer_distance).unwrap();
+        // Create a noise impact buffer zone around the road footprint
+        let buffer_distance = 0.5;
+        let noise_zone = buffer(&road_area, buffer_distance).unwrap();
 
-        // Check if residential building is in noise zone
-        let building = Geometry::from_wkt("POINT(10.0005 5.0)").unwrap();
+        // Check if a nearby residential building is in the noise zone
+        let building = Geometry::from_wkt("POINT(5.0 1.2)").unwrap();
 
         assert!(
             sf_within(&building, &noise_zone).unwrap()
                 || sf_intersects(&building, &noise_zone).unwrap(),
-            "Building should be within highway noise buffer zone"
+            "Building should be within road noise buffer zone"
         );
     }
 }
@@ -451,7 +454,7 @@ mod osm_environmental_scenarios {
     /// Simulate flood risk assessment
     /// Real-world use: Disaster preparedness, insurance risk modeling
     #[test]
-    #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
+    #[cfg(feature = "rust-buffer")]
     fn test_flood_risk_area() {
         // River polygon (flood-prone area)
         let river = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 2, 0 2, 0 0))").unwrap();

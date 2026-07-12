@@ -361,7 +361,7 @@ impl VectorStore {
         Ok(())
     }
 
-    /// Load a store that was previously saved with [`save_to_disk`].
+    /// Load a store that was previously saved with [`VectorStore::save_to_disk`].
     ///
     /// Reconstructs a `VectorStore` backed by a fresh `MemoryVectorIndex` and
     /// re-inserts all vectors from the saved snapshot.  The embedding manager

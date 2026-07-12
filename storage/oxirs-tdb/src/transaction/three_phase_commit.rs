@@ -52,6 +52,7 @@
 
 use crate::error::{Result, TdbError};
 use crate::transaction::two_phase_commit::Participant;
+use crate::transaction::txn_context::{Transaction, TransactionManager};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use parking_lot::{Mutex, RwLock};
@@ -484,6 +485,10 @@ pub struct ThreePhaseParticipant {
     pre_committed_txns: Arc<Mutex<HashSet<String>>>,
     /// Statistics
     stats: Arc<Mutex<ThreePhaseParticipantStats>>,
+    /// Optional injected TransactionManager (None in unit tests without real storage)
+    txn_manager: Option<Arc<TransactionManager>>,
+    /// Map distributed txn_id string → local Transaction
+    local_txns: Arc<Mutex<HashMap<String, Transaction>>>,
 }
 
 /// Three-Phase Commit Participant Statistics
@@ -512,6 +517,21 @@ impl ThreePhaseParticipant {
             active_txns: Arc::new(Mutex::new(HashSet::new())),
             pre_committed_txns: Arc::new(Mutex::new(HashSet::new())),
             stats: Arc::new(Mutex::new(ThreePhaseParticipantStats::default())),
+            txn_manager: None,
+            local_txns: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Create a participant backed by a real TransactionManager
+    pub fn with_transaction_manager(node_id: String, txn_manager: Arc<TransactionManager>) -> Self {
+        Self {
+            node_id,
+            phase: Arc::new(RwLock::new(TpcPhase::Init)),
+            active_txns: Arc::new(Mutex::new(HashSet::new())),
+            pre_committed_txns: Arc::new(Mutex::new(HashSet::new())),
+            stats: Arc::new(Mutex::new(ThreePhaseParticipantStats::default())),
+            txn_manager: Some(txn_manager),
+            local_txns: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -547,9 +567,11 @@ impl ThreePhaseParticipant {
     }
 
     /// Check if participant can commit transaction
-    async fn can_commit(&self, _txn_id: &str) -> Result<bool> {
-        // TODO: Implement actual resource checking
-        tokio::time::sleep(Duration::from_millis(5)).await;
+    async fn can_commit(&self, txn_id: &str) -> Result<bool> {
+        if let Some(tm) = &self.txn_manager {
+            let txn = tm.begin()?;
+            self.local_txns.lock().insert(txn_id.to_string(), txn);
+        }
         Ok(true)
     }
 
@@ -573,9 +595,20 @@ impl ThreePhaseParticipant {
     }
 
     /// Execute pre-commit preparation
-    async fn execute_pre_commit(&self, _txn_id: &str) -> Result<()> {
-        // TODO: Implement actual pre-commit logic
-        tokio::time::sleep(Duration::from_millis(5)).await;
+    async fn execute_pre_commit(&self, txn_id: &str) -> Result<()> {
+        // Verify the local transaction is still active
+        let is_active = self
+            .local_txns
+            .lock()
+            .get(txn_id)
+            .map(|txn| txn.is_active())
+            .unwrap_or(true); // If no TM, optimistically assume active
+        if !is_active {
+            return Err(TdbError::Transaction(format!(
+                "Local transaction for {} is no longer active at pre-commit",
+                txn_id
+            )));
+        }
         Ok(())
     }
 
@@ -597,9 +630,11 @@ impl ThreePhaseParticipant {
     }
 
     /// Execute commit operation
-    async fn execute_commit(&self, _txn_id: &str) -> Result<()> {
-        // TODO: Implement actual commit logic
-        tokio::time::sleep(Duration::from_millis(5)).await;
+    async fn execute_commit(&self, txn_id: &str) -> Result<()> {
+        if let Some(txn) = self.local_txns.lock().remove(txn_id) {
+            txn.commit()
+                .map_err(|e| TdbError::Transaction(e.to_string()))?;
+        }
         Ok(())
     }
 
@@ -621,9 +656,11 @@ impl ThreePhaseParticipant {
     }
 
     /// Execute abort operation
-    async fn execute_abort(&self, _txn_id: &str) -> Result<()> {
-        // TODO: Implement actual abort logic
-        tokio::time::sleep(Duration::from_millis(5)).await;
+    async fn execute_abort(&self, txn_id: &str) -> Result<()> {
+        if let Some(txn) = self.local_txns.lock().remove(txn_id) {
+            txn.abort()
+                .map_err(|e| TdbError::Transaction(e.to_string()))?;
+        }
         Ok(())
     }
 
@@ -939,5 +976,114 @@ mod tests {
             responses_after.get("node1").unwrap(),
             &Some(CanCommitResponse::Yes)
         );
+    }
+
+    #[tokio::test]
+    async fn test_3pc_participant_with_txn_manager_full_commit() {
+        use crate::transaction::{lock_manager::LockManager, wal::WriteAheadLog};
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs_3pc_commit_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wal = Arc::new(WriteAheadLog::new(&dir).unwrap());
+        let lm = Arc::new(LockManager::new());
+        let tm = Arc::new(TransactionManager::new(Arc::clone(&wal), Arc::clone(&lm)));
+
+        let participant =
+            ThreePhaseParticipant::with_transaction_manager("node-3pc-1".to_string(), tm);
+
+        let resp = participant
+            .handle_can_commit("dist-txn-001".to_string())
+            .await
+            .unwrap();
+        assert_eq!(resp, CanCommitResponse::Yes);
+
+        participant
+            .handle_pre_commit("dist-txn-001".to_string())
+            .await
+            .unwrap();
+        participant
+            .handle_do_commit("dist-txn-001".to_string())
+            .await
+            .unwrap();
+
+        assert_eq!(participant.phase(), TpcPhase::Committed);
+        let stats = participant.stats();
+        assert_eq!(stats.total_commits, 1);
+    }
+
+    #[tokio::test]
+    async fn test_3pc_participant_with_txn_manager_abort_at_can_commit() {
+        use crate::transaction::{lock_manager::LockManager, wal::WriteAheadLog};
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs_3pc_abort_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wal = Arc::new(WriteAheadLog::new(&dir).unwrap());
+        let lm = Arc::new(LockManager::new());
+        let tm = Arc::new(TransactionManager::new(Arc::clone(&wal), Arc::clone(&lm)));
+
+        let participant =
+            ThreePhaseParticipant::with_transaction_manager("node-3pc-2".to_string(), tm);
+
+        participant
+            .handle_can_commit("dist-txn-002".to_string())
+            .await
+            .unwrap();
+        participant
+            .handle_abort("dist-txn-002".to_string())
+            .await
+            .unwrap();
+
+        assert_eq!(participant.phase(), TpcPhase::Aborted);
+        let stats = participant.stats();
+        assert_eq!(stats.total_aborts, 1);
+    }
+
+    #[tokio::test]
+    async fn test_3pc_participant_with_txn_manager_coordinator_timeout_pre_committed() {
+        use crate::transaction::{lock_manager::LockManager, wal::WriteAheadLog};
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs_3pc_timeout_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wal = Arc::new(WriteAheadLog::new(&dir).unwrap());
+        let lm = Arc::new(LockManager::new());
+        let tm = Arc::new(TransactionManager::new(Arc::clone(&wal), Arc::clone(&lm)));
+
+        let participant =
+            ThreePhaseParticipant::with_transaction_manager("node-3pc-3".to_string(), tm);
+
+        participant
+            .handle_can_commit("dist-txn-003".to_string())
+            .await
+            .unwrap();
+        participant
+            .handle_pre_commit("dist-txn-003".to_string())
+            .await
+            .unwrap();
+
+        // Simulate coordinator timeout — participant auto-commits since pre-committed
+        let committed = participant
+            .handle_coordinator_timeout("dist-txn-003".to_string())
+            .await
+            .unwrap();
+        assert!(
+            committed,
+            "Pre-committed txn should commit on coordinator timeout"
+        );
+        assert_eq!(participant.phase(), TpcPhase::Committed);
     }
 }

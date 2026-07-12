@@ -54,38 +54,23 @@ pub fn build_tpf_response(
 fn build_fragment_uri(query: &TpfQuery, pagination: &PaginationParams) -> String {
     let mut parts = Vec::new();
     if let Some(s) = &query.subject {
-        parts.push(format!("subject={}", urlencoding::encode(s)));
+        parts.push(format!(
+            "subject={}",
+            oxirs_core::encoding::percent_encode(s)
+        ));
     }
     if let Some(p) = &query.predicate {
-        parts.push(format!("predicate={}", urlencoding::encode(p)));
+        parts.push(format!(
+            "predicate={}",
+            oxirs_core::encoding::percent_encode(p)
+        ));
     }
     if let Some(o) = &query.object {
-        parts.push(format!("object={}", urlencoding::encode(o)));
+        parts.push(format!(
+            "object={}",
+            oxirs_core::encoding::percent_encode(o)
+        ));
     }
     parts.push(format!("page={}", pagination.page));
     format!("/ldf?{}", parts.join("&"))
-}
-
-/// Minimal RFC 3986 unreserved-character URL encoding.
-///
-/// Used to avoid pulling additional dependencies just for the fragment URI
-/// constructor. The output is conservative — every byte outside the
-/// unreserved set is percent-encoded.
-mod urlencoding {
-    pub fn encode(s: &str) -> String {
-        let mut out = String::with_capacity(s.len());
-        for c in s.chars() {
-            match c {
-                'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => out.push(c),
-                _ => {
-                    let mut buf = [0u8; 4];
-                    let encoded = c.encode_utf8(&mut buf);
-                    for b in encoded.as_bytes() {
-                        out.push_str(&format!("%{:02X}", b));
-                    }
-                }
-            }
-        }
-        out
-    }
 }

@@ -1,8 +1,8 @@
 # OxiRS Embed - Knowledge Graph Embeddings
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -73,36 +73,35 @@ Generate vector embeddings for RDF knowledge graphs enabling semantic similarity
 Add to your `Cargo.toml`:
 
 ```toml
-# Experimental feature
 [dependencies]
-oxirs-embed = "0.3.1"
+oxirs-embed = "0.3.2"
 
-# Enable specific providers
-oxirs-embed = { version = "0.3.1", features = ["openai", "sentence-transformers"] }
+# Enable optional feature groups (advanced models, GPU acceleration, API server, ...)
+oxirs-embed = { version = "0.3.2", features = ["advanced-models", "gpu"] }
 ```
 
 ## Quick Start
 
 ### Basic Entity Embedding
 
+Free-text embedding uses the domain-specific transformer models in
+[`biomedical_embeddings`](src/biomedical_embeddings/) (SciBERT, CodeBERT, BioBERT,
+LegalBERT, FinBERT, ClinicalBERT, ChemBERT):
+
 ```rust
-use oxirs_embed::{EmbeddingModel, ModelProvider};
+use oxirs_embed::biomedical_embeddings::{SpecializedTextEmbedding, SpecializedTextModel};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load embedding model
-    let model = EmbeddingModel::builder()
-        .provider(ModelProvider::SentenceTransformers)
-        .model_name("all-mpnet-base-v2")
-        .build()
-        .await?;
+async fn main() -> anyhow::Result<()> {
+    // Load a domain-specific text embedding model (SciBERT here)
+    let mut model = SpecializedTextEmbedding::new(SpecializedTextEmbedding::scibert_config());
 
-    // Generate embedding
+    // Generate an embedding for a piece of text
     let text = "Machine learning researcher specializing in NLP";
-    let embedding = model.encode(text).await?;
+    let embedding = model.encode_text(text).await?;
 
     println!("Embedding dimension: {}", embedding.len());
-    println!("First 5 values: {:?}", &embedding[..5]);
+    println!("Model: {:?}", SpecializedTextModel::SciBERT.model_name());
 
     Ok(())
 }
@@ -110,56 +109,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Knowledge Graph Embedding
 
+Structural knowledge graph embedding trains one of the `EmbeddingModel` implementations
+(`TransE`, `DistMult`, `ComplEx`, `RotatE`, `HolE`, `ConvE`, `TuckER`, `QuatE`, ...)
+directly on RDF triples:
+
 ```rust
-use oxirs_embed::KnowledgeGraphEmbedder;
-use oxirs_core::Dataset;
+use oxirs_embed::{EmbeddingModel, ModelConfig, NamedNode, TransE, Triple};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load knowledge graph
-    let dataset = Dataset::from_file("knowledge_graph.ttl")?;
+async fn main() -> anyhow::Result<()> {
+    // Create a knowledge graph embedding model
+    let config = ModelConfig::default().with_dimensions(128);
+    let mut model = TransE::new(config);
 
-    // Create embedder
-    let embedder = KnowledgeGraphEmbedder::builder()
-        .model("sentence-transformers/all-mpnet-base-v2")
-        .use_labels(true)
-        .use_descriptions(true)
-        .use_context(true)  // Include neighboring entities
-        .build()
-        .await?;
+    // Add knowledge triples
+    model.add_triple(Triple::new(
+        NamedNode::new("http://example.org/Person/Alice")?,
+        NamedNode::new("http://example.org/knows")?,
+        NamedNode::new("http://example.org/Person/Bob")?,
+    ))?;
 
-    // Embed all entities
-    let embeddings = embedder.embed_dataset(&dataset).await?;
+    // Train the model
+    let stats = model.train(Some(100)).await?;
+    println!("Training completed: {stats:?}");
 
-    // Get embedding for specific entity
-    let entity_uri = "http://example.org/Person/Alice";
-    if let Some(embedding) = embeddings.get(entity_uri) {
-        println!("Embedding for Alice: {} dimensions", embedding.len());
-    }
+    // Get the embedding for a specific entity
+    let embedding = model.get_entity_embedding("http://example.org/Person/Alice")?;
+    println!("Embedding for Alice: {} dimensions", embedding.dimensions);
 
     Ok(())
 }
 ```
 
+`TransE` also implements `Default` (delegating to `ModelConfig::default()`, i.e. 100
+dimensions, L2 distance, margin 1.0), so `TransE::default()` works anywhere a plain
+`M: EmbeddingModel + Default` bound is needed — for example in generic benchmark/test
+harnesses. Prefer `TransE::new(config)` when you need a specific dimension or learning
+rate.
+
 ### Semantic Similarity
 
 ```rust
-use oxirs_embed::similarity::{cosine_similarity, find_similar};
+use oxirs_embed::embedding_aggregator::cosine_similarity;
 
-// Find similar entities
-let query_embedding = model.encode("AI researcher").await?;
-
-let similar_entities = find_similar(
-    &query_embedding,
-    &embeddings,
-    10,  // top 10 results
-    0.7  // minimum similarity threshold
-)?;
-
-for (entity, score) in similar_entities {
-    println!("{}: {:.3}", entity, score);
-}
+// Compare two entity embeddings (both `&[f32]`, e.g. from `Vector::values`)
+let score = cosine_similarity(&alice_embedding.values, &bob_embedding.values);
+println!("Alice <-> Bob similarity: {score:.3}");
 ```
+
+For ranked nearest-neighbor search over many entities at once, use the
+[Vector Search](#vector-search) index below rather than a single pairwise call.
 
 ## New Models (v0.1.0)
 
@@ -260,7 +259,7 @@ let candidates = vec!["bob".to_string(), "charlie".to_string()];
 let predictions = predictor.predict_tail("alice", "knows", &candidates)?;
 
 for pred in predictions {
-    println!("{} (score: {:.4}, rank: {})", pred.entity, pred.score, pred.rank);
+    println!("{} (score: {:.4}, rank: {})", pred.predicted_id, pred.score, pred.rank);
 }
 
 // Predict head entity (subject prediction)
@@ -321,7 +320,7 @@ let config = CommunityConfig {
 };
 
 let mut detector = CommunityDetector::new(config);
-let result = detector.detect(&triples)?;
+let result = detector.detect_from_triples(&triples)?;
 
 println!("Modularity: {:.3}", result.modularity);
 println!("Found {} communities", result.communities.len());
@@ -436,128 +435,126 @@ println!("To be like Bob, Alice would need to change {} dimensions",
 
 ## Supported Embedding Providers
 
-### Sentence Transformers (Local)
+`oxirs-embed` ships two families of models rather than a single pluggable "provider"
+facade: structural knowledge-graph embedders (trained locally on your triples) and
+specialized domain text-embedding models (also local — no network calls).
+
+### Structural Knowledge Graph Models
+
+Selected via Cargo features (`basic-models` is the default):
+
+| Feature | Models |
+|---------|--------|
+| `basic-models` (default) | `TransE`, `ComplEx`, `DistMult`, `HoLE` |
+| `advanced-models` | `RotatE`, `ConvE`, `TuckER`, `QuatE` |
+
+Each is a plain struct implementing the `EmbeddingModel` trait — see
+[Knowledge Graph Embedding](#knowledge-graph-embedding) above.
+
+### Specialized Domain Text Models
+
+`oxirs_embed::biomedical_embeddings::SpecializedTextModel` covers seven pretrained
+architectures, each with a matching `SpecializedTextEmbedding::{name}_config()` helper
+(`scibert_config()`, `codebert_config()`, `biobert_config()`, ...):
+
+- `SciBERT` - Scientific literature (768 dimensions)
+- `CodeBERT` - Code and programming languages
+- `BioBERT` - Biomedical literature
+- `LegalBERT` - Legal documents
+- `FinBERT` - Financial texts
+- `ClinicalBERT` - Clinical notes
+- `ChemBERT` - Chemical compounds
 
 ```rust
-use oxirs_embed::{EmbeddingModel, ModelProvider};
+use oxirs_embed::biomedical_embeddings::{SpecializedTextConfig, SpecializedTextEmbedding, SpecializedTextModel};
 
-let model = EmbeddingModel::builder()
-    .provider(ModelProvider::SentenceTransformers)
-    .model_name("all-mpnet-base-v2")  // or other models
-    .device("cuda")  // Optional GPU support
-    .build()
-    .await?;
-```
-
-Popular models:
-- `all-mpnet-base-v2` - General purpose, 768 dimensions
-- `all-MiniLM-L6-v2` - Faster, 384 dimensions
-- `multi-qa-mpnet-base-dot-v1` - For Q&A tasks
-- `paraphrase-multilingual-mpnet-base-v2` - Multi-lingual
-
-### OpenAI Embeddings (API)
-
-```rust
-use oxirs_embed::{EmbeddingModel, ModelProvider};
-
-let model = EmbeddingModel::builder()
-    .provider(ModelProvider::OpenAI)
-    .api_key(std::env::var("OPENAI_API_KEY")?)
-    .model_name("text-embedding-3-small")
-    .build()
-    .await?;
-
-let embedding = model.encode("Your text here").await?;
-```
-
-Available models:
-- `text-embedding-3-small` - 1536 dimensions, cost-effective
-- `text-embedding-3-large` - 3072 dimensions, highest quality
-- `text-embedding-ada-002` - Legacy model
-
-### Custom Models
-
-```rust
-use oxirs_embed::{EmbeddingModel, CustomModelConfig};
-
-let config = CustomModelConfig {
-    model_path: "./my-model".into(),
-    tokenizer_path: "./my-tokenizer".into(),
-    dimension: 768,
+let config = SpecializedTextConfig {
+    model_type: SpecializedTextModel::BioBERT,
+    ..Default::default()
 };
-
-let model = EmbeddingModel::custom(config).await?;
+let mut model = SpecializedTextEmbedding::new(config);
+let embedding = model.encode_text("BRCA1 is associated with breast cancer risk").await?;
 ```
 
 ## Advanced Features
 
 ### Batch Processing
 
+The `EmbeddingModel::encode` trait method already accepts multiple texts per call —
+there is no separate batch-sized entry point:
+
 ```rust
-let texts = vec![
-    "Machine learning",
-    "Natural language processing",
-    "Computer vision",
+use oxirs_embed::EmbeddingModel;
+
+let texts: Vec<String> = vec![
+    "Machine learning".to_string(),
+    "Natural language processing".to_string(),
+    "Computer vision".to_string(),
 ];
 
-// Process in batches for efficiency
-let embeddings = model.encode_batch(&texts, 32).await?;
+// One call encodes the whole batch: Vec<Vec<f32>>, one embedding per input text
+let embeddings = model.encode(&texts).await?;
 ```
 
 ### Contextual Embeddings
 
-Use graph context for better embeddings:
+`ContextualEmbeddingModel` adapts embeddings to query/user/task/temporal context.
+It is still evolving (its crate-root re-export is currently disabled), so import it
+via its module path:
 
-```rust
-use oxirs_embed::ContextualEmbedder;
+```rust,no_run
+use oxirs_embed::contextual::{ContextualConfig, ContextualEmbeddingModel, EmbeddingContext};
+use oxirs_embed::Triple;
 
-let embedder = ContextualEmbedder::builder()
-    .model("all-mpnet-base-v2")
-    .context_depth(2)  // Include 2-hop neighbors
-    .weight_by_relation(true)  // Different weights for different relations
-    .build()
-    .await?;
+# async fn example(triples: &[Triple]) -> anyhow::Result<()> {
+let mut model = ContextualEmbeddingModel::new(ContextualConfig::default())?;
+let context = EmbeddingContext::default();
 
-let embedding = embedder.embed_entity_with_context(
-    "http://example.org/Alice",
-    &dataset
-).await?;
+let embeddings = model.embed_with_context(triples, &context).await?;
+println!("Generated {} contextual embeddings", embeddings.len());
+# Ok(())
+# }
 ```
 
 ### Entity Linking
 
 ```rust
-use oxirs_embed::EntityLinker;
+use oxirs_embed::entity_linking::{EntityLinker, EntityLinkerConfig};
+use scirs2_core::ndarray_ext::Array1;
+use std::collections::HashMap;
 
-let linker = EntityLinker::new(model, &entity_embeddings);
+let linker = EntityLinker::new(EntityLinkerConfig::default(), entity_embeddings)?;
 
-// Link text mention to knowledge graph entity
-let mention = "machine learning expert from Stanford";
-let candidates = linker.link(mention, 5).await?;
+// Link a (pre-embedded) mention to knowledge graph entities — the mention text
+// "machine learning expert from Stanford" must already be embedded into the
+// same vector space as `entity_embeddings` (e.g. via a text embedding model).
+let mention_embedding: Array1<f32> = embed_mention("machine learning expert from Stanford");
+let candidates = linker.link_entity(&mention_embedding, None)?;
 
-for (entity_uri, score) in candidates {
-    println!("{}: {:.3}", entity_uri, score);
+for result in candidates {
+    println!("{}: confidence={:.3}", result.entity_id, result.confidence);
 }
 ```
 
 ### Relation Prediction
 
 ```rust
-use oxirs_embed::RelationPredictor;
+use oxirs_embed::entity_linking::{RelationPredictor, RelationPredictorConfig};
 
 let predictor = RelationPredictor::new(
+    RelationPredictorConfig::default(),
+    relation_embeddings,
     entity_embeddings,
-    relation_embeddings
 );
 
-// Predict relation between entities
-let predictions = predictor.predict_relation(
+// Predict relations between two entities
+let predictions = predictor.predict_relations(
     "http://example.org/Alice",
-    "http://example.org/Bob"
+    "http://example.org/Bob",
 )?;
 
-for (relation, score) in predictions {
-    println!("Predicted relation: {} ({:.3})", relation, score);
+for pred in predictions {
+    println!("Predicted relation: {} (score={:.3})", pred.relation, pred.score);
 }
 ```
 
@@ -566,73 +563,73 @@ for (relation, score) in predictions {
 ### With oxirs-vec (Vector Search)
 
 ```rust
-use oxirs_embed::EmbeddingModel;
-use oxirs_vec::VectorStore;
+use oxirs_embed::{EmbeddingModel, TransE};
+use oxirs_vec::{Vector as VecVector, VectorStore, VectorStoreTrait};
 
-// Generate embeddings
-let model = EmbeddingModel::load("all-mpnet-base-v2").await?;
-let embeddings = model.encode_dataset(&dataset).await?;
-
-// Index in vector store
-let mut store = VectorStore::new(IndexType::HNSW, 768)?;
-for (entity, embedding) in embeddings {
-    store.add_vector(&entity, &embedding)?;
+// Index every trained entity embedding in an oxirs-vec store
+let mut store = VectorStore::new();
+for entity in model.get_entities() {
+    let embedding = model.get_entity_embedding(&entity)?;
+    store.insert_vector(entity, VecVector::new(embedding.values))?;
 }
-store.build_index()?;
+
+// Find the entities closest to Alice
+let query = model.get_entity_embedding("http://example.org/Person/Alice")?;
+let results = store.search_similar(&VecVector::new(query.values), 10)?;
 ```
 
 ### With oxirs-chat (RAG)
 
-```rust
-use oxirs_embed::EmbeddingModel;
-use oxirs_chat::RagSystem;
-
-let model = EmbeddingModel::load("all-mpnet-base-v2").await?;
-let rag = RagSystem::builder()
-    .embedding_model(model)
-    .knowledge_graph(&dataset)
-    .build()?;
-```
+`oxirs-chat`'s `rag` module consumes entity/text embeddings produced by
+`oxirs-embed` as part of its retrieval-augmented generation pipeline. See
+[oxirs-chat](../oxirs-chat/) for the current pipeline API.
 
 ## Performance
 
-### Benchmark Results
+### Benchmarks
 
-| Model | Embedding Time | Dimension | Quality (Avg) |
-|-------|---------------|-----------|---------------|
-| all-mpnet-base-v2 | 15ms | 768 | 0.85 |
-| all-MiniLM-L6-v2 | 5ms | 384 | 0.78 |
-| text-embedding-3-small | 50ms* | 1536 | 0.88 |
+Run the criterion suite for up-to-date numbers on your own hardware:
 
-*API call latency
+```bash
+cargo bench -p oxirs-embed --bench performance_validation
+```
 
 ### Optimization Tips
 
 ```rust
-// Use batch processing
-let embeddings = model.encode_batch(&texts, batch_size: 32).await?;
+use oxirs_embed::EmbeddingModel;
 
-// Cache embeddings
-let cache = EmbeddingCache::new("./cache")?;
-let embedding = cache.get_or_compute(text, || model.encode(text))?;
+// encode() already batches: pass every text in one call instead of looping
+let embeddings = model.encode(&texts).await?;
 
-// GPU acceleration (if available)
-let model = EmbeddingModel::builder()
-    .device("cuda")
-    .build()
-    .await?;
+// Cache embeddings (fixed-capacity LRU, keyed by content hash + model id)
+use oxirs_embed::embedding_cache::{CacheKey, EmbeddingCache};
+
+let mut cache = EmbeddingCache::new(10_000);
+let key = CacheKey::new(content_hash, "scibert");
+if let Some(cached) = cache.get(&key) {
+    // reuse cached embedding
+} else {
+    let embedding = model.encode(&[text.to_string()]).await?;
+    cache.insert(key, embedding[0].clone());
+}
 ```
+
+GPU acceleration (feature `gpu`, Pure-Rust via `scirs2-core`/`scirs2-linalg`) is
+provided by `oxirs_embed::gpu_acceleration::{GpuAccelerationConfig, GpuAccelerationManager}`
+— see the crate-level docs for a full example.
 
 ## Status
 
-### Production Release (v0.3.1)
-- ✅ Sentence Transformers integration with batch streaming + persistence
-- ✅ OpenAI embeddings support with provider failover and caching
-- ✅ Entity/graph embeddings wired into CLI ingest/export pipelines
-- ✅ Semantic similarity search via `oxirs-vec` + SPARQL federation hooks
-- 🚧 Contextual embeddings (expanded graph context) – in progress
-- 🚧 Relation prediction (knowledge completion) – in progress
-- ⏳ Fine-tuning support (planned for v0.2.3)
+### Production Release (v0.3.2)
+- ✅ Structural KG embedding models: TransE, DistMult, ComplEx, RotatE, HoLE, ConvE, TuckER, QuatE
+- ✅ Specialized domain text embeddings: SciBERT, CodeBERT, BioBERT, LegalBERT, FinBERT, ClinicalBERT, ChemBERT
+- ✅ Link prediction, entity clustering, community detection, vector search, visualization, interpretability
+- ✅ Entity linking and relation prediction (`entity_linking` module)
+- ✅ Fine-tuning (`fine_tuning`/`fine_tuner`) and model ensembling (`ensemble`)
+- ✅ Model zoo with SHA256-verified manifests (`model_zoo`)
+- ✅ GPU acceleration behind the optional `gpu` feature (Pure-Rust, no CUDA/FFI required)
+- 🚧 Contextual embeddings (`contextual` module) – implemented but not yet re-exported at the crate root while the API stabilizes
 
 ## Contributing
 

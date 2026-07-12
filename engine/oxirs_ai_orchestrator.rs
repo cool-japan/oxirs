@@ -61,7 +61,9 @@ impl Default for AiOrchestratorConfig {
         Self {
             enable_gpu: true,
             max_gpu_memory_mb: 8192,
-            max_cpu_threads: num_cpus::get(),
+            max_cpu_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             model_cache_size_mb: 2048,
             monitoring_interval: Duration::from_secs(30),
             resource_strategy: ResourceAllocationStrategy::Adaptive,
@@ -894,9 +896,16 @@ pub struct ConfigurationRule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConfigurationCondition {
     /// Metric threshold
-    MetricThreshold { metric: String, threshold: f64, operator: ComparisonOperator },
+    MetricThreshold {
+        metric: String,
+        threshold: f64,
+        operator: ComparisonOperator,
+    },
     /// Resource utilization
-    ResourceUtilization { resource: ResourceType, threshold: f64 },
+    ResourceUtilization {
+        resource: ResourceType,
+        threshold: f64,
+    },
     /// Time-based condition
     TimeBased { schedule: String },
     /// Custom condition
@@ -962,30 +971,18 @@ impl OxirsAiOrchestrator {
     /// Initialize module coordinators
     fn initialize_module_coordinators(&mut self) -> Result<()> {
         // Initialize coordinators for each module type
-        self.module_coordinators.insert(
-            ModuleType::Embed,
-            Arc::new(EmbedModuleCoordinator::new()?),
-        );
-        self.module_coordinators.insert(
-            ModuleType::Vec,
-            Arc::new(VecModuleCoordinator::new()?),
-        );
-        self.module_coordinators.insert(
-            ModuleType::Shacl,
-            Arc::new(ShaclModuleCoordinator::new()?),
-        );
-        self.module_coordinators.insert(
-            ModuleType::Arq,
-            Arc::new(ArqModuleCoordinator::new()?),
-        );
-        self.module_coordinators.insert(
-            ModuleType::Rule,
-            Arc::new(RuleModuleCoordinator::new()?),
-        );
-        self.module_coordinators.insert(
-            ModuleType::Core,
-            Arc::new(CoreModuleCoordinator::new()?),
-        );
+        self.module_coordinators
+            .insert(ModuleType::Embed, Arc::new(EmbedModuleCoordinator::new()?));
+        self.module_coordinators
+            .insert(ModuleType::Vec, Arc::new(VecModuleCoordinator::new()?));
+        self.module_coordinators
+            .insert(ModuleType::Shacl, Arc::new(ShaclModuleCoordinator::new()?));
+        self.module_coordinators
+            .insert(ModuleType::Arq, Arc::new(ArqModuleCoordinator::new()?));
+        self.module_coordinators
+            .insert(ModuleType::Rule, Arc::new(RuleModuleCoordinator::new()?));
+        self.module_coordinators
+            .insert(ModuleType::Core, Arc::new(CoreModuleCoordinator::new()?));
 
         Ok(())
     }
@@ -1041,9 +1038,15 @@ impl OxirsAiOrchestrator {
     pub async fn register_model(&self, model_info: ModelInfo) -> Result<()> {
         let mut registry = self.model_registry.write().await;
 
-        registry.models.insert(model_info.id.clone(), model_info.clone());
-        registry.usage_stats.insert(model_info.id.clone(), ModelUsageStats::default());
-        registry.lifecycle_state.insert(model_info.id.clone(), ModelLifecycleState::Registered);
+        registry
+            .models
+            .insert(model_info.id.clone(), model_info.clone());
+        registry
+            .usage_stats
+            .insert(model_info.id.clone(), ModelUsageStats::default());
+        registry
+            .lifecycle_state
+            .insert(model_info.id.clone(), ModelLifecycleState::Registered);
 
         // Emit model registration event
         self.emit_event(Event {
@@ -1052,10 +1055,14 @@ impl OxirsAiOrchestrator {
             source: model_info.id.module,
             payload: HashMap::from([
                 ("model_id".to_string(), format!("{:?}", model_info.id)),
-                ("model_type".to_string(), format!("{:?}", model_info.model_type)),
+                (
+                    "model_type".to_string(),
+                    format!("{:?}", model_info.model_type),
+                ),
             ]),
             timestamp: Instant::now(),
-        }).await?;
+        })
+        .await?;
 
         info!("Registered model: {:?}", model_info.id);
         Ok(())
@@ -1074,11 +1081,10 @@ impl OxirsAiOrchestrator {
                 id: format!("model_unregistered_{}", model_id.name),
                 event_type: EventType::ModelUnloaded,
                 source: model_id.module,
-                payload: HashMap::from([
-                    ("model_id".to_string(), format!("{:?}", model_id)),
-                ]),
+                payload: HashMap::from([("model_id".to_string(), format!("{:?}", model_id))]),
                 timestamp: Instant::now(),
-            }).await?;
+            })
+            .await?;
 
             info!("Unregistered model: {:?}", model_id);
         } else {
@@ -1095,7 +1101,11 @@ impl OxirsAiOrchestrator {
 
         let mut orchestrator = self.workflow_orchestrator.write().await;
 
-        let execution_id = format!("exec_{}_{}", workflow.id.0, Instant::now().elapsed().as_millis());
+        let execution_id = format!(
+            "exec_{}_{}",
+            workflow.id.0,
+            Instant::now().elapsed().as_millis()
+        );
         let execution = WorkflowExecution {
             id: execution_id.clone(),
             workflow_id: workflow.id.clone(),
@@ -1116,7 +1126,8 @@ impl OxirsAiOrchestrator {
                 ("execution_id".to_string(), execution_id.clone()),
             ]),
             timestamp: Instant::now(),
-        }).await?;
+        })
+        .await?;
 
         orchestrator.execution_history.push(execution.clone());
 
@@ -1129,7 +1140,10 @@ impl OxirsAiOrchestrator {
         let mut event_bus = self.event_bus.write().await;
 
         // Update event statistics
-        let stats = event_bus.event_stats.entry(event.event_type.clone()).or_default();
+        let stats = event_bus
+            .event_stats
+            .entry(event.event_type.clone())
+            .or_default();
         stats.total_events += 1;
         stats.last_event = Some(event.timestamp);
 
@@ -1140,7 +1154,10 @@ impl OxirsAiOrchestrator {
         if let Some(subscribers) = event_bus.subscribers.get(&event.event_type) {
             for subscriber in subscribers {
                 if let Err(e) = (subscriber.handler)(&event) {
-                    error!("Error handling event for subscriber {}: {}", subscriber.id, e);
+                    error!(
+                        "Error handling event for subscriber {}: {}",
+                        subscriber.id, e
+                    );
                 }
             }
         }
@@ -1209,7 +1226,11 @@ impl OxirsAiOrchestrator {
     /// Get performance metrics
     async fn get_performance_metrics(&self) -> Result<HashMap<String, f64>> {
         let monitor = self.performance_monitor.read().await;
-        Ok(monitor.metrics.iter().map(|(k, v)| (k.clone(), v.value)).collect())
+        Ok(monitor
+            .metrics
+            .iter()
+            .map(|(k, v)| (k.clone(), v.value))
+            .collect())
     }
 
     /// Get active workflows
@@ -1285,8 +1306,12 @@ impl CpuResourcePool {
     /// Create a new CPU resource pool
     pub fn new() -> Result<Self> {
         Ok(Self {
-            total_cores: num_cpus::get(),
-            available_cores: num_cpus::get(),
+            total_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
+            available_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             allocations: HashMap::new(),
             usage_history: Vec::new(),
         })

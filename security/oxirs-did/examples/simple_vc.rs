@@ -28,7 +28,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_claim("name", "Alice Smith")
         .with_claim("role", "Researcher");
 
-    println!("  Subject ID: {}", subject.id.as_ref().unwrap());
+    println!(
+        "  Subject ID: {}",
+        subject.id.as_ref().expect("invariant: value is valid")
+    );
     println!("  Claims: {:?}\n", subject.claims.keys());
 
     // Step 3: Create and issue credential
@@ -39,7 +42,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let issuer = CredentialIssuer::new(keystore.clone(), resolver.clone());
     let signed_vc = issuer.issue(&issuer_did, subject, types).await?;
 
-    println!("  Credential ID: {}", signed_vc.id.as_ref().unwrap());
+    println!(
+        "  Credential ID: {}",
+        signed_vc.id.as_ref().expect("invariant: value is valid")
+    );
     println!("  Types: {:?}", signed_vc.credential_type);
     println!(
         "  Proof: {}\n",
@@ -64,7 +70,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "✗ INVALID"
         }
     );
-    println!("  Issuer: {}", result.issuer.as_ref().unwrap());
+    println!(
+        "  Issuer: {}",
+        result.issuer.as_ref().expect("invariant: value is valid")
+    );
 
     for check in &result.checks {
         println!(

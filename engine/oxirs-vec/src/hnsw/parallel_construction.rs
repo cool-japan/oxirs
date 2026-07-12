@@ -71,7 +71,9 @@ impl ParallelHnswBuilder {
     ) -> Result<(HnswIndex, ParallelConstructionStats)> {
         let start = Instant::now();
         let num_threads = if self.config.num_threads == 0 {
-            num_cpus::get()
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
         } else {
             self.config.num_threads
         };

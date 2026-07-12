@@ -8,7 +8,7 @@ Modbus TCP and RTU protocol support for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.3.1) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.3.2) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 
@@ -18,14 +18,40 @@ Modbus TCP and RTU protocol support for the OxiRS semantic web platform.
 
 ## Features
 
+### Core Protocol
 - ✅ **Modbus TCP client** - Port 502 connectivity (Ethernet)
-- ✅ **Modbus RTU client** - RS-232/RS-485 serial support
-- ✅ **Register mapping** - 6 data types (INT16, UINT16, INT32, UINT32, FLOAT32, BIT)
+- ✅ **Modbus RTU client** - RS-232/RS-485 serial support (default-on `rtu` feature)
+- ✅ **Modbus ASCII** - Legacy ASCII transport (LRC framing)
+- ✅ **Modbus over TLS** - Optional `tls` feature (rustls-based secure transport)
+- ✅ **Full function code coverage** - FC01/02/03/04/05/06/0F/10 (coils, discrete inputs, holding/input registers)
+- ✅ **TCP/RTU gateway** - Bridges serial RTU buses to Modbus TCP with request queuing
+
+### Register Mapping & RDF
+- ✅ **Register mapping** - 6 data types (INT16, UINT16, INT32, UINT32, FLOAT32, BIT) plus an extended IEEE 754/BCD/64-bit codec
 - ✅ **RDF triple generation** - QUDT units + W3C PROV-O timestamps
+- ✅ **SOSA/SSN mapper** - Sensor observation RDF mapping
+- ✅ **SPARQL graph updates** - Local INSERT DATA generation or HTTP UPDATE execution
+- ✅ **SAMM aspect model integration** - Generate/validate Eclipse SAMM aspect models
+- ✅ **Device profiles** - JSON/TOML-serializable register maps with scaling, units, access flags
+- ✅ **Register auto-discovery** - Probe unknown devices and infer register types/scaling
+
+### Operations
 - ✅ **Connection pooling** - Health monitoring and auto-reconnection
-- ✅ **Mock server** - Testing infrastructure without hardware
-- ✅ **Change detection** - Deadband filtering to reduce updates
-- ✅ **Batch operations** - Optimized multi-register reads
+- ✅ **Adaptive polling** - Fixed/Adaptive/OnChange/OnDemand strategies with a scheduler
+- ✅ **Register cache** - Deadband filtering, TTL expiry, change history
+- ✅ **Batch reads** - Adjacent-register coalescing with retry
+- ✅ **Alarm manager** - Rule-based triggering with acknowledge/clear lifecycle
+- ✅ **Register validator** - Range/type/scaling/rate-of-change checks
+- ✅ **Data logger** - Ring-buffer storage with CSV/JSON export and threshold alerts
+- ✅ **Event log** - Ring-buffer of register-change/connection/error events
+- ✅ **Exception handling** - Modbus exception codes with exponential-backoff retry
+- ✅ **Prometheus metrics** - Operational metrics export
+- ✅ **Device registry** - Runtime tracking of connected devices and register maps
+
+### Integrations & Tooling
+- ✅ **OPC UA bridge** - Bidirectional Modbus ↔ OPC UA translation (facade-based; mock transports bundled for testing, real transports pluggable)
+- ✅ **Mock server** - In-process test server (available under `cargo test`, or explicitly via the `testing` feature)
+- 🧩 **Terminal UI browser** - Interactive ratatui register browser (optional, non-default `tui` feature)
 
 ## Quick Start
 
@@ -33,7 +59,7 @@ Modbus TCP and RTU protocol support for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-modbus = "0.3.1"
+oxirs-modbus = "0.3.2"
 ```
 
 ### Basic Modbus TCP Example
@@ -54,28 +80,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### RDF Integration Example (Planned)
+### RDF Integration Example
 
 ```rust
-use oxirs_modbus::mapping::RegisterMap;
-use oxirs_core::store::RdfStore;
+use oxirs_modbus::mapping::{RegisterMap, RegisterType};
+use oxirs_modbus::rdf::ModbusTripleGenerator;
+use oxirs_modbus::ModbusTcpClient;
+use chrono::Utc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load register mapping from TOML
-    let register_map = RegisterMap::from_file("modbus_map.toml")?;
+    let register_map = RegisterMap::from_toml("modbus_map.toml")?;
+    let mut generator = ModbusTripleGenerator::new(register_map);
 
     // Connect to Modbus device
     let mut client = ModbusTcpClient::connect("192.168.1.100:502", 1).await?;
 
-    // Create RDF store
-    let mut store = RdfStore::new();
-
-    // Poll registers and update RDF graph
+    // Poll registers and generate RDF triples
     loop {
         let values = client.read_holding_registers(0, 100).await?;
-        let triples = register_map.generate_triples(&values)?;
-        store.insert_batch(&triples).await?;
+        let triples =
+            generator.generate_from_array(0, &values, RegisterType::Holding, Utc::now())?;
+        println!("Generated {} triples", triples.len());
+
+        // Persist via `oxirs_modbus::rdf::GraphUpdater` (local SPARQL INSERT DATA
+        // string, or HTTP UPDATE), or hand `triples` to your own RDF store.
 
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
@@ -129,13 +159,14 @@ predicate = "http://factory.example.com/property/motorRunning"
 
 | Code | Name | Status |
 |------|------|--------|
+| 0x01 | Read Coils | ✅ Complete |
+| 0x02 | Read Discrete Inputs | ✅ Complete |
 | 0x03 | Read Holding Registers | ✅ Complete |
 | 0x04 | Read Input Registers | ✅ Complete |
+| 0x05 | Write Single Coil | ✅ Complete |
 | 0x06 | Write Single Register | ✅ Complete |
+| 0x0F | Write Multiple Coils | ✅ Complete |
 | 0x10 | Write Multiple Registers | ✅ Complete |
-| 0x01 | Read Coils | ⏳ Future |
-| 0x02 | Read Discrete Inputs | ⏳ Future |
-| 0x0F | Write Multiple Coils | ⏳ Future |
 
 ## Data Type Mappings
 
@@ -192,10 +223,10 @@ See `/tmp/oxirs_cli_phase_d_guide.md` for complete CLI documentation.
 
 ## Production Status
 
-- ✅ **1,095 tests passing** - 100% success rate
+- ✅ **1,237 tests passing** - 100% success rate
 - ✅ **Zero warnings** - Strict code quality enforcement
-- ✅ **5 examples** - Complete usage documentation
-- ✅ **24 files, 6,752 lines** - Comprehensive implementation
+- ✅ **7 examples** - Complete usage documentation
+- ✅ **69 files, 24,418 lines** - Comprehensive implementation
 - ✅ **Standards compliant** - Modbus V1.1b3, W3C PROV-O, QUDT
 
 ## License

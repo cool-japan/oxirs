@@ -1,9 +1,9 @@
 //! # OxiRS GeoSPARQL
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-geosparql/badge.svg)](https://docs.rs/oxirs-geosparql)
 //!
-//! **Status**: Production Release (v0.3.1)
+//! **Status**: Production Release (v0.3.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
@@ -45,7 +45,6 @@
 //!
 //! - `wkt-support` (default): WKT parsing and serialization
 //! - `geojson-support`: GeoJSON support
-//! - `geos-backend`: Use GEOS library for geometric operations
 //! - `proj-support`: Coordinate transformation support
 //! - `parallel`: Parallel processing for large datasets
 
@@ -167,7 +166,10 @@ impl GeoSparqlRegistry {
     /// Get all available Egenhofer topological relation functions
     ///
     /// Returns a list of (function_uri, function_name) tuples
-    #[cfg(feature = "geos-backend")]
+    ///
+    /// NOTE: the working implementations of `ehMeet`/`ehInside`/`ehContains` require
+    /// GEOS, provided by the quarantined `oxirs-geosparql-adapter-geos` crate; the
+    /// remaining Egenhofer relations are Pure Rust in this crate.
     pub fn egenhofer_functions() -> Vec<(&'static str, &'static str)> {
         vec![
             (vocabulary::GEO_EH_EQUALS, "ehEquals"),
@@ -184,7 +186,10 @@ impl GeoSparqlRegistry {
     /// Get all available RCC8 topological relation functions
     ///
     /// Returns a list of (function_uri, function_name) tuples
-    #[cfg(feature = "geos-backend")]
+    ///
+    /// NOTE: the working implementations of the boundary-dependent RCC8 relations
+    /// (`EC`/`TPP`/`TPPi`/`NTPP`/`NTPPi`) require GEOS, provided by the quarantined
+    /// `oxirs-geosparql-adapter-geos` crate; `EQ`/`DC`/`PO` are Pure Rust here.
     pub fn rcc8_functions() -> Vec<(&'static str, &'static str)> {
         vec![
             (vocabulary::GEO_RCC8_EQ, "rcc8eq"),
@@ -215,7 +220,11 @@ impl GeoSparqlRegistry {
     /// Get all available geometric operation functions
     ///
     /// Returns a list of (function_uri, function_name) tuples
-    #[cfg(feature = "geos-backend")]
+    ///
+    /// NOTE: `buffer` (Point/LineString) and `boundary` require GEOS, provided by
+    /// the quarantined `oxirs-geosparql-adapter-geos` crate; the set operations
+    /// (intersection/union/difference/symDifference/convexHull/envelope) are Pure
+    /// Rust in this crate.
     pub fn operation_functions() -> Vec<(&'static str, &'static str)> {
         vec![
             (vocabulary::GEO_BUFFER, "buffer"),
@@ -240,18 +249,12 @@ impl GeoSparqlRegistry {
     ///
     /// Returns all boolean predicates that can be used in SPARQL FILTER clauses
     pub fn all_filter_functions() -> Vec<(&'static str, &'static str)> {
-        #[cfg(not(feature = "geos-backend"))]
-        {
-            Self::simple_features_functions()
-        }
-
-        #[cfg(feature = "geos-backend")]
-        {
-            let mut functions = Self::simple_features_functions();
-            functions.extend(Self::egenhofer_functions());
-            functions.extend(Self::rcc8_functions());
-            functions
-        }
+        // Only the Pure-Rust Simple Features predicates are registered by default.
+        // The boundary-dependent Egenhofer/RCC8 predicates require GEOS (provided by
+        // the quarantined `oxirs-geosparql-adapter-geos` crate); their URIs remain
+        // available via `egenhofer_functions()` / `rcc8_functions()` for callers that
+        // wire up the adapter.
+        Self::simple_features_functions()
     }
 
     /// Get all GeoSPARQL property functions
@@ -260,12 +263,9 @@ impl GeoSparqlRegistry {
     pub fn all_property_functions() -> Vec<(&'static str, &'static str)> {
         let mut functions = Self::property_functions();
         functions.extend(Self::distance_functions());
-
-        #[cfg(feature = "geos-backend")]
-        {
-            functions.extend(Self::operation_functions());
-        }
-
+        // The operation functions that need GEOS (buffer/boundary) are not registered
+        // by default; their URIs remain available via `operation_functions()` for
+        // callers wiring up the quarantined `oxirs-geosparql-adapter-geos` crate.
         functions
     }
 }
@@ -312,17 +312,11 @@ mod tests {
     fn test_init() {
         let (filter_functions, property_functions) = init();
 
-        // Check that we have the expected number of functions
-        #[cfg(feature = "geos-backend")]
-        {
-            assert_eq!(filter_functions.len(), 24); // 8 SF + 8 Egenhofer + 8 RCC8
-            assert_eq!(property_functions.len(), 15); // 6 props + 1 distance + 8 ops
-        }
-        #[cfg(not(feature = "geos-backend"))]
-        {
-            assert_eq!(filter_functions.len(), 8); // 8 Simple Features functions
-            assert_eq!(property_functions.len(), 7); // 6 properties + 1 distance
-        }
+        // Only the Pure-Rust Simple Features predicates / properties are registered
+        // by default; the GEOS-dependent Egenhofer/RCC8/operation functions live in
+        // the quarantined `oxirs-geosparql-adapter-geos` crate.
+        assert_eq!(filter_functions.len(), 8); // 8 Simple Features functions
+        assert_eq!(property_functions.len(), 7); // 6 properties + 1 distance
     }
 
     #[test]
@@ -338,7 +332,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "geos-backend")]
     fn test_egenhofer_registry() {
         let functions = GeoSparqlRegistry::egenhofer_functions();
 
@@ -351,7 +344,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "geos-backend")]
     fn test_rcc8_registry() {
         let functions = GeoSparqlRegistry::rcc8_functions();
 
@@ -376,7 +368,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "geos-backend")]
     fn test_operation_functions_registry() {
         let functions = GeoSparqlRegistry::operation_functions();
 

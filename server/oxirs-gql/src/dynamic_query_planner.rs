@@ -23,7 +23,8 @@ use sysinfo::System;
 use tokio::sync::RwLock;
 
 use crate::historical_cost_estimator::HistoricalCostEstimator;
-use crate::ml_optimizer::MLQueryOptimizer;
+use crate::ml_optimizer::{MLOptimizerConfig, MLQueryOptimizer, QueryFeatures, TrainingSample};
+use crate::performance::PerformanceTracker;
 
 /// Configuration for dynamic query planning
 #[derive(Debug, Clone)]
@@ -231,10 +232,13 @@ impl Default for StrategyStats {
 
 impl DynamicQueryPlanner {
     pub fn new(config: DynamicPlannerConfig) -> Self {
-        // Initialize ML optimizer if enabled
-        // Note: ML optimizer requires performance tracker, so we disable it for now
-        // TODO: Integrate with performance tracker when available
-        let ml_optimizer: Option<Arc<RwLock<MLQueryOptimizer>>> = None;
+        let ml_optimizer = if config.enable_ml_prediction {
+            let tracker = Arc::new(PerformanceTracker::new());
+            let optimizer = MLQueryOptimizer::new(MLOptimizerConfig::default(), tracker);
+            Some(Arc::new(RwLock::new(optimizer)))
+        } else {
+            None
+        };
 
         Self {
             cost_estimator: Arc::new(RwLock::new(HistoricalCostEstimator::new())),
@@ -496,6 +500,7 @@ impl DynamicQueryPlanner {
         let strategy = result.strategy_used;
         let execution_time = result.actual_time_ms;
         let success = result.success;
+        let resource_snapshot = result.resource_snapshot.clone();
 
         // Update historical cost estimator
         {
@@ -535,10 +540,33 @@ impl DynamicQueryPlanner {
             history.push_back(result);
         }
 
-        // Train ML optimizer if enabled (currently disabled)
-        // TODO: Integrate ML training when performance tracker is available
-        if let Some(_ml_opt) = &self.ml_optimizer {
-            // Training would happen here with features and target
+        // Train ML optimizer with synthesized features from execution result
+        if let Some(ml_opt) = &self.ml_optimizer {
+            let features = QueryFeatures {
+                field_count: resource_snapshot.active_queries as f64,
+                max_depth: 1.0,
+                complexity_score: execution_time,
+                selection_count: resource_snapshot.active_queries as f64,
+                has_fragments: 0.0,
+                has_variables: 0.0,
+                operation_type: 0.0,
+                unique_field_types: 1.0,
+                nested_list_count: 0.0,
+                argument_count: 0.0,
+                directive_count: 0.0,
+                estimated_result_size: resource_snapshot.avg_query_time_ms.log10().max(1.0),
+            };
+            let sample = TrainingSample {
+                features,
+                execution_time_ms: execution_time,
+                memory_usage_mb: resource_snapshot.memory_usage * 100.0,
+                cache_hit: false,
+                error_occurred: !success,
+                timestamp: std::time::SystemTime::now(),
+            };
+            let ml = ml_opt.read().await;
+            // best-effort: ignore training errors
+            let _ = ml.add_training_sample(sample).await;
         }
 
         Ok(())
@@ -912,5 +940,63 @@ mod tests {
         assert!(config.enable_ml_prediction);
         assert_eq!(config.cpu_threshold, 0.80);
         assert_eq!(config.memory_threshold, 0.85);
+    }
+
+    #[tokio::test]
+    async fn test_ml_optimizer_wired() {
+        let config = DynamicPlannerConfig {
+            enable_ml_prediction: true,
+            cpu_threshold: 1.0,
+            memory_threshold: 1.0,
+            ..Default::default()
+        };
+        let planner = DynamicQueryPlanner::new(config);
+        // With ML enabled, create_plan should succeed
+        let plan = planner
+            .create_plan("SELECT ?s WHERE { ?s ?p ?o }", 10.0)
+            .await
+            .expect("should succeed");
+        assert!(plan.fallback_strategy.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_ml_training_updates() {
+        let config = DynamicPlannerConfig {
+            enable_ml_prediction: true,
+            cpu_threshold: 1.0,
+            memory_threshold: 1.0,
+            ..Default::default()
+        };
+        let planner = DynamicQueryPlanner::new(config);
+
+        let snapshot = ResourceSnapshot {
+            timestamp: Instant::now(),
+            cpu_usage: 0.3,
+            memory_usage: 0.4,
+            active_queries: 5,
+            avg_query_time_ms: 50.0,
+        };
+
+        for i in 0..5u32 {
+            let exec_result = ExecutionResult {
+                query_fingerprint: format!("query_{i}"),
+                strategy_used: ExecutionStrategy::Sequential,
+                actual_time_ms: (i as f64 + 1.0) * 20.0,
+                success: true,
+                error_message: None,
+                resource_snapshot: snapshot.clone(),
+            };
+            planner
+                .record_execution(exec_result)
+                .await
+                .expect("should succeed");
+        }
+
+        let stats = planner.get_strategy_stats().await;
+        let seq_stats = stats
+            .get(&ExecutionStrategy::Sequential)
+            .expect("should have Sequential stats");
+        assert_eq!(seq_stats.total_executions, 5);
+        assert!(seq_stats.avg_time_ms > 0.0);
     }
 }

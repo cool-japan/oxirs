@@ -1,6 +1,6 @@
 //! Type-safe physics quantities via the `uom` crate (requires `simulation` feature).
 //!
-//! This module provides [`UomQuantity`] wrappers for common SI quantities used
+//! This module provides `UomQuantity` wrappers for common SI quantities used
 //! throughout the physics simulation bridge.  Using compile-time dimensional
 //! types eliminates unit-mismatch bugs that raw `f64` parameters cannot catch.
 //!

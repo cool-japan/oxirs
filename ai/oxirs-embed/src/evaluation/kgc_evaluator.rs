@@ -1,7 +1,7 @@
 //! Knowledge Graph Completion evaluator.
 //!
 //! This module provides [`KgcEvaluator`], which runs the standard KGC
-//! evaluation protocol against any trained [`EmbeddingModel`]:
+//! evaluation protocol against any trained [`EmbeddingModel`](crate::EmbeddingModel):
 //!
 //! 1. For each test triple (h, r, t):
 //!    - **Tail prediction**: replace `t` with every entity in the vocabulary,

@@ -78,7 +78,9 @@ impl Default for AdaptiveExecutionConfig {
             ga_population_size: 50,
             ga_max_generations: 100,
             enable_parallel_evaluation: true,
-            parallel_workers: num_cpus::get(),
+            parallel_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
         }
     }
 }

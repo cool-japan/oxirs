@@ -1,6 +1,6 @@
 # OxiRS-Star - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
@@ -21,7 +21,7 @@ OxiRS-Star provides RDF-star and SPARQL-star support for quoted triples with ent
 - **Reasoning Engine** - RDFS and OWL 2 RL support
 - **Cryptographic Provenance** - Secure triple signing and verification
 - **Production Features** - Circuit breaker, rate limiter, health monitoring
-- **1628 tests passing** with zero warnings
+- **1680 tests passing** with zero warnings
 
 ### Key Capabilities
 
@@ -40,7 +40,7 @@ OxiRS-Star provides RDF-star and SPARQL-star support for quoted triples with ent
 - ✅ Adaptive query optimization, HDT-star, streaming, property graph bridge
 - ✅ 1628 tests passing
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Advanced HNSW graph optimizations
 - ✅ Enhanced parallel query execution
 - ✅ Improved cache management
@@ -50,7 +50,7 @@ OxiRS-Star provides RDF-star and SPARQL-star support for quoted triples with ent
 - ✅ Advanced property graph integration
 - ✅ Distributed query processing
 
-### v0.3.0 - Planned (Q2 2026)
+### v0.3.0 - Released (Q2 2026)
 - [x] Full W3C RDF-star compliance (completed 2026-04-28)
   - **Goal:** Pass W3C RDF 1.2/RDF-star conformance suite for parsing, querying, and serializing quoted triples.
   - **Design:** Vendor W3C test suite fixtures → driver reads manifest → dispatch per-test → fix parser/serializer/query gaps (asserted vs unasserted semantics, SPARQL-star in BIND/FILTER/OPTIONAL, blank-node scope in quoted triples, round-trip NQ-star/TriG-star).
@@ -61,10 +61,13 @@ OxiRS-Star provides RDF-star and SPARQL-star support for quoted triples with ent
 - [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
+### v0.3.2 - Current Release (July 12, 2026)
+- [x] Maintenance release: no functional/API changes. Workspace-wide dependency modernization (`num_cpus::get()` → `std::thread::available_parallelism()`, `lazy_static` → `once_cell::sync::Lazy`) and rustdoc intra-doc link fixes
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS-Star v0.2.3 - RDF-star and SPARQL-star support*
+*OxiRS-Star v0.3.2 - RDF-star and SPARQL-star support*

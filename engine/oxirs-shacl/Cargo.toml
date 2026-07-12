@@ -42,19 +42,15 @@ dashmap.workspace = true
 chrono.workspace = true
 url.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
-num_cpus.workspace = true
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 serde_yaml.workspace = true
 semver = { version = "1.0", features = ["serde"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-wasmi = "1.0"  # Lightweight WASM interpreter for custom validators
+wasmi = "1.1"  # Lightweight WASM interpreter for custom validators
 tower-lsp = { version = "0.20", optional = true }  # LSP server implementation (includes lsp-types)
-tower = { workspace = true, optional = true }  # Service abstraction for LSP
 
 [dev-dependencies]
 criterion.workspace = true
-proptest.workspace = true
-tokio-test.workspace = true
 tracing-subscriber.workspace = true
 
 [[bin]]
@@ -85,7 +81,7 @@ sparql = []
 serde = []
 async = ["tokio", "futures", "futures-util", "tokio-stream"]
 parallel = ["rayon"]
-lsp = ["tower-lsp", "tower", "async", "tokio/full"]
+lsp = ["tower-lsp", "async", "tokio/full"]
 gpu = ["scirs2-core/gpu"]
 
 [[bench]]

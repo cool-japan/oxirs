@@ -4,11 +4,10 @@ use crate::model::{
     Literal, LiteralRef, NamedNode, NamedNodeRef, ObjectTerm, PredicateTerm, RdfTerm, SubjectTerm,
 };
 use crate::OxirsError;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 // use rand::random; // Replaced with fastrand
 use regex::Regex;
 // use serde::{Deserialize, Serialize}; // Available for serialization features
-use std::collections::HashSet;
 use std::fmt;
 use std::hash::Hash;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -49,23 +48,18 @@ fn to_integer_id(id: &str) -> Option<u128> {
     Some(value)
 }
 
-lazy_static! {
-    /// Regex for validating blank node IDs according to Turtle/N-Triples specification
-    static ref BLANK_NODE_REGEX: Regex = Regex::new(
-        r"^[a-zA-Z_][a-zA-Z0-9_.-]*$"
-    ).expect("Blank node regex compilation failed");
+/// Regex for validating blank node IDs according to Turtle/N-Triples specification
+static BLANK_NODE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_.-]*$").expect("Blank node regex compilation failed")
+});
 
-    /// Regex for validating SPARQL variable names according to SPARQL 1.1 specification
-    static ref VARIABLE_REGEX: Regex = Regex::new(
-        r"^[a-zA-Z_][a-zA-Z0-9_]*$"
-    ).expect("Variable regex compilation failed");
+/// Regex for validating SPARQL variable names according to SPARQL 1.1 specification
+static VARIABLE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").expect("Variable regex compilation failed")
+});
 
-    /// Global counter for unique blank node generation
-    static ref BLANK_NODE_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    /// Global set for collision detection (using thread-safe wrapper)
-    static ref BLANK_NODE_IDS: std::sync::Mutex<HashSet<String>> = std::sync::Mutex::new(HashSet::new());
-}
+/// Global counter for unique blank node generation
+static BLANK_NODE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Validates a blank node identifier according to RDF specifications
 fn validate_blank_node_id(id: &str) -> Result<(), OxirsError> {

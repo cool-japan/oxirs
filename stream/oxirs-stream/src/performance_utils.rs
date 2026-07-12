@@ -45,7 +45,9 @@ impl Default for PerformanceUtilsConfig {
             optimal_batch_size: 1000,
             enable_adaptive_rate_limiting: true,
             enable_prefetching: true,
-            cpu_cores: num_cpus::get(),
+            cpu_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
         }
     }
 }

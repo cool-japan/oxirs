@@ -1,9 +1,9 @@
 //! # OxiRS Vector Search
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-vec/badge.svg)](https://docs.rs/oxirs-vec)
 //!
-//! **Status**: Production Release (v0.3.1) - **Production-Ready with Complete Documentation**
+//! **Status**: Production Release (v0.3.2) - **Production-Ready with Complete Documentation**
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing and 100 KB of documentation.
 //!
 //! Vector index abstractions for semantic similarity and AI-augmented SPARQL querying.
@@ -62,20 +62,22 @@
 //!
 //! ### Core Features (Pure Rust)
 //!
-//! - `hnsw` - HNSW index support (default: disabled, Pure Rust)
 //! - `simd` - SIMD optimizations for vector operations (Pure Rust)
 //! - `parallel` - Parallel processing support (Pure Rust)
+//! - `tantivy-search` - Tantivy full-text search (Pure Rust)
+//!
+//! HNSW index support is always built in (Pure Rust, no feature flag required).
 //!
 //! ### Optional Features (with system dependencies)
 //!
-//! - `gpu` - GPU acceleration abstractions (Pure Rust, uses scirs2-core GPU backend)
+//! - `gpu` - GPU acceleration abstractions (Pure Rust; no-op compatibility feature)
 //! - `blas` - BLAS acceleration (requires system BLAS library)
-//! - `cuda` - CUDA GPU acceleration (requires NVIDIA CUDA Toolkit)
-//!   - When CUDA toolkit is installed: enables GPU-accelerated operations
-//!   - When CUDA toolkit is missing: gracefully falls back to CPU implementations
-//!   - Install CUDA from: <https://developer.nvidia.com/cuda-downloads>
-//! - `candle-gpu` - Candle GPU backend (Pure Rust)
-//! - `gpu-full` - All GPU features combined (`cuda` + `candle-gpu` + `gpu`)
+//!
+//! > **CUDA**: Real NVIDIA CUDA GPU acceleration is provided by the companion
+//! > `oxirs-vec-adapter-cuda` crate (`publish = false`), which depends on
+//! > `oxirs-vec` and quarantines the `cuda-runtime-sys` C FFI off this crate's
+//! > Pure-Rust surface per the COOLJAPAN Pure Rust Policy v2. The former `cuda`
+//! > and `gpu-full` features were removed.
 //!
 //! ### Content Processing
 //!
@@ -85,7 +87,6 @@
 //! ### Language Integration
 //!
 //! - `python` - Python bindings via PyO3
-//! - `huggingface` - HuggingFace Hub integration
 //!
 //! ### Default Build
 //!
@@ -96,10 +97,9 @@
 //!
 //! ### GPU-Accelerated Build (requires CUDA toolkit)
 //!
-//! ```toml
-//! [dependencies]
-//! oxirs-vec = { version = "0.1", features = ["gpu-full"] }
-//! ```
+//! Real CUDA acceleration lives in the `oxirs-vec-adapter-cuda` crate
+//! (`publish = false`), which depends on `oxirs-vec` and is built only where the
+//! NVIDIA CUDA Toolkit is present.
 
 use anyhow::Result;
 

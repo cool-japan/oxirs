@@ -121,17 +121,16 @@ pub mod memory;
 #[cfg(feature = "redis")]
 pub mod redis;
 
-#[cfg(feature = "kafka")]
-pub mod kafka;
+// NOTE: the Kafka (`kafka`, `kafka_schema_registry`) and Pulsar (`pulsar`) backend
+// modules were quarantined into the publish=false `oxirs-stream-adapter-rdkafka` and
+// `oxirs-stream-adapter-pulsar` crates per COOLJAPAN Pure Rust Policy v2 (they pulled
+// rdkafka-sys/libz-sys and native-tls/lz4-sys respectively).
 
 #[cfg(feature = "nats")]
 pub mod nats;
 
 #[cfg(feature = "kinesis")]
 pub mod kinesis;
-
-#[cfg(feature = "pulsar")]
-pub mod pulsar;
 
 #[cfg(feature = "rabbitmq")]
 pub mod rabbitmq;
@@ -141,6 +140,3 @@ pub mod mqtt;
 
 #[cfg(feature = "opcua")]
 pub mod opcua;
-
-#[cfg(feature = "kafka")]
-pub mod kafka_schema_registry;

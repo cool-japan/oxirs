@@ -25,8 +25,6 @@ juniper_hyper.workspace = true
 tokio.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
-tower.workspace = true
-tower-http.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
@@ -37,12 +35,10 @@ tracing-subscriber.workspace = true
 async-trait.workspace = true
 uuid.workspace = true
 chrono.workspace = true
-urlencoding.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 regex.workspace = true
 fastrand.workspace = true
 sysinfo.workspace = true
-num_cpus.workspace = true
 
 # Distributed caching
 redis.workspace = true

@@ -25,7 +25,7 @@
 use std::sync::Arc;
 
 use cranelift_codegen::ir::{
-    condcodes::IntCC, types, AbiParam, InstBuilder, MemFlags, Signature, Value,
+    condcodes::IntCC, types, AbiParam, InstBuilder, MemFlagsData, Signature, Value,
 };
 use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings::{self, Configurable};
@@ -350,7 +350,11 @@ fn emit_project_body(
             .iconst(ptr_type, (spec.src_idx * std::mem::size_of::<f64>()) as i64);
         let src_addr = builder.ins().iadd(src_ptr, src_offset);
         // SAFETY comment for generated IR: bounds were verified above; load is safe.
-        let val = builder.ins().load(types::F64, MemFlags::new(), src_addr, 0);
+        // cranelift 0.133: the old `MemFlags::new()` value type is now `MemFlagsData`
+        // (InstBuilder interns it into the DFG's MemFlagsSet internally).
+        let val = builder
+            .ins()
+            .load(types::F64, MemFlagsData::new(), src_addr, 0);
 
         // Destination store: dst_ptr + dst_i * 8
         let dst_offset = builder
@@ -358,7 +362,7 @@ fn emit_project_body(
             .iconst(ptr_type, (dst_i * std::mem::size_of::<f64>()) as i64);
         let dst_addr = builder.ins().iadd(dst_ptr, dst_offset);
         // SAFETY comment for generated IR: bounds were verified above; store is safe.
-        builder.ins().store(MemFlags::new(), val, dst_addr, 0);
+        builder.ins().store(MemFlagsData::new(), val, dst_addr, 0);
     }
 
     let one_i8 = builder.ins().iconst(types::I8, 1);

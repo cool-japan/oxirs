@@ -27,13 +27,9 @@ tracing-subscriber.workspace = true
 
 # SciRS2 dependencies for high-performance RDF-star processing (SCIRS2 POLICY)
 scirs2-core = { workspace = true, features = ["simd", "parallel", "memory_efficient", "profiling", "benchmarking", "random", "jit"] }
-scirs2-graph.workspace = true  # For RDF graph algorithms
-scirs2-stats.workspace = true   # For statistical analysis
-scirs2-metrics.workspace = true # For performance metrics
 
 # CLI and tooling dependencies
 clap = { workspace = true, features = ["derive"] }
-num_cpus.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 lru.workspace = true
 rayon.workspace = true  # For parallel operations
@@ -51,7 +47,6 @@ tokio = { workspace = true, features = ["sync"] }
 ed25519-dalek = { workspace = true, features = ["serde"] }
 sha2.workspace = true
 hex.workspace = true
-base64.workspace = true
 # Note: rand not needed directly - use scirs2_core::random (SCIRS2 POLICY)
 
 [dev-dependencies]

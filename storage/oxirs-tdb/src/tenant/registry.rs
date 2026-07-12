@@ -45,7 +45,7 @@ impl TenantRegistry {
     /// Delete a tenant and discard all their statistics.
     ///
     /// This does **not** physically remove the underlying triples from the store;
-    /// callers should also call [`TenantStore::purge`] first if desired.
+    /// callers should also call [`TenantStore::purge`](crate::tenant::TenantStore::purge) first if desired.
     pub fn delete_tenant(&self, id: &TenantId) -> TenantResult<()> {
         let mut guard = self
             .tenants

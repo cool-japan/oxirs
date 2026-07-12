@@ -113,7 +113,9 @@ impl Default for ReasoningConfig {
         Self {
             max_iterations: 100,
             enable_parallel: true,
-            worker_threads: num_cpus::get(),
+            worker_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             enable_provenance: true,
             max_inference_depth: 10,
             enable_profiling: false,

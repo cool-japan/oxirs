@@ -63,7 +63,9 @@ impl Default for BatchBuilderConfig {
 impl BatchBuilderConfig {
     /// Create configuration optimized for current system
     pub fn auto() -> Self {
-        let num_cpus = num_cpus::get();
+        let num_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
         let mem_info = sys_info::mem_info().ok();
 
         let (max_batch_size, max_memory_usage) = if let Some(info) = mem_info {

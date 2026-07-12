@@ -1,6 +1,6 @@
 //! The Jena parity checker engine.
 //!
-//! [`JenaParityChecker`] holds the full feature catalogue, the per-category
+//! [`JenaParityChecker`](crate::commands::jena_parity_checker::JenaParityChecker) holds the full feature catalogue, the per-category
 //! registration routines, the coverage analysis helpers and the Markdown report
 //! generator.
 

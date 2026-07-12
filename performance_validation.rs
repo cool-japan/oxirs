@@ -128,18 +128,19 @@ impl PerformanceValidator {
     pub async fn validate_ecosystem(&self) -> Result<ValidationResults> {
         println!("🚀 Starting OxiRS Ecosystem Performance Validation");
         println!("=================================================");
-        
+
         let start_time = Instant::now();
-        
+
         // Prepare output directory
         fs::create_dir_all(&self.config.output_dir)?;
-        
+
         // Gather system information
         let system_info = self.gather_system_info()?;
-        println!("📊 System: {} {} | {} cores | {:.1}GB RAM", 
-                 system_info.os, system_info.arch, 
-                 system_info.cpu_cores, system_info.memory_gb);
-        
+        println!(
+            "📊 System: {} {} | {} cores | {:.1}GB RAM",
+            system_info.os, system_info.arch, system_info.cpu_cores, system_info.memory_gb
+        );
+
         // Define modules to benchmark
         let modules = self.get_benchmark_modules();
         let mut module_results = HashMap::new();
@@ -154,7 +155,12 @@ impl PerformanceValidator {
             // Run benchmarks sequentially for comprehensive analysis
             println!("🔍 Running benchmarks sequentially for detailed analysis");
             for (i, module) in modules.iter().enumerate() {
-                println!("\n📦 [{}/{}] Benchmarking {}", i + 1, modules.len(), module.name);
+                println!(
+                    "\n📦 [{}/{}] Benchmarking {}",
+                    i + 1,
+                    modules.len(),
+                    module.name
+                );
                 let result = self.benchmark_module(module).await?;
                 total_targets += result.total_targets;
                 passed_targets += result.targets_met;
@@ -176,7 +182,7 @@ impl PerformanceValidator {
 
         // Identify bottlenecks
         let bottlenecks = self.identify_bottlenecks(&module_results);
-        
+
         // Generate recommendations
         let recommendations = self.generate_recommendations(&module_results, &bottlenecks);
 
@@ -197,10 +203,10 @@ impl PerformanceValidator {
         };
 
         let total_duration = start_time.elapsed();
-        
+
         // Save results
         self.save_results(&results).await?;
-        
+
         // Display summary
         self.display_summary(&results, total_duration);
 
@@ -231,14 +237,12 @@ impl PerformanceValidator {
             BenchmarkModule {
                 name: "oxirs-arq".to_string(),
                 path: "engine/oxirs-arq".to_string(),
-                targets: vec![
-                    PerformanceTarget {
-                        name: "sparql_query_throughput".to_string(),
-                        target_value: 1000.0, // 1K queries/second
-                        unit: "queries/sec".to_string(),
-                        critical: true,
-                    },
-                ],
+                targets: vec![PerformanceTarget {
+                    name: "sparql_query_throughput".to_string(),
+                    target_value: 1000.0, // 1K queries/second
+                    unit: "queries/sec".to_string(),
+                    critical: true,
+                }],
             },
             BenchmarkModule {
                 name: "oxirs-tdb".to_string(),
@@ -261,14 +265,12 @@ impl PerformanceValidator {
             BenchmarkModule {
                 name: "oxirs-vec".to_string(),
                 path: "engine/oxirs-vec".to_string(),
-                targets: vec![
-                    PerformanceTarget {
-                        name: "vector_search_latency".to_string(),
-                        target_value: 500.0, // 500μs for similarity search
-                        unit: "μs".to_string(),
-                        critical: true,
-                    },
-                ],
+                targets: vec![PerformanceTarget {
+                    name: "vector_search_latency".to_string(),
+                    target_value: 500.0, // 500μs for similarity search
+                    unit: "μs".to_string(),
+                    critical: true,
+                }],
             },
             BenchmarkModule {
                 name: "oxirs-stream".to_string(),
@@ -309,14 +311,12 @@ impl PerformanceValidator {
             BenchmarkModule {
                 name: "oxirs-embed".to_string(),
                 path: "ai/oxirs-embed".to_string(),
-                targets: vec![
-                    PerformanceTarget {
-                        name: "embedding_generation_rate".to_string(),
-                        target_value: 1000.0, // 1K embeddings/second
-                        unit: "embeddings/sec".to_string(),
-                        critical: false,
-                    },
-                ],
+                targets: vec![PerformanceTarget {
+                    name: "embedding_generation_rate".to_string(),
+                    target_value: 1000.0, // 1K embeddings/second
+                    unit: "embeddings/sec".to_string(),
+                    critical: false,
+                }],
             },
         ]
     }
@@ -344,10 +344,11 @@ impl PerformanceValidator {
         // Run Cargo benchmarks
         println!("  🔧 Running cargo benchmarks...");
         let benchmark_output = self.run_cargo_benchmarks(&module.path).await?;
-        
+
         // Parse benchmark results and check against targets
         for target in &module.targets {
-            let benchmark_result = self.create_benchmark_result_from_target(target, &benchmark_output)?;
+            let benchmark_result =
+                self.create_benchmark_result_from_target(target, &benchmark_output)?;
             if benchmark_result.target_met {
                 targets_met += 1;
             }
@@ -367,8 +368,13 @@ impl PerformanceValidator {
             (targets_met as f64 / module.targets.len() as f64) * 100.0
         };
 
-        println!("  ✅ {} completed: {:.1}% ({}/{} targets met)", 
-                 module.name, performance_score, targets_met, module.targets.len());
+        println!(
+            "  ✅ {} completed: {:.1}% ({}/{} targets met)",
+            module.name,
+            performance_score,
+            targets_met,
+            module.targets.len()
+        );
 
         Ok(ModuleResults {
             module_name: module.name.clone(),
@@ -381,9 +387,12 @@ impl PerformanceValidator {
     }
 
     /// Run benchmarks in parallel
-    async fn run_parallel_benchmarks(&self, modules: &[BenchmarkModule]) -> Result<HashMap<String, ModuleResults>> {
+    async fn run_parallel_benchmarks(
+        &self,
+        modules: &[BenchmarkModule],
+    ) -> Result<HashMap<String, ModuleResults>> {
         use tokio::task::JoinSet;
-        
+
         let mut set = JoinSet::new();
         let mut results = HashMap::new();
 
@@ -391,7 +400,7 @@ impl PerformanceValidator {
         for module in modules {
             let module_clone = module.clone();
             let config_clone = self.config.clone();
-            
+
             set.spawn(async move {
                 let validator = PerformanceValidator::new(config_clone);
                 let result = validator.benchmark_module(&module_clone).await;
@@ -436,7 +445,11 @@ impl PerformanceValidator {
     }
 
     /// Create benchmark result from target
-    fn create_benchmark_result_from_target(&self, target: &PerformanceTarget, _output: &str) -> Result<BenchmarkResult> {
+    fn create_benchmark_result_from_target(
+        &self,
+        target: &PerformanceTarget,
+        _output: &str,
+    ) -> Result<BenchmarkResult> {
         // Simulate benchmark results - in production this would parse actual benchmark output
         let simulated_value = target.target_value * (0.8 + rand::random::<f64>() * 0.4); // 80-120% of target
         let target_met = simulated_value >= target.target_value;
@@ -543,7 +556,10 @@ impl PerformanceValidator {
     }
 
     /// Identify performance bottlenecks
-    fn identify_bottlenecks(&self, results: &HashMap<String, ModuleResults>) -> Vec<PerformanceBottleneck> {
+    fn identify_bottlenecks(
+        &self,
+        results: &HashMap<String, ModuleResults>,
+    ) -> Vec<PerformanceBottleneck> {
         let mut bottlenecks = vec![];
 
         for (module_name, module_result) in results {
@@ -564,7 +580,11 @@ impl PerformanceValidator {
                             severity: severity.to_string(),
                             description: format!(
                                 "{} performance below target: {:.1} {} (target: {:.1} {})",
-                                benchmark.name, benchmark.value, benchmark.unit, target, benchmark.unit
+                                benchmark.name,
+                                benchmark.value,
+                                benchmark.unit,
+                                target,
+                                benchmark.unit
                             ),
                             impact: self.assess_impact(severity, &benchmark.name),
                         });
@@ -579,20 +599,29 @@ impl PerformanceValidator {
     /// Assess impact of bottleneck
     fn assess_impact(&self, severity: &str, operation: &str) -> String {
         match (severity, operation) {
-            ("critical", op) if op.contains("insertion") => "Severely impacts data loading performance".to_string(),
-            ("critical", op) if op.contains("query") => "Severely impacts query response times".to_string(),
+            ("critical", op) if op.contains("insertion") => {
+                "Severely impacts data loading performance".to_string()
+            }
+            ("critical", op) if op.contains("query") => {
+                "Severely impacts query response times".to_string()
+            }
             ("major", _) => "Noticeable impact on user experience".to_string(),
             _ => "Minor impact on overall performance".to_string(),
         }
     }
 
     /// Generate performance recommendations
-    fn generate_recommendations(&self, results: &HashMap<String, ModuleResults>, bottlenecks: &[PerformanceBottleneck]) -> Vec<String> {
+    fn generate_recommendations(
+        &self,
+        results: &HashMap<String, ModuleResults>,
+        bottlenecks: &[PerformanceBottleneck],
+    ) -> Vec<String> {
         let mut recommendations = vec![];
 
         // General recommendations based on overall performance
-        let avg_score: f64 = results.values().map(|r| r.performance_score).sum::<f64>() / results.len() as f64;
-        
+        let avg_score: f64 =
+            results.values().map(|r| r.performance_score).sum::<f64>() / results.len() as f64;
+
         if avg_score < 70.0 {
             recommendations.push("Consider increasing system resources (CPU/Memory)".to_string());
             recommendations.push("Review algorithmic complexity in core operations".to_string());
@@ -602,13 +631,17 @@ impl PerformanceValidator {
         for bottleneck in bottlenecks {
             match bottleneck.operation.as_str() {
                 op if op.contains("insertion") => {
-                    recommendations.push("Optimize bulk insertion algorithms and consider batching".to_string());
+                    recommendations.push(
+                        "Optimize bulk insertion algorithms and consider batching".to_string(),
+                    );
                 }
                 op if op.contains("query") => {
-                    recommendations.push("Review query optimization and indexing strategies".to_string());
+                    recommendations
+                        .push("Review query optimization and indexing strategies".to_string());
                 }
                 op if op.contains("memory") => {
-                    recommendations.push("Implement memory pooling and reduce allocations".to_string());
+                    recommendations
+                        .push("Implement memory pooling and reduce allocations".to_string());
                 }
                 _ => {}
             }
@@ -619,7 +652,10 @@ impl PerformanceValidator {
         recommendations.dedup();
 
         if recommendations.is_empty() {
-            recommendations.push("All performance targets met - consider raising targets for next release".to_string());
+            recommendations.push(
+                "All performance targets met - consider raising targets for next release"
+                    .to_string(),
+            );
         }
 
         recommendations
@@ -630,7 +666,9 @@ impl PerformanceValidator {
         Ok(SystemInfo {
             os: std::env::consts::OS.to_string(),
             arch: std::env::consts::ARCH.to_string(),
-            cpu_cores: num_cpus::get(),
+            cpu_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             memory_gb: 16.0, // Simplified - would use system APIs in production
             rust_version: "1.70.0".to_string(), // Would get actual version
             git_commit: "abc123".to_string(), // Would get actual commit
@@ -640,7 +678,10 @@ impl PerformanceValidator {
     /// Save validation results
     async fn save_results(&self, results: &ValidationResults) -> Result<()> {
         // Save JSON results
-        let json_path = self.config.output_dir.join("performance_validation_results.json");
+        let json_path = self
+            .config
+            .output_dir
+            .join("performance_validation_results.json");
         let json_content = serde_json::to_string_pretty(results)?;
         fs::write(&json_path, json_content)?;
 
@@ -659,41 +700,73 @@ impl PerformanceValidator {
     /// Generate markdown report
     fn generate_markdown_report(&self, results: &ValidationResults) -> String {
         let mut report = String::new();
-        
+
         report.push_str("# OxiRS Ecosystem Performance Validation Report\n\n");
-        report.push_str(&format!("**Generated:** {}\n", results.timestamp.format("%Y-%m-%d %H:%M:%S UTC")));
-        report.push_str(&format!("**Overall Score:** {:.1}%\n", results.overall_score));
-        report.push_str(&format!("**Targets Met:** {}/{}\n\n", results.passed_targets, results.total_targets));
+        report.push_str(&format!(
+            "**Generated:** {}\n",
+            results.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
+        report.push_str(&format!(
+            "**Overall Score:** {:.1}%\n",
+            results.overall_score
+        ));
+        report.push_str(&format!(
+            "**Targets Met:** {}/{}\n\n",
+            results.passed_targets, results.total_targets
+        ));
 
         // System information
         report.push_str("## System Information\n\n");
-        report.push_str(&format!("- **OS:** {} {}\n", results.system_info.os, results.system_info.arch));
-        report.push_str(&format!("- **CPU Cores:** {}\n", results.system_info.cpu_cores));
-        report.push_str(&format!("- **Memory:** {:.1} GB\n", results.system_info.memory_gb));
-        report.push_str(&format!("- **Rust Version:** {}\n", results.system_info.rust_version));
-        report.push_str(&format!("- **Git Commit:** {}\n\n", results.system_info.git_commit));
+        report.push_str(&format!(
+            "- **OS:** {} {}\n",
+            results.system_info.os, results.system_info.arch
+        ));
+        report.push_str(&format!(
+            "- **CPU Cores:** {}\n",
+            results.system_info.cpu_cores
+        ));
+        report.push_str(&format!(
+            "- **Memory:** {:.1} GB\n",
+            results.system_info.memory_gb
+        ));
+        report.push_str(&format!(
+            "- **Rust Version:** {}\n",
+            results.system_info.rust_version
+        ));
+        report.push_str(&format!(
+            "- **Git Commit:** {}\n\n",
+            results.system_info.git_commit
+        ));
 
         // Module results
         report.push_str("## Module Performance Results\n\n");
         for (module_name, module_result) in &results.module_results {
             report.push_str(&format!("### {}\n\n", module_name));
-            report.push_str(&format!("**Score:** {:.1}% ({}/{} targets met)\n", 
-                                   module_result.performance_score, 
-                                   module_result.targets_met, 
-                                   module_result.total_targets));
-            report.push_str(&format!("**Duration:** {:.2}s\n\n", module_result.duration.as_secs_f64()));
+            report.push_str(&format!(
+                "**Score:** {:.1}% ({}/{} targets met)\n",
+                module_result.performance_score,
+                module_result.targets_met,
+                module_result.total_targets
+            ));
+            report.push_str(&format!(
+                "**Duration:** {:.2}s\n\n",
+                module_result.duration.as_secs_f64()
+            ));
 
             if !module_result.benchmarks.is_empty() {
                 report.push_str("| Benchmark | Value | Unit | Target | Status |\n");
                 report.push_str("|-----------|-------|------|--------|---------|\n");
                 for benchmark in &module_result.benchmarks {
                     let status = if benchmark.target_met { "✅" } else { "❌" };
-                    let target_str = benchmark.target_value
+                    let target_str = benchmark
+                        .target_value
                         .map(|t| format!("{:.1}", t))
                         .unwrap_or_else(|| "N/A".to_string());
-                    
-                    report.push_str(&format!("| {} | {:.1} | {} | {} | {} |\n",
-                                           benchmark.name, benchmark.value, benchmark.unit, target_str, status));
+
+                    report.push_str(&format!(
+                        "| {} | {:.1} | {} | {} | {} |\n",
+                        benchmark.name, benchmark.value, benchmark.unit, target_str, status
+                    ));
                 }
                 report.push_str("\n");
             }
@@ -708,9 +781,10 @@ impl PerformanceValidator {
                     "major" => "🟡",
                     _ => "🔵",
                 };
-                report.push_str(&format!("- {} **{}:** {} ({})\n", 
-                                       severity_emoji, bottleneck.operation, 
-                                       bottleneck.description, bottleneck.impact));
+                report.push_str(&format!(
+                    "- {} **{}:** {} ({})\n",
+                    severity_emoji, bottleneck.operation, bottleneck.description, bottleneck.impact
+                ));
             }
             report.push_str("\n");
         }
@@ -729,7 +803,10 @@ impl PerformanceValidator {
         println!("\n🎯 Performance Validation Summary");
         println!("================================");
         println!("Overall Score: {:.1}%", results.overall_score);
-        println!("Targets Met: {}/{}", results.passed_targets, results.total_targets);
+        println!(
+            "Targets Met: {}/{}",
+            results.passed_targets, results.total_targets
+        );
         println!("Total Duration: {:.1}s", duration.as_secs_f64());
         println!();
 
@@ -741,12 +818,14 @@ impl PerformanceValidator {
             _ => ("❌", "Needs Improvement"),
         };
         println!("Performance Grade: {} {}", grade.0, grade.1);
-        
+
         // Critical bottlenecks
-        let critical_bottlenecks: Vec<_> = results.bottlenecks.iter()
+        let critical_bottlenecks: Vec<_> = results
+            .bottlenecks
+            .iter()
             .filter(|b| b.severity == "critical")
             .collect();
-        
+
         if !critical_bottlenecks.is_empty() {
             println!("\n🔴 Critical Issues:");
             for bottleneck in critical_bottlenecks {

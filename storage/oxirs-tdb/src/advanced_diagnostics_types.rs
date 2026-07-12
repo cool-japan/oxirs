@@ -7,7 +7,7 @@
 //! - Trend/forecast types ([`PredictiveHealthIndicators`], [`CapacityForecast`], etc.)
 //! - The [`AdvancedDiagnosticEngine`] struct and its internal trackers
 //!
-//! [`AdvancedDiagnosticEngine`]: crate::advanced_diagnostics_engine::AdvancedDiagnosticEngine
+//! [`AdvancedDiagnosticEngine`]: crate::advanced_diagnostics_types::AdvancedDiagnosticEngine
 
 use crate::diagnostics::Severity;
 use crate::storage::BufferPoolStats;

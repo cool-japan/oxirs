@@ -461,7 +461,9 @@ impl AdvancedOptimizationEngine {
             // Configure parallel execution for independent constraint groups
             let max_concurrent_groups = self.config.max_parallel_threads.min(parallel_groups.len());
             let chunk_size = self.calculate_optimal_chunk_size(&parallel_groups).await?;
-            let thread_pool_size = num_cpus::get();
+            let thread_pool_size = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1);
 
             // Note: In a real implementation, we would configure the parallel executor
             // For now, we record the parallelization potential
@@ -755,7 +757,9 @@ impl AdvancedOptimizationEngine {
     /// Calculate optimal chunk size for parallel execution
     async fn calculate_optimal_chunk_size(&self, groups: &[ConstraintGroup]) -> Result<usize> {
         let total_constraints: usize = groups.iter().map(|g| g.constraints.len()).sum();
-        let num_threads = num_cpus::get();
+        let num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
 
         // Balance between having enough work per thread and not too much overhead
         let optimal_chunk_size = (total_constraints / num_threads).clamp(1, 50);
@@ -773,10 +777,21 @@ impl AdvancedOptimizationEngine {
         let mut total_validation_time = 0.0;
         let mut peak_memory_usage: f64 = 0.0;
 
-        // Simulate realistic constraint execution with varying costs
+        // Estimate realistic constraint execution cost with varying costs.
+        //
+        // NOTE: This deliberately uses the deterministic, complexity-based cost
+        // estimate (`constraint_time`) as the recorded metric instead of measuring
+        // real wall-clock time via `Instant::elapsed()`. An earlier version of this
+        // code computed `constraint_time` and then discarded it in favor of an
+        // actual timed sleep-and-measure step; that let OS scheduler jitter leak
+        // into what is meant to be a reproducible cost model, so two measurements
+        // of an *unchanged* shape (e.g. the before/after comparison in
+        // `optimize_shape`/`apply_optimization`) could non-deterministically
+        // differ and occasionally report a negative `improvement_percentage` even
+        // though nothing about the shape's constraints had changed. Using the
+        // deterministic estimate directly keeps `measure_performance` a pure
+        // function of the constraint set and configuration.
         for (index, constraint) in constraints.iter().enumerate() {
-            let constraint_start = Instant::now();
-
             // Calculate realistic execution time based on constraint complexity
             let base_time = self.estimate_constraint_cost(constraint).await?;
             let complexity_factor = self
@@ -784,18 +799,8 @@ impl AdvancedOptimizationEngine {
                 .await?;
             let constraint_time = base_time * complexity_factor;
 
-            // Simulate actual execution delay for measurement (if enabled)
-            // Note: This is a development/testing feature
-            if cfg!(debug_assertions) && constraint_time > 10.0 {
-                tokio::time::sleep(std::time::Duration::from_micros(
-                    (constraint_time * 10.0) as u64,
-                ))
-                .await;
-            }
-
-            let actual_time = constraint_start.elapsed().as_secs_f64() * 1000.0; // Convert to ms
-            constraint_execution_times.insert(format!("constraint_{}", index), actual_time);
-            total_validation_time += actual_time;
+            constraint_execution_times.insert(format!("constraint_{}", index), constraint_time);
+            total_validation_time += constraint_time;
 
             // Estimate memory usage per constraint based on complexity
             let constraint_memory: f64 = self.estimate_constraint_cost(constraint).await? * 0.5; // Approximate memory from cost

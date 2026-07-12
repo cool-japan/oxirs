@@ -8,7 +8,7 @@ CANbus/J1939 protocol support for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.3.1) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.3.2) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 
@@ -18,14 +18,35 @@ CANbus/J1939 protocol support for the OxiRS semantic web platform.
 
 ## Features
 
+### Core Protocol
 - ✅ **Socketcan integration** - Linux CAN interface support (vcan for testing)
-- ✅ **DBC file parsing** - Vector CANdb++ format with signal extraction
-- ✅ **J1939 protocol** - Heavy vehicle parameter groups (PGN extraction)
-- ✅ **Multi-packet reassembly** - BAM (Broadcast Announce Message) support
-- ✅ **Signal decoding** - Little/big endian, unaligned, signed/unsigned
-- ✅ **RDF mapping** - CAN frames → RDF triples with provenance
-- ✅ **SAMM generation** - Auto-generate Aspect Models from DBC files
-- ✅ **CAN FD support** - High-speed CAN with flexible data rate
+- ✅ **CAN 2.0 + CAN FD** - Standard/extended IDs, up to 64-byte FD payloads
+- ✅ **J1939 protocol** - Heavy vehicle parameter groups (PGN extraction), multi-packet reassembly (BAM / TP.CM / TP.DT)
+- ✅ **DBC file parsing** - Vector CANdb++ format (messages, signals, value tables, Intel/Motorola byte order)
+- ✅ **Signal decoding** - Little/big endian, unaligned, signed/unsigned, scaling/offset
+- ✅ **Frame filtering** - Composable mask/range/data/logical filter rules
+
+### Diagnostics & Higher-Layer Protocols
+- ✅ **OBD-II** - SAE J1979 Mode 01 PID + DTC decoding, ISO 15765-2 diagnostic session monitoring
+- ✅ **UDS** - Unified Diagnostic Services (ISO 14229) client over ISO-TP
+- ✅ **CANopen** - CiA DS-301 NMT/SDO/PDO/EMCY object dictionary
+- ✅ **J1939 diagnostics** - DM1/DM2/DM3/DM11/DM13 messages, DTC + lamp status
+
+### RDF & Digital Twin
+- ✅ **RDF mapping** - CAN frames → RDF triples with W3C PROV-O provenance
+- ✅ **SAMM generation** - Auto-generate Eclipse SAMM Aspect Models from DBC files
+- ✅ **Vehicle digital twin** - Real-time OBD-II + CAN state aggregation with SAREF/SSN triple generation
+- ✅ **J1939 ↔ DTDL bridge** - Facade-based property bridge into `oxirs-physics` digital twins (mock J1939/DTDL transports bundled; real transports pluggable)
+
+### Bus Analysis & Tooling
+- ✅ **Frame validation, aggregation & monitoring** - Integrity/DLC checks, windowed statistics, threshold alerting
+- ✅ **Network topology modeling** - Node/edge graph with BFS routing
+- ✅ **Bus scheduling & bit-timing** - Priority arbitration, bus-load calculation, bit-timing math
+- ✅ **Error state tracking** - TEC/REC counters (Error Active → Bus Off)
+- ✅ **Replay engine** - Time-scaled CAN bus replay
+- ✅ **Recording formats** - ASC, BLF, CSV, MF4 read/write
+- ✅ **Gateway bridge** - Rule-based CAN-to-MQTT/HTTP routing (in-memory simulation harness)
+- ✅ **Message database** - DBC-like message/signal definitions with decode/encode
 
 ## Quick Start
 
@@ -33,7 +54,7 @@ CANbus/J1939 protocol support for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-canbus = "0.3.1"
+oxirs-canbus = "0.3.2"
 ```
 
 **Note**: Linux only (requires socketcan kernel module).
@@ -48,37 +69,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = CanbusConfig {
         interface: "can0".to_string(),
         dbc_file: Some("vehicle.dbc".to_string()),
-        filters: vec![],
+        ..Default::default()
     };
 
-    let client = CanbusClient::new(config)?;
+    let mut client = CanbusClient::new(config)?;
     client.start().await?;
 
     Ok(())
 }
 ```
 
-### DBC Integration Example (Planned)
+### DBC Integration Example
 
 ```rust
-use oxirs_canbus::dbc::DbcParser;
-use oxirs_canbus::rdf::CanRdfMapper;
+use oxirs_canbus::{parse_dbc_file, CanRdfMapper, CanbusClient, CanbusConfig, RdfMappingConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse DBC file
-    let dbc = DbcParser::from_file("vehicle.dbc")?;
+    let dbc = parse_dbc_file("vehicle.dbc")?;
 
     // Create RDF mapper
-    let mapper = CanRdfMapper::new(dbc);
+    let rdf_config = RdfMappingConfig {
+        device_id: "vehicle001".to_string(),
+        base_iri: "http://automotive.example.com/vehicle".to_string(),
+        graph_iri: "urn:automotive:can-data".to_string(),
+    };
+    let mut mapper = CanRdfMapper::new(dbc, rdf_config);
 
     // Connect to CAN interface
+    let config = CanbusConfig {
+        interface: "can0".to_string(),
+        dbc_file: Some("vehicle.dbc".to_string()),
+        ..Default::default()
+    };
     let mut client = CanbusClient::new(config)?;
+    client.start().await?;
 
     // Receive CAN frames and convert to RDF
-    while let Some(frame) = client.recv().await? {
+    while let Some(frame) = client.recv_frame().await {
         let triples = mapper.map_frame(&frame)?;
-        store.insert_batch(&triples).await?;
+        println!("Generated {} triples", triples.len());
     }
 
     Ok(())
@@ -199,10 +230,10 @@ See `/tmp/oxirs_cli_phase_d_guide.md` for complete CLI documentation.
 
 ## Production Status
 
-- ✅ **1,125 tests passing** - 100% success rate
+- ✅ **1,183 tests passing** - 100% success rate
 - ✅ **Zero warnings** - Strict code quality enforcement
-- ✅ **6 examples** - Complete usage documentation
-- ✅ **25 files, 8,667 lines** - Comprehensive implementation
+- ✅ **7 examples** - Complete usage documentation
+- ✅ **54 files, 24,855 lines** - Comprehensive implementation
 - ✅ **Standards compliant** - ISO 11898-1, SAE J1939, Vector DBC
 
 ## Documentation

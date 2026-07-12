@@ -229,6 +229,28 @@ impl<'a> WktLexer<'a> {
     }
 }
 
+/// Extended coordinate with optional Z and M values.
+///
+/// Since `geo_types::Coord<f64>` is 2D only, Z and M are parsed but the
+/// geographic coordinate is projected to (x, y) for compatibility.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoordZM {
+    /// X (longitude/easting)
+    pub x: f64,
+    /// Y (latitude/northing)
+    pub y: f64,
+    /// Z (elevation/altitude) — optional
+    pub z: Option<f64>,
+    /// M (measure) — optional
+    pub m: Option<f64>,
+}
+
+impl From<CoordZM> for Coord<f64> {
+    fn from(c: CoordZM) -> Self {
+        Coord { x: c.x, y: c.y }
+    }
+}
+
 /// Zero-copy WKT parser with string interning and lazy parsing
 pub struct ZeroCopyWktParser {
     /// String arena for interning coordinate values and IRIs
@@ -421,12 +443,18 @@ impl ZeroCopyWktParser {
     }
 
     /// Parse a coordinate sequence
+    ///
+    /// Returns a `Vec<Coord<f64>>` (2D projection). Z and M values are parsed
+    /// from the token stream and discarded (since `geo_types` is 2D only).
     fn parse_coordinate_sequence(&self, lexer: &mut WktLexer) -> Result<Vec<Coord<f64>>> {
         let mut coords = Vec::new();
 
         loop {
-            let coord = self.parse_coordinate(lexer)?;
-            coords.push(coord);
+            let coord_zm = self.parse_coordinate(lexer)?;
+            coords.push(Coord {
+                x: coord_zm.x,
+                y: coord_zm.y,
+            });
 
             // Check for comma (more coordinates) or something else
             let next = lexer.next_token()?;
@@ -446,8 +474,12 @@ impl ZeroCopyWktParser {
         Ok(coords)
     }
 
-    /// Parse a single coordinate (lazy parsing - only parse what's needed)
-    fn parse_coordinate(&self, lexer: &mut WktLexer) -> Result<Coord<f64>> {
+    /// Parse a single coordinate, consuming optional Z and M values
+    ///
+    /// Supports 2D (X Y), 3D (X Y Z), and 4D (X Y Z M) coordinates.
+    /// Z and M values are parsed from the token stream but the returned
+    /// `CoordZM` carries them explicitly. Use `.into()` to get a 2D `Coord<f64>`.
+    fn parse_coordinate(&self, lexer: &mut WktLexer) -> Result<CoordZM> {
         // Parse X
         let x_token = lexer.next_token()?;
         let x = match x_token {
@@ -474,10 +506,43 @@ impl ZeroCopyWktParser {
             }
         };
 
-        // TODO: Parse Z/M if present
-        // For now, we only parse X and Y (2D)
+        // Optionally parse Z (3rd number in the coordinate tuple)
+        let saved_pos = lexer.pos;
+        let z = match lexer.next_token()? {
+            Token::Number(n) => {
+                let val = n
+                    .parse::<f64>()
+                    .map_err(|_| GeoSparqlError::InvalidWkt(format!("Invalid Z value: {}", n)))?;
+                Some(val)
+            }
+            _ => {
+                // Not a number — put it back
+                lexer.pos = saved_pos;
+                None
+            }
+        };
 
-        Ok(Coord { x, y })
+        // Optionally parse M (4th number, only present when Z is also present)
+        let m = if z.is_some() {
+            let saved_pos2 = lexer.pos;
+            match lexer.next_token()? {
+                Token::Number(n) => {
+                    let val = n.parse::<f64>().map_err(|_| {
+                        GeoSparqlError::InvalidWkt(format!("Invalid M value: {}", n))
+                    })?;
+                    Some(val)
+                }
+                _ => {
+                    // Not a number — put it back
+                    lexer.pos = saved_pos2;
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        Ok(CoordZM { x, y, z, m })
     }
 
     /// Get statistics about string interning
@@ -706,5 +771,86 @@ mod tests {
 
         // After parsing, arena may or may not have entries depending on implementation
         let _ = parser.parse("POINT (1 2)");
+    }
+
+    #[test]
+    fn test_point_z() {
+        let parser = ZeroCopyWktParser::new();
+        let geom = parser
+            .parse("POINT Z (1.0 2.0 3.0)")
+            .expect("Z point should parse");
+        match geom.geom {
+            GeoGeometry::Point(p) => {
+                assert_relative_eq!(p.x(), 1.0);
+                assert_relative_eq!(p.y(), 2.0);
+            }
+            _ => panic!("Expected Point"),
+        }
+    }
+
+    #[test]
+    fn test_point_m() {
+        let parser = ZeroCopyWktParser::new();
+        // M-only: POINT M (x y m) — parsed as x=1, y=2, z=100 (treating m as z since no explicit Z)
+        // Actually the modifier "M" indicates the 3rd value is M not Z. We still parse it as a number.
+        let geom = parser
+            .parse("POINT M (1.0 2.0 100.0)")
+            .expect("M point should parse");
+        match geom.geom {
+            GeoGeometry::Point(p) => {
+                assert_relative_eq!(p.x(), 1.0);
+                assert_relative_eq!(p.y(), 2.0);
+            }
+            _ => panic!("Expected Point"),
+        }
+    }
+
+    #[test]
+    fn test_point_zm() {
+        let parser = ZeroCopyWktParser::new();
+        let geom = parser
+            .parse("POINT ZM (1.0 2.0 3.0 100.0)")
+            .expect("ZM point should parse");
+        match geom.geom {
+            GeoGeometry::Point(p) => {
+                assert_relative_eq!(p.x(), 1.0);
+                assert_relative_eq!(p.y(), 2.0);
+            }
+            _ => panic!("Expected Point"),
+        }
+    }
+
+    #[test]
+    fn test_linestring_z() {
+        let parser = ZeroCopyWktParser::new();
+        let geom = parser
+            .parse("LINESTRING Z (0 0 10, 1 1 20, 2 2 30)")
+            .expect("Z linestring should parse");
+        match geom.geom {
+            GeoGeometry::LineString(ls) => {
+                assert_eq!(ls.0.len(), 3, "should have 3 coords");
+                assert_relative_eq!(ls.0[0].x, 0.0);
+                assert_relative_eq!(ls.0[0].y, 0.0);
+                assert_relative_eq!(ls.0[2].x, 2.0);
+                assert_relative_eq!(ls.0[2].y, 2.0);
+            }
+            _ => panic!("Expected LineString"),
+        }
+    }
+
+    #[test]
+    fn test_linestring_zm() {
+        let parser = ZeroCopyWktParser::new();
+        let geom = parser
+            .parse("LINESTRING ZM (0 0 10 1, 1 1 20 2)")
+            .expect("ZM linestring should parse");
+        match geom.geom {
+            GeoGeometry::LineString(ls) => {
+                assert_eq!(ls.0.len(), 2, "should have 2 coords");
+                assert_relative_eq!(ls.0[0].x, 0.0);
+                assert_relative_eq!(ls.0[1].x, 1.0);
+            }
+            _ => panic!("Expected LineString"),
+        }
     }
 }

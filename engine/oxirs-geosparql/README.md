@@ -1,12 +1,12 @@
 # oxirs-geosparql
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
-✅ **Production Ready**: APIs are stable and ready for production deployments.
+✅ **Production Ready**: APIs are stable and ready for production deployments. 1,967 tests passing.
 
 ## Overview
 
@@ -17,12 +17,13 @@ GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
 - **GeoSPARQL Vocabulary**: Full support for GeoSPARQL ontology and datatypes
 - **WKT/GML Support**: Parse and serialize Well-Known Text (WKT) and GML geometries
 - **Simple Features Relations**: All 8 topological predicates (sfEquals, sfDisjoint, sfIntersects, sfTouches, sfCrosses, sfWithin, sfContains, sfOverlaps)
-- **Egenhofer Relations**: All 8 relations based on 4-intersection model
-- **RCC8 Relations**: All 8 Region Connection Calculus relations
+- **Egenhofer Relations**: All 8 relations based on 4-intersection model; 5 of 8 (equals, disjoint, overlap, covers, coveredBy) run in pure Rust, the remaining 3 (meet, inside, contains) need the optional GEOS adapter — see [Topological Relations](#topological-relations) below
+- **RCC8 Relations**: All 8 Region Connection Calculus relations; 3 of 8 (eq, dc, po) run in pure Rust, the remaining 5 (ec, tpp, tppi, ntpp, ntppi) need the optional GEOS adapter — see [Topological Relations](#topological-relations) below
 - **Geometric Operations**: Distance, buffer, convex hull, intersection, union, etc.
 - **Geometric Properties**: Dimension, SRID, isEmpty, isSimple, etc.
 - **Spatial Indexing**: R-tree based spatial index for efficient queries
 - **CRS Support**: Coordinate Reference System handling with EPSG codes and transformations
+- **GeoPackage**: Read/write OGC GeoPackage files on a 100% Pure-Rust SQLite-compatible backend (no `libsqlite3`) — see [GeoPackage Support](#geopackage-support) below
 
 ## Installation
 
@@ -30,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-geosparql = "0.3.1"
+oxirs-geosparql = "0.3.2"
 ```
 
 ## Usage
@@ -58,38 +59,62 @@ println!("WKT: {}", wkt); // Output: POINT(1 2)
 
 #### Egenhofer Relations (4-Intersection Model)
 
+`eh_equals`, `eh_disjoint`, `eh_overlap`, `eh_covers`, and `eh_covered_by` run entirely
+in pure Rust. `eh_meet`, `eh_inside`, and `eh_contains` need a computed geometric
+boundary, so by default they return `GeoSparqlError::UnsupportedOperation`:
+
 ```rust
 use oxirs_geosparql::geometry::Geometry;
 use oxirs_geosparql::functions::egenhofer;
 
-let polygon1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-let polygon2 = Geometry::from_wkt("POLYGON((2 2, 6 2, 6 6, 2 6, 2 2))").unwrap();
+let polygon1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+let polygon2 = Geometry::from_wkt("POLYGON((2 2, 6 2, 6 6, 2 6, 2 2))").expect("should succeed");
 
-// Test various Egenhofer relations
-let overlap = egenhofer::eh_overlap(&polygon1, &polygon2).unwrap();
+// Runs in pure Rust — no boundary calculation required
+let overlap = egenhofer::eh_overlap(&polygon1, &polygon2).expect("should succeed");
 assert!(overlap); // Polygons overlap
 
-let meets = egenhofer::eh_meet(&polygon1, &polygon2).unwrap();
-// Note: Egenhofer relations require GEOS backend for boundary calculations
+// `eh_meet` needs a boundary calculation, so it errors in the default pure-Rust build
+let meets = egenhofer::eh_meet(&polygon1, &polygon2);
+assert!(meets.is_err());
 ```
 
 #### RCC8 Relations (Region Connection Calculus)
+
+`rcc8_eq`, `rcc8_dc`, and `rcc8_po` run entirely in pure Rust. `rcc8_ec`, `rcc8_tpp`,
+`rcc8_tppi`, `rcc8_ntpp`, and `rcc8_ntppi` need a computed geometric boundary, so by
+default they return `GeoSparqlError::UnsupportedOperation`:
 
 ```rust
 use oxirs_geosparql::geometry::Geometry;
 use oxirs_geosparql::functions::rcc8;
 
-let polygon1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-let polygon2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+let polygon1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+let polygon2 = Geometry::from_wkt("POLYGON((5 5, 7 5, 7 7, 5 7, 5 5))").expect("should succeed");
 
-// Test RCC8 relations
-let tpp = rcc8::rcc8_tpp(&polygon1, &polygon2).unwrap();
-assert!(tpp); // polygon1 is a tangential proper part of polygon2
+// Runs in pure Rust — no boundary calculation required
+let dc = rcc8::rcc8_dc(&polygon1, &polygon2).expect("should succeed");
+assert!(dc); // The two regions are disconnected
+
+// `rcc8_tpp` needs a boundary calculation, so it errors in the default pure-Rust build
+let tpp = rcc8::rcc8_tpp(&polygon1, &polygon2);
+assert!(tpp.is_err());
 ```
 
-**Requirements for Egenhofer & RCC8:**
-- Enable `geos-backend` feature for boundary calculations
-- Install GEOS library: `brew install geos` (macOS) or `apt-get install libgeos-dev` (Ubuntu)
+**Boundary-dependent Egenhofer & RCC8 relations:**
+
+`eh_meet`, `eh_inside`, `eh_contains`, `rcc8_ec`, `rcc8_tpp`, `rcc8_tppi`, `rcc8_ntpp`,
+and `rcc8_ntppi` require GEOS for their boundary calculations. Per the COOLJAPAN Pure
+Rust Policy v2, the GEOS C FFI has been quarantined out of this published crate into
+the companion `oxirs-geosparql-adapter-geos` crate (`publish = false`, workspace-only),
+so `oxirs-geosparql`'s own dependency surface stays 100% Pure Rust. Depend on the
+adapter crate directly (e.g. `oxirs_geosparql_adapter_geos::eh_meet`,
+`oxirs_geosparql_adapter_geos::rcc8_tpp`) for working implementations of these
+relations; it requires the GEOS library (`brew install geos` on macOS, `apt-get install
+libgeos-dev` on Ubuntu). The corresponding SPARQL filter functions (`geof:ehMeet`,
+`geof:ehInside`, `geof:ehContains`, `geof:rcc8ec`, `geof:rcc8tpp`, `geof:rcc8tppi`,
+`geof:rcc8ntpp`, `geof:rcc8ntppi`) are therefore not registered by
+`sparql_integration::get_all_geosparql_functions()` in the default build.
 
 ### Spatial Indexing
 
@@ -177,18 +202,18 @@ This implementation supports:
   - `geof:sfEquals`, `geof:sfDisjoint`, `geof:sfIntersects`
   - `geof:sfTouches`, `geof:sfCrosses`, `geof:sfWithin`
   - `geof:sfContains`, `geof:sfOverlaps`
-- ✅ Egenhofer relations (4-intersection model)
-  - `geof:ehEquals`, `geof:ehDisjoint`, `geof:ehMeet`, `geof:ehOverlap`
-  - `geof:ehCovers`, `geof:ehCoveredBy`, `geof:ehInside`, `geof:ehContains`
-- ✅ RCC8 relations (Region Connection Calculus)
-  - `geof:rcc8eq`, `geof:rcc8dc`, `geof:rcc8ec`, `geof:rcc8po`
-  - `geof:rcc8tpp`, `geof:rcc8tppi`, `geof:rcc8ntpp`, `geof:rcc8ntppi`
+- ✅ Egenhofer relations (4-intersection model) — 5/8 pure Rust, 3/8 require the GEOS adapter crate (see below)
+  - Pure Rust: `geof:ehEquals`, `geof:ehDisjoint`, `geof:ehOverlap`, `geof:ehCovers`, `geof:ehCoveredBy`
+  - Requires `oxirs-geosparql-adapter-geos`: `geof:ehMeet`, `geof:ehInside`, `geof:ehContains`
+- ✅ RCC8 relations (Region Connection Calculus) — 3/8 pure Rust, 5/8 require the GEOS adapter crate (see below)
+  - Pure Rust: `geof:rcc8eq`, `geof:rcc8dc`, `geof:rcc8po`
+  - Requires `oxirs-geosparql-adapter-geos`: `geof:rcc8ec`, `geof:rcc8tpp`, `geof:rcc8tppi`, `geof:rcc8ntpp`, `geof:rcc8ntppi`
 
 ### Geometry Extension
 - ✅ WKT parsing and serialization
 - ✅ GML parsing and serialization (with `gml-support`)
 - ✅ Spatial properties (dimension, SRID, isEmpty, isSimple)
-- ✅ Buffer operations (pure Rust + GEOS backends)
+- ✅ Buffer operations (pure Rust `rust-buffer` for Polygon/MultiPolygon; GEOS for other types via the adapter crate)
 - ✅ Boundary operations
 - ✅ Geometric set operations (intersection, union, difference, symmetric difference)
 - ✅ Convex hull, envelope
@@ -221,10 +246,23 @@ WHERE {
 - `wkt-support` (default): WKT parsing and serialization
 - `gml-support`: GML (Geography Markup Language) parsing and serialization
 - `geojson-support`: GeoJSON support
-- `geos-backend`: Use GEOS C++ library for advanced operations (requires GEOS installation)
+- `kml-support`: KML (Keyhole Markup Language) parsing and serialization
+- `gpx-support`: GPX (GPS Exchange Format) parsing and serialization
+- `shapefile-support`: ESRI Shapefile reading and writing (including interior rings/holes for `Polygon`/`MultiPolygon`)
+- `geopackage`: OGC GeoPackage reading and writing on the Pure-Rust `oxisql-core`/`oxisql-sqlite-compat` backend (no `libsqlite3`) — see [GeoPackage Support](#geopackage-support)
+- `flatgeobuf-support`: FlatGeobuf reading and writing (local files; remote HTTP-range reading is out of scope, see Cargo.toml notes)
+- `mvt-support`: Mapbox Vector Tile encoding
+- `topojson-support`: TopoJSON support
 - `rust-buffer`: Pure Rust buffer operations for Polygon/MultiPolygon (no C++ dependencies)
 - `proj-support`: Coordinate transformation support
 - `parallel`: Parallel processing for large datasets
+- `gpu` / `cuda` / `metal` / `wgpu_backend` / `performance`: GPU-acceleration abstraction flags (Pure Rust; see `Cargo.toml` for current status)
+
+> **GEOS**: real GEOS C++-backed operations (the boundary-dependent Egenhofer/RCC8
+> relations, and buffering for Point/LineString or custom cap/join styles) are **not**
+> a feature of this crate. They live in the separate, workspace-only
+> `oxirs-geosparql-adapter-geos` crate (`publish = false`) per the COOLJAPAN Pure Rust
+> Policy v2, so `oxirs-geosparql` itself has a 100% Pure-Rust dependency surface.
 
 📖 **See [BUFFER_GUIDE.md](BUFFER_GUIDE.md) for comprehensive buffer operations documentation**
 
@@ -232,17 +270,17 @@ WHERE {
 
 oxirs-geosparql provides **two buffer implementations**:
 
-**1. Pure Rust Buffer** (`rust-buffer` feature):
+**1. Pure Rust Buffer** (`rust-buffer` feature) — in this crate:
 ```toml
 [dependencies]
-oxirs-geosparql = { version = "0.3.1", features = ["rust-buffer"] }
+oxirs-geosparql = { version = "0.3.2", features = ["rust-buffer"] }
 ```
 
 ```rust
 use oxirs_geosparql::functions::geometric_operations::buffer;
 
-let poly = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
-let buffered = buffer(&poly, 2.0).unwrap(); // Pure Rust!
+let poly = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
+let buffered = buffer(&poly, 2.0).expect("should succeed"); // Pure Rust!
 ```
 
 **Advantages:**
@@ -252,12 +290,17 @@ let buffered = buffer(&poly, 2.0).unwrap(); // Pure Rust!
 - ✅ Supports Polygon and MultiPolygon
 
 **Limitations:**
-- ⚠️ Only Polygon/MultiPolygon (Point/LineString require GEOS)
+- ⚠️ Only Polygon/MultiPolygon (Point/LineString and custom cap/join styles require GEOS, below)
 
-**2. GEOS Backend** (`geos-backend` feature):
-```toml
-[dependencies]
-oxirs-geosparql = { version = "0.3.1", features = ["geos-backend"] }
+**2. GEOS Backend** — via the companion `oxirs-geosparql-adapter-geos` crate (`publish = false`):
+
+GEOS is no longer a Cargo feature of `oxirs-geosparql` itself (the `geos-backend`
+feature was removed under the COOLJAPAN Pure Rust Policy v2). Depend on the adapter
+crate directly instead:
+
+```rust,ignore
+// In the adapter crate's caller (workspace-only; not published to crates.io)
+let buffered = oxirs_geosparql_adapter_geos::buffer_with_params(&geom, 2.0, &params)?;
 ```
 
 **Advantages:**
@@ -271,9 +314,43 @@ oxirs-geosparql = { version = "0.3.1", features = ["geos-backend"] }
   - Ubuntu: `sudo apt-get install libgeos-dev`
 
 **Hybrid Strategy:**
-The `buffer()` function automatically uses the best available backend:
-- Polygon/MultiPolygon → `rust-buffer` (if enabled), else `geos-backend`
-- Point/LineString → `geos-backend` (required)
+The `buffer()` function in this crate automatically picks the best backend it has
+available:
+- Polygon/MultiPolygon → pure-Rust `rust-buffer` (if enabled)
+- Everything else (Point/LineString, or `rust-buffer` disabled) → returns
+  `GeoSparqlError::UnsupportedOperation`, directing callers to
+  `oxirs_geosparql_adapter_geos::buffer_with_params`
+
+## GeoPackage Support
+
+Enable the `geopackage` feature to read and write [OGC GeoPackage](http://www.geopackage.org/spec/)
+files — SQLite-based vector feature storage. The backend is the Pure-Rust
+`oxisql-core`/`oxisql-sqlite-compat` engine (COOLJAPAN Pure Rust Policy v2), so there is
+**no `libsqlite3` / C dependency**:
+
+```toml
+[dependencies]
+oxirs-geosparql = { version = "0.3.2", features = ["geopackage"] }
+```
+
+```rust,ignore
+use oxirs_geosparql::geometry::geopackage::GeoPackage;
+
+// Open (or create) a GeoPackage file; the required tables and default SRS rows
+// are initialized automatically.
+let gpkg = GeoPackage::open("data.gpkg")?;
+
+// An in-memory GeoPackage is also available (useful for tests):
+let gpkg = GeoPackage::create_memory()?;
+
+// The engine writes in WAL mode. Call `checkpoint()` before handing a
+// file-backed GeoPackage to an external GIS reader — this flushes the WAL so the
+// GPKG application-id magic bytes land in the main database file.
+gpkg.checkpoint()?;
+```
+
+`GeoPackage` drives the underlying async `oxisql` engine through an owned
+current-thread Tokio runtime, so its public API stays synchronous.
 
 ## Architecture
 
@@ -281,6 +358,7 @@ The `buffer()` function automatically uses the best available backend:
 oxirs-geosparql/
 ├── vocabulary/     # GeoSPARQL URIs and terms
 ├── geometry/       # Geometry types and WKT parser
+│   └── geopackage.rs   # OGC GeoPackage read/write (oxisql-core / oxisql-sqlite-compat)
 ├── functions/      # Topological and geometric functions
 │   ├── simple_features/       # DE-9IM relations
 │   ├── geometric_operations/  # Buffer, hull, etc.
@@ -288,6 +366,10 @@ oxirs-geosparql/
 ├── index/          # R-tree spatial indexing
 └── error/          # Error types
 ```
+
+GEOS-backed operations (boundary-dependent Egenhofer/RCC8 relations, and buffering for
+non-polygon types) live outside this crate entirely, in the workspace-only
+`oxirs-geosparql-adapter-geos` crate (`publish = false`).
 
 ## References
 

@@ -41,17 +41,16 @@
 
 use crate::description_logic::{Concept, Role, TableauxReasoner};
 use anyhow::Result;
-use scirs2_core::metrics::{Counter, Gauge, Timer};
+use once_cell::sync::Lazy;
+use scirs2_core::metrics::{Counter, Timer};
 use std::collections::HashSet;
 
 // Global metrics for Hermit reasoning
-lazy_static::lazy_static! {
-    static ref HERMIT_CONSISTENCY_CHECKS: Counter = Counter::new("hermit_consistency_checks".to_string());
-    static ref HERMIT_BLOCKING_EVENTS: Counter = Counter::new("hermit_blocking_events".to_string());
-    static ref HERMIT_ABSORPTION_COUNT: Counter = Counter::new("hermit_absorption_count".to_string());
-    static ref HERMIT_ACTIVE_NODES: Gauge = Gauge::new("hermit_active_nodes".to_string());
-    static ref HERMIT_CHECK_TIME: Timer = Timer::new("hermit_check_time".to_string());
-}
+static HERMIT_CONSISTENCY_CHECKS: Lazy<Counter> =
+    Lazy::new(|| Counter::new("hermit_consistency_checks".to_string()));
+static HERMIT_ABSORPTION_COUNT: Lazy<Counter> =
+    Lazy::new(|| Counter::new("hermit_absorption_count".to_string()));
+static HERMIT_CHECK_TIME: Lazy<Timer> = Lazy::new(|| Timer::new("hermit_check_time".to_string()));
 
 /// OWL axiom types
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

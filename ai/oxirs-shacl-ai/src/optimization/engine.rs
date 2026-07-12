@@ -1038,7 +1038,9 @@ impl OptimizationEngine {
         shapes: &[Shape],
         store: &dyn Store,
     ) -> Result<ParallelExecutionStrategy> {
-        let num_cpus = num_cpus::get();
+        let num_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
 
         // Get execution plans to understand dependencies
         let execution_plans = self.optimize_execution_order(shapes, store)?;

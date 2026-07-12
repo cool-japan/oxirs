@@ -754,7 +754,9 @@ impl Default for AsyncValidationConfig {
     fn default() -> Self {
         Self {
             default_timeout: Duration::from_secs(30),
-            max_concurrency: num_cpus::get(),
+            max_concurrency: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             enable_streaming: true,
             batch_size: 1000,
         }

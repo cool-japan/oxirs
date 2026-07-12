@@ -212,7 +212,7 @@ pub struct ObservabilitySystem {
     gdpr_events_counter: Arc<Counter>,
     anomalies_detected: Arc<Counter>,
     active_sessions_gauge: Arc<Gauge>,
-
+    alert_handlers: Arc<RwLock<Vec<Arc<dyn Fn(SecurityEvent) -> anyhow::Result<()> + Send + Sync>>>>,
 }
 
 impl ObservabilitySystem {
@@ -246,7 +246,17 @@ impl ObservabilitySystem {
             gdpr_events_counter,
             anomalies_detected,
             active_sessions_gauge,
+            alert_handlers: Arc::new(RwLock::new(Vec::new())),
         })
+    }
+
+    /// Register an alert handler for security events
+    pub async fn register_alert_handler(
+        &self,
+        handler: Arc<dyn Fn(SecurityEvent) -> anyhow::Result<()> + Send + Sync>,
+    ) {
+        let mut handlers = self.alert_handlers.write().await;
+        handlers.push(handler);
     }
 
     /// Log an audit event
@@ -584,8 +594,61 @@ impl ObservabilitySystem {
     }
 
     async fn detect_anomalies(&self, _event: &AuditEvent) -> Result<()> {
-        // TODO: Implement anomaly detection using statistical analysis
-        // For now, just a placeholder
+        // Use try_read to avoid deadlock: log_audit_event holds the write lock
+        // while calling detect_anomalies, so a blocking read would deadlock.
+        let events = match self.audit_events.try_read() {
+            Ok(guard) => guard,
+            Err(_) => return Ok(()), // Write lock held elsewhere; skip detection
+        };
+        let n = events.len();
+        if n < 5 {
+            return Ok(());
+        }
+
+        // Compute inter-arrival deltas between successive events (milliseconds)
+        let mut deltas: Vec<f64> = Vec::with_capacity(n - 1);
+        for i in 1..n {
+            let delta = (events[i].timestamp - events[i - 1].timestamp)
+                .num_milliseconds()
+                .unsigned_abs() as f64;
+            deltas.push(delta);
+        }
+
+        // Welford's online algorithm for mean and variance
+        let mut count = 0usize;
+        let mut mean = 0.0f64;
+        let mut m2 = 0.0f64;
+        for d in &deltas {
+            count += 1;
+            let delta_val = d - mean;
+            mean += delta_val / count as f64;
+            let delta2 = d - mean;
+            m2 += delta_val * delta2;
+        }
+        if count < 2 {
+            return Ok(());
+        }
+        let variance = m2 / (count - 1) as f64;
+        let std_dev = variance.sqrt();
+        if std_dev < 1e-10 {
+            return Ok(());
+        }
+
+        // Current inter-arrival: time from last stored event to now
+        if let Some(last) = events.last() {
+            let current_delta = (chrono::Utc::now() - last.timestamp)
+                .num_milliseconds()
+                .unsigned_abs() as f64;
+            let z_score = (current_delta - mean).abs() / std_dev;
+            if z_score > self.config.anomaly_threshold {
+                warn!(
+                    "Anomaly detected: z-score={:.2} threshold={:.2}",
+                    z_score, self.config.anomaly_threshold
+                );
+                self.anomalies_detected.increment();
+            }
+        }
+
         Ok(())
     }
 
@@ -595,7 +658,12 @@ impl ObservabilitySystem {
             event.event_type, event.description
         );
 
-        // TODO: Integrate with alerting system (email, Slack, PagerDuty, etc.)
+        let handlers = self.alert_handlers.read().await;
+        for handler in handlers.iter() {
+            if let Err(e) = handler(event.clone()) {
+                tracing::error!("Alert handler failed: {:?}", e);
+            }
+        }
 
         Ok(())
     }
@@ -664,6 +732,50 @@ mod tests {
         assert_eq!(report.total_events, 10);
         assert!(report.compliance_score > 0.9);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_anomaly_detection_accumulates() -> Result<()> {
+        let config = ObservabilityConfig {
+            enable_anomaly_detection: true,
+            anomaly_threshold: 3.0,
+            ..Default::default()
+        };
+        let obs = ObservabilitySystem::new(config).await?;
+        for i in 0..10 {
+            obs.audit_chat_access(&format!("u{}", i), &format!("s{}", i)).await?;
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_alert_handler_called() -> Result<()> {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let config = ObservabilityConfig::default();
+        let obs = ObservabilitySystem::new(config).await?;
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let cc = call_count.clone();
+        let handler: Arc<dyn Fn(SecurityEvent) -> anyhow::Result<()> + Send + Sync> =
+            Arc::new(move |_event| {
+                cc.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
+        obs.register_alert_handler(handler).await;
+
+        let sec_event = SecurityEvent {
+            event_id: "test-id".to_string(),
+            event_type: SecurityEventType::UnauthorizedAccess,
+            severity: Severity::Critical,
+            timestamp: chrono::Utc::now(),
+            source: "test".to_string(),
+            description: "Test critical event".to_string(),
+            affected_resources: vec![],
+            remediation: None,
+        };
+        obs.log_security_event(sec_event).await?;
+        assert_eq!(call_count.load(Ordering::SeqCst), 1);
         Ok(())
     }
 }

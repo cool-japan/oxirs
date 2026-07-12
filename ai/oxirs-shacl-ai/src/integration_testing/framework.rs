@@ -244,7 +244,9 @@ impl IntegrationTestFramework {
             end_time: SystemTime::now(),
             environment_info: EnvironmentInfo {
                 os: std::env::consts::OS.to_string(),
-                cpu_cores: num_cpus::get(),
+                cpu_cores: std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1),
                 memory_gb: 16.0,                     // Default value
                 rust_version: "unknown".to_string(), // Would be set by build script or runtime
             },

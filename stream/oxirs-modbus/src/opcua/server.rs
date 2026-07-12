@@ -62,7 +62,7 @@ pub trait OpcuaServerFacade: Send + Sync {
 pub struct MockOpcuaServer {
     /// All `(node_id, value)` pairs published via [`OpcuaServerFacade::publish_value`].
     pub published: Arc<Mutex<Vec<(String, DataValue)>>>,
-    /// Sender half of the write event channel. Use [`simulate_write`] to inject events.
+    /// Sender half of the write event channel. Use [`simulate_write`](MockOpcuaServer::simulate_write) to inject events.
     pub write_tx: mpsc::Sender<(String, DataValue)>,
     /// Receiver half — taken by [`subscribe_writes`].
     write_rx: Option<mpsc::Receiver<(String, DataValue)>>,

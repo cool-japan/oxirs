@@ -39,12 +39,16 @@ pub(super) fn local_name_bytes(bytes: &[u8]) -> String {
 }
 
 /// Get an attribute value from a `BytesStart` element by local name.
-/// Uses `unescape_value()` which handles XML entity unescaping (e.g. `&amp;` → `&`).
+/// Uses `normalized_value()` which handles XML entity unescaping (e.g. `&amp;` → `&`).
 pub(super) fn attr_value(e: &BytesStart<'_>, name: &str) -> Option<String> {
     e.attributes()
         .filter_map(|a| a.ok())
         .find(|a| a.key.local_name().into_inner() == name.as_bytes())
-        .and_then(|a| a.unescape_value().ok().map(|v| v.into_owned()))
+        .and_then(|a| {
+            a.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                .ok()
+                .map(|v| v.into_owned())
+        })
 }
 
 /// Append a start element's raw bytes to a string (for SignedInfo capture).
@@ -55,7 +59,7 @@ pub(super) fn append_start_to_raw(e: &BytesStart<'_>, buf: &mut String) {
         buf.push(' ');
         buf.push_str(&String::from_utf8_lossy(attr.key.as_ref()));
         buf.push_str("=\"");
-        if let Ok(val) = attr.unescape_value() {
+        if let Ok(val) = attr.normalized_value(quick_xml::XmlVersion::Implicit1_0) {
             buf.push_str(&xml_escape(&val));
         }
         buf.push('"');
@@ -71,7 +75,7 @@ pub(super) fn append_empty_to_raw(e: &BytesStart<'_>, buf: &mut String) {
         buf.push(' ');
         buf.push_str(&String::from_utf8_lossy(attr.key.as_ref()));
         buf.push_str("=\"");
-        if let Ok(val) = attr.unescape_value() {
+        if let Ok(val) = attr.normalized_value(quick_xml::XmlVersion::Implicit1_0) {
             buf.push_str(&xml_escape(&val));
         }
         buf.push('"');

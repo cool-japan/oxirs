@@ -78,7 +78,7 @@ pub fn compute_constraint_violation_loss(
 /// with actual prediction values, weighted by rule importance.
 ///
 /// For each rule that fires on `predictions` (treated as inputs):
-///   inconsistency = (predicted_value - actual_prediction[index])^2 * rule.weight
+///   inconsistency = (predicted_value - actual_prediction\[index\])^2 * rule.weight
 pub fn compute_rule_consistency_loss(
     predictions: &Array1<f32>,
     knowledge_base: &[KnowledgeRule],

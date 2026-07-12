@@ -15,23 +15,23 @@ fn main() {
     println!("Inserting triples...");
     let triples = vec![
         Triple::new(
-            NamedNode::new("http://example.org/alice").unwrap(),
-            NamedNode::new("http://example.org/knows").unwrap(),
-            NamedNode::new("http://example.org/bob").unwrap(),
+            NamedNode::new("http://example.org/alice").expect("literal IRI is valid"),
+            NamedNode::new("http://example.org/knows").expect("literal IRI is valid"),
+            NamedNode::new("http://example.org/bob").expect("literal IRI is valid"),
         ),
         Triple::new(
-            NamedNode::new("http://example.org/alice").unwrap(),
-            NamedNode::new("http://example.org/age").unwrap(),
+            NamedNode::new("http://example.org/alice").expect("literal IRI is valid"),
+            NamedNode::new("http://example.org/age").expect("literal IRI is valid"),
             Literal::new("30"),
         ),
         Triple::new(
-            NamedNode::new("http://example.org/bob").unwrap(),
-            NamedNode::new("http://example.org/knows").unwrap(),
-            NamedNode::new("http://example.org/charlie").unwrap(),
+            NamedNode::new("http://example.org/bob").expect("literal IRI is valid"),
+            NamedNode::new("http://example.org/knows").expect("literal IRI is valid"),
+            NamedNode::new("http://example.org/charlie").expect("literal IRI is valid"),
         ),
         Triple::new(
-            NamedNode::new("http://example.org/bob").unwrap(),
-            NamedNode::new("http://example.org/age").unwrap(),
+            NamedNode::new("http://example.org/bob").expect("literal IRI is valid"),
+            NamedNode::new("http://example.org/age").expect("literal IRI is valid"),
             Literal::new("25"),
         ),
     ];
@@ -43,10 +43,11 @@ fn main() {
 
     // Query by subject
     println!("Query: Who does Alice know?");
-    let alice =
-        oxirs_core::model::Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+    let alice = oxirs_core::model::Subject::NamedNode(
+        NamedNode::new("http://example.org/alice").expect("literal IRI is valid"),
+    );
     let knows = oxirs_core::model::Predicate::NamedNode(
-        NamedNode::new("http://example.org/knows").unwrap(),
+        NamedNode::new("http://example.org/knows").expect("literal IRI is valid"),
     );
 
     let results = graph.query(Some(&alice), Some(&knows), None);
@@ -77,8 +78,10 @@ fn main() {
         for j in 0..10 {
             for k in 0..10 {
                 test_triples.push(Triple::new(
-                    NamedNode::new(format!("http://example.org/subject{i}")).unwrap(),
-                    NamedNode::new(format!("http://example.org/predicate{j}")).unwrap(),
+                    NamedNode::new(format!("http://example.org/subject{i}"))
+                        .expect("invariant: value is valid"),
+                    NamedNode::new(format!("http://example.org/predicate{j}"))
+                        .expect("invariant: value is valid"),
                     Literal::new(format!("object{i}_{k}")),
                 ));
             }
@@ -102,7 +105,7 @@ fn main() {
 
     // Measure query performance
     let subject = oxirs_core::model::Subject::NamedNode(
-        NamedNode::new("http://example.org/subject50").unwrap(),
+        NamedNode::new("http://example.org/subject50").expect("literal IRI is valid"),
     );
 
     let start = Instant::now();

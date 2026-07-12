@@ -34,14 +34,12 @@ thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
 regex.workspace = true
-lazy_static.workspace = true
 once_cell.workspace = true
 
 # Ultra performance dependencies
 rayon = { workspace = true, optional = true }
 crossbeam = "0.8"
 crossbeam-epoch = "0.9"
-crossbeam-utils.workspace = true
 crossbeam-deque = "0.8"
 dashmap.workspace = true
 bumpalo.workspace = true
@@ -49,8 +47,7 @@ memmap2.workspace = true
 parking_lot.workspace = true
 ahash = "0.8"
 simd-json = "0.17"
-wide = { version = "1.3", optional = true }
-num_cpus.workspace = true
+wide = { version = "1.5", optional = true }
 sys-info = "0.9"
 libc.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-util"] }
@@ -72,7 +69,6 @@ chrono.workspace = true
 # rand replaced with scirs2-core random generation
 fastrand.workspace = true
 uuid.workspace = true
-urlencoding.workspace = true
 
 # Storage engine dependencies
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
@@ -109,18 +105,15 @@ bytes = { workspace = true }
 # SciRS2 scientific computing dependencies (replaces direct ndarray/rand usage)
 scirs2-core = { workspace = true, features = ["memory_management", "memory_efficient", "parallel"] }
 
-# GPU monitoring (optional)
-nvml-wrapper = { version = "0.12", optional = true }
+# GPU monitoring: the real NVIDIA NVML backend (nvml-wrapper / nvml-wrapper-sys C
+# FFI) has been quarantined into the `oxirs-gpu-monitor` crate (publish = false)
+# per COOLJAPAN Pure Rust Policy v2. oxirs-core keeps only the Pure-Rust GpuMonitor
+# stub in src/ai/gpu_monitor.rs, so no nvml dependency is declared here.
 
 # High-performance validation dependencies from oxrdf ecosystem
 oxiri.workspace = true         # Fast IRI validation and parsing
 oxilangtag.workspace = true    # Fast language tag validation
 oxsdatatypes.workspace = true  # Fast XSD datatype validation and parsing
-
-# Dependencies for Unicode normalization
-icu = "2.2"
-icu_normalizer = "2.2"
-icu_properties = "2.2"
 
 # Random number generation now provided by scirs2-core
 
@@ -140,7 +133,6 @@ async = []
 async-tokio = ["async"]
 parallel = ["rayon"]
 simd = ["wide"]
-gpu = ["nvml-wrapper"]
 cuda = []
 opencl = []
 metal = []

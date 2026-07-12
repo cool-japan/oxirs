@@ -2,12 +2,12 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
+use once_cell::sync::Lazy;
 use scirs2_core::metrics::{Counter, Gauge};
 
-lazy_static::lazy_static! {
-    pub static ref TOKEN_CLONES : Counter = Counter::new("rete_token_clones".to_string());
-    pub static ref ACTIVE_TOKENS : Gauge = Gauge::new("rete_active_tokens".to_string());
-}
+pub static TOKEN_CLONES: Lazy<Counter> =
+    Lazy::new(|| Counter::new("rete_token_clones".to_string()));
+pub static ACTIVE_TOKENS: Lazy<Gauge> = Lazy::new(|| Gauge::new("rete_active_tokens".to_string()));
 /// Unique identifier for RETE nodes
 pub type NodeId = usize;
 #[cfg(test)]

@@ -1,9 +1,9 @@
 //! # OxiRS Stream - Ultra-High Performance RDF Streaming Platform
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-stream/badge.svg)](https://docs.rs/oxirs-stream)
 //!
-//! **Status**: Production Release (v0.3.1)
+//! **Status**: Production Release (v0.3.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Real-time streaming support with Kafka/NATS/Redis I/O, RDF Patch, SPARQL Update delta,
@@ -205,6 +205,7 @@ pub use end_to_end_encryption::{
     HomomorphicEncryption, KeyExchangeAlgorithm, KeyPair, KeyRotationConfig, MultiPartyConfig,
     ZeroKnowledgeProof,
 };
+#[cfg(feature = "gpu")]
 pub use gpu_acceleration::{
     AggregationOp, GpuBackend, GpuBuffer, GpuConfig, GpuContext, GpuProcessorConfig, GpuStats,
     GpuStreamProcessor,
@@ -443,6 +444,12 @@ pub mod webhook;
 // New v0.3.0 modules for advanced features
 pub mod custom_serialization;
 pub mod end_to_end_encryption;
+// PRE-EXISTING BUG WORKAROUND (unrelated to the rdkafka/pulsar quarantine):
+// `gpu_acceleration` imports `scirs2_core::gpu`, which scirs2-core gates behind its own
+// `gpu` feature (Pure Rust — `gpu = ["std"]`, no GPU FFI). Gate the module behind an
+// off-by-default `gpu` feature that turns scirs2-core's `gpu` on, so the default build
+// compiles without it and `--all-features` resolves `scirs2_core::gpu`.
+#[cfg(feature = "gpu")]
 pub mod gpu_acceleration;
 pub mod ml_integration;
 pub mod rate_limiting;

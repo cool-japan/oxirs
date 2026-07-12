@@ -36,7 +36,7 @@ fn main() -> Result<()> {
         let point_path = temp_dir.join("point.fgb");
         oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
             std::slice::from_ref(&point),
-            point_path.to_str().unwrap(),
+            point_path.to_str().expect("path is valid UTF-8"),
         )?;
         println!("   ✓ Written to: {}", point_path.display());
 
@@ -59,7 +59,7 @@ fn main() -> Result<()> {
         let route_path = temp_dir.join("route.fgb");
         oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
             std::slice::from_ref(&route),
-            route_path.to_str().unwrap(),
+            route_path.to_str().expect("path is valid UTF-8"),
         )?;
         println!("   ✓ Written to: {}", route_path.display());
 
@@ -83,7 +83,7 @@ fn main() -> Result<()> {
         let poly_path = temp_dir.join("polygon.fgb");
         oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
             std::slice::from_ref(&polygon),
-            poly_path.to_str().unwrap(),
+            poly_path.to_str().expect("path is valid UTF-8"),
         )?;
         println!("   ✓ Written to: {}", poly_path.display());
 
@@ -103,7 +103,7 @@ fn main() -> Result<()> {
         let mp_path = temp_dir.join("multipoint.fgb");
         oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
             std::slice::from_ref(&multipoint),
-            mp_path.to_str().unwrap(),
+            mp_path.to_str().expect("path is valid UTF-8"),
         )?;
         println!("   ✓ Written to: {}", mp_path.display());
 
@@ -122,7 +122,7 @@ fn main() -> Result<()> {
         let batch_path = temp_dir.join("batch.fgb");
         oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
             &points,
-            batch_path.to_str().unwrap(),
+            batch_path.to_str().expect("path is valid UTF-8"),
         )?;
         println!("   ✓ Written to: {}", batch_path.display());
 
@@ -140,7 +140,7 @@ fn main() -> Result<()> {
         let fgb_path = temp_dir.join("test.fgb");
         oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
             std::slice::from_ref(&test_geom),
-            fgb_path.to_str().unwrap(),
+            fgb_path.to_str().expect("path is valid UTF-8"),
         )?;
         let fgb_size = std::fs::metadata(&fgb_path)?.len();
         println!("   FlatGeobuf (.fgb) size: {} bytes", fgb_size);

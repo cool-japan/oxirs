@@ -62,7 +62,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let perf_config = PerformanceConfig {
         parallel_processing: true,
-        num_workers: num_cpus::get(),
+        num_workers: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1),
         cache_size: 100,
         profiling_enabled: true,
         ..Default::default()
@@ -220,10 +222,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     println!("  Recommendations based on system:");
-    println!("    CPU cores: {}", num_cpus::get());
+    println!(
+        "    CPU cores: {}",
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+    );
     println!(
         "    Recommended workers: {}",
-        num_cpus::get().saturating_sub(1).max(1)
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .saturating_sub(1)
+            .max(1)
     );
     println!("    Recommended cache size: 100-1000 entries");
     println!("    Enable parallel processing: Yes (for > 10 models)");

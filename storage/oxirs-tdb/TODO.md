@@ -1,6 +1,6 @@
 # OxiRS TDB - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
@@ -13,21 +13,26 @@
 - **Database Operations** - Lifecycle management, compaction, repair
 - **Observability** - Metrics collection, health checks, distributed tracing
 - **Bulk Loader** - High-performance data loading with parallel processing
-- **Distributed Transactions** - Two-phase commit, three-phase commit, Paxos consensus
+- **Distributed Transactions** - Two-phase/three-phase commit participants backed by a real
+  WAL-backed `Transaction` via `with_transaction_manager()`; Paxos consensus (`consensus::paxos`)
+- **Saga Pattern** - `SagaOrchestrator` + `SagaCallbackRegistry` run real registered
+  forward-action/compensation callbacks per step, with reverse-order compensation on failure
+- **Distributed Deadlock Detection** - wait-for graph cycle detection with four victim-selection
+  strategies (`YoungestTransaction`, `OldestTransaction`, `LeastWork`, `Random`)
 - **Database Replication** - Master-slave and master-master replication
 - **Advanced Diagnostics** - Production-ready diagnostic engine
 - **GeoSPARQL Indexing** - R*-tree based spatial queries
 - **Asynchronous I/O** - Non-blocking operations with io_uring support
 - **Cost-Based Optimizer** - Intelligent index selection
 - **Production Features** - Resource quotas, materialized views, WAL archiving, connection pooling
-- **2005 tests passing** with clean build
+- **2106 tests passing** with clean build
 
 ## Roadmap
 
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ MVCC + ACID, B+ Tree, TDB2 parity, bulk loader, distributed transactions, 950+ tests
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Advanced compression algorithms
 - ✅ Enhanced index strategies (adaptive index, bloom index)
 - ✅ Improved query optimization
@@ -38,7 +43,7 @@
 - ✅ Six-index store, page cache, write batch, checkpoint manager
 - ✅ 2005 tests passing
 
-### v0.3.0 - Planned (Q2 2026)
+### v0.3.0 - Released (Q2 2026)
 - [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] Complete TDB2 parity verification (completed 2026-04-28)
   - **Goal:** Verify behavioral parity with Apache Jena TDB2 over a defined operation matrix and fix any gaps surfaced.
@@ -50,10 +55,27 @@
 - [x] Enterprise support (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
+### v0.3.2 - Current Release (July 12, 2026)
+- [x] Saga steps now run real registered forward-action/compensation callbacks via
+  `SagaCallbackRegistry` (`register_action`/`register_compensation`), with reverse-order
+  compensation on failure; `DistributedTdbStore::execute_saga` previously reported success
+  without ever calling `saga.execute()` — fixed so sagas actually run, with outcomes recorded
+  to the replication log via `commit_distributed_transaction`
+- [x] 2PC/3PC participants (`TwoPhaseParticipant`/`ThreePhaseParticipant`) can now be constructed
+  via `with_transaction_manager()` to commit/abort a real WAL-backed `Transaction` instead of
+  only tracking protocol state
+- [x] Deadlock detector's `LeastWork` victim-selection strategy is implemented (picks the
+  transaction with fewest outstanding wait-for edges) instead of silently falling back;
+  `YoungestTransaction`/`OldestTransaction` no longer panic on an empty cycle
+- [x] Distributed coordinator's `abort_transaction` now fans out an abort notification to all
+  registered participants instead of a no-op
+- Note: oxirs-tdb has no DuckDB coupling (`grep -rn duckdb src/` is empty) — the DuckDB C-FFI
+  quarantine into `oxirs-tsdb-adapter-duckdb` this release applies to **oxirs-tsdb**, not this crate
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TDB v0.3.1 - High-performance RDF storage*
+*OxiRS TDB v0.3.2 - High-performance RDF storage*

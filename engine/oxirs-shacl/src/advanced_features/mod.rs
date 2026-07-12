@@ -35,6 +35,7 @@ pub mod shape_comparison;
 pub mod shape_evolution;
 pub mod shape_inference;
 pub mod shape_operations;
+pub(crate) mod subclass_closure;
 
 // Re-export key types
 pub use rules::{

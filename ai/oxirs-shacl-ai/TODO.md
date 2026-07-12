@@ -1,16 +1,16 @@
 # OxiRS SHACL-AI - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
 **oxirs-shacl-ai** provides AI-enhanced SHACL validation with production-ready MLOps features.
 
 ### Quality Metrics
-- **Test Status**: 1589/1589 tests passing (100% success rate)
+- **Test Status**: 1718/1718 tests passing (100% success rate)
 - **Code Quality**: Zero warnings, zero errors
 - **SciRS2 Compliance**: Full compliance (no direct ndarray/rand imports)
-- **Code Size**: 153,329 lines total (401 Rust source files)
+- **Code Size**: 159,946 lines total (412 Rust source files)
 
 ### Features
 
@@ -86,7 +86,7 @@
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ GNNs, Transformer-based constraint generation, RL optimization, federated learning, 555 tests
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Enhanced GPU acceleration across all models
 - ✅ Distributed training support
 - ✅ Advanced model ensembles
@@ -96,7 +96,7 @@
 - ✅ Pattern scorer, constraint ranker, rule generator
 - ✅ 1589 tests passing
 
-### v0.3.0 - Planned (Q2 2026)
+### v0.3.0 - Released (Q2 2026)
 - [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive ML certification suite (completed 2026-05-02)
@@ -235,7 +235,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS SHACL-AI v0.2.3 - AI-enhanced SHACL validation*
+*OxiRS SHACL-AI v0.3.2 - AI-enhanced SHACL validation*
 
 ## Proposed follow-ups
 

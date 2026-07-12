@@ -1,10 +1,11 @@
 //! Comparison of Pure Rust buffer vs GEOS backend
 //!
-//! This example demonstrates the hybrid buffer strategy where:
-//! - Polygon/MultiPolygon → uses rust-buffer (pure Rust)
-//! - Point/LineString → uses geos-backend (C++ library)
+//! This example demonstrates the buffer strategy where:
+//! - Polygon/MultiPolygon → uses rust-buffer (pure Rust, this crate)
+//! - Point/LineString → requires GEOS, provided by the quarantined
+//!   `oxirs-geosparql-adapter-geos` crate (publish = false)
 //!
-//! Run with: cargo run --example buffer_comparison --features rust-buffer,geos-backend
+//! Run with: cargo run --example buffer_comparison --features rust-buffer
 
 use oxirs_geosparql::error::Result;
 use oxirs_geosparql::functions::geometric_operations::buffer;
@@ -25,51 +26,16 @@ fn main() -> Result<()> {
     println!("   After buffer(2.0): {}", buffered_square.to_wkt());
     println!("   ✅ Used: Pure Rust (geo-buffer)\n");
 
-    // Test 2: Point buffer - Uses GEOS
-    #[cfg(feature = "geos-backend")]
-    {
-        println!("2. POINT BUFFER (GEOS Backend):");
-        println!("   When you buffer a Point, oxirs-geosparql automatically uses");
-        println!("   the GEOS backend (C++ library).\n");
+    // Test 2: Point buffer - requires GEOS (quarantined into the adapter crate)
+    println!("2. POINT BUFFER (GEOS adapter):");
+    println!("   Point buffering requires GEOS, which is provided by the");
+    println!("   `oxirs-geosparql-adapter-geos` crate (publish = false). Call");
+    println!("   `oxirs_geosparql_adapter_geos::buffer(&point, 3.0)` there.\n");
 
-        let point = Geometry::from_wkt("POINT(5 5)")?;
-        println!("   Original: {}", point.to_wkt());
-
-        let buffered_point = buffer(&point, 3.0)?;
-        println!("   After buffer(3.0): {}", buffered_point.to_wkt());
-        println!("   Result type: {}", buffered_point.geometry_type());
-        println!("   ✅ Used: GEOS backend (creates circular polygon)\n");
-    }
-
-    #[cfg(not(feature = "geos-backend"))]
-    {
-        println!("2. POINT BUFFER (GEOS Backend):");
-        println!("   ❌ GEOS backend not available - Point buffer requires geos-backend feature\n");
-    }
-
-    // Test 3: LineString buffer - Uses GEOS
-    #[cfg(feature = "geos-backend")]
-    {
-        println!("3. LINESTRING BUFFER (GEOS Backend):");
-        println!("   When you buffer a LineString, oxirs-geosparql automatically uses");
-        println!("   the GEOS backend.\n");
-
-        let line = Geometry::from_wkt("LINESTRING(0 0, 10 10, 20 5)")?;
-        println!("   Original: {}", line.to_wkt());
-
-        let buffered_line = buffer(&line, 2.0)?;
-        println!("   After buffer(2.0): {}", buffered_line.to_wkt());
-        println!("   Result type: {}", buffered_line.geometry_type());
-        println!("   ✅ Used: GEOS backend (creates rounded corridor)\n");
-    }
-
-    #[cfg(not(feature = "geos-backend"))]
-    {
-        println!("3. LINESTRING BUFFER (GEOS Backend):");
-        println!(
-            "   ❌ GEOS backend not available - LineString buffer requires geos-backend feature\n"
-        );
-    }
+    // Test 3: LineString buffer - requires GEOS (quarantined into the adapter crate)
+    println!("3. LINESTRING BUFFER (GEOS adapter):");
+    println!("   LineString buffering likewise requires the");
+    println!("   `oxirs-geosparql-adapter-geos` crate.\n");
 
     // Test 4: MultiPolygon buffer - Uses Pure Rust
     println!("4. MULTIPOLYGON BUFFER (Pure Rust Backend):");
@@ -111,38 +77,19 @@ fn main() -> Result<()> {
     // Test 6: Feature flag demonstration
     println!("\n=== FEATURE FLAG CONFIGURATION ===\n");
 
-    #[cfg(all(feature = "rust-buffer", feature = "geos-backend"))]
+    #[cfg(feature = "rust-buffer")]
     {
-        println!("Current configuration: ✅ Both backends available");
+        println!("Current configuration: Pure-Rust buffer ENABLED");
         println!("   • rust-buffer: ENABLED (Pure Rust for Polygon/MultiPolygon)");
-        println!("   • geos-backend: ENABLED (GEOS for all geometry types)");
-        println!("\n   This is the RECOMMENDED configuration for maximum compatibility.");
+        println!("   • GEOS (Point/LineString, cap/join styles): provided by the");
+        println!("     oxirs-geosparql-adapter-geos crate (publish = false).");
     }
 
-    #[cfg(all(feature = "rust-buffer", not(feature = "geos-backend")))]
+    #[cfg(not(feature = "rust-buffer"))]
     {
-        println!("Current configuration: ⚠️ Partial support");
-        println!("   • rust-buffer: ENABLED (Pure Rust for Polygon/MultiPolygon)");
-        println!("   • geos-backend: DISABLED");
-        println!("\n   Point and LineString buffers will not work.");
-        println!("   Consider enabling geos-backend for full support.");
-    }
-
-    #[cfg(all(not(feature = "rust-buffer"), feature = "geos-backend"))]
-    {
-        println!("Current configuration: ✅ GEOS-only");
-        println!("   • rust-buffer: DISABLED");
-        println!("   • geos-backend: ENABLED (GEOS for all geometry types)");
-        println!("\n   All geometry types work, but requires GEOS C++ library.");
-    }
-
-    #[cfg(not(any(feature = "rust-buffer", feature = "geos-backend")))]
-    {
-        println!("Current configuration: ❌ No buffer support");
-        println!("   • rust-buffer: DISABLED");
-        println!("   • geos-backend: DISABLED");
-        println!("\n   Buffer operations will not work.");
-        println!("   Enable at least one feature to use buffer().");
+        println!("Current configuration: no Pure-Rust buffer feature enabled");
+        println!("   • rust-buffer: DISABLED (enable it for Polygon/MultiPolygon buffering)");
+        println!("   • GEOS buffering: use the oxirs-geosparql-adapter-geos crate.");
     }
 
     println!("\n=== Example completed successfully! ===");

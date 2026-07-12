@@ -118,7 +118,7 @@ impl TsdbRaftOp {
         serde_json::to_vec(self).map_err(|e| ReplicationError::Serialization(e.to_string()))
     }
 
-    /// Deserialise a `TsdbRaftOp` from JSON bytes produced by [`to_bytes`].
+    /// Deserialise a `TsdbRaftOp` from JSON bytes produced by [`TsdbRaftOp::to_bytes`].
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ReplicationError> {
         serde_json::from_slice(bytes).map_err(|e| ReplicationError::Serialization(e.to_string()))
     }

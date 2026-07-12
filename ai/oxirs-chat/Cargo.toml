@@ -44,7 +44,7 @@ reqwest = { workspace = true, features = ["stream"] }
 # async-openai forces `reqwest/rustls` (= aws-lc-rs, C/C++) and has no
 # no-provider variant, so feature-unification would poison the whole graph with
 # aws-lc-sys. It is therefore opt-in behind the non-default `openai` feature.
-async-openai = { version = "0.36", default-features = false, features = ["chat-completion", "audio"], optional = true }
+async-openai = { version = "0.41", default-features = false, features = ["chat-completion", "audio"], optional = true }
 # anthropic-sdk = "0.1" # Add when available
 
 # Storage and Caching

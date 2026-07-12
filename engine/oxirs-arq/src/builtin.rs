@@ -3,9 +3,9 @@
 //! This module re-exports all SPARQL 1.1 built-in functions and provides the
 //! central registration entry point. Implementation details live in:
 //!
-//! - [`crate::builtin_string`]   — string, type-check, logical, and regex functions
-//! - [`crate::builtin_numeric`]  — numeric/math functions
-//! - [`crate::builtin_datetime`] — date/time, hash, and aggregate functions
+//! - `crate::builtin_string`   — string, type-check, logical, and regex functions
+//! - `crate::builtin_numeric`  — numeric/math functions
+//! - `crate::builtin_datetime` — date/time, hash, and aggregate functions
 
 use crate::builtin_datetime::{
     AvgAggregate, CountAggregate, DayFunction, GroupConcatAggregate, HoursFunction, MaxAggregate,

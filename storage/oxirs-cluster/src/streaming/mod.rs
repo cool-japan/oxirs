@@ -6,23 +6,23 @@
 //!
 //! ## Components
 //!
-//! * [`StreamSink`] — local trait describing a write-only sink that accepts a
+//! * [`streaming::StreamSink`] — local trait describing a write-only sink that accepts a
 //!   batch of cluster-shaped streaming events. The matching producer side
 //!   (e.g. `oxirs-stream`) implements *its* end of the bridge by exposing a
 //!   transform that calls into a `StreamSink`. We deliberately keep the trait
 //!   local to avoid a circular dependency with `oxirs-stream` (W3-S11 will
 //!   pull from this side, not the reverse).
-//! * [`ClusterSink`] — the production [`StreamSink`] implementation that
+//! * [`streaming::ClusterSink`] — the production [`streaming::StreamSink`] implementation that
 //!   proposes each event batch through the [`crate::consensus::ConsensusManager`]
 //!   as a sequence of [`crate::raft::RdfCommand`] entries. Read replicas serve
 //!   queries against committed events via the existing `RdfApp` query path.
-//! * [`BackpressureBridge`] — exposes a [`BackpressureSignal`] that upstream
+//! * [`streaming::BackpressureBridge`] — exposes a [`streaming::BackpressureSignal`] that upstream
 //!   operators can poll. The sink updates the bridge based on the depth of the
 //!   pending log queue and the configured high/low watermarks.
-//! * [`EventMapper`] — pluggable transformer from
+//! * [`streaming::EventMapper`] — pluggable transformer from
 //!   [`crate::stream_integration::StreamMessage`] to a vector of
 //!   [`crate::raft::RdfCommand`]. The default
-//!   [`DefaultEventMapper`] turns inserts/deletes/truncates one-to-one.
+//!   [`streaming::DefaultEventMapper`] turns inserts/deletes/truncates one-to-one.
 //!
 //! ## Why not extend `RdfCommand` directly?
 //!

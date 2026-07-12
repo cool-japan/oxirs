@@ -50,16 +50,14 @@ pub async fn clear_memory_events() {
 
 /// Backend-agnostic producer wrapper (crate-private)
 pub(crate) enum BackendProducer {
-    #[cfg(feature = "kafka")]
-    Kafka(backend::kafka::KafkaProducer),
+    // Kafka/Pulsar variants removed: those backends were quarantined into the
+    // publish=false oxirs-stream-adapter-{rdkafka,pulsar} crates (Pure Rust Policy v2).
     #[cfg(feature = "nats")]
     Nats(Box<backend::nats::NatsProducer>),
     #[cfg(feature = "redis")]
     Redis(backend::redis::RedisProducer),
     #[cfg(feature = "kinesis")]
     Kinesis(backend::kinesis::KinesisProducer),
-    #[cfg(feature = "pulsar")]
-    Pulsar(Box<backend::pulsar::PulsarProducer>),
     #[cfg(feature = "rabbitmq")]
     RabbitMQ(Box<backend::rabbitmq::RabbitMQProducer>),
     Memory(MemoryProducer),
@@ -155,16 +153,12 @@ impl StreamProducer {
 
         let stats = Arc::new(RwLock::new(ProducerStats {
             backend_type: match backend_producer {
-                #[cfg(feature = "kafka")]
-                BackendProducer::Kafka(_) => "kafka".to_string(),
                 #[cfg(feature = "nats")]
                 BackendProducer::Nats(_) => "nats".to_string(),
                 #[cfg(feature = "redis")]
                 BackendProducer::Redis(_) => "redis".to_string(),
                 #[cfg(feature = "kinesis")]
                 BackendProducer::Kinesis(_) => "kinesis".to_string(),
-                #[cfg(feature = "pulsar")]
-                BackendProducer::Pulsar(_) => "pulsar".to_string(),
                 #[cfg(feature = "rabbitmq")]
                 BackendProducer::RabbitMQ(_) => "rabbitmq".to_string(),
                 BackendProducer::Memory(_) => "memory".to_string(),
@@ -191,24 +185,13 @@ impl StreamProducer {
 
     async fn build_backend_producer(config: &StreamConfig) -> Result<BackendProducer> {
         match &config.backend {
-            #[cfg(feature = "kafka")]
-            StreamBackendType::Kafka {
-                brokers,
-                security_protocol,
-                sasl_config,
-            } => {
-                let stream_config = Self::make_stream_config(
-                    config,
-                    crate::StreamBackendType::Kafka {
-                        brokers: brokers.clone(),
-                        security_protocol: security_protocol.clone(),
-                        sasl_config: sasl_config.clone(),
-                    },
-                );
-                let mut producer = backend::kafka::KafkaProducer::new(stream_config)?;
-                producer.connect().await?;
-                Ok(BackendProducer::Kafka(producer))
-            }
+            // Kafka backend quarantined into the publish=false `oxirs-stream-adapter-rdkafka`
+            // crate (Pure Rust Policy v2): build `KafkaBackend` there via the `StreamBackend` trait.
+            StreamBackendType::Kafka { .. } => Err(anyhow!(
+                "Kafka backend moved to the publish=false `oxirs-stream-adapter-rdkafka` crate \
+                 (COOLJAPAN Pure Rust Policy v2). Construct `oxirs_stream_adapter_rdkafka::KafkaBackend` \
+                 and drive it via the `oxirs_stream::backend::StreamBackend` trait."
+            )),
             #[cfg(feature = "nats")]
             StreamBackendType::Nats {
                 url,
@@ -263,22 +246,13 @@ impl StreamProducer {
                 producer.connect().await?;
                 Ok(BackendProducer::Kinesis(producer))
             }
-            #[cfg(feature = "pulsar")]
-            StreamBackendType::Pulsar {
-                service_url,
-                auth_config,
-            } => {
-                let stream_config = Self::make_stream_config(
-                    config,
-                    crate::StreamBackendType::Pulsar {
-                        service_url: service_url.clone(),
-                        auth_config: auth_config.clone(),
-                    },
-                );
-                let mut producer = backend::pulsar::PulsarProducer::new(stream_config)?;
-                producer.connect().await?;
-                Ok(BackendProducer::Pulsar(Box::new(producer)))
-            }
+            // Pulsar backend quarantined into the publish=false `oxirs-stream-adapter-pulsar`
+            // crate (Pure Rust Policy v2): construct PulsarProducer/PulsarConsumer there directly.
+            StreamBackendType::Pulsar { .. } => Err(anyhow!(
+                "Pulsar backend moved to the publish=false `oxirs-stream-adapter-pulsar` crate \
+                 (COOLJAPAN Pure Rust Policy v2). Construct \
+                 `oxirs_stream_adapter_pulsar::PulsarProducer` / `PulsarConsumer` directly."
+            )),
             #[cfg(feature = "rabbitmq")]
             StreamBackendType::RabbitMQ {
                 url,
@@ -381,16 +355,12 @@ impl StreamProducer {
 
     async fn publish_single_event(&mut self, event: StreamEvent) -> Result<()> {
         match &mut self.backend_producer {
-            #[cfg(feature = "kafka")]
-            BackendProducer::Kafka(producer) => producer.publish(event).await,
             #[cfg(feature = "nats")]
             BackendProducer::Nats(producer) => producer.publish(event).await,
             #[cfg(feature = "redis")]
             BackendProducer::Redis(producer) => producer.publish(event).await,
             #[cfg(feature = "kinesis")]
             BackendProducer::Kinesis(producer) => producer.publish(event).await,
-            #[cfg(feature = "pulsar")]
-            BackendProducer::Pulsar(producer) => producer.publish(event).await,
             #[cfg(feature = "rabbitmq")]
             BackendProducer::RabbitMQ(producer) => producer.publish(event).await,
             BackendProducer::Memory(producer) => producer.publish(event).await,
@@ -410,16 +380,12 @@ impl StreamProducer {
         let event_count = events.len();
 
         let result = match &mut self.backend_producer {
-            #[cfg(feature = "kafka")]
-            BackendProducer::Kafka(producer) => producer.publish_batch(events).await,
             #[cfg(feature = "nats")]
             BackendProducer::Nats(producer) => producer.publish_batch(events).await,
             #[cfg(feature = "redis")]
             BackendProducer::Redis(producer) => producer.publish_batch(events).await,
             #[cfg(feature = "kinesis")]
             BackendProducer::Kinesis(producer) => producer.publish_batch(events).await,
-            #[cfg(feature = "pulsar")]
-            BackendProducer::Pulsar(producer) => producer.publish_batch(events).await,
             #[cfg(feature = "rabbitmq")]
             BackendProducer::RabbitMQ(producer) => producer.publish_batch(events).await,
             BackendProducer::Memory(producer) => {
@@ -479,16 +445,12 @@ impl StreamProducer {
         }
 
         let result = match &mut self.backend_producer {
-            #[cfg(feature = "kafka")]
-            BackendProducer::Kafka(producer) => producer.flush().await,
             #[cfg(feature = "nats")]
             BackendProducer::Nats(producer) => producer.flush().await,
             #[cfg(feature = "redis")]
             BackendProducer::Redis(producer) => producer.flush().await,
             #[cfg(feature = "kinesis")]
             BackendProducer::Kinesis(producer) => producer.flush().await,
-            #[cfg(feature = "pulsar")]
-            BackendProducer::Pulsar(producer) => producer.flush().await,
             #[cfg(feature = "rabbitmq")]
             BackendProducer::RabbitMQ(producer) => producer.flush().await,
             BackendProducer::Memory(producer) => producer.flush().await,

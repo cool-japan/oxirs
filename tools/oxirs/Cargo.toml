@@ -12,6 +12,11 @@ categories = ["command-line-utilities", "database", "development-tools"]
 readme = "README.md"
 rust-version.workspace = true
 
+# End-user CLI application (not a library). Kept off crates.io so it can consume
+# publish=false quarantine adapters (e.g. oxirs-tsdb-adapter-duckdb's libduckdb-sys)
+# without putting C FFI on the published Pure-Rust surface. Ships as a release binary.
+publish = false
+
 [dependencies]
 scirs2-core = { workspace = true }
 # SCIRS2 POLICY: Full use of SciRS2 ecosystem for advanced analytics
@@ -56,7 +61,7 @@ clap_complete = "4.6"  # Shell completion support
 textwrap = "0.16"   # Text wrapping for help
 unicode-width = "0.2"  # Unicode text width
 terminal_size = "0.4"  # Terminal dimensions
-shlex = "1.3"       # Shell-like parsing
+shlex = "2.0"       # Shell-like parsing
 # OxiCrypto (Pure Rust) — replaces `ring` for AEAD, hashing, and KDF
 oxicrypto-core.workspace = true   # Aead/Hash/StreamingHash traits + CryptoError
 oxicrypto-aead.workspace = true   # AES-256-GCM (seal_to_vec / open_to_vec)
@@ -81,73 +86,61 @@ quick-xml.workspace = true   # XML parsing for SPARQL Results XML (SRX) format
 
 [dev-dependencies]
 criterion.workspace = true
-tokio-test.workspace = true
 wiremock.workspace = true
 
 [features]
 default = []
 all-features = [
-    "star",
-    "ai",
-    "cluster",
     "text",
     "geo",
-    "vec",
     "pdf-export"
 ]
 excel-export = ["rust_xlsxwriter"]
 pdf-export = ["dep:printpdf"]
 system-keyring = ["dep:keyring-core", "dep:apple-native-keyring-store"]  # Enable OS-level secret storage (macOS Keychain, Windows Credential Manager, Linux Secret Service)
-star = ["oxirs-star"]
-ai = ["oxirs-chat"] # oxirs-embed temporarily disabled
-cluster = ["oxirs-cluster"]
 # Propagate the non-default `full-text-search` gate to oxirs-tdb and oxirs-fuseki.
 # Enables Tantivy-backed full-text search (pulls C `zstd-sys`); off by default
 # per the COOLJAPAN Pure Rust default policy. `oxirs` itself does not use Tantivy
 # directly, so no direct `tantivy` dependency is required here.
 text = ["oxirs-tdb/full-text-search", "oxirs-fuseki/full-text-search"]
 geo = []
-vec = ["oxirs-vec"]
-# DuckDB-backed TSDB chunk inspection (`oxirs tsdb duck-db`). Pulls libduckdb
-# C dependencies via `oxirs-tsdb`'s `duckdb` feature; off by default per the
-# COOLJAPAN Pure Rust default policy.
-tsdb-duckdb = ["dep:oxirs-tsdb", "dep:arrow"]
-
-[dependencies.oxirs-star]
-workspace = true
-optional = true
-
-# [dependencies.oxirs-embed] # Temporarily disabled
-# workspace = true
-# optional = true
-
-[dependencies.oxirs-chat]
-workspace = true
-optional = true
-
-[dependencies.oxirs-cluster]
-workspace = true
-optional = true
-
-[dependencies.oxirs-vec]
-workspace = true
-optional = true
+# DuckDB-backed TSDB chunk inspection (`oxirs tsdb duckdb`). Pulls libduckdb C
+# dependencies via the `publish = false` `oxirs-tsdb-adapter-duckdb` quarantine
+# crate; off by default per the COOLJAPAN Pure Rust default policy.
+tsdb-duckdb = ["dep:oxirs-tsdb", "dep:oxirs-tsdb-adapter-duckdb", "dep:arrow"]
 
 [dependencies.oxirs-tsdb]
 workspace = true
 optional = true
-features = ["duckdb"]
 
-[dependencies.arrow]
+# DuckDB bridge lives in the quarantine adapter crate (publish = false) so the
+# libduckdb C FFI stays off oxirs-tsdb's published Pure-Rust surface.
+[dependencies.oxirs-tsdb-adapter-duckdb]
 workspace = true
+optional = true
+
+# NOTE (cargo-upgrade sweep, 2026-07-02): pinned to arrow 58 (NOT workspace 59) — a
+# per-crate override. oxirs-tsdb-adapter-duckdb hands back `duckdb::arrow` RecordBatch
+# (= the arrow 58.3.0 duckdb 1.10504 bundles), and the tsdb_duckdb tool needs
+# STANDALONE arrow with `prettyprint` (pretty_format_batches) that duckdb's re-export
+# doesn't enable — so a direct arrow dep is required, and it must be 58 so the tool's
+# RecordBatch type is identical to the adapter's (otherwise E0308). Re-eval when duckdb
+# bundles arrow 59 (then this can return to `workspace = true`).
+[dependencies.arrow]
+version = "58"
 optional = true
 features = ["prettyprint"]
 
 [package.metadata.docs.rs]
 # Use minimal features for docs.rs build (avoid features with system dependencies)
-features = ["star", "geo"]
-# Exclude: ai (complex), cluster (lmdb), text (tantivy build issues), vec
+features = ["geo"]
+# Exclude: text (tantivy build issues), tsdb-duckdb (libduckdb C build)
 rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+# prettytable-rs is used as `prettytable` (lib name differs from package name),
+# which cargo-machete cannot match against the dependency key.
+ignored = ["prettytable-rs"]
 
 [[bin]]
 name = "oxirs"

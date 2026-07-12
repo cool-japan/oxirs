@@ -191,7 +191,8 @@ fn benchmark_query_latency() {
         })
         .collect();
 
-    let chunk = TimeChunk::new(1, base_time, Duration::hours(24), points).unwrap();
+    let chunk = TimeChunk::new(1, base_time, Duration::hours(24), points)
+        .expect("invariant: value is valid");
     engine.add_chunk(chunk);
 
     println!("Dataset: 1,000,000 data points");
@@ -228,7 +229,7 @@ fn benchmark_query_latency() {
             query = query.aggregate(a);
         }
 
-        let result = query.execute().unwrap();
+        let result = query.execute().expect("invariant: value is valid");
         let elapsed = start.elapsed();
 
         let points_per_ms = result.points_processed as f64 / elapsed.as_secs_f64() / 1000.0;
@@ -259,7 +260,8 @@ fn benchmark_aggregations() {
         })
         .collect();
 
-    let chunk = TimeChunk::new(1, base_time, Duration::hours(24), points).unwrap();
+    let chunk = TimeChunk::new(1, base_time, Duration::hours(24), points)
+        .expect("invariant: value is valid");
     engine.add_chunk(chunk);
 
     let aggregations = [
@@ -283,7 +285,12 @@ fn benchmark_aggregations() {
 
     for (name, agg) in aggregations {
         let start = Instant::now();
-        let result = engine.query().series(1).aggregate(agg).execute().unwrap();
+        let result = engine
+            .query()
+            .series(1)
+            .aggregate(agg)
+            .execute()
+            .expect("invariant: value is valid");
         let elapsed = start.elapsed();
 
         println!(
@@ -311,7 +318,8 @@ fn benchmark_window_functions() {
         })
         .collect();
 
-    let chunk = TimeChunk::new(1, base_time, Duration::hours(24), points).unwrap();
+    let chunk = TimeChunk::new(1, base_time, Duration::hours(24), points)
+        .expect("invariant: value is valid");
     engine.add_chunk(chunk);
 
     let window_sizes = [10, 100, 1000];
@@ -338,7 +346,7 @@ fn benchmark_window_functions() {
                 .series(1)
                 .window(WindowSpec::count_based(size, func))
                 .execute()
-                .unwrap();
+                .expect("invariant: value is valid");
             let elapsed = start.elapsed();
 
             println!(
@@ -385,7 +393,8 @@ fn benchmark_memory_efficiency() {
                 })
                 .collect();
 
-            let chunk = TimeChunk::new(1, base_time, Duration::hours(24), points).unwrap();
+            let chunk = TimeChunk::new(1, base_time, Duration::hours(24), points)
+                .expect("invariant: value is valid");
             let chunk_size = chunk.metadata.compressed_size;
             let ratio = raw_size as f64 / chunk_size as f64;
 

@@ -80,7 +80,11 @@ fn extract_query_from_request(request: &Request) -> Option<String> {
         for param in query_params.split('&') {
             if let Some((key, value)) = param.split_once('=') {
                 if key == "query" {
-                    return Some(urlencoding::decode(value).ok()?.into_owned());
+                    return Some(
+                        oxirs_core::encoding::percent_decode(value)
+                            .ok()?
+                            .into_owned(),
+                    );
                 }
             }
         }
@@ -437,7 +441,7 @@ mod tests {
     fn test_extract_query_from_url() {
         // This is a simplified test - actual implementation would need a full Request
         let query_str = "SELECT * WHERE { ?s ?p ?o }";
-        let encoded = urlencoding::encode(query_str);
+        let encoded = oxirs_core::encoding::percent_encode(query_str);
         let url_query = format!("query={}", encoded);
 
         // Would create a Request with this query string and test extract_query_from_request

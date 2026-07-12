@@ -21,7 +21,8 @@
 //! let ranks = vec![1, 2, 3];
 //! let filtered = vec![1, 1, 2];
 //! let m = EvaluationMetrics::compute(&ranks, &filtered);
-//! assert!((m.mean_reciprocal_rank - (1.0 / 3.0 + 0.5 + 1.0 / 3.0) / 3.0).abs() < 1e-9);
+//! // MRR is the mean of 1/rank over the *raw* ranks [1, 2, 3]:
+//! assert!((m.mean_reciprocal_rank - (1.0 / 1.0 + 1.0 / 2.0 + 1.0 / 3.0) / 3.0).abs() < 1e-9);
 //! ```
 
 use serde::{Deserialize, Serialize};

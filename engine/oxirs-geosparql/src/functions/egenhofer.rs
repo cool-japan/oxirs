@@ -11,11 +11,7 @@
 //! Reference: Egenhofer, M. J., & Herring, J. (1990). "A mathematical framework for the definition of topological relationships"
 
 use crate::error::Result;
-#[cfg(feature = "geos-backend")]
-use crate::functions::bbox_utils::bbox_could_contain;
 use crate::functions::bbox_utils::bboxes_disjoint;
-#[cfg(feature = "geos-backend")]
-use crate::functions::geometric_operations::boundary;
 use crate::functions::simple_features::{sf_contains, sf_disjoint, sf_equals};
 use crate::geometry::Geometry;
 use geo::Intersects;
@@ -78,37 +74,22 @@ pub fn eh_disjoint(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
 /// let poly2 = Geometry::from_wkt("POLYGON((2 0, 4 0, 4 2, 2 2, 2 0))").expect("should succeed");
 ///
-/// assert!(eh_meet(&poly1, &poly2).expect("should succeed"));
+/// // These polygons share only the boundary edge x=2 (a true "Meet" relation), but
+/// // evaluating it requires GEOS boundary calculation, which is not available in
+/// // the pure-Rust build.
+/// let result = eh_meet(&poly1, &poly2);
+/// assert!(result.is_err());
 /// ```
-#[cfg(feature = "geos-backend")]
-pub fn eh_meet(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
-    geom1.validate_crs_compatibility(geom2)?;
-
-    // Fast path: if bboxes are disjoint, geometries can't meet
-    if bboxes_disjoint(geom1, geom2) {
-        return Ok(false);
-    }
-
-    // Boundaries must intersect
-    let b1 = boundary(geom1)?;
-    let b2 = boundary(geom2)?;
-    let boundaries_intersect = b1.geom.intersects(&b2.geom);
-
-    // Interiors must NOT intersect
-    let interiors_disjoint = !geom1.geom.intersects(&geom2.geom) || {
-        // If they intersect, check if it's only at the boundary
-        use geo::Contains;
-        !geom1.geom.contains(&geom2.geom) && !geom2.geom.contains(&geom1.geom)
-    };
-
-    Ok(boundaries_intersect && interiors_disjoint)
-}
-
-/// Egenhofer Meet (fallback without GEOS)
-#[cfg(not(feature = "geos-backend"))]
+///
+/// This relation needs a geometric boundary, computed via GEOS. The GEOS C FFI has
+/// been quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false)
+/// under the COOLJAPAN Pure Rust Policy v2; call
+/// `oxirs_geosparql_adapter_geos::eh_meet` for the working implementation.
 pub fn eh_meet(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
     Err(crate::error::GeoSparqlError::UnsupportedOperation(
-        "Egenhofer Meet requires 'geos-backend' feature for boundary calculation".to_string(),
+        "Egenhofer Meet requires GEOS boundary calculation; it is provided by the quarantined \
+         `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::eh_meet)."
+            .to_string(),
     ))
 }
 
@@ -209,35 +190,22 @@ pub fn eh_covered_by(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// let point = Geometry::from_wkt("POINT(2 2)").expect("should succeed");
 /// let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
-/// assert!(eh_inside(&point, &poly).expect("should succeed"));
+/// // The point lies strictly within the polygon's interior (a true "Inside"
+/// // relation), but evaluating it requires GEOS boundary calculation, which is
+/// // not available in the pure-Rust build.
+/// let result = eh_inside(&point, &poly);
+/// assert!(result.is_err());
 /// ```
-#[cfg(feature = "geos-backend")]
-pub fn eh_inside(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
-    use geo::Contains;
-
-    geom1.validate_crs_compatibility(geom2)?;
-
-    // Fast path: if geom1's bbox is not within geom2's bbox, geom1 can't be inside geom2
-    if !bbox_could_contain(geom2, geom1) {
-        return Ok(false);
-    }
-
-    // geom1 must be contained in geom2
-    let contained = geom2.geom.contains(&geom1.geom);
-
-    // geom1's boundary must not intersect geom2's boundary
-    let b1 = boundary(geom1)?;
-    let b2 = boundary(geom2)?;
-    let boundaries_disjoint = !b1.geom.intersects(&b2.geom);
-
-    Ok(contained && boundaries_disjoint)
-}
-
-/// Egenhofer Inside (fallback without GEOS)
-#[cfg(not(feature = "geos-backend"))]
+///
+/// This relation needs a geometric boundary, computed via GEOS. The GEOS C FFI has
+/// been quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false)
+/// under the COOLJAPAN Pure Rust Policy v2; call
+/// `oxirs_geosparql_adapter_geos::eh_inside` for the working implementation.
 pub fn eh_inside(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
     Err(crate::error::GeoSparqlError::UnsupportedOperation(
-        "Egenhofer Inside requires 'geos-backend' feature for boundary calculation".to_string(),
+        "Egenhofer Inside requires GEOS boundary calculation; it is provided by the quarantined \
+         `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::eh_inside)."
+            .to_string(),
     ))
 }
 
@@ -255,27 +223,29 @@ pub fn eh_inside(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 /// let point = Geometry::from_wkt("POINT(2 2)").expect("should succeed");
 ///
-/// assert!(eh_contains(&poly, &point).expect("should succeed"));
+/// // The polygon's interior contains the point (a true "Contains" relation), but
+/// // evaluating it requires GEOS boundary calculation, which is not available in
+/// // the pure-Rust build.
+/// let result = eh_contains(&poly, &point);
+/// assert!(result.is_err());
 /// ```
-#[cfg(feature = "geos-backend")]
-pub fn eh_contains(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
-    // Contains is the inverse of inside
-    eh_inside(geom2, geom1)
-}
-
-/// Egenhofer Contains (fallback without GEOS)
-#[cfg(not(feature = "geos-backend"))]
+///
+/// This relation needs a geometric boundary, computed via GEOS. The GEOS C FFI has
+/// been quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false)
+/// under the COOLJAPAN Pure Rust Policy v2; call
+/// `oxirs_geosparql_adapter_geos::eh_contains` for the working implementation.
 pub fn eh_contains(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
     Err(crate::error::GeoSparqlError::UnsupportedOperation(
-        "Egenhofer Contains requires 'geos-backend' feature for boundary calculation".to_string(),
+        "Egenhofer Contains requires GEOS boundary calculation; it is provided by the quarantined \
+         `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::eh_contains)."
+            .to_string(),
     ))
 }
 
 #[cfg(test)]
-#[cfg(feature = "geos-backend")]
 mod tests {
     use super::*;
-    use geo_types::{Coord, Geometry as GeoGeometry, LineString, Point, Polygon};
+    use geo_types::{Coord, Geometry as GeoGeometry, LineString, Polygon};
 
     #[test]
     fn test_eh_equals() {
@@ -329,33 +299,6 @@ mod tests {
         )));
 
         assert!(eh_disjoint(&poly1, &poly2).expect("should succeed"));
-    }
-
-    #[test]
-    fn test_eh_meet() {
-        let poly1 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 2.0, y: 0.0 },
-                Coord { x: 2.0, y: 2.0 },
-                Coord { x: 0.0, y: 2.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        let poly2 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 2.0, y: 0.0 },
-                Coord { x: 4.0, y: 0.0 },
-                Coord { x: 4.0, y: 2.0 },
-                Coord { x: 2.0, y: 2.0 },
-                Coord { x: 2.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        assert!(eh_meet(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -438,46 +381,9 @@ mod tests {
 
         assert!(eh_covered_by(&poly1, &poly2).expect("should succeed"));
     }
-
-    #[test]
-    fn test_eh_inside() {
-        let point = Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0)));
-
-        let poly = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 4.0, y: 0.0 },
-                Coord { x: 4.0, y: 4.0 },
-                Coord { x: 0.0, y: 4.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        assert!(eh_inside(&point, &poly).expect("should succeed"));
-    }
-
-    #[test]
-    fn test_eh_contains() {
-        let poly = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 4.0, y: 0.0 },
-                Coord { x: 4.0, y: 4.0 },
-                Coord { x: 0.0, y: 4.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        let point = Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0)));
-
-        assert!(eh_contains(&poly, &point).expect("should succeed"));
-    }
 }
 
 #[cfg(test)]
-#[cfg(not(feature = "geos-backend"))]
 mod tests_without_geos {
     use super::*;
     use geo_types::{Geometry as GeoGeometry, Point};

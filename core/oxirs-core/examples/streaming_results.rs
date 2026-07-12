@@ -70,7 +70,9 @@ fn basic_streaming_example() -> Result<(), OxirsError> {
                 )))),
             );
 
-            sender.send(Ok(StreamingSolution::new(bindings))).unwrap();
+            sender
+                .send(Ok(StreamingSolution::new(bindings)))
+                .expect("invariant: channel receiver is active");
             thread::sleep(Duration::from_millis(50)); // Simulate query delay
         }
         Ok::<(), OxirsError>(())
@@ -115,7 +117,9 @@ fn batch_processing_example() -> Result<(), OxirsError> {
                 variables[1].clone(),
                 Some(Term::Literal(Literal::new((i * 10).to_string()))),
             );
-            sender.send(Ok(StreamingSolution::new(bindings))).unwrap();
+            sender
+                .send(Ok(StreamingSolution::new(bindings)))
+                .expect("invariant: channel receiver is active");
         }
         Ok::<(), OxirsError>(())
     });
@@ -163,7 +167,9 @@ fn progress_tracking_example() -> Result<(), OxirsError> {
                     "http://example.org/resource/{i}"
                 ))?)),
             );
-            sender.send(Ok(StreamingSolution::new(bindings))).unwrap();
+            sender
+                .send(Ok(StreamingSolution::new(bindings)))
+                .expect("invariant: channel receiver is active");
             thread::sleep(Duration::from_millis(100)); // Slow query
         }
         Ok::<(), OxirsError>(())
@@ -266,7 +272,9 @@ fn construct_streaming_example() -> Result<(), OxirsError> {
             let obj = Literal::new(format!("Value {i}"));
 
             let triple = Triple::new(subj, pred.clone(), obj);
-            sender.send(Ok(triple)).unwrap();
+            sender
+                .send(Ok(triple))
+                .expect("invariant: channel receiver is active");
             thread::sleep(Duration::from_millis(50));
         }
         Ok::<(), OxirsError>(())

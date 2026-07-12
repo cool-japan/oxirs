@@ -37,7 +37,9 @@ impl Default for SciRS2ParallelConfig {
             enable_simd: true,
             chunk_size: 128,
             enable_load_balancing: true,
-            max_parallelism: num_cpus::get(),
+            max_parallelism: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
         }
     }
 }

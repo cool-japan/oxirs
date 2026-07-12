@@ -439,7 +439,9 @@ impl StreamingAnalyzer {
                 memory_limit: self.config.memory_threshold_mb * 1024 * 1024,
                 batch_size: self.config.streaming_batch_size,
                 spill_threshold: self.config.spill_threshold_percent,
-                parallelism_degree: num_cpus::get(),
+                parallelism_degree: std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1),
             }))
         } else {
             Ok(None)

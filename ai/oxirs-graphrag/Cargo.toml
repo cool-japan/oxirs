@@ -17,10 +17,7 @@ workspace = true
 
 [dependencies]
 # Internal OxiRS crates
-oxirs-core.workspace = true
 oxirs-rule.workspace = true
-oxirs-vec.workspace = true
-oxirs-embed.workspace = true
 
 # SciRS2 for graph algorithms and scientific computing
 scirs2-core.workspace = true
@@ -54,12 +51,8 @@ seahash.workspace = true
 # Parallel computation
 rayon.workspace = true
 
-# Optional: streaming support
-oxirs-stream = { workspace = true, optional = true }
-
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
-tempfile.workspace = true
 criterion.workspace = true
 
 [features]
@@ -67,7 +60,6 @@ default = ["community-detection", "hierarchical-summarization"]
 community-detection = []
 hierarchical-summarization = []
 sparql-extensions = []
-streaming = ["oxirs-stream"]
 gguf-loader = []
 
 [[bench]]

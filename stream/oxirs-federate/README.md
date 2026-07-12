@@ -1,8 +1,8 @@
 # OxiRS Federate - Federated Query Processing
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
 ✨ **Features Complete!** All Release Targets implemented. APIs stable. Ready for promotion.
 
@@ -21,6 +21,10 @@ Federated SPARQL query processing across multiple RDF endpoints. Execute queries
 - **Join Ordering** - Minimize data transfer between endpoints
 - **Parallel Execution** - Execute independent sub-queries concurrently
 - **Result Caching** - Cache frequent sub-query results
+- **GPU-Accelerated Query Processing** *(optional `gpu` feature, off by default)* - Pure-Rust `scirs2-core/gpu` acceleration in `gpu_accelerated_query.rs`; enable with `features = ["gpu"]`
+
+### Messaging
+- **NATS Federation Message Dispatch** - `nats_federation::NatsFederationClient::register_handler()` registers `FederationMessageHandler` implementations that receive inbound federation messages routed by type (query request/response, health check, service discovery, load info, cluster message)
 
 ### Reliability
 - **Failure Handling** - Graceful degradation when endpoints fail
@@ -35,8 +39,25 @@ Add to your `Cargo.toml`:
 ```toml
 # Features complete - APIs stable
 [dependencies]
-oxirs-federate = "0.3.1"
+oxirs-federate = "0.3.2"
+
+# Optional: Pure-Rust GPU acceleration for query processing (off by default)
+oxirs-federate = { version = "0.3.2", features = ["gpu"] }
 ```
+
+> **Note on the sections below:** "Quick Start" through "Service Discovery" sketch a
+> unified `FederatedEngine` builder facade (`Endpoint`, `SourceSelector`,
+> `QueryDecomposer`, `JoinOptimizer`, `HealthMonitor`, `ServiceDiscovery`, `VoidParser`,
+> ...). That facade is aspirational and does not exist in the current public API — treat
+> these as conceptual sketches, not compilable code. (The "NATS Federation Messaging"
+> section further below is real and verified against the current source.) The actual,
+> tested entry points for the same capabilities live in: `service_client` /
+> `service_executor` / `service_core` (endpoint execution), `routing` / `planner` /
+> `query_decomposition` / `source_selection` (query planning), `join_optimizer` (join
+> strategy selection), `result_aggregator` / `result_merger` / `cache` / `cache_v2`
+> (result handling), `endpoint_registry` / `endpoint_discovery` / `auto_discovery` /
+> `k8s_discovery` (service discovery), `health` / `health_monitor` (health checks), and
+> `graphql` (GraphQL federation). See `src/lib.rs` for the full, current public API.
 
 ## Quick Start
 
@@ -264,6 +285,61 @@ let engine = FederatedEngine::builder()
     .build()?;
 ```
 
+## NATS Federation Messaging
+
+`nats_federation::NatsFederationClient` routes inbound federation gossip (query
+requests/responses, health checks, service-discovery announcements, load info, cluster
+messages) to registered handlers, dispatched by `FederationMessage` variant:
+
+```rust
+use anyhow::Result;
+use async_trait::async_trait;
+use oxirs_federate::nats_federation::{
+    FederationMessage, FederationMessageHandler, NatsFederationClient, NatsFederationConfig,
+};
+use std::sync::Arc;
+
+/// Example handler that logs service-discovery/load-info gossip and
+/// declines to answer query/health requests locally.
+struct LoggingHandler;
+
+#[async_trait]
+impl FederationMessageHandler for LoggingHandler {
+    async fn handle_query_request(&self, _request: FederationMessage) -> Result<FederationMessage> {
+        Err(anyhow::anyhow!("no local query executor registered"))
+    }
+
+    async fn handle_health_check(&self, _request: FederationMessage) -> Result<FederationMessage> {
+        Err(anyhow::anyhow!("no local health responder registered"))
+    }
+
+    async fn handle_service_discovery(&self, message: FederationMessage) -> Result<()> {
+        println!("peer discovery event: {:?}", message);
+        Ok(())
+    }
+
+    async fn handle_load_info(&self, _message: FederationMessage) -> Result<()> {
+        Ok(())
+    }
+
+    async fn handle_cluster_message(&self, _message: FederationMessage) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let client = NatsFederationClient::new(NatsFederationConfig::default());
+
+    // Inbound messages of each FederationMessage variant are now dispatched
+    // by type to every registered handler (previously a no-op).
+    client.register_handler(Arc::new(LoggingHandler)).await;
+
+    let metrics = client.get_metrics().await;
+    println!("messages received so far: {}", metrics.messages_received);
+}
+```
+
 ## Monitoring
 
 ### Query Statistics
@@ -401,20 +477,21 @@ println!("SPARQL endpoint: {}", description.sparql_endpoint);
 
 ## Status
 
-### Production Release (v0.2.3) - Features Complete!
+### Production Release (v0.3.2) - Features Complete!
 - ✅ **Distributed Transactions** - 2PC and Saga patterns with automatic compensation
 - ✅ **Advanced Authentication** - OAuth2, SAML, JWT, API keys, Basic, Service-to-Service
 - ✅ **ML-Driven Optimization** - Intelligent source selection and query planning
 - ✅ **Adaptive Join Strategies** - Bind join, hash join, nested loop with cost-based selection
 - ✅ **GraphQL Federation** - Schema stitching, entity resolution, query translation
 - ✅ **Production Monitoring** - OpenTelemetry, circuit breakers, auto-healing
-- ✅ **Streaming Support** - Real-time processing with NATS/Kafka and backpressure handling
+- ✅ **NATS Federation Messaging** - Type-based dispatch of inbound `FederationMessage`s to registered `FederationMessageHandler`s via `register_handler()`
+- ✅ **GPU-Accelerated Query Processing** - Optional Pure-Rust `gpu` feature (`scirs2-core/gpu`), off by default
 - ✅ **Load Balancing** - Adaptive algorithms with health-aware routing
-- ✅ **1,397 Passing Tests** - Comprehensive test coverage with zero warnings
+- ✅ **1,555 Passing Tests** - Comprehensive test coverage with zero warnings
 
 ## Contributing
 
-This is an experimental module. Feedback welcome!
+Feedback and contributions welcome — see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## License
 

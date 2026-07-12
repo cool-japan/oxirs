@@ -74,7 +74,7 @@ pub struct ThreadPerCore {
 /// Configuration for thread-per-core executor
 #[derive(Debug, Clone)]
 pub struct ThreadPerCoreConfig {
-    /// Number of worker threads (defaults to num_cpus)
+    /// Number of worker threads (defaults to available parallelism)
     pub num_workers: usize,
     /// Enable CPU affinity (pin threads to cores)
     pub enable_affinity: bool,
@@ -89,7 +89,9 @@ pub struct ThreadPerCoreConfig {
 impl Default for ThreadPerCoreConfig {
     fn default() -> Self {
         Self {
-            num_workers: num_cpus::get(),
+            num_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             enable_affinity: true,
             queue_capacity: 1024,
             enable_work_stealing: true,

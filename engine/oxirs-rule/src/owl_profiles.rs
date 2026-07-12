@@ -51,17 +51,20 @@ use crate::description_logic::{Concept, Role};
 use crate::hermit_reasoner::{Axiom, Ontology};
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
+use once_cell::sync::Lazy;
 use scirs2_core::metrics::{Counter, Timer};
 use std::collections::{HashMap, HashSet};
 
 // Global metrics for profile reasoning
-lazy_static::lazy_static! {
-    static ref EL_CLASSIFICATIONS: Counter = Counter::new("el_classifications".to_string());
-    static ref EL_SUBSUMPTIONS: Counter = Counter::new("el_subsumptions".to_string());
-    static ref QL_QUERY_REWRITES: Counter = Counter::new("ql_query_rewrites".to_string());
-    static ref RL_RULE_APPLICATIONS: Counter = Counter::new("rl_rule_applications".to_string());
-    static ref PROFILE_REASONING_TIME: Timer = Timer::new("profile_reasoning_time".to_string());
-}
+static EL_CLASSIFICATIONS: Lazy<Counter> =
+    Lazy::new(|| Counter::new("el_classifications".to_string()));
+static EL_SUBSUMPTIONS: Lazy<Counter> = Lazy::new(|| Counter::new("el_subsumptions".to_string()));
+static QL_QUERY_REWRITES: Lazy<Counter> =
+    Lazy::new(|| Counter::new("ql_query_rewrites".to_string()));
+static RL_RULE_APPLICATIONS: Lazy<Counter> =
+    Lazy::new(|| Counter::new("rl_rule_applications".to_string()));
+static PROFILE_REASONING_TIME: Lazy<Timer> =
+    Lazy::new(|| Timer::new("profile_reasoning_time".to_string()));
 
 /// OWL 2 Profile types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

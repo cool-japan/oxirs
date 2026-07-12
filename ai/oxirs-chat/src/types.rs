@@ -256,7 +256,7 @@ pub enum RichContentElement {
         chart_type: ChartType,
         data: ChartData,
         title: Option<String>,
-        axes: ChartAxes,
+        axes: Box<ChartAxes>,
         styling: ChartStyling,
     },
     /// File upload reference

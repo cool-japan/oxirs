@@ -67,10 +67,19 @@ fn main() {
         let speedup = sequential_time.as_secs_f64() / parallel_time.as_secs_f64();
         println!("📈 Results:");
         println!("   Speedup: {:.2}x faster", speedup);
-        println!("   CPU cores: {}", num_cpus::get());
+        println!(
+            "   CPU cores: {}",
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+        );
         println!(
             "   Efficiency: {:.1}%",
-            (speedup / num_cpus::get() as f64) * 100.0
+            (speedup
+                / std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1) as f64)
+                * 100.0
         );
     }
 

@@ -31,7 +31,9 @@
 
 use std::sync::Arc;
 
-use cranelift_codegen::ir::{condcodes::IntCC, types, AbiParam, InstBuilder, MemFlags, Signature};
+use cranelift_codegen::ir::{
+    condcodes::IntCC, types, AbiParam, InstBuilder, MemFlagsData, Signature,
+};
 use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
@@ -355,11 +357,15 @@ fn emit_distinct_body(
             .iconst(ptr_type, (spec.col_idx * std::mem::size_of::<f64>()) as i64);
         let addr = builder.ins().iadd(ptr, offset);
         // SAFETY comment for generated IR: bounds were verified above; load is safe.
-        let f64_val = builder.ins().load(types::F64, MemFlags::new(), addr, 0);
+        // cranelift 0.133: the old `MemFlags::new()` value type is now `MemFlagsData`
+        // (InstBuilder interns it into the DFG's MemFlagsSet internally).
+        let f64_val = builder.ins().load(types::F64, MemFlagsData::new(), addr, 0);
 
         // Bitcast f64 → i64 to treat the bit pattern as an integer.
         // This is the standard FNV approach for floating-point hashing.
-        let bits = builder.ins().bitcast(types::I64, MemFlags::new(), f64_val);
+        let bits = builder
+            .ins()
+            .bitcast(types::I64, MemFlagsData::new(), f64_val);
 
         // FNV-1a step: hash = (hash XOR bits) * FNV_PRIME
         hash = builder.ins().bxor(hash, bits);

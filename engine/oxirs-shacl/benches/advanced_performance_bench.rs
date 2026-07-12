@@ -37,7 +37,9 @@ impl Default for AdvancedBenchConfig {
         Self {
             quantum_analytics: true,
             memory_optimization_level: 8,
-            thread_count: num_cpus::get(),
+            thread_count: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             batch_size: 1000,
             adaptive_ordering: true,
             performance_threshold: 0.95,

@@ -1,6 +1,6 @@
 //! Indexing structures and query helpers for the TDB store.
 //!
-//! This module re-exports index access helpers from [`store_impl`] and provides
+//! This module re-exports index access helpers from [`store_impl`](crate::store::store_impl) and provides
 //! convenience wrappers around B-tree page scanning and range queries used
 //! internally by the store.
 

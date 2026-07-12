@@ -1,6 +1,6 @@
 //! Time-series optimizations for OxiRS
 //!
-//! **Status**: Production Ready (v0.3.1)
+//! **Status**: Production Ready (v0.3.2)
 //!
 //! This crate provides high-performance time-series storage and query
 //! capabilities for IoT-scale RDF data.
@@ -237,13 +237,8 @@ pub use multi_region::{
     RouteDecision, RoutingError, RoutingTable, WriteOutcome, WriteRoutingRule,
 };
 
-/// DuckDB ↔ TSDB chunk bridge (W3-S8). Feature-gated behind `duckdb`.
-#[cfg(feature = "duckdb")]
-pub mod duckdb_bridge;
-
-#[cfg(feature = "duckdb")]
-pub use duckdb_bridge::{
-    chunk_to_record_batch, open_in_memory as duckdb_open_in_memory, points_to_record_batch,
-    read_into_chunk, record_batches_to_points, register_tsdb_chunk, run_sql as duckdb_run_sql,
-    ReadOptions as DuckDbReadOptions, RegisterOptions as DuckDbRegisterOptions,
-};
+// NOTE: The DuckDB ↔ TSDB chunk bridge (formerly `duckdb_bridge`, gated behind
+// the `duckdb` feature) has been quarantined into the `publish = false` crate
+// `oxirs-tsdb-adapter-duckdb` per COOLJAPAN Pure Rust Policy v2 — it pulled
+// `libduckdb-sys` (C FFI). Depend on that adapter crate directly to inspect
+// TSDB chunks through embedded DuckDB SQL.

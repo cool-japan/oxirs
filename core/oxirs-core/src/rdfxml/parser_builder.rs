@@ -808,7 +808,12 @@ impl<R> InternalRdfXmlParser<R> {
         attribute: &Attribute<'_>,
     ) -> Result<String, RdfXmlParseError> {
         Ok(attribute
-            .decode_and_unescape_value_with(self.reader.decoder(), |e| self.resolve_entity(e))?
+            .decoded_and_normalized_value_with(
+                quick_xml::XmlVersion::Implicit1_0,
+                self.reader.decoder(),
+                128,
+                |e| self.resolve_entity(e),
+            )?
             .into_owned())
     }
 

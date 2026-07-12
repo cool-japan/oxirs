@@ -676,13 +676,15 @@ impl SessionPersistenceManager {
             ));
         }
 
-        let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+        let key = <&Key<Aes256Gcm>>::try_from(&key_bytes[..])
+            .map_err(|_| anyhow!("Invalid encryption key length"))?;
         let cipher = Aes256Gcm::new(key);
 
         // Generate cryptographically secure random nonce (SCIRS2 POLICY: use SecureRandom)
         let mut secure_rng = SecureRandom::new();
         let nonce_bytes = secure_rng.random_bytes(12);
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce =
+            <&Nonce<_>>::try_from(&nonce_bytes[..]).map_err(|_| anyhow!("Invalid nonce length"))?;
 
         // Encrypt data
         let ciphertext = cipher
@@ -719,12 +721,14 @@ impl SessionPersistenceManager {
             ));
         }
 
-        let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+        let key = <&Key<Aes256Gcm>>::try_from(&key_bytes[..])
+            .map_err(|_| anyhow!("Invalid encryption key length"))?;
         let cipher = Aes256Gcm::new(key);
 
         // Extract nonce and ciphertext
         let (nonce_bytes, ciphertext) = data.split_at(12);
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let nonce =
+            <&Nonce<_>>::try_from(nonce_bytes).map_err(|_| anyhow!("Invalid nonce length"))?;
 
         // Decrypt data
         let plaintext = cipher

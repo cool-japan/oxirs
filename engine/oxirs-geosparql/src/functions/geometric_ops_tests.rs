@@ -7,15 +7,8 @@ mod tests {
         sym_difference, union,
     };
 
-    #[cfg(feature = "geos-backend")]
-    use crate::functions::geometric_operations::{
-        buffer_with_params, BufferParams, CapStyle, JoinStyle,
-    };
     use crate::geometry::Geometry;
     use geo_types::{Coord, Geometry as GeoGeometry, LineString, Point};
-
-    #[cfg(feature = "geos-backend")]
-    use crate::functions::geometric_operations::boundary;
 
     #[cfg(feature = "rust-buffer")]
     use crate::functions::geometric_operations::buffer_rust;
@@ -252,111 +245,20 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "geos-backend")]
-    fn test_buffer_positive() {
-        let point = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
-
-        let buffered = buffer(&point, 1.0).expect("should succeed");
-        assert_eq!(buffered.geometry_type(), "Polygon");
-
-        // Buffered point should create a circular polygon
-        // The area should be approximately π * r²
-        use geo::Area;
-        if let GeoGeometry::Polygon(poly) = buffered.geom {
-            let area = poly.unsigned_area();
-            let expected_area = std::f64::consts::PI * 1.0 * 1.0;
-            assert!((area - expected_area).abs() < 0.1); // Allow small tolerance
-        }
-    }
-
-    #[test]
-    #[cfg(feature = "geos-backend")]
-    fn test_buffer_negative() {
-        use geo_types::Polygon;
-
-        // Create a square polygon
-        let poly = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 10.0, y: 0.0 },
-                Coord { x: 10.0, y: 10.0 },
-                Coord { x: 0.0, y: 10.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        // Negative buffer should shrink the polygon
-        let shrunk = buffer(&poly, -1.0).expect("should succeed");
-        assert!(matches!(shrunk.geometry_type(), "Polygon" | "MultiPolygon"));
-    }
-
-    #[test]
-    #[cfg(feature = "geos-backend")]
-    fn test_buffer_with_custom_params() {
-        let point = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
-
-        let params = BufferParams {
-            cap_style: CapStyle::Square,
-            join_style: JoinStyle::Mitre,
-            quadrant_segments: 4,
-            mitre_limit: 2.0,
-        };
-
-        let buffered = buffer_with_params(&point, 1.0, &params).expect("should succeed");
-        assert_eq!(buffered.geometry_type(), "Polygon");
-    }
-
-    #[test]
-    #[cfg(feature = "geos-backend")]
-    fn test_boundary_linestring() {
-        // Boundary of a linestring is its endpoints
-        let ls = Geometry::new(GeoGeometry::LineString(LineString::new(vec![
-            Coord { x: 0.0, y: 0.0 },
-            Coord { x: 5.0, y: 0.0 },
-            Coord { x: 5.0, y: 5.0 },
-        ])));
-
-        let bound = boundary(&ls).expect("should succeed");
-        assert_eq!(bound.geometry_type(), "MultiPoint");
-    }
-
-    #[test]
-    #[cfg(feature = "geos-backend")]
-    fn test_boundary_polygon() {
-        use geo_types::Polygon;
-
-        // Boundary of a polygon is its rings
-        let poly = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 10.0, y: 0.0 },
-                Coord { x: 10.0, y: 10.0 },
-                Coord { x: 0.0, y: 10.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        let bound = boundary(&poly).expect("should succeed");
-        assert!(matches!(
-            bound.geometry_type(),
-            "LineString" | "MultiLineString"
-        ));
-    }
-
-    #[test]
-    #[cfg(not(feature = "geos-backend"))]
     fn test_buffer_without_geos() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
 
+        // Point buffering needs GEOS (quarantined into oxirs-geosparql-adapter-geos),
+        // so the default Pure-Rust build returns an error pointing at the adapter.
         let result = buffer(&point, 1.0);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("geos-backend"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("oxirs-geosparql-adapter-geos"));
     }
 
     #[test]
-    #[cfg(not(feature = "geos-backend"))]
     fn test_boundary_without_geos() {
         use crate::functions::geometric_operations::boundary;
 
@@ -365,9 +267,14 @@ mod tests {
             Coord { x: 5.0, y: 5.0 },
         ])));
 
+        // The facade boundary() needs GEOS (quarantined into the adapter), so the
+        // default Pure-Rust build returns an error pointing at the adapter.
         let result = boundary(&ls);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("geos-backend"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("oxirs-geosparql-adapter-geos"));
     }
 
     #[test]
@@ -472,7 +379,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "rust-buffer", not(feature = "geos-backend")))]
+    #[cfg(feature = "rust-buffer")]
     fn test_buffer_hybrid_polygon_uses_rust() {
         use geo_types::Polygon;
 
@@ -487,17 +394,17 @@ mod tests {
             vec![],
         )));
 
-        // Without geos-backend, Polygon should use rust-buffer
+        // Polygon should use the Pure-Rust rust-buffer path
         let buffered = buffer(&poly, 1.0).expect("should succeed");
         assert_eq!(buffered.geometry_type(), "MultiPolygon");
     }
 
     #[test]
-    #[cfg(all(feature = "rust-buffer", not(feature = "geos-backend")))]
+    #[cfg(feature = "rust-buffer")]
     fn test_buffer_hybrid_point_fails_without_geos() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
 
-        // Without geos-backend, Point buffer should fail
+        // Point buffer needs GEOS (the adapter), so it should fail in the pure build
         let result = buffer(&point, 1.0);
         assert!(result.is_err());
     }
@@ -755,40 +662,11 @@ mod tests {
     // 3D Buffer Tests
     // ========================================================================
 
-    #[test]
-    #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
-    fn test_buffer_3d_point() {
-        use geo::{Area, Euclidean, Length};
-
-        let point = Geometry::from_wkt("POINT Z(0 0 5)").expect("should succeed");
-        let buffered = buffer_3d(&point, 1.0).expect("should succeed");
-
-        // Should be 3D
-        assert!(buffered.is_3d());
-
-        // Check that the buffer was created (geometry type might change to Polygon)
-        // The exact result depends on the buffer implementation
-        let length = match &buffered.geom {
-            GeoGeometry::LineString(ls) => Euclidean.length(ls),
-            GeoGeometry::Polygon(p) => Euclidean.length(p.exterior()),
-            _ => 0.0,
-        };
-        assert!(length > 0.0 || buffered.geom.unsigned_area() > 0.0);
-    }
-
-    #[test]
-    #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
-    fn test_buffer_3d_linestring() {
-        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 0 10)").expect("should succeed");
-        let buffered = buffer_3d(&line, 2.0).expect("should succeed");
-
-        // Should be 3D
-        assert!(buffered.is_3d());
-
-        // Should have expanded the geometry
-        use geo::Area;
-        assert!(buffered.geom.unsigned_area() > 0.0);
-    }
+    // NOTE: 3D buffering of Point/LineString geometries routes through the GEOS 2D
+    // buffer, which is quarantined into `oxirs-geosparql-adapter-geos`; those tests
+    // moved with the capability. Polygon/MultiPolygon 3D buffering still works here
+    // because `buffer_3d` -> `buffer()` uses the Pure-Rust `rust-buffer` path for
+    // polygons.
 
     #[test]
     #[cfg(feature = "rust-buffer")]
@@ -831,23 +709,8 @@ mod tests {
         }
     }
 
-    #[test]
-    #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
-    fn test_buffer_3d_varying_z() {
-        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 20)").expect("should succeed");
-        let buffered = buffer_3d(&line, 1.0).expect("should succeed");
-
-        // Should be 3D
-        assert!(buffered.is_3d());
-
-        // Original Z range: [0, 20], average = 10
-        // After buffering, all Z should be set to average
-        if let Some(ref z_coords) = buffered.coord3d.z_coords {
-            for &z in &z_coords.values {
-                assert!((z - 10.0).abs() < 0.1);
-            }
-        }
-    }
+    // (test_buffer_3d_varying_z used a LineString and needed the GEOS 2D buffer; it
+    // moved to oxirs-geosparql-adapter-geos with the capability.)
 
     #[test]
     fn test_buffer_3d_requires_z_coordinates() {
@@ -864,7 +727,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
+    #[cfg(feature = "rust-buffer")]
     fn test_buffer_3d_negative_distance() {
         // Negative buffer (erosion) in 3D
         let poly = Geometry::from_wkt("POLYGON Z((0 0 10, 20 0 10, 20 20 10, 0 20 10, 0 0 10))")

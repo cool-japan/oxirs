@@ -1,7 +1,7 @@
 //! GraphQL schema generator and RDF-to-GraphQL type mapping.
 //!
 //! Defines the [`SchemaGenerator`] together with the logic that turns an
-//! [`RdfVocabulary`](crate::schema_types::RdfVocabulary) into GraphQL object,
+//! [`RdfVocabulary`] into GraphQL object,
 //! query, mutation and subscription types.
 
 use crate::rdf_scalars::RdfScalars;

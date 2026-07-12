@@ -1,7 +1,7 @@
 //! SDL serialization and naming helpers for [`SchemaGenerator`].
 //!
 //! Provides the GraphQL Schema Definition Language (SDL) writer used to render
-//! a generated [`Schema`](crate::types::Schema), plus the URI-to-name
+//! a generated [`Schema`], plus the URI-to-name
 //! conversion utilities (PascalCase / camelCase / pluralization).
 
 use crate::schema_generator::SchemaGenerator;

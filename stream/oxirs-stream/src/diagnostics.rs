@@ -282,18 +282,13 @@ impl DiagnosticAnalyzer {
                 backends.push("memory".to_string()); // Always include memory backend
             }
 
-            // Add other backends based on available feature flags or connections
-            #[cfg(feature = "kafka")]
-            backends.push("kafka".to_string());
-
+            // Add other backends based on available feature flags or connections.
+            // (Kafka/Pulsar live in the publish=false adapter crates — Pure Rust Policy v2.)
             #[cfg(feature = "nats")]
             backends.push("nats".to_string());
 
             #[cfg(feature = "redis")]
             backends.push("redis".to_string());
-
-            #[cfg(feature = "pulsar")]
-            backends.push("pulsar".to_string());
 
             #[cfg(feature = "kinesis")]
             backends.push("kinesis".to_string());
@@ -363,7 +358,7 @@ impl DiagnosticAnalyzer {
             "REDIS_URL",
             "AWS_REGION",
             "AWS_ACCESS_KEY_ID",
-            "OTEL_EXPORTER_JAEGER_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
             "PROMETHEUS_ENDPOINT",
             "PATH",
             "CARGO_PKG_VERSION",
@@ -1232,7 +1227,7 @@ mod tests {
             health_check_interval: std::time::Duration::from_secs(30),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         };
         let metrics_collector = Arc::new(RwLock::new(MetricsCollector::new(config.clone())));
@@ -1257,7 +1252,7 @@ mod tests {
             health_check_interval: std::time::Duration::from_secs(30),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         };
         let metrics_collector = Arc::new(RwLock::new(MetricsCollector::new(config.clone())));
@@ -1299,7 +1294,7 @@ mod tests {
             health_check_interval: std::time::Duration::from_secs(30),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         };
         let metrics_collector = Arc::new(RwLock::new(MetricsCollector::new(config.clone())));

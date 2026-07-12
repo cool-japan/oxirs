@@ -203,7 +203,9 @@ pub async fn get_performance_stats(
         uptime_seconds: state.startup_time.elapsed().as_secs(),
         cpu_usage_percent,
         memory_usage_mb: used_memory,
-        worker_threads: num_cpus::get(),
+        worker_threads: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1),
     };
 
     Ok(Json(PerformanceStats {

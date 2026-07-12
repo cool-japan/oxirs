@@ -7,7 +7,7 @@
 //! # Lifecycle
 //!
 //! 1. Call [`J1939DtdlBridge::new`] with a config, source, sink, and
-//!    [`CancellationToken`].
+//!    [`tokio_util::sync::CancellationToken`].
 //! 2. Call [`J1939DtdlBridge::run`].  The bridge loops until:
 //!    - The cancellation token is cancelled (clean shutdown → `Ok(())`).
 //!    - The source returns [`J1939SourceError::Exhausted`] (clean end-of-stream
@@ -20,8 +20,9 @@
 //! For each received J1939 frame:
 //!
 //! 1. Look up the frame's PGN + SPN=0 in the mapper's read-direction table.
-//! 2. Extract the raw byte from data[0] via [`extract_spn`].
-//! 3. Convert to a [`TwinValue`] via [`spn_to_twin_value`] — skipping the write
+//! 2. Extract the raw byte from data\[0\] via [`crate::digital_twin::mapper::extract_spn`].
+//! 3. Convert to a [`oxirs_physics::digital_twin::twin_value::TwinValue`] via
+//!    [`crate::digital_twin::mapper::spn_to_twin_value`] — skipping the write
 //!    if the J1939 not-available indicator (0xFE / 0xFF) is present.
 //! 4. Call [`DtdlSinkFacade::set_property`] with the mapped property name.
 //!

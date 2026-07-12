@@ -1,0 +1,39 @@
+[package]
+name = "oxirs-stream-adapter-pulsar"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Quarantined Apache Pulsar backend adapter for oxirs-stream (publish=false; isolates native-tls + lz4-sys C FFI off the published Pure-Rust surface)."
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+# Reuse oxirs-stream's public `StreamConfig`/`StreamEvent`/`StreamBackendType`
+# types so the Pulsar backend stays API-compatible with the published crate.
+oxirs-stream = { workspace = true }
+# C FFI quarantined HERE (publish = false) — `pulsar` (default runtime + compression)
+# pulls `native-tls` (and `lz4`/`lz4-sys`, `zstd`), kept off oxirs-stream's published
+# `--all-features` closure per COOLJAPAN Pure Rust Policy v2. pulsar 6.x has NO
+# Pure-Rust TLS option (every runtime needs native-tls, aws-lc-rs, or ring), so a
+# feature swap is impossible — quarantine is the only path. Gated by a default-on
+# `pulsar` feature so the moved backend's existing `#[cfg(feature = "pulsar")]`
+# plumbing compiles unchanged.
+pulsar = { version = "6.8", optional = true }
+anyhow.workspace = true
+chrono.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[features]
+default = ["pulsar"]
+pulsar = ["dep:pulsar"]
+
+[lints]
+workspace = true

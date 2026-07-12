@@ -1,6 +1,6 @@
 # OxiRS Embed - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
@@ -17,7 +17,7 @@
 - **Interpretability** - Similarity analysis, feature importance, counterfactuals
 - **Temporal Embeddings** - Time-aware knowledge graphs
 - **Performance Optimization** - Mixed precision, quantization, GPU acceleration
-- **1345 tests passing** with zero warnings
+- **1503 tests passing** with zero warnings
 
 ## Recent Accomplishments (v0.2.3)
 
@@ -128,7 +128,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Embed v0.2.3 - Knowledge graph embeddings with production validation*
+*OxiRS Embed v0.3.2 - Knowledge graph embeddings with production validation*
 
 ## Proposed follow-ups
 

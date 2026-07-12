@@ -143,7 +143,9 @@ async fn get_adaptive_statistics(State(state): State<Arc<AppState>>) -> impl Int
             ml_sample_count: 0,
             cost_model_tuned: true,
             parallel_evaluation_enabled: true,
-            parallel_workers: num_cpus::get(),
+            parallel_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
         };
 
         (StatusCode::OK, Json(response)).into_response()

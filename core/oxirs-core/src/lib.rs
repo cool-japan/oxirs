@@ -1,9 +1,9 @@
 //! # OxiRS Core - RDF and SPARQL Foundation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 //!
-//! **Status**: Production Release (v0.3.1)
+//! **Status**: Production Release (v0.3.2)
 //! **Stability**: Public APIs are stabilizing. Production-ready for RDF/SPARQL core operations.
 //!
 //! ## Overview
@@ -289,6 +289,7 @@ pub mod config_validation;
 pub mod consciousness; // Consciousness-inspired computing for intuitive query optimization
 pub mod crypto_provider; // Installs the Pure Rust rustls CryptoProvider as the process default (binaries + tests)
 pub mod distributed;
+pub mod encoding; // RFC 3986 percent-encoding utilities (pure-std replacement for the urlencoding crate)
 pub mod federation;
 pub mod format;
 pub mod graph;

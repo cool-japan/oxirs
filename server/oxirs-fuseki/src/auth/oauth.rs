@@ -209,15 +209,18 @@ impl OAuth2Service {
         let mut url = format!(
             "{}?response_type=code&client_id={}&redirect_uri={}&state={}",
             self.config.auth_url,
-            urlencoding::encode(&self.config.client_id),
-            urlencoding::encode(redirect_uri),
-            urlencoding::encode(&state)
+            oxirs_core::encoding::percent_encode_strict(&self.config.client_id),
+            oxirs_core::encoding::percent_encode_strict(redirect_uri),
+            oxirs_core::encoding::percent_encode_strict(&state)
         );
 
         // Add scopes
         if !scopes.is_empty() {
             let scope_string = scopes.join(" ");
-            url.push_str(&format!("&scope={}", urlencoding::encode(&scope_string)));
+            url.push_str(&format!(
+                "&scope={}",
+                oxirs_core::encoding::percent_encode_strict(&scope_string)
+            ));
         } else {
             // Default scopes for OIDC
             url.push_str("&scope=openid%20profile%20email");
@@ -239,7 +242,7 @@ impl OAuth2Service {
 
             url.push_str(&format!(
                 "&code_challenge={}&code_challenge_method=S256",
-                urlencoding::encode(&code_challenge)
+                oxirs_core::encoding::percent_encode_strict(&code_challenge)
             ));
 
             oauth_state.code_verifier = Some(code_verifier);
@@ -571,8 +574,8 @@ impl OAuth2Service {
         let url = format!(
             "{}?response_type=code&client_id={}&state={}",
             self.config.auth_url,
-            urlencoding::encode(&self.config.client_id),
-            urlencoding::encode(state)
+            oxirs_core::encoding::percent_encode_strict(&self.config.client_id),
+            oxirs_core::encoding::percent_encode_strict(state)
         );
         Ok(url)
     }
@@ -597,13 +600,6 @@ fn generate_code_challenge(code_verifier: &str) -> String {
     use sha2::{Digest, Sha256};
     let digest = Sha256::digest(code_verifier.as_bytes());
     URL_SAFE_NO_PAD.encode(digest)
-}
-
-/// URL encoding helper
-mod urlencoding {
-    pub fn encode(input: &str) -> String {
-        percent_encoding::utf8_percent_encode(input, percent_encoding::NON_ALPHANUMERIC).to_string()
-    }
 }
 
 #[cfg(test)]
@@ -647,8 +643,9 @@ mod tests {
             .unwrap();
 
         assert!(url.contains("response_type=code"));
+        // Strict (NON_ALPHANUMERIC-style) encoding: '_' becomes %5F.
         assert!(url.contains("client_id=test%5Fclient%5Fid")); // URL-encoded test_client_id
-        assert!(url.contains(&urlencoding::encode(&state))); // URL-encoded state
+        assert!(url.contains(oxirs_core::encoding::percent_encode_strict(&state).as_ref())); // URL-encoded state
         assert!(!state.is_empty());
     }
 

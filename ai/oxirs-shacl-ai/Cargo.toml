@@ -25,11 +25,7 @@ oxirs-shacl.workspace = true
 
 # SciRS2 dependencies for AI-powered SHACL validation
 scirs2-core = { workspace = true }
-scirs2-neural = { workspace = true }
-scirs2-graph = { workspace = true }
 scirs2-stats = { workspace = true }
-scirs2-metrics = { workspace = true }
-scirs2-optimize = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
@@ -37,25 +33,18 @@ thiserror.workspace = true
 tracing.workspace = true
 chrono.workspace = true
 tokio.workspace = true
-num_cpus.workspace = true
 # ndarray and rand now provided by scirs2-core (SciRS2 compliance)
 regex.workspace = true
 indexmap.workspace = true
 uuid.workspace = true
 threadpool = "1.8"
-sysinfo.workspace = true  # Updated to 0.33 to fix objc2-core-foundation conflict
-nalgebra = { workspace = true, features = ["serde-serialize"] }
-num-complex = { workspace = true, features = ["serde"] }
 async-trait.workspace = true
 reqwest = { workspace = true, optional = true }
 futures.workspace = true
 dashmap.workspace = true
 # datafusion.workspace = true  # Temporarily disabled due to version conflicts
 fastrand.workspace = true
-base64.workspace = true
 url = { workspace = true, features = ["serde"] }
-tokio-stream.workspace = true
-libm = "0.2"  # For erf function
 oxiarc-deflate = { workspace = true }
 oxiarc-zstd = { workspace = true }
 oxiarc-lz4 = { workspace = true }
@@ -68,6 +57,15 @@ toml.workspace = true
 criterion.workspace = true
 tracing-subscriber.workspace = true
 
+[[example]]
+name = "advanced_scirs2_integration_demo"
+required-features = ["gpu"]
+
+[[bench]]
+name = "advanced_scirs2_benchmarks"
+harness = false
+required-features = ["gpu"]
+
 [features]
 default = []
 shape-induction = []
@@ -75,3 +73,6 @@ data-repair = []
 # Enable network-based LLM providers (OpenAI, Anthropic).
 # Requires a valid API key at runtime; default features remain 100% offline.
 llm-network = ["dep:reqwest"]
+# GPU acceleration via scirs2-core's Pure-Rust `gpu` feature (no GPU FFI).
+# Gates `advanced_scirs2_integration.rs`, which imports `scirs2_core::gpu`.
+gpu = ["scirs2-core/gpu"]

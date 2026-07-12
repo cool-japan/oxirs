@@ -203,7 +203,9 @@ impl Default for UltraPerformanceConfig {
             star_config: StarConfig::default(),
             enable_simd: true,
             enable_parallel: true,
-            worker_threads: num_cpus::get(),
+            worker_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             buffer_pool_size: 256 * 1024 * 1024, // 256MB
             enable_profiling: false,
         }

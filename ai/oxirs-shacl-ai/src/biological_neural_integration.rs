@@ -15,9 +15,9 @@
 //! - Neural organoid integration for complex reasoning
 //!
 //! ## Module layout
-//! - [`crate::bio_neural_types`]      — all config/context/result type definitions
-//! - [`crate::bio_neural_core`]       — `BiologicalNeuralIntegrator` implementation
-//! - [`crate::bio_neural_components`] — sub-component struct implementations
+//! - [`crate::bio_neural_types`]    — all config/context/result type definitions
+//! - `crate::bio_neural_core`       — `BiologicalNeuralIntegrator` implementation (private)
+//! - `crate::bio_neural_components` — sub-component struct implementations (private)
 
 // Re-export the public API so callers can use `oxirs_shacl_ai::BiologicalNeuralIntegrator`
 // and all associated public types without knowing the internal module layout.

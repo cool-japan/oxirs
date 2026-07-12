@@ -1,10 +1,10 @@
 # OxiRS Core - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 11, 2026*
 
 ## Current Status
 
-OxiRS Core v0.3.1 is production-ready, providing the foundation for semantic web operations with complete RDF/SPARQL support.
+OxiRS Core v0.3.2 is production-ready, providing the foundation for semantic web operations with complete RDF/SPARQL support.
 
 ### Production Features
 - ✅ RDF 1.2 data model with 7 format parsers
@@ -13,7 +13,8 @@ OxiRS Core v0.3.1 is production-ready, providing the foundation for semantic web
 - ✅ ML-based query optimization with adaptive learning
 - ✅ Federation support with SERVICE clause execution
 - ✅ SciRS2 integration for scientific computing
-- ✅ 2332 tests passing (100% pass rate)
+- ✅ Pure-`std` RFC 3986 percent-encoding (`encoding` module, replaces the external `urlencoding` crate; backs SPARQL `ENCODE_FOR_URI()`)
+- ✅ 2589 tests passing (100% pass rate)
 
 ## Roadmap
 
@@ -23,7 +24,7 @@ OxiRS Core v0.3.1 is production-ready, providing the foundation for semantic web
 - ✅ Federation support with SERVICE clause execution
 - ✅ SciRS2 integration, 850 tests passing
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Cost-based optimizer enhancements
 - ✅ Advanced join ordering strategies
 - ✅ Query result caching with invalidation
@@ -34,7 +35,7 @@ OxiRS Core v0.3.1 is production-ready, providing the foundation for semantic web
 - ✅ Advanced indexing strategies
 - ✅ 2332 tests passing (100% pass rate)
 
-### v0.3.0 - Planned (Q2 2026)
+### v0.3.0 - Released (May 3, 2026)
 - [x] API stability guarantees (planned 2026-05-01)
   - **Goal:** Concrete engineering interpretation: a programmatic public-API
     surface baseline that the test suite enforces, blocking unintentional
@@ -106,13 +107,27 @@ OxiRS Core v0.3.1 is production-ready, providing the foundation for semantic web
     threshold assertion (still measure + report).
 - [x] Enterprise audit trail — SOC2/GDPR-compliant structured event logging (completed 2026-05-02)
 
+### v0.3.1 - Released (June 6, 2026)
+- [x] RDF-star quoted triples in pattern matching and query execution — quoted-triple support across query algebra, executor, JIT, planner, pattern unification, and SIMD triple matching
+- [x] Fixed a latent compile break in `jsonld::{compaction,flattening}` by declaring `indexmap` and `toml` as workspace dependencies
+- [x] Pure-Rust migration: `crypto_provider.rs` installs OxiTLS's Pure Rust `rustls` `CryptoProvider` as the process default via a `#[ctor::ctor]` constructor (no `ring`/`aws-lc-sys` required at runtime, including in test harnesses)
+- [x] Compression migrated to `oxiarc-*` crates workspace-wide (COOLJAPAN Pure Rust Policy)
+
+### v0.3.2 - Released (July 11, 2026)
+- [x] New `encoding` module — pure-`std` RFC 3986 percent-encoding (`percent_encode`, `percent_encode_strict`, `percent_decode`), replacing the external `urlencoding` crate; now backs SPARQL's `ENCODE_FOR_URI()` (`query/functions/string.rs`) and federated-query URL construction (`federation/client.rs`)
+- [x] Fixed: `rdfxml::serializer` no longer collides two or more distinct unmapped namespaces on the same subject onto one hardcoded `xmlns:oxprefix` attribute; each namespace now gets its own synthetic prefix
+- [x] Fixed: `query::update`'s `INSERT DATA`/`DELETE DATA` blocks whose final triple omits the trailing `.` (legal in SPARQL's grammar, illegal in the Turtle grammar used to re-parse the block) now parse correctly
+- [x] Fixed: JSON-LD expansion no longer silently drops `@index` on indexed containers and node objects; `@protected` term-redefinition detection now also compares the `protected` flag itself; `@set` containers now expand to flat triples instead of a no-op
+- [x] Pure-Rust Policy v2: the `gpu` feature (NVML via `nvml-wrapper`) was removed; live GPU telemetry moved to the separate `publish = false` `oxirs-gpu-monitor` adapter crate, leaving `ai::gpu_monitor::GpuMonitor` as a Pure-Rust "no GPU" stub with an unchanged public API
+- [x] 2589 tests passing (100% pass rate)
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Core v0.2.3 - Zero-dependency RDF/SPARQL foundation*
+*OxiRS Core v0.3.2 - RDF/SPARQL foundation for the OxiRS platform (zero dependencies on other OxiRS crates)*
 
 ## Proposed follow-ups
 

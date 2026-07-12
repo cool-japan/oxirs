@@ -102,7 +102,7 @@ fn benchmark_transitive_reasoning(fact_count: usize) {
     FACT_SET_CLONES.store(0, Ordering::Relaxed);
 
     let start = Instant::now();
-    let _facts = chainer.infer().unwrap();
+    let _facts = chainer.infer().expect("invariant: value is valid");
     let elapsed = start.elapsed();
 
     let sub_clones = SUBSTITUTION_CLONES.load(Ordering::Relaxed);
@@ -159,7 +159,9 @@ fn benchmark_can_derive(fact_count: usize) {
     };
 
     let start = Instant::now();
-    let result = chainer.can_derive(&target).unwrap();
+    let result = chainer
+        .can_derive(&target)
+        .expect("invariant: value is valid");
     let elapsed = start.elapsed();
 
     let fact_clones = FACT_SET_CLONES.load(Ordering::Relaxed);
@@ -227,7 +229,9 @@ fn benchmark_derive_new_facts(fact_count: usize) {
     FACT_SET_CLONES.store(0, Ordering::Relaxed);
 
     let start = Instant::now();
-    let new_facts = chainer.derive_new_facts().unwrap();
+    let new_facts = chainer
+        .derive_new_facts()
+        .expect("invariant: value is valid");
     let elapsed = start.elapsed();
 
     let fact_clones = FACT_SET_CLONES.load(Ordering::Relaxed);

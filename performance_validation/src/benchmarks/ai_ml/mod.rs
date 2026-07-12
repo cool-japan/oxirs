@@ -218,7 +218,9 @@ fn detect_hardware_info() -> HardwareInfo {
     HardwareInfo {
         gpu_available: detect_gpu_availability(),
         gpu_memory_gb: 8.0, // Simulated
-        cpu_cores: num_cpus::get(),
+        cpu_cores: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1),
         memory_gb: 16.0, // Simulated
         simd_support,
     }

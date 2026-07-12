@@ -1,10 +1,10 @@
 # OxiRS GraphQL
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **High-performance GraphQL server for RDF data with automatic schema generation**
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -17,9 +17,9 @@
 - **Automatic Schema Generation**: Generate GraphQL schemas from RDF vocabularies
 - **SPARQL Translation**: Automatic translation of GraphQL queries to SPARQL
 - **Type Safety**: Leverage Rust's type system for compile-time schema validation
-- **High Performance**: Async execution with query optimization and caching
+- **High Performance**: Async execution with adaptive query batching (dependency-aware topological wave execution), an ML-driven dynamic query planner, and parallel field resolution with real timing metrics
 - **Subscriptions**: Real-time GraphQL subscriptions with WebSocket support
-- **Federation**: GraphQL schema stitching across multiple RDF datasets
+- **Federation**: Apollo Federation v2 subgraph support (`@key`, `@external`, `@shareable`, `@requires`, `@provides`) plus GraphQL schema stitching across multiple RDF datasets
 - **Introspection**: Full GraphQL introspection support for tooling
 - **Custom Scalars**: RDF-specific scalar types (IRI, DateTime, Literal)
 - **Flexible Mapping**: Custom mapping rules for complex RDF to GraphQL conversions
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-gql = "0.3.1"
+oxirs-gql = "0.3.2"
 ```
 
 ## Quick Start
@@ -249,18 +249,21 @@ impl Person {
 
 ### Federation
 
-```rust
-use oxirs_gql::{FederatedSchema, RemoteSchema};
+Apollo Federation v2 subgraph directives (`@key`, `@external`, `@shareable`, `@requires`,
+`@provides`) are modeled by the `federation_v2` module:
 
-let federated = FederatedSchema::new()
-    .schema("users", RemoteSchema::new("http://users.example.com/graphql"))
-    .schema("products", RemoteSchema::new("http://products.example.com/graphql"))
-    .extend_type("User", |user| {
-        user.field("orders", "products.orders", |args| {
-            args.where_field("userId", user.id)
-        })
-    })
-    .build()?;
+```rust
+use oxirs_gql::federation_v2::{FederatedField, FederatedType, FederationDirective};
+
+let product = FederatedType::new("Product")
+    .with_key("id", true)
+    .with_field(FederatedField::new("id", "ID").non_null())
+    .with_field(
+        FederatedField::new("price", "Float")
+            .with_directive(FederationDirective::External),
+    );
+
+assert!(product.is_entity());
 ```
 
 ### Custom Scalars
@@ -480,13 +483,18 @@ Licensed under:
 
 ## Status
 
-🚀 **Production Release (v0.3.1)** - 2026-06-06
+🚀 **Production Release (v0.3.2)** - 2026-07-12
+
+**2,148 tests passing**, zero warnings
 
 Current features:
 - ✅ GraphQL server with persisted dataset introspection and hot-reload
 - ✅ GraphQL ⇄ SPARQL translation covering vector/federation-aware resolvers
 - ✅ Schema generation with CLI configuration parity and dataset auto-sync
 - ✅ Subscriptions bridged to SPARQL/stream events (experimental)
-- 🚧 Apollo Federation interoperability (in progress)
+- ✅ Apollo Federation v2 subgraph support (`federation_v2` module)
+- ✅ Adaptive query batching with dependency analysis and topological wave execution (`QueryBatcher::analyze_batch_dependencies`)
+- ✅ ML-driven dynamic query planning (`DynamicQueryPlanner` + `MLQueryOptimizer` + `PerformanceTracker`, behind `enable_ml_prediction`)
+- ✅ Parallel field resolver with real per-field timing metrics and parallelization-rate tracking
 
 APIs follow semantic versioning. See CHANGELOG.md for details.

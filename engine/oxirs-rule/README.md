@@ -1,8 +1,8 @@
 # OxiRS Rule Engine
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -36,39 +36,48 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-rule = "0.3.1"
+oxirs-rule = "0.3.2"
 ```
 
 ## Quick Start
 
 ```rust
-use oxirs_rule::*;
+use oxirs_rule::{RuleEngine, Rule, RuleAtom, Term};
 
+# fn example() -> anyhow::Result<()> {
 // Create a new rule engine
 let mut engine = RuleEngine::new();
 
-// Add facts
-engine.add_fact(atom!(
-    "knows", 
-    term!("alice"), 
-    term!("bob")
-));
+// Add a rule: knows(X,Y) -> friend(X,Y)
+engine.add_rule(Rule {
+    name: "friend_rule".to_string(),
+    body: vec![RuleAtom::Triple {
+        subject: Term::Variable("X".to_string()),
+        predicate: Term::Constant("knows".to_string()),
+        object: Term::Variable("Y".to_string()),
+    }],
+    head: vec![RuleAtom::Triple {
+        subject: Term::Variable("X".to_string()),
+        predicate: Term::Constant("friend".to_string()),
+        object: Term::Variable("Y".to_string()),
+    }],
+});
 
-// Add rules
-engine.add_rule(rule!(
-    [atom!("knows", var!("X"), var!("Y"))],
-    [atom!("friend", var!("X"), var!("Y"))]
-));
+// Facts to reason over
+let facts = vec![RuleAtom::Triple {
+    subject: Term::Constant("alice".to_string()),
+    predicate: Term::Constant("knows".to_string()),
+    object: Term::Constant("bob".to_string()),
+}];
 
 // Perform forward chaining inference
-let stats = engine.forward_chain()?;
-println!("Derived {} new facts", stats.facts_derived);
-
-// Query the knowledge base
-let results = engine.query(&atom!("friend", var!("X"), var!("Y")))?;
-for result in results {
-    println!("Friend relationship: {:?}", result);
+let derived = engine.forward_chain(&facts)?;
+println!("Derived {} facts", derived.len());
+for fact in &derived {
+    println!("Derived fact: {:?}", fact);
 }
+# Ok(())
+# }
 ```
 
 ## Architecture
@@ -88,19 +97,24 @@ for result in results {
 ```rust
 // Core data types
 pub struct Rule {
-    pub head: Vec<RuleAtom>,
+    pub name: String,
     pub body: Vec<RuleAtom>,
+    pub head: Vec<RuleAtom>,
 }
 
-pub struct RuleAtom {
-    pub predicate: String,
-    pub terms: Vec<Term>,
+pub enum RuleAtom {
+    Triple { subject: Term, predicate: Term, object: Term },
+    Builtin { name: String, args: Vec<Term> },
+    NotEqual { left: Term, right: Term },
+    GreaterThan { left: Term, right: Term },
+    LessThan { left: Term, right: Term },
 }
 
 pub enum Term {
     Variable(String),
     Constant(String),
     Literal(String),
+    Function { name: String, args: Vec<Term> },
 }
 ```
 
@@ -114,9 +128,8 @@ Ideal for:
 - Data integration and ETL processes
 
 ```rust
-let stats = engine.forward_chain()?;
-println!("Facts derived: {}", stats.facts_derived);
-println!("Rules fired: {}", stats.rules_fired);
+let derived = engine.forward_chain(&facts)?;
+println!("Facts derived: {}", derived.len());
 ```
 
 ### Backward Chaining
@@ -127,11 +140,13 @@ Ideal for:
 - Proof explanation and validation
 
 ```rust
-let goal = atom!("ancestor", term!("alice"), var!("X"));
-let proofs = engine.backward_chain(&goal)?;
-for proof in proofs {
-    println!("Proof path: {:?}", proof.derivation_path);
-}
+let goal = RuleAtom::Triple {
+    subject: Term::Constant("alice".to_string()),
+    predicate: Term::Constant("ancestor".to_string()),
+    object: Term::Variable("X".to_string()),
+};
+let provable = engine.backward_chain(&goal)?;
+println!("Goal provable: {}", provable);
 ```
 
 ### RETE Network
@@ -142,10 +157,11 @@ Ideal for:
 - High-throughput applications
 
 ```rust
+use oxirs_rule::rete::ReteNetwork;
+
 let mut rete = ReteNetwork::new();
-rete.add_rule(&rule);
-rete.add_fact(&fact);
-let results = rete.execute()?;
+rete.add_rule(&rule)?;
+let results = rete.forward_chain(vec![fact])?;
 ```
 
 ## Built-in Predicates
@@ -178,12 +194,26 @@ Automatic inference of:
 - Type membership (`rdf:type`)
 
 ```rust
-let mut rdfs = RdfsReasoner::new();
-rdfs.add_schema_triple("Person", "rdfs:subClassOf", "Agent");
-rdfs.add_data_triple("alice", "rdf:type", "Person");
+use oxirs_rule::rdfs::RdfsReasoner;
+use oxirs_rule::{RuleAtom, Term};
 
-let inferred = rdfs.materialize()?;
-// Automatically infers: alice rdf:type Agent
+let mut rdfs = RdfsReasoner::new();
+
+let schema_and_data = vec![
+    RuleAtom::Triple {
+        subject: Term::Constant("Person".to_string()),
+        predicate: Term::Constant("rdfs:subClassOf".to_string()),
+        object: Term::Constant("Agent".to_string()),
+    },
+    RuleAtom::Triple {
+        subject: Term::Constant("alice".to_string()),
+        predicate: Term::Constant("rdf:type".to_string()),
+        object: Term::Constant("Person".to_string()),
+    },
+];
+
+let inferred = rdfs.infer(&schema_and_data)?;
+// `inferred` includes the entailed triple: alice rdf:type Agent
 ```
 
 ## OWL RL Reasoning
@@ -195,13 +225,28 @@ Support for:
 - Basic property restrictions
 
 ```rust
-let mut owl = OwlReasoner::new();
-owl.add_axiom("hasParent", "rdf:type", "owl:TransitiveProperty");
-owl.add_fact("alice", "hasParent", "bob");
-owl.add_fact("bob", "hasParent", "charlie");
+use oxirs_rule::owl::{vocabulary, OwlReasoner};
+use oxirs_rule::{RuleAtom, Term};
 
-let inferred = owl.reason()?;
-// Automatically infers: alice hasParent charlie
+let mut owl = OwlReasoner::new();
+owl.context
+    .set_property_characteristic("hasParent", vocabulary::OWL_TRANSITIVE_PROPERTY, true);
+
+let facts = vec![
+    RuleAtom::Triple {
+        subject: Term::Constant("alice".to_string()),
+        predicate: Term::Constant("hasParent".to_string()),
+        object: Term::Constant("bob".to_string()),
+    },
+    RuleAtom::Triple {
+        subject: Term::Constant("bob".to_string()),
+        predicate: Term::Constant("hasParent".to_string()),
+        object: Term::Constant("charlie".to_string()),
+    },
+];
+
+let inferred = owl.infer(&facts)?;
+// `inferred` includes the entailed triple: alice hasParent charlie
 ```
 
 ## SWRL Rules
@@ -248,18 +293,21 @@ let swrl_rule = SwrlRule {
 
 ### With oxirs-core
 ```rust
-use oxirs_core::model::{Triple, IRI};
-use oxirs_rule::RuleEngine;
+use oxirs_rule::{RuleEngine, RuleAtom, Term};
 
 let mut engine = RuleEngine::new();
-// Convert oxirs-core triples to rule facts
-engine.add_triple(&triple)?;
+// Convert an oxirs-core triple's subject/predicate/object strings into a rule fact
+engine.add_fact(RuleAtom::Triple {
+    subject: Term::Constant(subject_iri),
+    predicate: Term::Constant(predicate_iri),
+    object: Term::Constant(object_iri),
+});
 ```
 
 ### With SPARQL
 ```rust
 // Use reasoning results in SPARQL queries
-let inferred_facts = engine.get_materialized_facts();
+let inferred_facts = engine.get_facts();
 // Add to SPARQL dataset for querying
 ```
 
@@ -279,7 +327,7 @@ cargo test --release --features benchmarks
 ```
 
 ### Test Coverage
-- 2,072 tests passing (100% success rate)
+- 2,240 tests passing (100% success rate)
 - Unit tests for all reasoning algorithms
 - Integration tests with real-world datasets
 - Performance regression tests
@@ -287,16 +335,19 @@ cargo test --release --features benchmarks
 ## Configuration
 
 ```rust
-use oxirs_rule::config::EngineConfig;
+use oxirs_rule::RuleEngine;
 
-let config = EngineConfig {
-    max_iterations: 1000,
-    cache_size: 10000,
-    enable_statistics: true,
-    reasoning_strategy: ReasoningStrategy::Hybrid,
-};
+let mut engine = RuleEngine::new();
 
-let engine = RuleEngine::with_config(config);
+// Caching is enabled by default; toggle explicitly if needed
+engine.enable_cache();
+
+// Limit backward-chaining recursion depth (default: 100)
+engine.set_backward_chain_max_depth(30);
+
+if let Some(stats) = engine.get_cache_statistics() {
+    println!("Cache statistics: {:?}", stats);
+}
 ```
 
 ## Error Handling
@@ -304,17 +355,10 @@ let engine = RuleEngine::with_config(config);
 Comprehensive error types with detailed context:
 
 ```rust
-use oxirs_rule::error::RuleEngineError;
-
-match engine.forward_chain() {
-    Ok(stats) => println!("Success: {} facts derived", stats.facts_derived),
-    Err(RuleEngineError::UnificationError(msg)) => {
-        eprintln!("Unification failed: {}", msg);
-    },
-    Err(RuleEngineError::CycleDetected(path)) => {
-        eprintln!("Infinite recursion detected: {:?}", path);
-    },
-    Err(e) => eprintln!("Other error: {}", e),
+// `RuleEngine` reasoning methods return `anyhow::Result<T>`
+match engine.forward_chain(&facts) {
+    Ok(derived) => println!("Success: {} facts derived", derived.len()),
+    Err(e) => eprintln!("Forward chaining failed: {e}"),
 }
 ```
 
@@ -329,8 +373,8 @@ use tracing::{info, debug};
 tracing_subscriber::init();
 
 // Reasoning operations automatically logged
-let stats = engine.forward_chain()?;
-// Logs: "Forward chaining completed: 1000 facts derived, 50 rules fired"
+let derived = engine.forward_chain(&facts)?;
+// Logs (via tracing): "Forward chaining completed: N facts derived"
 ```
 
 ## Contributing
@@ -347,11 +391,11 @@ Licensed under the Apache License, Version 2.0.
 
 ## Status
 
-🚀 **Production Release (v0.2.3)** – March 16, 2026
+🚀 **Production Release (v0.3.2)** – 2026-07-12
 
 Highlights:
 - ✅ Forward/backward chaining over persisted datasets with automatic inference snapshots
 - ✅ RETE network optimized with SciRS2 metrics and tracing hooks
 - ✅ Integrated with federation-aware SPARQL workflows for rule-driven post-processing
-- ✅ 2,072 tests passing plus CLI end-to-end coverage
+- ✅ 2,240 tests passing plus CLI end-to-end coverage
 - 🚧 Advanced distributed reasoning (planned for future release)

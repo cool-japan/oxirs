@@ -1,10 +1,10 @@
 # OxiRS Cluster
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12 (1831 tests passing)
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -19,6 +19,11 @@ A high-performance, distributed RDF storage system using Raft consensus for hori
 - **SPARQL 1.2 Support**: Distributed query processing with federated queries
 - **Enterprise Security**: TLS encryption, authentication, and access control
 - **Operational Excellence**: Comprehensive monitoring, alerting, and management tools
+- **Certification Suite**: `certification::CertificationSuite` runs deterministic, in-memory
+  simulations (no real sockets) validating consistency (read-your-writes, linearizability
+  probes, convergence), partition handling (island formation, quorum loss/recovery, split-brain
+  prevention), Raft safety invariants (leader uniqueness, log monotonicity), and SLA bounds
+  (read/write p99 latency, throughput floor)
 
 ## Architecture
 
@@ -58,35 +63,37 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-cluster = "0.3.1"
+oxirs-cluster = "0.3.2"
 ```
 
 ### Basic Usage
 
 ```rust
-use oxirs_cluster::{Cluster, ClusterConfig};
+use oxirs_cluster::{DistributedStore, NodeConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize cluster configuration
-    let config = ClusterConfig::builder()
-        .node_id("node-1")
-        .bind_address("127.0.0.1:8080")
-        .peers(vec!["127.0.0.1:8081", "127.0.0.1:8082"])
-        .data_dir("./data")
-        .build()?;
+    // Initialize node configuration
+    let mut config = NodeConfig::new(1, "127.0.0.1:8080".parse()?);
+    config.data_dir = "./data".to_string();
+    config.add_peer(2);
+    config.add_peer(3);
 
-    // Start cluster node
-    let cluster = Cluster::new(config).await?;
-    cluster.start().await?;
+    // Start the distributed store (wraps a ClusterNode running Raft consensus)
+    let mut store = DistributedStore::new(config).await?;
+    store.start().await?;
 
-    // Insert RDF data
-    cluster.insert_triple("http://example.org/alice", 
-                         "http://example.org/knows", 
-                         "http://example.org/bob").await?;
+    // Insert RDF data (accepted on the leader; forwarded internally otherwise)
+    store
+        .insert_triple(
+            "http://example.org/alice",
+            "http://example.org/knows",
+            "http://example.org/bob",
+        )
+        .await?;
 
     // Execute SPARQL query
-    let results = cluster.query("SELECT ?s ?p ?o WHERE { ?s ?p ?o }").await?;
+    let results = store.query_sparql("SELECT ?s ?p ?o WHERE { ?s ?p ?o }").await?;
     println!("Results: {:?}", results);
 
     Ok(())
@@ -95,27 +102,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Multi-Node Cluster Setup
 
-```bash
-# Start first node (bootstrap)
-cargo run --bin oxirs-cluster -- \
-    --node-id node-1 \
-    --bind 127.0.0.1:8080 \
-    --data-dir ./data/node1 \
-    --bootstrap
+`oxirs-cluster` is a library crate — it does not bundle a multi-node launcher
+binary. Wire `NodeConfig`/`DistributedStore` into your own binary (or a test
+harness), giving each node a distinct `node_id` and the full peer set:
 
-# Start second node
-cargo run --bin oxirs-cluster -- \
-    --node-id node-2 \
-    --bind 127.0.0.1:8081 \
-    --data-dir ./data/node2 \
-    --join 127.0.0.1:8080
+```rust
+// Node 1 (peers 2 and 3)
+let mut n1 = NodeConfig::new(1, "127.0.0.1:8080".parse()?);
+n1.data_dir = "./data/node1".to_string();
+n1.add_peer(2);
+n1.add_peer(3);
 
-# Start third node
-cargo run --bin oxirs-cluster -- \
-    --node-id node-3 \
-    --bind 127.0.0.1:8082 \
-    --data-dir ./data/node3 \
-    --join 127.0.0.1:8080
+// Node 2 (peers 1 and 3)
+let mut n2 = NodeConfig::new(2, "127.0.0.1:8081".parse()?);
+n2.data_dir = "./data/node2".to_string();
+n2.add_peer(1);
+n2.add_peer(3);
+
+// Node 3 (peers 1 and 2)
+let mut n3 = NodeConfig::new(3, "127.0.0.1:8082".parse()?);
+n3.data_dir = "./data/node3".to_string();
+n3.add_peer(1);
+n3.add_peer(2);
+
+// Start each `DistributedStore::new(n).await?.start().await?` in its own
+// process/task; Raft handles leader election among the three automatically.
 ```
 
 ## Configuration
@@ -168,14 +179,18 @@ message_timeout = "5s"
 ### Tuning
 
 ```rust
-let config = ClusterConfig::builder()
-    .node_id("node-1")
-    .heartbeat_interval(Duration::from_millis(150))
-    .election_timeout(Duration::from_millis(1500))
-    .max_log_entries(10000)
-    .snapshot_threshold(5000)
-    .build()?;
+let mut config = NodeConfig::new(1, "127.0.0.1:8080".parse()?);
+config
+    .add_peer(2)
+    .add_peer(3);
+let config = config
+    .with_discovery(DiscoveryConfig::default())
+    .with_replication_strategy(ReplicationStrategy::default());
 ```
+
+Raft election/heartbeat timing (`election_timeout_min`/`_max`, `heartbeat_interval`,
+`max_batch_size`) defaults live in the crate-internal `raft_state::RaftConfig` and are not yet
+exposed as `NodeConfig` builder methods.
 
 ## Monitoring
 
@@ -224,10 +239,10 @@ cargo bench
 cargo test
 
 # Integration tests
-cargo test --test integration
+cargo test --test integration_tests
 
 # Chaos engineering tests
-cargo test --test chaos
+cargo test --test chaos_engineering_tests
 ```
 
 ## Contributing
@@ -256,15 +271,16 @@ This project is licensed under the Apache License, Version 2.0 - see the [LICENS
 
 ## Roadmap
 
-### Version 0.1.0
-- [ ] Multi-region deployment support
-- [ ] Advanced conflict resolution
-- [ ] Improved monitoring dashboard
-- [ ] Performance optimizations
-- [ ] Machine learning-based query optimization
-- [ ] Edge computing integration
-- [ ] Advanced security features
-- [ ] GraphQL federation support
+### Post-1.0 Enhancements
+- [x] Multi-region deployment support — `region_manager`, `cross_dc`, `cross_dc_consistency` modules
+- [x] Advanced conflict resolution — `conflict_resolution` module (CRDTs, vector clocks)
+- [x] Improved monitoring dashboard — `visualization_dashboard` module with REST API
+- [x] Performance optimizations — `raft_optimization`, `performance_monitor`, SIMD Merkle hashing
+- [x] Machine learning-based query optimization — `ml_optimization` module (Q-learning, cost optimization)
+- [x] Edge computing integration — `edge_computing` module
+- [x] Advanced security features — `security`, `encryption`, `tls`, `bft` (Byzantine fault tolerance) modules
+- [ ] GraphQL federation support — cross-cluster query federation exists (`federation` module);
+      GraphQL-schema-level federation is a separate concern handled by `oxirs-gql`, not this crate
 
 ---
 

@@ -79,7 +79,10 @@ fn chunked_processing_example() {
 
     println!("  Processed {} chunks", chunks.len());
     println!("  First chunk size: {}", chunks[0].len());
-    println!("  Last chunk size: {}", chunks.last().unwrap().len());
+    println!(
+        "  Last chunk size: {}",
+        chunks.last().expect("invariant: value is valid").len()
+    );
 
     assert_eq!(chunks.len(), 10); // 1000 / 100 = 10 chunks
 }
@@ -247,7 +250,8 @@ fn chained_operations_example() {
         assert_eq!(pt.x(), 100.0);
     }
 
-    if let geo_types::Geometry::Point(pt) = &results.last().unwrap().geom {
+    if let geo_types::Geometry::Point(pt) = &results.last().expect("invariant: value is valid").geom
+    {
         println!("  Last result: x = {}", pt.x());
         assert_eq!(pt.x(), 890.0);
     }

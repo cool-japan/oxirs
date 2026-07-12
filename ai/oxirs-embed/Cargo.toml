@@ -30,7 +30,6 @@ uuid = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-num_cpus = { workspace = true }
 tempfile = { workspace = true }
 # GraphQL and streaming dependencies - downgraded to avoid arrow conflicts
 async-graphql.workspace = true
@@ -61,8 +60,6 @@ oxirs-vec.workspace = true
 # Note: rand and rand_distr replaced by scirs2_core::random
 scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
 scirs2-neural = { workspace = true }
-scirs2-stats = { workspace = true }
-scirs2-metrics = { workspace = true }
 scirs2-linalg = { workspace = true }
 
 # Web server dependencies (for API server feature)
@@ -74,6 +71,7 @@ tower-http = { workspace = true, features = ["cors", "timeout", "trace"], option
 criterion = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true }
+tokio-test = { workspace = true }
 
 [features]
 default = ["basic-models"]

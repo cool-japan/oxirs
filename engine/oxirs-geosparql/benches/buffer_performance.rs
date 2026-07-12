@@ -11,8 +11,8 @@ use std::hint::black_box;
 #[cfg(feature = "rust-buffer")]
 use oxirs_geosparql::functions::geometric_operations::buffer_rust;
 
-#[cfg(feature = "geos-backend")]
-use oxirs_geosparql::functions::geometric_operations::{buffer_with_params, BufferParams};
+// NOTE: the GEOS buffer benchmarks were removed when the GEOS backend was
+// quarantined into the `oxirs-geosparql-adapter-geos` crate (Pure Rust Policy v2).
 
 /// Create test polygons of various sizes
 #[allow(dead_code)]
@@ -82,58 +82,6 @@ fn bench_pure_rust_buffer(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(feature = "geos-backend")]
-fn bench_geos_buffer(c: &mut Criterion) {
-    let mut group = c.benchmark_group("GEOS Buffer");
-    let params = BufferParams::default();
-
-    for (name, geom) in create_test_polygons() {
-        group.bench_with_input(
-            BenchmarkId::new("Positive Buffer (2.0)", &name),
-            &geom,
-            |b, geom| {
-                b.iter(|| {
-                    buffer_with_params(black_box(geom), black_box(2.0), &params).unwrap();
-                });
-            },
-        );
-
-        group.bench_with_input(
-            BenchmarkId::new("Negative Buffer (-2.0)", &name),
-            &geom,
-            |b, geom| {
-                b.iter(|| {
-                    buffer_with_params(black_box(geom), black_box(-2.0), &params).unwrap();
-                });
-            },
-        );
-    }
-
-    group.finish();
-}
-
-#[cfg(all(feature = "rust-buffer", feature = "geos-backend"))]
-fn bench_comparison(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Backend Comparison");
-
-    let medium_square = Geometry::from_wkt("POLYGON((0 0, 100 0, 100 100, 0 100, 0 0))").unwrap();
-    let params = BufferParams::default();
-
-    group.bench_function("Pure Rust - Medium Square", |b| {
-        b.iter(|| {
-            buffer_rust(black_box(&medium_square), black_box(5.0)).unwrap();
-        });
-    });
-
-    group.bench_function("GEOS - Medium Square", |b| {
-        b.iter(|| {
-            buffer_with_params(black_box(&medium_square), black_box(5.0), &params).unwrap();
-        });
-    });
-
-    group.finish();
-}
-
 #[cfg(feature = "rust-buffer")]
 fn bench_wkt_roundtrip(c: &mut Criterion) {
     let mut group = c.benchmark_group("WKT Round-trip with Buffer");
@@ -151,29 +99,17 @@ fn bench_wkt_roundtrip(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(not(any(feature = "rust-buffer", feature = "geos-backend")))]
+#[cfg(not(feature = "rust-buffer"))]
 fn bench_no_features(_c: &mut Criterion) {
-    eprintln!("❌ No buffer features enabled!");
-    eprintln!("Enable rust-buffer or geos-backend to run benchmarks.");
+    eprintln!("❌ The rust-buffer feature is not enabled!");
+    eprintln!("Enable rust-buffer to run the Pure-Rust buffer benchmarks.");
 }
 
 // Configure benchmark groups based on available features
-#[cfg(all(feature = "rust-buffer", feature = "geos-backend"))]
-criterion_group!(
-    benches,
-    bench_pure_rust_buffer,
-    bench_geos_buffer,
-    bench_comparison,
-    bench_wkt_roundtrip
-);
-
-#[cfg(all(feature = "rust-buffer", not(feature = "geos-backend")))]
+#[cfg(feature = "rust-buffer")]
 criterion_group!(benches, bench_pure_rust_buffer, bench_wkt_roundtrip);
 
-#[cfg(all(not(feature = "rust-buffer"), feature = "geos-backend"))]
-criterion_group!(benches, bench_geos_buffer);
-
-#[cfg(not(any(feature = "rust-buffer", feature = "geos-backend")))]
+#[cfg(not(feature = "rust-buffer"))]
 criterion_group!(benches, bench_no_features);
 
 criterion_main!(benches);

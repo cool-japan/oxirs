@@ -1,9 +1,9 @@
 //! # OxiRS Turtle - RDF Format Parser
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-ttl/badge.svg)](https://docs.rs/oxirs-ttl)
 //!
-//! **Status**: Production Release (v0.3.1)
+//! **Status**: Production Release (v0.3.2)
 //! **Stability**: Production-ready with 461 passing tests and 97% W3C compliance.
 //!
 //! High-performance parsing and serialization for RDF formats in the Turtle family.

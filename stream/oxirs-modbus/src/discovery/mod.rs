@@ -17,6 +17,14 @@
 //!    YAML-like human-readable format, and consumed by
 //!    `crate::register_validator`.
 //!
+//! [`driver`]: crate::discovery::driver
+//! [`driver::ModbusAccess`]: crate::discovery::driver::ModbusAccess
+//! [`inference`]: crate::discovery::inference
+//! [`inference::InferredType`]: crate::discovery::inference::InferredType
+//! [`inference::ConfidenceLevel`]: crate::discovery::inference::ConfidenceLevel
+//! [`emitter`]: crate::discovery::emitter
+//! [`emitter::CandidateRegisterMap`]: crate::discovery::emitter::CandidateRegisterMap
+//!
 //! # Quick Start
 //!
 //! ```no_run

@@ -2,7 +2,7 @@
 //!
 //! A [`ClusterSink`] is the bridge between an external streaming source and
 //! the cluster's Raft log. Each batch of [`StreamMessage`] events is
-//! translated through an [`EventMapper`] into [`RdfCommand`] entries which
+//! translated through an [`EventMapper`] into [`crate::raft::RdfCommand`] entries which
 //! are then proposed to the leader through the [`ConsensusManager`]. Once
 //! committed, read replicas serve queries against the resulting `RdfApp`
 //! state.

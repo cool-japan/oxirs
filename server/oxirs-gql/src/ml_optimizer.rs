@@ -994,6 +994,24 @@ impl MLQueryOptimizer {
         Ok(())
     }
 
+    /// Add a pre-built training sample directly (used by external callers who don't have a Document)
+    pub async fn add_training_sample(&self, sample: TrainingSample) -> Result<()> {
+        if !self.config.learning_enabled {
+            return Ok(());
+        }
+        let mut samples = self.training_samples.write().await;
+        samples.push_back(sample);
+        while samples.len() > self.config.max_training_samples {
+            samples.pop_front();
+        }
+        let sample_count = samples.len();
+        drop(samples);
+        if sample_count >= self.config.min_samples_for_learning {
+            self.update_models().await?;
+        }
+        Ok(())
+    }
+
     /// Update ML models with new training data
     pub async fn update_models(&self) -> Result<()> {
         let samples = self.training_samples.read().await;

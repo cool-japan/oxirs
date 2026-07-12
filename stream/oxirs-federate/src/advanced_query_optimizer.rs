@@ -637,7 +637,9 @@ impl HardwareProfile {
     /// Detect hardware profile
     pub fn detect() -> Self {
         Self {
-            cpu_cores: num_cpus::get(),
+            cpu_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             memory_bandwidth: 20.0,    // Assumed
             network_bandwidth: 1000.0, // 1 Gbps
         }

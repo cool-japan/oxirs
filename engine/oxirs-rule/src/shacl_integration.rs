@@ -27,15 +27,16 @@
 
 use crate::{Rule, RuleAtom, RuleEngine};
 use anyhow::Result;
+use once_cell::sync::Lazy;
 use scirs2_core::metrics::Timer;
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 // Global metrics for validation performance
-lazy_static::lazy_static! {
-    static ref VALIDATION_DIRECT_TIMER: Timer = Timer::new("shacl_validation_direct".to_string());
-    static ref VALIDATION_PRE_REASONING_TIMER: Timer = Timer::new("shacl_validation_pre_reasoning".to_string());
-}
+static VALIDATION_DIRECT_TIMER: Lazy<Timer> =
+    Lazy::new(|| Timer::new("shacl_validation_direct".to_string()));
+static VALIDATION_PRE_REASONING_TIMER: Lazy<Timer> =
+    Lazy::new(|| Timer::new("shacl_validation_pre_reasoning".to_string()));
 
 /// Validation execution mode
 #[derive(Debug, Clone, PartialEq)]

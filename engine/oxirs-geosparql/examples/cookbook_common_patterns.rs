@@ -109,7 +109,8 @@ fn pattern_proximity_analysis() -> Result<()> {
         .map(|i| {
             let lat = 37.7 + (i as f64 / 100.0) * 0.01;
             let lon = -122.4 + (i as f64 / 100.0) * 0.01;
-            Geometry::from_wkt(&format!("POINT({} {})", lon, lat)).unwrap()
+            Geometry::from_wkt(&format!("POINT({} {})", lon, lat))
+                .expect("invariant: value is valid")
         })
         .collect();
 
@@ -177,7 +178,7 @@ fn pattern_streaming_large_datasets() -> Result<()> {
                     base,
                     base
                 ))
-                .unwrap()
+                .expect("invariant: value is valid")
             })
             .collect();
 
@@ -226,7 +227,7 @@ fn pattern_performance_critical() -> Result<()> {
                 (i % 100) as f64 * 0.1,
                 (i / 100) as f64 * 0.1
             ))
-            .unwrap()
+            .expect("invariant: value is valid")
         })
         .collect();
 

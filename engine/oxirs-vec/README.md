@@ -1,10 +1,10 @@
 # OxiRS Vec - Vector Search Engine
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
-✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
+✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing (1,754 tests passing).
 
 High-performance vector search infrastructure for semantic similarity search in RDF knowledge graphs.
 
@@ -15,6 +15,7 @@ High-performance vector search infrastructure for semantic similarity search in 
 - **Flat Index** - Exact search for smaller datasets
 - **IVF Index** - Inverted file index for large-scale datasets
 - **Dynamic Updates** - Real-time index updates without full rebuilds
+- **Real-Time Embedding Pipeline** - Streaming embedding updates with configurable consistency, per-ID version history, and live health/alerting monitoring (see [Real-Time Embedding Pipeline](#real-time-embedding-pipeline) below)
 
 ### Search Capabilities
 - **Similarity Search** - Find semantically similar entities
@@ -35,7 +36,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-vec = "0.3.1"
+oxirs-vec = "0.3.2"
 ```
 
 ## Quick Start
@@ -236,15 +237,49 @@ for entity in dataset.subjects() {
 }
 ```
 
+## Real-Time Embedding Pipeline
+
+`real_time_embedding_pipeline` is a streaming embedding-update system for high-throughput,
+low-latency workloads. It is organized into `config`, `traits`, `types`, `pipeline`,
+`streaming`, `coordination`, `monitoring`, `versioning`, and `consistency` submodules,
+all compiled in and wired live into `RealTimeEmbeddingPipeline`:
+
+- **`consistency`** - `InconsistencyRepairEngine` detects and repairs embedding drift with severity-based repair strategies
+- **`versioning`** - `VersionManager` keeps a per-ID embedding version history with configurable retention
+- **`monitoring`** - `PipelinePerformanceMonitor`/`MetricsCollector`/`AlertManager` for metrics collection, health checks, and severity-throttled alerting
+- **`coordination`** - `UpdateCoordinator` synchronizes concurrent update batches
+
+```rust,no_run
+use oxirs_vec::real_time_embedding_pipeline::{
+    RealTimeEmbeddingPipeline, PipelineConfig, ConsistencyLevel
+};
+
+let config = PipelineConfig {
+    max_batch_size: 1000,
+    consistency_level: ConsistencyLevel::Session,
+    ..Default::default()
+};
+
+let runtime = tokio::runtime::Runtime::new()?;
+runtime.block_on(async {
+    let mut pipeline = RealTimeEmbeddingPipeline::new(config)?;
+    pipeline.start().await?;
+    pipeline.stop().await?;
+    Ok::<(), Box<dyn std::error::Error>>(())
+})?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ## Status
 
-### Production Release (v0.2.3)
+### Production Release (v0.3.2)
 - ✅ HNSW/IVF/Flat indices with persisted dataset support
 - ✅ SPARQL/GraphQL integration enhanced with federation-aware vector filters
 - ✅ CLI pipelines for batch embedding import/export and monitoring
 - ✅ SciRS2 metrics for query latency, recall, and index health
-- 🚧 GPU acceleration (targeted for future release)
-- 🚧 Distributed indexing (planned for v0.2.3)
+- ✅ Real-time embedding pipeline with consistency repair, versioning, and monitoring submodules wired live (previously declared but commented out as unimplemented)
+- ✅ GPU acceleration abstractions (Pure Rust, no-op by default); real NVIDIA CUDA acceleration is provided by the separate `oxirs-vec-adapter-cuda` crate (`publish = false`), which quarantines the `cuda-runtime-sys` C FFI off this crate's Pure-Rust dependency surface per the COOLJAPAN Pure Rust Policy v2 — the former `cuda`/`gpu-full` features were removed
+- ✅ Distributed indexing - Raft-based replication and cross-datacenter sync (`distributed` module)
 
 ## Contributing
 

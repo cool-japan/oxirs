@@ -1,8 +1,8 @@
 //! GPU-accelerated HNSW index construction
 //!
-//! This module implements GPU-based HNSW graph construction using CUDA kernels
-//! (feature-gated behind the `cuda` feature). When CUDA is not available, it
-//! falls back to an efficient CPU implementation.
+//! This module implements HNSW graph construction with a GPU-oriented batched
+//! pipeline that runs as an efficient Pure Rust CPU implementation. Real CUDA
+//! kernels live in the quarantined `oxirs-vec-adapter-cuda` crate.
 //!
 //! # Architecture
 //!
@@ -14,8 +14,8 @@
 //!
 //! # Pure Rust Policy
 //!
-//! All CUDA code is gated with `#[cfg(feature = "cuda")]` so the default build
-//! is 100% Pure Rust.
+//! This module is 100% Pure Rust. Real CUDA code is quarantined in the
+//! `oxirs-vec-adapter-cuda` crate (publish = false).
 //!
 //! # Module Layout
 //!

@@ -306,7 +306,9 @@ impl RaftOptimizer {
         // Use SciRS2 parallel processing for large logs
         if log_entries.len() > 1000 && self.parallel_config.enabled {
             // Calculate optimal chunk size based on CPU count and load
-            let cpu_count = num_cpus::get();
+            let cpu_count = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1);
             let chunk_size = ((log_entries.len() - keep_from) / cpu_count).max(100);
 
             // Use parallel processing for large logs

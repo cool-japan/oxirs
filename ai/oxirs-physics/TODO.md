@@ -1,32 +1,37 @@
 # OxiRS Physics - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
-**oxirs-physics** provides physics-informed digital twin simulation bridge with SciRS2 integration.
+**oxirs-physics** provides a physics-informed digital twin simulation bridge with SciRS2 integration.
 
 ### Features
-- Simulation orchestration framework (SimulationOrchestrator)
-- SciRS2 thermal simulation (1D heat diffusion with RK4 solver)
-- Basic conservation law checking (energy, momentum, mass)
+- Simulation orchestration framework (`SimulationOrchestrator`) spanning thermal, mechanical, fluid,
+  electromagnetic, statistical/quantum, and coupled-physics domains
+- SPARQL-based parameter extraction and SPARQL UPDATE result injection, with RDF literal parsing
+  and full SI unit conversion
+- SAMM Aspect Model TTL parsing and SAMM-to-RDF bridge
+- Conservation law checking (energy, momentum, mass, angular momentum, entropy), Buckingham Pi
+  dimensional analysis, and type-safe `uom` quantities (feature `simulation`)
+- Bidirectional RDF ↔ physics-state synchronization and DTDL v3 parsing/RDF mapping
+- Predictive maintenance (RUL prediction) and anomaly detection
+- GPU-accelerated FEM/Navier-Stokes/heat-diffusion kernels (opt-in `gpu` feature, CPU fallback
+  always available) and PINN residual correction (opt-in `pinn_correction` feature)
 - Provenance tracking (software version, parameters hash, execution time)
-- Comprehensive error types (PhysicsError with variants)
-- Basic parameter and result structures
-- Mock simulation fallback
+- Comprehensive error types (`PhysicsError` with variants)
 
 ### Current Limitations
-- Parameter extraction from RDF (stub implementation)
-- Result injection to RDF (stub implementation)
-- Dimensional analysis (skeleton only)
-- Digital twin management (basic structure)
+- GPU acceleration and PINN residual correction are feature-gated and opt-in — CPU-only, no-correction
+  is the default build
+- Real-time streaming integration (e.g. via `oxirs-stream`) is not yet implemented
 
 ## Roadmap
 
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ SimulationOrchestrator, thermal simulation (RK4), conservation law checking, provenance tracking
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ SPARQL queries to extract entity properties
 - ✅ RDF literals to Rust types with unit conversion
 - ✅ SPARQL UPDATE queries for simulation results
@@ -88,6 +93,10 @@
   - **Tests:** unit per-element-type + DTMI validation + QUDT unit mapping + integration round-trip of sample DTDL docs
 - [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 
+### v0.3.2 - Current Release (July 12, 2026)
+- [x] Rustdoc intra-doc link fixes (`digital_twin::twin_value`, `uom_quantities`)
+- ✅ 1292 tests passing
+
 ## Notes
 
 - Follow [SCIRS2 Integration Policy](../../SCIRS2_INTEGRATION_POLICY.md)
@@ -101,4 +110,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Physics v0.2.3 - Physics-informed digital twin simulation*
+*OxiRS Physics v0.3.2 - Physics-informed digital twin simulation*

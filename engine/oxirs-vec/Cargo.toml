@@ -13,10 +13,9 @@ readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
-# Exclude CUDA features from docs.rs builds (CUDA not available in build environment)
-# NOTE: Do NOT include "cuda" or "gpu-full" features as they require CUDA toolkit
-features = ["simd", "parallel", "gpu", "blas", "candle-gpu", "images", "content-processing", "python", "huggingface"]
-# Do not use all-features to avoid enabling CUDA
+# oxirs-vec is now CUDA-free: real CUDA lives in oxirs-vec-adapter-cuda
+# (publish = false). all-features is safe here (no C FFI on the feature surface).
+features = ["simd", "parallel", "gpu", "blas", "images", "content-processing", "python"]
 all-features = false
 
 [dependencies]
@@ -36,7 +35,6 @@ memmap2.workspace = true
 parking_lot.workspace = true
 blake3.workspace = true
 lru.workspace = true
-crossbeam-utils.workspace = true
 libc.workspace = true
 nalgebra.workspace = true
 petgraph.workspace = true
@@ -44,28 +42,21 @@ reqwest = { workspace = true }
 tokio = { workspace = true, features = ["rt", "time"] }
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 regex.workspace = true
-pdf-extract = { version = "0.10", optional = true }
+pdf-extract = { version = "0.12", optional = true }
 oxiarc-archive = { workspace = true, optional = true }
 quick-xml = { workspace = true, optional = true }
 base64.workspace = true
 image = { workspace = true, optional = true }
 chrono.workspace = true
-# CUDA dependencies (optional - for GPU acceleration)
-# These are only pulled in when "cuda" feature is enabled
-# Code falls back to CPU implementations when CUDA toolkit is not available
-cuda-runtime-sys = { version = "0.3.0-alpha.1", optional = true }
-cudarc = { version = "0.19", features = ["cuda-12000"], optional = true }
-candle-core = { version = "0.10", optional = true }
+# NOTE: CUDA (`cuda-runtime-sys` C FFI) has been quarantined into the
+# `oxirs-vec-adapter-cuda` crate (publish = false) per the COOLJAPAN Pure Rust
+# Policy v2, keeping this crate's published --all-features surface Pure Rust.
 # Python bindings
-pyo3 = { version = "0.28", features = ["extension-module"], optional = true }
-numpy = { version = "0.28", optional = true }
+pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
+numpy = { version = "0.29", optional = true }
 uuid.workspace = true
-num_cpus.workspace = true
 humantime = "2.3"
 indicatif.workspace = true
-# HuggingFace integration
-tokenizers = { version = "0.23", optional = true }
-hf-hub = { version = "0.5", optional = true }
 # Tantivy full-text search (upgraded to 0.25 for lru security fix)
 tantivy = { workspace = true, optional = true }
 
@@ -78,19 +69,19 @@ uuid.workspace = true
 default = []
 simd = ["oxirs-core/simd"]
 parallel = ["oxirs-core/parallel"]
-gpu = ["oxirs-core/gpu"]
+# `gpu` was a vestigial pass-through to the removed `oxirs-core/gpu` feature
+# (oxirs-vec uses its own local GpuMonitor, not oxirs-core's). The oxirs-core
+# `gpu` feature was deleted when NVML was quarantined into oxirs-gpu-monitor
+# (COOLJAPAN Pure Rust Policy v2), so this is now an empty no-op kept for
+# backward compatibility of oxirs-vec's own feature surface.
+gpu = []
 blas = ["oxirs-core/blas"]
-# CUDA feature for GPU acceleration (OPTIONAL - follows Pure Rust Policy)
-# When enabled without CUDA toolkit: falls back to CPU implementations
-# When enabled with CUDA toolkit: enables GPU-accelerated operations
-# Default features are 100% Pure Rust (no CUDA required)
-cuda = ["dep:cuda-runtime-sys", "dep:cudarc"]
-candle-gpu = ["candle-core"]
-gpu-full = ["cuda", "candle-gpu", "gpu"]
+# Real NVIDIA CUDA acceleration is provided by the `oxirs-vec-adapter-cuda`
+# crate (publish = false). The former `cuda` and `gpu-full` features were
+# removed when `cuda-runtime-sys` was quarantined per Pure Rust Policy v2.
 images = ["image"]
 content-processing = ["pdf-extract", "oxiarc-archive", "quick-xml", "images"]
 python = ["pyo3", "numpy"]
-huggingface = ["tokenizers", "hf-hub"]
 # Tantivy full-text search (Pure Rust, optional)
 tantivy-search = ["tantivy"]
 

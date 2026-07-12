@@ -1,0 +1,33 @@
+[package]
+name = "oxirs-tsdb-adapter-duckdb"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Quarantined DuckDB analytics-bridge adapter for oxirs-tsdb (publish=false; isolates libduckdb-sys C FFI off the published Pure-Rust surface)."
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+# Reuse oxirs-tsdb's public TimeChunk/DataPoint types + TsdbError/TsdbResult so
+# the bridge stays API-compatible with the published Pure-Rust crate.
+oxirs-tsdb = { workspace = true }
+# C FFI quarantined HERE (publish = false) — `duckdb` pulls `libduckdb-sys`
+# (libduckdb is bundled and built from source), kept off oxirs-tsdb's published
+# `--all-features` closure per COOLJAPAN Pure Rust Policy v2.
+duckdb = { workspace = true, features = ["bundled", "vtab-arrow", "appender-arrow"] }
+# NOTE (cargo-upgrade sweep, 2026-07-02): NO direct `arrow` dependency. duckdb
+# 1.10504 internally pins arrow 58.3.0 (its vtab-arrow/appender-arrow surface, e.g.
+# Appender::append_record_batch, only accepts arrow-58 RecordBatch), while the
+# workspace `arrow` is now 59 — mixing them produced two incompatible `RecordBatch`
+# types (E0308). This crate uses only core Arrow types (array/datatypes/record_batch)
+# that duckdb re-exports via `pub use arrow` (duckdb::arrow), and needs no standalone
+# arrow/parquet functionality, so ALL Arrow usage is routed through `duckdb::arrow::*`
+# for a single, consistent version. When duckdb bumps its bundled arrow to 59, this
+# stays correct automatically (it tracks whatever duckdb re-exports).
+chrono = { workspace = true }
+
+[lints]
+workspace = true

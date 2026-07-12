@@ -1,5 +1,6 @@
 # Rust
 /target/
+**/target-purge-gate/
 **/*.rs.bk
 *.rs.cleanup
 *.pdb

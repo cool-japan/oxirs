@@ -6,10 +6,8 @@
 use crate::model::{NamedNode, NamedNodeRef, ObjectTerm, RdfTerm};
 use crate::vocab::{rdf, xsd};
 use crate::OxirsError;
-use lazy_static::lazy_static;
 use oxilangtag::LanguageTag as OxiLanguageTag;
 use oxsdatatypes::{Boolean, Date, DateTime, Decimal, Double, Float, Integer, Time};
-use regex::Regex;
 use std::borrow::Cow;
 use std::fmt::{self, Write};
 use std::hash::Hash;
@@ -64,49 +62,6 @@ impl fmt::Display for LanguageTag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.tag)
     }
-}
-
-lazy_static! {
-    /// BCP 47 language tag validation regex
-    /// Based on RFC 5646 - Tags for Identifying Languages
-    static ref LANGUAGE_TAG_REGEX: Regex = Regex::new(
-        r"^([a-zA-Z]{2,3}(-[a-zA-Z]{3}){0,3}(-[a-zA-Z]{4})?(-[a-zA-Z]{2}|\d{3})?(-[0-9a-zA-Z]{5,8}|-\d[0-9a-zA-Z]{3})*(-[0-9a-wyzA-WYZ](-[0-9a-zA-Z]{2,8})+)*(-x(-[0-9a-zA-Z]{1,8})+)?|x(-[0-9a-zA-Z]{1,8})+|[a-zA-Z]{4}|[a-zA-Z]{5,8})$"
-    ).expect("Language tag regex compilation failed");
-
-    /// Simple language subtag validation (2-3 letter language codes)
-    static ref SIMPLE_LANGUAGE_REGEX: Regex = Regex::new(
-        r"^[a-zA-Z]{2,3}$"
-    ).expect("Simple language regex compilation failed");
-
-    /// XSD numeric type validation regexes
-    static ref INTEGER_REGEX: Regex = Regex::new(
-        r"^[+-]?\d+$"
-    ).expect("Integer regex compilation failed");
-
-    static ref DECIMAL_REGEX: Regex = Regex::new(
-        r"^[+-]?(\d+(\.\d*)?|\.\d+)$"
-    ).expect("Decimal regex compilation failed");
-
-    static ref DOUBLE_REGEX: Regex = Regex::new(
-        r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$|^[+-]?INF$|^NaN$"
-    ).expect("Double regex compilation failed");
-
-    static ref BOOLEAN_REGEX: Regex = Regex::new(
-        r"^(true|false|1|0)$"
-    ).expect("Boolean regex compilation failed");
-
-    /// DateTime validation (simplified ISO 8601)
-    static ref DATETIME_REGEX: Regex = Regex::new(
-        r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$"
-    ).expect("DateTime regex compilation failed");
-
-    static ref DATE_REGEX: Regex = Regex::new(
-        r"^\d{4}-\d{2}-\d{2}(Z|[+-]\d{2}:\d{2})?$"
-    ).expect("Date regex compilation failed");
-
-    static ref TIME_REGEX: Regex = Regex::new(
-        r"^\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$"
-    ).expect("Time regex compilation failed");
 }
 
 /// Validates a language tag according to BCP 47 (RFC 5646) using oxilangtag

@@ -5,11 +5,11 @@
 //!
 //! This module is a thin facade. The implementation is split across sibling
 //! modules:
-//! - [`import_command_types`](super::import_command_types): core data types
-//!   ([`ImportFormat`], [`Triple`], [`ImportResult`], [`ImportError`]).
-//! - [`import_command_runner`](super::import_command_runner): the
-//!   [`ImportCommand`] entry point, format detection, and shared helpers.
-//! - [`import_command_formats`](super::import_command_formats): the
+//! - [`import_command_types`](crate::commands::import_command_types): core data types
+//!   ([`ImportFormat`](crate::commands::import_command_types::ImportFormat), [`Triple`](crate::commands::import_command_types::Triple), [`ImportResult`](crate::commands::import_command_types::ImportResult), [`ImportError`](crate::commands::import_command_types::ImportError)).
+//! - [`import_command_runner`](crate::commands::import_command_runner): the
+//!   [`ImportCommand`](crate::commands::import_command_runner::ImportCommand) entry point, format detection, and shared helpers.
+//! - [`import_command_formats`](crate::commands::import_command_formats): the
 //!   format-specific parsers.
 //!
 //! # Example

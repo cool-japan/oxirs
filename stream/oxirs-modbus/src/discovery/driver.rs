@@ -4,6 +4,8 @@
 //! The driver is deliberately synchronous and generic over a [`ModbusAccess`]
 //! trait so it can be driven by a real Modbus TCP/RTU connection **or** an
 //! in-process mock in unit tests.
+//!
+//! [`ModbusAccess`]: crate::discovery::driver::ModbusAccess
 
 use std::time::Duration;
 
@@ -99,8 +101,8 @@ impl DiscoveredRegister {
 
 /// Configuration for a single discovery scan pass.
 ///
-/// Adjust [`address_start`] / [`address_end`] to narrow the search space and
-/// [`read_batch_size`] to match the device's max-register-per-request limit.
+/// Adjust [`address_start`](DiscoveryConfig::address_start) / [`address_end`](DiscoveryConfig::address_end) to narrow the search space and
+/// [`read_batch_size`](DiscoveryConfig::read_batch_size) to match the device's max-register-per-request limit.
 #[derive(Debug, Clone)]
 pub struct DiscoveryConfig {
     /// Inclusive start address for the scan.

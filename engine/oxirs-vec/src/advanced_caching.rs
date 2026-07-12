@@ -2,9 +2,9 @@
 //!
 //! This module is organized as a set of focused sub-modules:
 //!
-//! - [`advanced_caching_eviction`] — `MemoryCache`, `PersistentCache`, eviction policies
-//! - [`advanced_caching_multilevel`] — `MultiLevelCache`, `CacheInvalidator`
-//! - [`advanced_caching_worker`] — `BackgroundCacheWorker`, `CacheWarmer`, `CacheAnalyzer`
+//! - [`advanced_caching_eviction`](crate::advanced_caching_eviction) — `MemoryCache`, `PersistentCache`, eviction policies
+//! - [`advanced_caching_multilevel`](crate::advanced_caching_multilevel) — `MultiLevelCache`, `CacheInvalidator`
+//! - [`advanced_caching_worker`](crate::advanced_caching_worker) — `BackgroundCacheWorker`, `CacheWarmer`, `CacheAnalyzer`
 //!
 //! Shared primitive types (`EvictionPolicy`, `CacheConfig`, `CacheEntry`, `CacheKey`,
 //! `CacheStats`) are defined here in the root and re-exported so that all sibling

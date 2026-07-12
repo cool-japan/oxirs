@@ -583,7 +583,12 @@ impl IntegratedQueryPlanner {
 
         // Determine parallelism level
         if cost_estimate.total_cost > 100.0 {
-            hints.parallelism_level = Some(num_cpus::get().min(4));
+            hints.parallelism_level = Some(
+                std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1)
+                    .min(4),
+            );
         }
 
         // Memory allocation hints

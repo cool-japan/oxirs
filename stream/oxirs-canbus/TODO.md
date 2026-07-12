@@ -1,10 +1,10 @@
 # OxiRS CAN Bus - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
-OxiRS CAN Bus v0.3.1 provides automotive CAN bus integration with J1939 protocol support, DBC file parsing, and RDF mapping for vehicle telematics and industrial automation.
+OxiRS CAN Bus v0.3.2 provides automotive CAN bus integration with J1939 protocol support, DBC file parsing, and RDF mapping for vehicle telematics and industrial automation.
 
 ### Features
 - ✅ SocketCAN integration (Linux)
@@ -20,27 +20,27 @@ OxiRS CAN Bus v0.3.1 provides automotive CAN bus integration with J1939 protocol
 - ✅ UDS (Unified Diagnostic Services, ISO 14229)
 - ✅ CANopen support (DS-301 profiles)
 - ✅ OBD-II decoder
-- ✅ Protocol analyzer
+- ✅ Diagnostic monitor (OBD-II / ISO 15765-2 session monitoring)
 - ✅ PGN decoder
 - ✅ Frame aggregator, frame validator, signal monitor
 - ✅ CAN scheduler, gateway bridge, recording extensions
-- ✅ 1125 tests passing
+- ✅ 1183 tests passing
 
 ## Roadmap
 
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ SocketCAN, J1939, DBC parser, RDF generation, SAMM, 101 tests
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ OBD-II decoder
 - ✅ UDS (Unified Diagnostic Services, ISO 14229)
 - ✅ CANopen support (DS-301 profiles)
-- ✅ PGN decoder, protocol analyzer, bit timing
+- ✅ PGN decoder, diagnostic monitor, bit timing
 - ✅ Frame validator, frame aggregator, signal monitor
 - ✅ Gateway bridge, recording extensions
 - ✅ 1125 tests passing
 
-### v0.3.0 - Planned (Q2 2026)
+### v0.3.0 - Released (May 4, 2026)
 - [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] Enterprise integration features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] GUI tools and web interface — Tauri 2.x J1939 CAN bus monitor, desktop/ui/canbus.html (completed 2026-05-02)
@@ -60,8 +60,8 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS CAN Bus v0.3.1 - Automotive telematics for semantic web*
+*OxiRS CAN Bus v0.3.2 - Automotive telematics for semantic web*
 
 ## Proposed follow-ups
 
-- oxirs-physics DTDL API surfacing: if `oxirs_physics::digital_twin::Twin` property-write API isn't public, surface it in a dedicated oxirs-physics round, then wire to the real `DtdlSinkFacade` implementation.
+- oxirs-physics DTDL API surfacing: `oxirs_physics::digital_twin::twin_value::Twin::set_property` is already public, so only a real (non-mock) `DtdlSinkFacade` implementation backed by it remains to be wired up (currently only `MockDtdlSink` ships in `oxirs-canbus`).

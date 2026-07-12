@@ -114,7 +114,7 @@ impl AdaptivePlanner {
     /// Build a greedy routing plan.
     ///
     /// For each sub-query the planner picks the cheapest endpoint whose
-    /// availability score is above [`MIN_AVAILABILITY_SCORE`].  If no
+    /// availability score is above `MIN_AVAILABILITY_SCORE`.  If no
     /// endpoint satisfies the threshold the first endpoint in the ranked list
     /// is used as a last resort (the caller may inspect the plan and decide to
     /// reject it).

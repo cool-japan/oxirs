@@ -158,7 +158,10 @@ pub struct WorkStealerConfig {
 impl Default for WorkStealerConfig {
     fn default() -> Self {
         Self {
-            num_workers: num_cpus::get().max(2),
+            num_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .max(2),
             spin_duration: Duration::from_micros(100),
         }
     }

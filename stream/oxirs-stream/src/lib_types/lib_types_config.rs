@@ -84,7 +84,7 @@ pub struct MonitoringConfig {
     pub health_check_interval: Duration,
     pub enable_profiling: bool,
     pub prometheus_endpoint: Option<String>,
-    pub jaeger_endpoint: Option<String>,
+    pub otlp_endpoint: Option<String>,
     pub log_level: String,
 }
 
@@ -124,7 +124,12 @@ pub enum PulsarAuthMethod {
 /// Enhanced streaming backend options
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamBackendType {
-    #[cfg(feature = "kafka")]
+    /// Apache Kafka backend selector. The variant (pure config data) stays here so
+    /// configs remain API-stable, but the `rdkafka`-backed implementation was
+    /// quarantined into the publish=false `oxirs-stream-adapter-rdkafka` crate
+    /// (Pure Rust Policy v2). Build a `KafkaBackend` from that crate via the
+    /// `StreamBackend` trait; `StreamProducer::new`/`StreamConsumer::new` return an
+    /// error explaining this for a `Kafka` config.
     Kafka {
         brokers: Vec<String>,
         security_protocol: Option<String>,
@@ -148,7 +153,12 @@ pub enum StreamBackendType {
         stream_name: String,
         credentials: Option<AwsCredentials>,
     },
-    #[cfg(feature = "pulsar")]
+    /// Apache Pulsar backend selector. The variant (pure config data) stays here so
+    /// configs remain API-stable, but the `pulsar`-backed implementation was
+    /// quarantined into the publish=false `oxirs-stream-adapter-pulsar` crate
+    /// (Pure Rust Policy v2). Build a `PulsarProducer`/`PulsarConsumer` from that
+    /// crate directly; `StreamProducer::new`/`StreamConsumer::new` return an error
+    /// explaining this for a `Pulsar` config.
     Pulsar {
         service_url: String,
         auth_config: Option<PulsarAuthConfig>,
@@ -257,7 +267,7 @@ impl Default for MonitoringConfig {
             health_check_interval: Duration::from_secs(30),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         }
     }
@@ -388,7 +398,7 @@ impl StreamConfig {
                 health_check_interval: Duration::from_secs(30),
                 enable_profiling: false,
                 prometheus_endpoint: None,
-                jaeger_endpoint: None,
+                otlp_endpoint: None,
                 log_level: "debug".to_string(),
             },
         }
@@ -440,7 +450,7 @@ impl StreamConfig {
                 health_check_interval: Duration::from_secs(10),
                 enable_profiling: true,
                 prometheus_endpoint: None,
-                jaeger_endpoint: None,
+                otlp_endpoint: None,
                 log_level: "info".to_string(),
             },
         }

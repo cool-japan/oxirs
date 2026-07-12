@@ -132,7 +132,7 @@ impl ParallelStarBgpEvaluator {
     /// Create an evaluator with the given parallelism degree.
     ///
     /// `parallelism` controls the Rayon thread pool size.  Use
-    /// `num_cpus::get()` for the full machine parallelism.
+    /// `std::thread::available_parallelism()` for the full machine parallelism.
     pub fn new(parallelism: usize) -> Self {
         Self {
             parallelism: parallelism.max(1),

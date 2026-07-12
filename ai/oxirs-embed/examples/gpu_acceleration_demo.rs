@@ -262,7 +262,10 @@ async fn demo_mixed_precision() -> Result<()> {
         "   Max value: {:.6}",
         fp32_tensor.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b))
     );
-    println!("   Mean: {:.6}", fp32_tensor.mean().unwrap());
+    println!(
+        "   Mean: {:.6}",
+        fp32_tensor.mean().expect("invariant: value is valid")
+    );
 
     // Convert to FP16 for computation
     let fp16_tensor = mixed_precision.to_fp16(&fp32_tensor);
@@ -276,13 +279,16 @@ async fn demo_mixed_precision() -> Result<()> {
         "   Max value: {:.6}",
         fp16_tensor.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b))
     );
-    println!("   Mean: {:.6}", fp16_tensor.mean().unwrap());
+    println!(
+        "   Mean: {:.6}",
+        fp16_tensor.mean().expect("invariant: value is valid")
+    );
 
     // Demonstrate precision difference
     let precision_loss = (&fp32_tensor - &fp16_tensor)
         .mapv(|x| x.abs())
         .mean()
-        .unwrap();
+        .expect("invariant: value is valid");
     println!("   Precision loss: {precision_loss:.8}");
 
     // Demonstrate loss scaling

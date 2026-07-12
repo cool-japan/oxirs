@@ -36,7 +36,9 @@ impl Default for PerformanceConfig {
     fn default() -> Self {
         Self {
             enable_parallel_validation: true,
-            worker_threads: num_cpus::get(),
+            worker_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             batch_size: 1000,
             enable_constraint_ordering: true,
             enable_caching: true,

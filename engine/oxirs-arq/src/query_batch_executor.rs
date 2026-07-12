@@ -98,7 +98,9 @@ pub struct BatchConfig {
 impl Default for BatchConfig {
     fn default() -> Self {
         Self {
-            max_concurrent: num_cpus::get(),
+            max_concurrent: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             memory_limit_mb: 4096,
             cpu_limit: 0.8,
             mode: BatchMode::default(),

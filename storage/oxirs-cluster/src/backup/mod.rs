@@ -2,11 +2,11 @@
 //!
 //! This module provides a complete backup management system:
 //!
-//! - [`policy::BackupPolicy`] — schedule + retention + GFS + encryption + destination
-//! - [`retention::RetentionTier`] — hot/warm/cold retention windows
-//! - [`gfs::GfsRotation`] — Grandfather-Father-Son rotation
-//! - [`executor::BackupExecutor`] — write artefacts + audit log
-//! - [`destination::DestinationConfig`] — local FS (default) or S3 (feature-gated)
+//! - [`backup::policy::BackupPolicy`] — schedule + retention + GFS + encryption + destination
+//! - [`backup::retention::RetentionTier`] — hot/warm/cold retention windows
+//! - [`backup::gfs::GfsRotation`] — Grandfather-Father-Son rotation
+//! - [`backup::executor::BackupExecutor`] — write artefacts + audit log
+//! - [`backup::destination::DestinationConfig`] — local FS (default) or S3 (feature-gated)
 //!
 //! # Quick start
 //!

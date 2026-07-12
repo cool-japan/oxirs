@@ -1,7 +1,7 @@
 //! N-Quads streaming parser: pull-parse N-Quads format line by line.
 //!
-//! Implements a zero-copy-friendly [`NQuadsStreamingParser`] that wraps a
-//! `BufReader<R>` and acts as an iterator over [`StreamedQuad`] values.
+//! Implements a zero-copy-friendly [`NQuadsStreamingParser`](crate::nquads_streaming::NQuadsStreamingParser) that wraps a
+//! `BufReader<R>` and acts as an iterator over [`StreamedQuad`](crate::nquads_streaming::StreamedQuad) values.
 //! Each call to `next()` reads exactly one line from the underlying reader
 //! and either returns a parsed quad, skips blank/comment lines, or returns
 //! an error.

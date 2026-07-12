@@ -253,7 +253,11 @@ impl IrQueryPlan {
             IrOp::TriplePattern { .. } | IrOp::IndexScan { .. } => ParallelHints {
                 can_parallelize_scans: true,
                 can_parallelize_joins: false,
-                suggested_parallelism: Some(num_cpus::get()),
+                suggested_parallelism: Some(
+                    std::thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or(1),
+                ),
             },
             IrOp::Join {
                 left,
@@ -266,7 +270,11 @@ impl IrQueryPlan {
                     can_parallelize_scans: left_hints.can_parallelize_scans
                         && right_hints.can_parallelize_scans,
                     can_parallelize_joins: *join_type == JoinType::Inner,
-                    suggested_parallelism: Some(num_cpus::get()),
+                    suggested_parallelism: Some(
+                        std::thread::available_parallelism()
+                            .map(|n| n.get())
+                            .unwrap_or(1),
+                    ),
                 }
             }
             _ => ParallelHints::default(),

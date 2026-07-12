@@ -9,12 +9,12 @@
 //! re-exports so consumers can keep importing from
 //! `crate::service_description::*`:
 //!
-//! - [`service_description_types`]: the SD vocabulary types
+//! - `service_description_types`: the SD vocabulary types
 //!   (`ServiceDescription`, `SdFeature`, `SdLanguage`, `SdResultFormat`,
 //!   `SdInputFormat`, `EntailmentRegime`) and namespace constants.
-//! - [`service_description_builder`]: [`ServiceDescriptionBuilder`] and the
+//! - `service_description_builder`: [`ServiceDescriptionBuilder`] and the
 //!   `ServiceDescription` constructor / query / merge helpers.
-//! - [`service_description_serializer`]: Turtle, JSON-LD, and RDF/XML
+//! - `service_description_serializer`: Turtle, JSON-LD, and RDF/XML
 //!   serializers plus string-escaping helpers.
 
 mod service_description_builder;

@@ -1,10 +1,12 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 — in development on branch `0.3.2`, last verified 2026-07-12
+
+**Tests**: 1799 passed, 0 failed (`cargo nextest run -p oxirs --all-features`)
 
 ⚡ **Production-Ready**: APIs are stable and tested. Ready for production use with comprehensive documentation.
 
@@ -12,51 +14,55 @@
 
 `oxirs` is the unified command-line tool for the OxiRS ecosystem, providing comprehensive functionality for RDF data management, SPARQL operations, server administration, and development workflows. It's designed to be the Swiss Army knife for semantic web developers and data engineers working with knowledge graphs and semantic data.
 
-## What's New in v0.3.1 (2026-06-06)
+This crate is an end-user CLI application, not a published library: `Cargo.toml` sets `publish = false` so it can depend on `publish = false` quarantine adapter crates (for optional GPU/CUDA, GEOS, DuckDB, and Kafka/Pulsar integrations) without putting C FFI on the published Pure-Rust dependency surface. It ships as a release binary built from source rather than via `cargo install oxirs` from crates.io — see [Installation](#installation).
 
-- **Fully Pure-Rust build**: `cargo install oxirs` now links zero `ring`/`aws-lc-sys` C/asm crypto — compression via oxiarc, crypto via oxicrypto, and TLS via oxitls (COOLJAPAN Pure-Rust policy)
-- **Tracks the v0.3.1 platform**: validation and query commands run on the v0.3.1 engines, which add SHACL Advanced Features (recursive and qualified shapes plus a rule-based reasoning engine) and RDF-star quoted-triple support
-- **Leaner codebase**: large command modules (import, interactive, aspect, jena-parity) were split so every source file stays under 2,000 lines
-- **Dependency refresh**: SciRS2 0.5.0, with oxiarc 0.3.3 consumed directly from crates.io
-- **Stable CLI**: all commands and flags remain stable under semantic versioning
+## What's New in v0.3.2 (2026-07-11)
+
+- **Pure-Rust Policy v2**: six previously in-tree C-FFI integrations (NVIDIA GPU monitoring, GEOS, DuckDB, Kafka, Pulsar) were extracted into separate `publish = false` adapter crates. This CLI's optional `tsdb-duckdb` feature now depends on the `oxirs-tsdb-adapter-duckdb` bridge crate instead of an in-tree DuckDB integration
+- **SHACL improvements reach `oxirs shacl`**: `sh:class` and implicit-class targets now honor `rdfs:subClassOf` closure instead of exact-type matching only
+- **Dependency refresh**: SciRS2 0.6.0, oxiarc-* 0.3.5, oxicrypto/oxitls 0.2.0
+
+See the [workspace CHANGELOG](../../CHANGELOG.md) for the complete list of engine-level changes shipping in this release.
 
 ## Features
 
-- **Data Operations**: Import, export, validate, and transform RDF data
-- **Query Execution**: Run SPARQL queries against local and remote endpoints
-- **Server Management**: Start, stop, and configure OxiRS servers
-- **Development Tools**: Schema validation, query optimization, and debugging
-- **Benchmarking**: Performance testing and dataset generation
-- **Migration Tools**: Convert between RDF formats and upgrade datasets
-- **Configuration Management**: Manage server and client configurations
-- **Interactive Mode**: REPL for exploratory data analysis
+- **Data Operations**: Import, export, and validate RDF data (7 formats: Turtle, N-Triples, N-Quads, RDF/XML, JSON-LD, TriG, N3)
+- **Query Execution**: Run SPARQL queries and updates against local datasets or remote endpoints
+- **Server Management**: Start and configure the embedded OxiRS SPARQL/GraphQL server
+- **Development Tools**: Query explain/optimize analysis, dataset indexing, schema generation, graph analytics
+- **Benchmarking**: Performance testing and synthetic dataset generation
+- **Migration Tools**: Convert between RDF formats, migrate from Jena TDB1/TDB2, Virtuoso, RDF4J, Blazegraph, and GraphDB
+- **Industrial Connectivity**: Time-series (TSDB), Modbus, and CANbus/J1939 tooling with SAMM/AAS model generation
+- **Configuration Management**: Generate, validate, and inspect server configuration files
+- **Interactive Mode**: REPL for exploratory SPARQL data analysis
 
 ## Installation
 
-### From Crates.io
-
-```bash
-# Install the latest release
-cargo install oxirs --version 0.3.1
-
-# Or install with all optional features
-cargo install oxirs --version 0.3.1 --features all-features
-```
-
 ### From Source
+
+`oxirs` is not published to crates.io (`publish = false`, see [Overview](#overview)). Build and install it from a checkout:
 
 ```bash
 git clone https://github.com/cool-japan/oxirs
 cd oxirs/tools/oxirs
 cargo install --path .
 
-# Or with all features
+# Or with all optional features (full-text search, geo, PDF export)
 cargo install --path . --features all-features
+```
+
+To just produce a binary without installing it onto your `PATH`:
+
+```bash
+git clone https://github.com/cool-japan/oxirs
+cd oxirs
+cargo build --release --bin oxirs
+# binary at target/release/oxirs
 ```
 
 ### Shell Completion
 
-Generate shell completion scripts for your shell:
+`oxirs` exposes a `--completion` flag that prints a completion script for your shell:
 
 ```bash
 # Bash
@@ -100,7 +106,7 @@ oxirs query mydata "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
 # Start a SPARQL server
 oxirs serve mydata --port 3030
 
-# Export to different format
+# Export to a different format
 oxirs export mydata output.jsonld --format json-ld
 ```
 
@@ -118,21 +124,17 @@ oxirs> SELECT ?person ?name WHERE { ?person foaf:name ?name } LIMIT 5
 │ http://example.org/bob             │ "Bob"        │
 └─────────────────────────────────────┴──────────────┘
 
-oxirs> .schema foaf:Person
-Class: foaf:Person
-Properties:
-  - foaf:name (string, required)
-  - foaf:age (integer, optional)
-  - foaf:mbox (string, optional)
-
+# Dot-commands: .help .stats .history .save .load .export .import
+#               .batch .search .format .template .session .clear .exit
+oxirs> .stats
 oxirs> .exit
 ```
 
 ## Commands
 
-### Data Management
+`oxirs` has ~60 top-level commands. `oxirs --help` lists all of them; `oxirs <command> --help` (or `oxirs <command> <subcommand> --help`) shows exact flags; `oxirs docs --format markdown` generates a complete CLI reference. The tour below covers the major groups with verified, copy-pasteable examples.
 
-#### Import Data
+### Data Management
 
 ```bash
 # Initialize dataset first
@@ -144,90 +146,75 @@ oxirs import mydata data.ttl --format turtle
 # Import with named graph
 oxirs import mydata data.ttl --format turtle --graph http://example.org/graph1
 
-# Import N-Triples
+# Import N-Triples / RDF/XML / JSON-LD
 oxirs import mydata data.nt --format ntriples
-
-# Import RDF/XML
 oxirs import mydata data.rdf --format rdfxml
-
-# Import JSON-LD
 oxirs import mydata data.jsonld --format jsonld
-```
 
-#### Export Data
-
-```bash
-# Export entire dataset
+# Export entire dataset / a specific named graph
 oxirs export mydata export.ttl --format turtle
-
-# Export specific graph
 oxirs export mydata output.jsonld --format json-ld --graph http://example.org/graph1
-
-# Export to N-Triples
-oxirs export mydata output.nt --format ntriples
-
-# Export to RDF/XML
-oxirs export mydata output.rdf --format rdfxml
 ```
 
-#### Validate Data
+### Validation & Reasoning
 
 ```bash
-# Validate RDF syntax
-oxirs rdfparse data.ttl --format turtle
+# Validate RDF syntax (Jena rdfparse equivalent)
+oxirs rdf-parse data.ttl --format turtle
 
 # SHACL validation
 oxirs shacl --dataset mydata --shapes shapes.ttl --format text
 
 # ShEx validation
 oxirs shex --dataset mydata --schema schema.shex --format text
+
+# RDFS/OWL-RL inference
+oxirs infer data.ttl --profile rdfs --output inferred.ttl
+
+# Generate a SHACL/ShEx/OWL schema from existing data
+oxirs schema-gen data.ttl --schema-type shacl --output schema.ttl --stats
 ```
 
 ### Query Operations
 
-#### Execute Queries
-
 ```bash
-# Run SPARQL query
+# Run a SPARQL query
 oxirs query mydata "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
 
-# Run query from file
-oxirs query mydata query.sparql --file
-
-# Output formats: table, json, csv, tsv
+# Run a query from a file, with a specific output format
+# (table, json, csv, tsv, xml, html, markdown)
 oxirs query mydata query.sparql --file --output json
 
-# Advanced query with arq tool
-oxirs arq --dataset mydata --query "SELECT * WHERE { ?s ?p ?o }" --results table
-```
+# SPARQL update
+oxirs update mydata "INSERT DATA { <http://ex.org/s> <http://ex.org/p> \"o\" }"
 
-#### Query Analysis
+# Advanced local query processor (Jena arq equivalent)
+oxirs arq --dataset mydata --query "SELECT * WHERE { ?s ?p ?o }" --results table --explain
 
-```bash
-# Parse and validate SPARQL query
-oxirs qparse query.sparql --print-ast
+# Remote SPARQL query/update against an HTTP endpoint
+oxirs r-sparql --service http://localhost:3030/sparql --query "SELECT * WHERE { ?s ?p ?o }"
+oxirs r-update --service http://localhost:3030/update --update "CLEAR GRAPH <http://ex.org/g>"
 
-# Show query algebra
-oxirs qparse query.sparql --print-algebra
+# Parse and validate a query/update without executing it
+oxirs q-parse query.sparql --file --print-ast --print-algebra
+oxirs u-parse update.sparql --file --print-ast
 
-# Parse SPARQL update
-oxirs uparse update.sparql --print-ast
-
-# Query optimization analysis (PostgreSQL EXPLAIN-style)
+# Query EXPLAIN/ANALYZE (PostgreSQL-style query plan analysis)
 oxirs explain mydata "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
 oxirs explain mydata query.sparql --file --mode analyze
-oxirs explain mydata query.sparql --file --mode full
+oxirs explain mydata query.sparql --file --mode full --graphviz plan.dot
 
-# Shows: query structure, complexity score, optimization hints
+# Standalone query optimization analyzer (prints suggestions, no dataset needed)
+oxirs optimize query.sparql --file
 ```
 
-#### Query Templates
+### Query Templates
 
 ```bash
 # List all available query templates
 oxirs template list
 
-# Filter by category
+# Filter by category (basic, advanced, analytics, graph, federation, paths, aggregation)
 oxirs template list --category basic
 oxirs template list --category aggregation
 
@@ -243,191 +230,213 @@ oxirs template render select-by-type \
 # Basic: select-all, select-by-type, select-with-filter, ask-exists
 # Advanced: construct-graph
 # Aggregation: count-instances, group-by-count
-# PropertyPaths: transitive-closure
+# Paths: transitive-closure
 # Federation: federated-query
 # Analytics: statistics-summary
 ```
 
-#### Query History
+### Query History
 
 ```bash
 # List recent queries (automatically tracked)
 oxirs history list
 oxirs history list --limit 20 --dataset mydata
 
-# Show full query details
+# Show full query details / re-execute a previous query
 oxirs history show 1
-
-# Re-execute a previous query
-oxirs history replay 5
 oxirs history replay 5 --output json
 
-# Search query history
+# Search history, view statistics/analytics, clear history
 oxirs history search "SELECT"
-oxirs history search "foaf:Person"
-
-# View history statistics
 oxirs history stats
-
-# Clear history
+oxirs history analytics --dataset mydata
 oxirs history clear
-
-# History tracks: dataset, query text, execution time,
-# result count, success/failure, timestamps
-# Stored in: ~/.local/share/oxirs/query_history.json
 ```
 
-### Server Management
-
-#### Start Server
+### Server & Configuration
 
 ```bash
-# Start SPARQL server with configuration file
+# Start SPARQL server (config file or dataset directory), optionally with GraphQL
 oxirs serve mydata/oxirs.toml --port 3030
+oxirs serve mydata --host 0.0.0.0 --port 8080 --graphql
 
-# With GraphQL support enabled
-oxirs serve mydata/oxirs.toml --port 3030 --graphql
-
-# Specify host and port
-oxirs serve mydata/oxirs.toml --host 0.0.0.0 --port 8080
+# Generate / validate / inspect a configuration file
+oxirs config init --output oxirs.toml
+oxirs config validate oxirs.toml
+oxirs config show oxirs.toml
 ```
 
-#### Server Administration
+### RDF Processing Tools (Jena-equivalent)
 
 ```bash
-# Check server status
-oxirs admin status --server http://localhost:3030
+# Parse and serialize RDF, with validation/counting (riot equivalent)
+oxirs riot data.ttl --output ntriples --out data.nt
+oxirs riot data.ttl --validate --count
 
-# Upload data to running server
-oxirs admin upload --server http://localhost:3030 --file new-data.ttl
+# Concatenate multiple files into one output
+oxirs rdf-cat a.ttl b.ttl --format turtle --output combined.ttl
 
-# Backup dataset
-oxirs admin backup --server http://localhost:3030 --output backup.tar.gz
+# Copy a dataset/file with format conversion
+oxirs rdf-copy data.rdf data.ttl --source-format rdfxml --target-format turtle
 
-# View server metrics
-oxirs admin metrics --server http://localhost:3030 --format prometheus
+# Compare two RDF datasets/files
+oxirs rdf-diff old.ttl new.ttl --format text
 ```
 
-### Development Tools
-
-#### Schema Operations
+### Storage (TDB) Tools
 
 ```bash
-# Generate schema from data
-oxirs schema generate --dataset mydata.oxirs --output schema.rdfs
+# Bulk load files directly into a TDB location
+oxirs tdb-loader mydata data1.nt data2.nt --progress --stats
 
-# Validate against schema
-oxirs schema validate --dataset mydata.oxirs --schema schema.rdfs
+# Dump / query / update a TDB location directly (bypassing the dataset registry)
+oxirs tdb-dump mydata --output dump.nq --format nquads
+oxirs tdb-query mydata "SELECT * WHERE { ?s ?p ?o }" --results text
+oxirs tdb-update mydata "INSERT DATA { <urn:s> <urn:p> <urn:o> }"
 
-# Compare schemas
-oxirs schema diff --schema1 old-schema.rdfs --schema2 new-schema.rdfs
+# Statistics, backup (optionally encrypted), and compaction
+oxirs tdb-stats mydata --detailed
+oxirs tdb-backup mydata backup/ --compress --encrypt   # prompts for a password
+oxirs tdb-compact mydata --delete-old
 
-# Convert schema formats
-oxirs schema convert --input schema.owl --output schema.shacl --format shacl
+# Point-in-time recovery: checkpoints and transaction-log based restore
+oxirs pitr init mydata --auto-archive
+oxirs pitr checkpoint mydata before-migration
+oxirs pitr list mydata
 ```
 
-#### Optimization
+### Benchmarking & Dataset Generation
 
 ```bash
-# Optimize dataset
-oxirs optimize --dataset mydata.oxirs --output optimized.oxirs
+# Generate a synthetic dataset for testing (top-level `generate`)
+oxirs generate test-data.ttl --size small --type rdf --format turtle --seed 42
 
-# Analyze dataset statistics
-oxirs analyze --dataset mydata.oxirs --output stats.json
+# Run a benchmark suite against a dataset (sp2bench, watdiv, ldbc, bsbm, custom)
+oxirs benchmark run mydata --suite sp2bench --iterations 10 --detailed
 
-# Generate indices
-oxirs index --dataset mydata.oxirs --properties foaf:name,dc:title
+# Generate a synthetic benchmark dataset
+oxirs benchmark generate bench-data.ttl --size medium --triples 1000000
 
-# Compress dataset
-oxirs compress --dataset mydata.oxirs --algorithm lz4 --output compressed.oxirs
+# Analyze a query log / compare two benchmark result files for regressions
+oxirs benchmark analyze query.log --suggestions --patterns
+oxirs benchmark compare baseline-results.json current-results.json --threshold 10.0
 ```
 
-### Benchmarking
-
-#### Dataset Generation
+### Migration
 
 ```bash
-# Generate test dataset
-oxirs benchmark generate --template university --size 10000 --output test-data.ttl
+# Convert RDF data between formats
+oxirs migrate format data.rdf data.ttl --from rdfxml --to turtle
 
-# Generate synthetic data
-oxirs benchmark synthetic --schema schema.rdfs --triples 1000000 --output synthetic.nq
-
-# Generate benchmark queries
-oxirs benchmark queries --dataset mydata.oxirs --count 100 --complexity mixed --output queries/
+# Migrate from Apache Jena TDB1/TDB2, Virtuoso, RDF4J, Blazegraph, or GraphDB
+oxirs migrate from-tdb2 /path/to/jena-tdb2-dir mydataset
+oxirs migrate from-virtuoso "connection-string" mydataset --graphs all
+oxirs migrate from-blazegraph http://localhost:9999/blazegraph/sparql mydataset --namespace kb
 ```
 
-#### Performance Testing
+### Index Management
 
 ```bash
-# Run benchmarks
-oxirs benchmark run --dataset mydata.oxirs --queries queries/ --report benchmark-report.html
-
-# Compare performance
-oxirs benchmark compare --baseline baseline-results.json --current current-results.json
-
-# Stress testing
-oxirs benchmark stress --endpoint http://localhost:3030 --duration 60s --concurrent 10
+oxirs index list mydata
+oxirs index rebuild mydata --index spo
+oxirs index stats mydata --format json
+oxirs index optimize mydata
 ```
 
-### Migration and Conversion
-
-#### Format Conversion
+### SAMM / AAS / Package Tools (Java ESMF SDK compatible)
 
 ```bash
-# Convert between RDF formats
-oxirs convert --input data.rdf --output data.ttl --from rdfxml --to turtle
+# Validate / pretty-print a SAMM Aspect model, or generate artifacts from it
+oxirs aspect validate model.ttl --detailed
+oxirs aspect prettyprint model.ttl --output formatted.ttl
+oxirs aspect to model.ttl rust --output generated/
 
-# Batch conversion
-oxirs convert --directory rdf-files/ --from rdfxml --to jsonld --output converted/
+# Asset Administration Shell (AAS) submodel <-> Aspect Model conversion
+oxirs aas list aas-file.xml
+oxirs aas to-aspect aas-file.xml --output-directory models/
 
-# Streaming conversion for large files
-oxirs convert --input large-file.nt --output large-file.ttl --stream --chunk-size 10000
+# Namespace package import/export
+oxirs package export urn:samm:org.example:1.0.0 --output package.zip
+oxirs package import package.zip --models-root models/
 ```
 
-#### Data Migration
+### Industrial Connectivity
 
 ```bash
-# Migrate from older OxiRS version
-oxirs migrate --input old-dataset.oxirs --output new-dataset.oxirs --from-version 0.1.0
+# Time-series database: query/insert/export with SPARQL temporal extensions
+oxirs tsdb query mydata --series 1 --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z --aggregate avg
+oxirs tsdb insert mydata --series 1 --value 22.5
+oxirs tsdb stats mydata --detailed
+oxirs tsdb export mydata --series 1 --output data.csv --format csv
 
-# Migrate from other triple stores
-oxirs migrate --input virtuoso-dump.nq --format nquads --output migrated.oxirs --optimize
+# Modbus TCP/RTU monitoring and RDF mapping
+oxirs modbus monitor-tcp --address 192.168.1.100:502 --start 40001 --count 10 --interval 1000
+oxirs modbus read --device 192.168.1.100:502 --address 40001 --count 5 --datatype float32
+oxirs modbus to-rdf --device 192.168.1.100:502 --config modbus_map.toml --output data.ttl
+oxirs modbus mock-server --port 5020
 
-# Migrate with transformation
-oxirs migrate --input data.ttl --transform-rules rules.sparql --output transformed.oxirs
+# CANbus/J1939 monitoring, DBC parsing, and SAMM generation
+oxirs canbus monitor --interface can0 --dbc vehicle.dbc --j1939
+oxirs canbus parse-dbc --file vehicle.dbc --detailed
+oxirs canbus decode --id 0x0CF00400 --data DEADBEEF --dbc vehicle.dbc
+oxirs canbus to-samm --dbc vehicle.dbc --output ./models/
 ```
 
-### Configuration
-
-#### Configuration Management
+### Utilities
 
 ```bash
-# Initialize configuration
-oxirs config init --template server --output oxirs.yaml
-
-# Validate configuration
-oxirs config validate --file oxirs.yaml
-
-# Show current configuration
-oxirs config show --format yaml
-
-# Set configuration values
-oxirs config set server.port 3030
-oxirs config set auth.enabled true
+oxirs iri "http://example.org/path" --validate --normalize
+oxirs lang-tag "en-US" --validate --normalize
+oxirs j-uuid --count 5 --format uuid
+oxirs utf8 "some text" --validate
+oxirs www-enc "hello world" --encoding url
+oxirs www-dec "hello%20world" --decoding url
+oxirs r-set results.csv --input-format csv --output-format table
 ```
 
-#### Environment Setup
+### Productivity
 
 ```bash
-# Setup development environment
-oxirs init --project my-semantic-app --template basic
+# Command aliases
+oxirs alias add qa "query mydata"
+oxirs alias list
 
-# Install dependencies
-oxirs deps install --file requirements.yaml
+# Query result cache and LRU result-cache management
+oxirs cache stats
+oxirs result-cache stats
 
-# Setup CI/CD templates
-oxirs init --template ci-cd --output .github/workflows/
+# Generate CLI reference documentation (markdown, html, man, text)
+oxirs docs --format markdown --output CLI_REFERENCE.md
+
+# Interactive tutorial mode
+oxirs tutorial
+```
+
+### Performance, Analytics & Access Control
+
+```bash
+# Performance monitoring/profiling subsystem (monitor, profile, compare, health,
+# report, optimizer, advisor, predictor)
+oxirs performance monitor
+oxirs performance advisor --help
+
+# SPARQL query profiler with latency statistics
+oxirs profile run --dataset mydata --query query.sparql --file --iterations 10
+
+# RDF graph analytics (pagerank, community, betweenness, closeness, degree, paths, stats)
+oxirs graph-analytics mydata --operation pagerank --top 20
+
+# Export RDF graph visualization (dot/graphviz, mermaid, cytoscape/json)
+oxirs visualize mydata graph.dot --format dot
+
+# Streaming SPARQL results (NDJSON/CSV/TSV) for large result sets
+oxirs stream query --dataset mydata --query query.sparql --file --format json --chunk-size 1000
+
+# ReBAC relationship management (export, import, migrate, verify, stats)
+oxirs rebac stats
+
+# CI/CD integration file generation (report, docker, github, gitlab)
+oxirs cicd github --output .github/workflows/ci.yml
 ```
 
 ## Configuration
@@ -463,25 +472,26 @@ enable_vector_search = false
 ### Configuration Fields
 
 - `general.default_format`: Default RDF serialization format
-- `server.port`: HTTP server port
-- `server.host`: Server bind address
-- `server.enable_graphql`: Enable GraphQL endpoint
+- `server.port` / `server.host`: HTTP server bind address
+- `server.enable_cors` / `server.enable_graphql`: CORS and GraphQL endpoint toggles
 - `datasets.{name}.location`: Storage path (`.` means dataset directory itself)
 - `datasets.{name}.dataset_type`: Storage backend (`tdb2` or `memory`)
 - `datasets.{name}.read_only`: Prevent modifications
 - Feature flags: `enable_reasoning`, `enable_validation`, `enable_text_search`, `enable_vector_search`
 
-### Command-specific Configuration
+### Global Flags
 
 ```bash
-# Use specific profile
-oxirs --profile production query --endpoint production --query query.sparql
+# Use a specific configuration profile
+oxirs --profile production serve mydata
 
-# Override global settings
-oxirs --verbose query --dataset mydata.oxirs --format json --query query.sparql
+# Verbose logging / quiet mode / disable color
+oxirs --verbose query mydata "SELECT * WHERE { ?s ?p ?o }"
+oxirs --quiet import mydata data.ttl --format turtle
+oxirs --no-color query mydata "SELECT * WHERE { ?s ?p ?o }"
 
-# Use configuration file
-oxirs --config custom-config.yaml serve --dataset mydata.oxirs
+# Use a specific configuration file
+oxirs --config custom-config.toml serve mydata
 ```
 
 ## Advanced Features
@@ -490,41 +500,23 @@ oxirs --config custom-config.yaml serve --dataset mydata.oxirs
 
 ```bash
 # Bash completion
-eval "$(oxirs completion bash)"
+eval "$(oxirs --completion bash)"
 
-# Pipeline operations
-oxirs import --file data.ttl --dataset temp.oxirs | \
-oxirs validate --shapes shapes.ttl | \
-oxirs optimize --output optimized.oxirs
-
-# Batch processing
-find . -name "*.ttl" -exec oxirs import --file {} --dataset combined.oxirs \;
-```
-
-### Custom Extensions
-
-```bash
-# Install plugin
-oxirs plugin install oxirs-geospatial
-
-# List plugins
-oxirs plugin list
-
-# Run plugin command
-oxirs geo index --dataset spatial-data.oxirs --property geo:hasGeometry
+# Batch processing over many files
+for f in rdf-files/*.ttl; do
+  oxirs import combined "$f" --format turtle
+done
 ```
 
 ### Integration with Other Tools
 
 ```bash
-# Integration with Git
-oxirs export --dataset mydata.oxirs --format turtle | git diff --no-index data.ttl -
+# Pipe SPARQL results (JSON output) into another tool
+oxirs query mydata query.sparql --file --output json | python process.py
 
-# Integration with Apache Jena
-oxirs export --dataset mydata.oxirs --format ntriples | riot --formatted=turtle
-
-# Integration with RDFLib
-oxirs query --dataset mydata.oxirs --query query.sparql --format json | python process.py
+# Export then hand off to Jena's riot for reformatting
+oxirs export mydata dump.nt --format ntriples
+riot --formatted=turtle dump.nt
 ```
 
 ## Examples
@@ -535,42 +527,38 @@ oxirs query --dataset mydata.oxirs --query query.sparql --format json | python p
 #!/bin/bash
 # data-pipeline.sh
 
-# Download and import multiple datasets
-oxirs import --url https://dbpedia.org/dataset.ttl --dataset dbpedia.oxirs
-oxirs import --url https://wikidata.org/dataset.ttl --dataset wikidata.oxirs
+oxirs init combined
 
-# Merge datasets
-oxirs merge --datasets dbpedia.oxirs,wikidata.oxirs --output merged.oxirs
+# Import multiple local datasets into one
+oxirs import combined dbpedia-sample.ttl --format turtle
+oxirs import combined wikidata-sample.ttl --format turtle
 
-# Validate merged data
-oxirs validate --dataset merged.oxirs --shapes validation-shapes.ttl
+# Validate against SHACL shapes
+oxirs shacl --dataset combined --shapes validation-shapes.ttl
 
-# Generate optimized indices
-oxirs index --dataset merged.oxirs --properties rdfs:label,skos:prefLabel
+# Inspect index health and rebuild if needed
+oxirs index stats combined
+oxirs index rebuild combined
 
-# Start production server
-oxirs serve --dataset merged.oxirs --config production.yaml --daemon
+# Start the server
+oxirs serve combined --port 3030
 ```
 
 ### Development Workflow
 
 ```bash
-# Create new project
-oxirs init --project semantic-app --template web-app
+# Create and populate a dataset
+oxirs init dev-kg
+oxirs import dev-kg dev-data.ttl --format turtle
 
-cd semantic-app/
+# Explore interactively
+oxirs interactive --dataset dev-kg
 
-# Import development data
-oxirs import --file dev-data.ttl --dataset dev.oxirs
+# Start a development server
+oxirs serve dev-kg --port 3030 --graphql
 
-# Start development server with hot reload
-oxirs serve --dataset dev.oxirs --dev --reload
-
-# Run tests
-oxirs test --dataset dev.oxirs --test-suite tests/
-
-# Deploy to staging
-oxirs deploy --dataset dev.oxirs --target staging --config deploy.yaml
+# Benchmark before shipping
+oxirs benchmark run dev-kg --suite sp2bench --detailed
 ```
 
 ## Performance
@@ -588,17 +576,17 @@ oxirs deploy --dataset dev.oxirs --target staging --config deploy.yaml
 ### Optimization Tips
 
 ```bash
-# Use streaming for large files
-oxirs import --file large-dataset.nt --stream --chunk-size 100000
+# Bulk-load large files directly into TDB storage
+oxirs tdb-loader mydata large-dataset.nt --progress --stats
 
-# Enable parallel processing
-oxirs export --dataset large.oxirs --parallel --workers 8
+# Analyze a query before running it at scale
+oxirs explain mydata query.sparql --file --mode full
 
-# Use binary format for faster loading
-oxirs convert --input data.ttl --output data.oxirs --optimize
+# Stream large result sets instead of buffering them
+oxirs stream query --dataset mydata --query query.sparql --file --chunk-size 50000
 
-# Compress datasets
-oxirs compress --dataset data.oxirs --algorithm zstd --level 3
+# Compact TDB storage after heavy write workloads
+oxirs tdb-compact mydata
 ```
 
 ## Troubleshooting
@@ -606,37 +594,32 @@ oxirs compress --dataset data.oxirs --algorithm zstd --level 3
 ### Common Issues
 
 ```bash
-# Debug mode
-oxirs --debug query --dataset mydata.oxirs --query query.sparql
+# Verbose output for diagnosing failures
+oxirs --verbose import mydata problematic-data.ttl --format turtle
 
-# Verbose output
-oxirs --verbose import --file problematic-data.ttl
+# Validate a query's syntax before debugging further
+oxirs q-parse query.sparql --file --print-ast
 
-# Check dataset integrity
-oxirs check --dataset mydata.oxirs --repair
-
-# Memory profiling
-oxirs --profile-memory query --dataset large.oxirs --query complex-query.sparql
+# Check dataset statistics/health
+oxirs tdb-stats mydata --detailed
 ```
 
-### Error Recovery
+### Recovery
 
 ```bash
-# Recover corrupted dataset
-oxirs recover --dataset corrupted.oxirs --output recovered.oxirs
+# Point-in-time recovery from transaction logs (requires `oxirs pitr init` beforehand)
+oxirs pitr list mydata
+oxirs pitr recover-timestamp mydata 2026-07-01T00:00:00Z restored/
 
-# Validate and repair
-oxirs validate --dataset mydata.oxirs --repair --backup
-
-# Restore from backup
-oxirs restore --backup backup.tar.gz --output restored.oxirs
+# Restore from a tdb-backup archive by pointing tdb-loader at the extracted backup
+oxirs tdb-loader restored-mydata /path/to/extracted-backup/*.nq
 ```
 
 ## Related Tools
 
 - [`oxirs-fuseki`](../../server/oxirs-fuseki/): SPARQL HTTP server
 - [`oxirs-chat`](../../ai/oxirs-chat/): AI-powered chat interface
-- [`oxirs-workbench`](../workbench/): Visual RDF editor
+- [`oxirs-tauri`](../../desktop/oxirs-tauri/): Desktop GUI (chat, visual SPARQL builder, CAN bus monitor)
 - Apache Jena: Java-based semantic web toolkit
 - RDFLib: Python RDF processing library
 
@@ -652,7 +635,7 @@ oxirs restore --backup backup.tar.gz --output restored.oxirs
 
 Licensed under:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](../../LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- Apache License, Version 2.0 ([LICENSE](../../LICENSE) or http://www.apache.org/licenses/LICENSE-2.0)
 
 ---
 
@@ -674,27 +657,28 @@ oxirs serve mydata --port 3030                 # Start server
 oxirs serve mydata --graphql                   # With GraphQL
 
 # Format Conversion
-oxirs migrate --source data.ttl --target data.nt --from turtle --to ntriples
+oxirs migrate format data.ttl data.nt --from turtle --to ntriples
 
 # Validation
-oxirs rdfparse file.ttl -f turtle              # Validate syntax
+oxirs rdf-parse file.ttl -f turtle             # Validate syntax
+oxirs shacl --dataset mydata --shapes shapes.ttl --format text
 
 # Analysis
 oxirs explain mydata query.sparql --file       # Query analysis
-oxirs tdbstats mydata --detailed               # Dataset statistics
+oxirs tdb-stats mydata --detailed              # Dataset statistics
 ```
 
 ### Performance Tips
 
 **For Large Datasets (>1M triples)**:
-- Use batch import with parallel processing: `oxirs batch import --dataset mydata --files *.nt --parallel 8`
-- Use TDB loader for bulk loading: `oxirs tdbloader mydata *.nt --progress --stats`
-- Stream large exports: `oxirs export mydata output.nq --format nquads | gzip > output.nq.gz`
+- Use the TDB bulk loader: `oxirs tdb-loader mydata *.nt --progress --stats`
+- Compact storage after large write batches: `oxirs tdb-compact mydata`
+- Stream large query results instead of buffering: `oxirs stream query --dataset mydata --query q.sparql --file`
 
 **For Query Performance**:
 - Analyze queries before execution: `oxirs explain mydata query.sparql --file --mode full`
 - Use appropriate output format (JSON for programmatic use, table for humans)
-- Enable query caching for repeated queries
+- Check `oxirs performance advisor` and `oxirs profile run` for optimization suggestions
 
 ### Troubleshooting
 
@@ -703,19 +687,19 @@ oxirs tdbstats mydata --detailed               # Dataset statistics
 | "Dataset not found" | Run `oxirs init <name>` first to create the dataset |
 | "Format not recognized" | Specify format explicitly with `--format` flag |
 | "Permission denied" | Check directory permissions with `chmod 755 <dir>` |
-| "Port already in use" | Use different port with `--port <num>` |
-| "Out of memory" | Use streaming operations or increase batch size |
-| "Invalid SPARQL syntax" | Use `oxirs qparse` to validate query syntax |
+| "Port already in use" | Use a different port with `--port <num>` |
+| "Dataset directory already exists" | `oxirs init` refuses to overwrite; choose a new name or remove the old directory |
+| "Invalid SPARQL syntax" | Use `oxirs q-parse` to validate query syntax before running it |
 
 **Debug Mode**:
 ```bash
 # Enable verbose logging
 oxirs --verbose query mydata "SELECT * WHERE {?s ?p ?o}"
 
-# Debug specific modules
+# Debug specific modules via tracing-subscriber's env filter
 RUST_LOG=oxirs_core=debug,oxirs_arq=trace oxirs query mydata query.sparql
 ```
 
 ---
 
-**OxiRS CLI v0.3.1** - Production-ready command-line interface for semantic web operations
+**OxiRS CLI v0.3.2** - Production-ready command-line interface for semantic web operations

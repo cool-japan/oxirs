@@ -10,9 +10,9 @@
 //!
 //! - [`node_expr_types`](super::node_expr_types) – AST, RDF term, property
 //!   path, graph trait, in-memory graph, config / stats / errors, and the
-//!   [`ExprBuilder`](super::node_expr_types::ExprBuilder) fluent API.
+//!   [`ExprBuilder`] fluent API.
 //! - [`node_expr_evaluator`](super::node_expr_evaluator) –
-//!   [`NodeExprEvaluator`](super::node_expr_evaluator::NodeExprEvaluator) and
+//!   [`NodeExprEvaluator`] and
 //!   evaluation control flow.
 //! - [`node_expr_builtins`](super::node_expr_builtins) – built-in function
 //!   implementations (sh:strlen, sh:concat, sh:sum) and registration helper.

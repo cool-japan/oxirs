@@ -1,13 +1,14 @@
 # OxiRS Stream - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Current Status
 
-OxiRS Stream v0.3.1 is production-ready, providing enterprise-grade real-time RDF streaming with advanced windowing, backpressure management, and ML integration.
+OxiRS Stream v0.3.2 is production-ready, providing enterprise-grade real-time RDF streaming with advanced windowing, backpressure management, and ML integration.
 
 ### Production Features
-- ✅ **Multiple Backends** - Kafka, NATS, Redis, Kinesis, Pulsar, RabbitMQ support
+- ✅ **Multiple Backends** - MQTT 5.0/3.1.1, NATS JetStream, Redis Streams, AWS Kinesis, RabbitMQ in-tree; Kafka and Pulsar via the separate `oxirs-stream-adapter-{rdkafka,pulsar}` crates (`publish = false`, Pure Rust Policy v2 quarantine)
+- ✅ **MQTT 5.0 Property Codec** - `backend::mqtt::properties` encode/decode for PUBLISH-relevant properties (Payload Format Indicator, Message Expiry Interval, Content Type, Response Topic, Correlation Data, Subscription Identifier, Topic Alias, repeatable User Properties), wired into `MqttClient::parse_properties_from_bytes()`
 - ✅ **Advanced Operators** - 20+ stream operators (filter, map, aggregate, join, window)
 - ✅ **ML Integration** - Online learning, anomaly detection, AutoML, reinforcement learning
 - ✅ **Advanced Sampling** - Reservoir, stratified, HyperLogLog, Count-Min Sketch, T-Digest, Bloom filters
@@ -17,8 +18,9 @@ OxiRS Stream v0.3.1 is production-ready, providing enterprise-grade real-time RD
 - ✅ **Data Quality Framework** - Validation, profiling, anomaly detection
 - ✅ **Developer Tools** - Visual designer, code generation, Jupyter integration
 - ✅ **Production Hardening** - Security, monitoring, disaster recovery, multi-tenancy
+- ✅ **OTLP Observability** - `MonitoringConfig.otlp_endpoint` (env `OTEL_EXPORTER_OTLP_ENDPOINT`), replacing the deprecated `opentelemetry-jaeger` exporter
 - ✅ **Quantum & Edge Computing** - Quantum optimization, WASM edge deployment
-- ✅ **1505 tests passing** with zero warnings
+- ✅ **1735 tests passing** (`--all-features`) with zero warnings
 
 ### Key Performance Metrics
 - Throughput: 100K+ events/sec
@@ -48,7 +50,7 @@ OxiRS Stream v0.3.1 is production-ready, providing enterprise-grade real-time RD
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ Kafka/NATS/Redis/Kinesis/Pulsar/RabbitMQ backends, 20+ operators, ML integration
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Advanced windowing (session, tumbling, sliding windows)
 - ✅ Backpressure and adaptive load shedding
 - ✅ Stream optimization (operator fusion, parallel processing)
@@ -101,10 +103,24 @@ OxiRS Stream v0.3.1 is production-ready, providing enterprise-grade real-time RD
   - **Tests:** unit per-stream rate/lag/jitter math; integration multi-tenant stream simulator (Bronze drains fast, Platinum sustains; lag rejects; jitter rejects; coordinator-precedence test).
   - **Risk:** SLA-vs-backpressure interaction edge cases. Mitigation: coordinator short-circuits the shedder when admission rejects; integration test asserts the precedence.
 
+### v0.3.2 - Current Release (July 12, 2026)
+- [x] MQTT 5.0 property codec (`backend::mqtt::properties`) — VarInt-framed encode/decode for the
+  PUBLISH-relevant property set (Payload Format Indicator, Message Expiry Interval, Content Type,
+  Response Topic, Correlation Data, Subscription Identifier, Topic Alias, repeatable User
+  Properties), wired into `MqttClient::parse_properties_from_bytes()` for v4/v5 bridge scenarios
+- [x] `MonitoringConfig.otlp_endpoint` renamed from `jaeger_endpoint` (env var
+  `OTEL_EXPORTER_JAEGER_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT`), dropping the deprecated
+  `opentelemetry-jaeger` exporter in favor of OTLP
+- [x] Kafka/Pulsar backends quarantined out of the default build (COOLJAPAN Pure Rust Policy v2):
+  the `kafka`/`pulsar` Cargo features and their `rdkafka`/`pulsar` dependencies were removed from
+  this crate; the former in-tree implementations moved verbatim to the `publish = false`
+  `oxirs-stream-adapter-rdkafka` / `oxirs-stream-adapter-pulsar` crates
+- [x] 1735 tests passing (`--all-features`), zero warnings
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Stream v0.3.1 - Enterprise-grade real-time RDF streaming with advanced windowing*
+*OxiRS Stream v0.3.2 - Enterprise-grade real-time RDF streaming with advanced windowing*

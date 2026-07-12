@@ -79,7 +79,7 @@ impl PyVectorStore {
             }
         };
 
-        let _index_type = match index_type {
+        let index_type = match index_type {
             "memory" => IndexType::Flat,
             "hnsw" => IndexType::Hnsw,
             "ivf" => IndexType::Ivf,
@@ -92,10 +92,30 @@ impl PyVectorStore {
             }
         };
 
-        // For now, ignore index_type - just create with embedding strategy
-        // TODO: Properly handle index_type by creating appropriate index
-        let store = VectorStore::with_embedding_strategy(strategy)
-            .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
+        let store = match index_type {
+            IndexType::Flat => VectorStore::with_embedding_strategy(strategy)
+                .map_err(|e| VectorSearchError::new_err(e.to_string()))?,
+            IndexType::Hnsw => {
+                let config = crate::index::IndexConfig {
+                    index_type: IndexType::Hnsw,
+                    ..crate::index::IndexConfig::default()
+                };
+                let index = Box::new(crate::index::AdvancedVectorIndex::new(config));
+                VectorStore::with_index_and_embeddings(index, strategy)
+                    .map_err(|e| VectorSearchError::new_err(e.to_string()))?
+            }
+            IndexType::Ivf => {
+                let config = crate::index::IndexConfig {
+                    index_type: IndexType::Ivf,
+                    ..crate::index::IndexConfig::default()
+                };
+                let index = Box::new(crate::index::AdvancedVectorIndex::new(config));
+                VectorStore::with_index_and_embeddings(index, strategy)
+                    .map_err(|e| VectorSearchError::new_err(e.to_string()))?
+            }
+            IndexType::PQ => VectorStore::with_embedding_strategy(strategy)
+                .map_err(|e| VectorSearchError::new_err(e.to_string()))?,
+        };
 
         Ok(PyVectorStore {
             store: Arc::new(RwLock::new(store)),
@@ -835,16 +855,14 @@ impl PyJupyterVectorTools {
             if let Some(vector1) = store.get_vector(id1) {
                 for id2 in &vector_ids {
                     if let Some(vector2) = store.get_vector(id2) {
-                        let similarity = match similarity_metric {
-                            SimilarityMetric::Cosine => crate::similarity::cosine_similarity(
-                                &vector1.as_f32(),
-                                &vector2.as_f32(),
-                            ),
-                            _ => crate::similarity::cosine_similarity(
-                                &vector1.as_f32(),
-                                &vector2.as_f32(),
-                            ), // TODO: implement other metrics
-                        };
+                        let similarity = similarity_metric
+                            .similarity(&vector1.as_f32(), &vector2.as_f32())
+                            .unwrap_or_else(|_| {
+                                crate::similarity::cosine_similarity(
+                                    &vector1.as_f32(),
+                                    &vector2.as_f32(),
+                                )
+                            });
                         row.push(similarity);
                     } else {
                         row.push(0.0);

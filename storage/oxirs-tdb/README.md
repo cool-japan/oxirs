@@ -1,10 +1,10 @@
 # OxiRS TDB - High-Performance RDF Storage Engine
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12 (2106 tests passing)
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -18,6 +18,15 @@ A high-performance, ACID-compliant RDF storage engine with multi-version concurr
 - **B+ Tree Indexing**: Six standard RDF indices (SPO, POS, OSP, SOP, PSO, OPS)
 - **Advanced Page Management**: LRU buffer pools with efficient memory management
 - **Crash Recovery**: ARIES-style write-ahead logging with analysis/redo/undo phases
+
+### Distributed Transactions & Fault Tolerance
+- **Two-Phase & Three-Phase Commit**: `TwoPhaseParticipant`/`ThreePhaseParticipant` can be constructed via `with_transaction_manager()` so PREPARE/COMMIT/ABORT drive a real WAL-backed `Transaction`, not just protocol bookkeeping
+- **Saga Pattern**: `SagaOrchestrator` plus a `SagaCallbackRegistry` runs real registered forward-action/compensation callbacks per step, with automatic reverse-order compensation when a step fails
+- **Distributed Deadlock Detection**: wait-for graph cycle detection with four victim-selection strategies — `YoungestTransaction`, `OldestTransaction`, `LeastWork` (fewest outstanding wait-for edges), and `Random`
+- **Paxos Consensus**: `consensus::paxos` for coordinator agreement, alongside 2PC/3PC
+- **Replication Manager**: master-slave and master-master replication with async/sync modes
+
+  *The coordinator/participant/saga engines are an in-process protocol state machine — network transport across real nodes is provided by integration layers such as `oxirs-cluster`.*
 
 ### Performance & Scalability
 - **High Throughput**: Designed for 100M+ triples with sub-second query response
@@ -61,81 +70,58 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-tdb = "0.3.1"
+oxirs-tdb = "0.3.2"
 ```
 
 ### Basic Usage
 
 ```rust
-use oxirs_tdb::{TdbStore, TdbConfig};
-use oxirs_core::{Triple, Quad, Term};
+use oxirs_tdb::TdbStore;
 
-// Create a new TDB store
-let config = TdbConfig::new()
-    .with_directory("./data/tdb")
-    .with_cache_size(1024 * 1024 * 1024) // 1GB cache
-    .with_sync_mode(true);
+// Open (or create) a TDB store at a directory
+let mut store = TdbStore::open("./data/tdb")?;
 
-let mut store = TdbStore::new(config)?;
-
-// Start a transaction
-let mut txn = store.begin_transaction()?;
-
-// Insert triples
-let subject = Term::iri("http://example.org/subject")?;
-let predicate = Term::iri("http://example.org/predicate")?;
-let object = Term::literal("Hello, World!")?;
-
-let triple = Triple::new(subject, predicate, object);
-txn.insert_triple(&triple)?;
-
-// Commit transaction
-txn.commit()?;
-
-// Query data
-let results = store.query_pattern(
-    Some(&subject),
-    Some(&predicate),
-    None
+// Insert a triple (string-based convenience API)
+store.insert(
+    "http://example.org/subject",
+    "http://example.org/predicate",
+    "Hello, World!",
 )?;
 
-for triple in results {
-    println!("{}", triple);
+// Query by pattern (any of subject/predicate/object may be `None` as a wildcard)
+let results = store.query_triples(None, None, None)?;
+for (subject, predicate, object) in results {
+    println!("{subject} {predicate} {object}");
 }
+
+println!("{} triples stored", store.count());
 ```
 
 ### Advanced Usage
 
 ```rust
-use oxirs_tdb::{TdbStore, TdbConfig, TransactionOptions};
+use oxirs_core::model::{NamedNode, Term};
+use oxirs_tdb::{TdbConfig, TdbStore};
 
 // Configure with advanced options
-let config = TdbConfig::new()
-    .with_directory("./data/tdb")
-    .with_cache_size(2 * 1024 * 1024 * 1024) // 2GB cache
-    .with_page_size(8192) // 8KB pages
-    .with_wal_enabled(true)
-    .with_checkpoint_interval(Duration::from_secs(300))
-    .with_mvcc_enabled(true);
+let config = TdbConfig::new("./data/tdb")
+    .with_buffer_pool_size(2000) // pages kept in the buffer pool
+    .with_compression(true)
+    .with_bloom_filters(true)
+    .with_statistics(true);
 
-let store = TdbStore::new(config)?;
+let mut store = TdbStore::open_with_config(config)?;
 
-// Use transactions with options
-let txn_options = TransactionOptions::new()
-    .with_isolation_level(IsolationLevel::Snapshot)
-    .with_timeout(Duration::from_secs(30));
+// Bulk insert using Term-typed triples
+let subject = Term::NamedNode(NamedNode::new("http://example.org/subject")?);
+let predicate = Term::NamedNode(NamedNode::new("http://example.org/predicate")?);
+let object = Term::NamedNode(NamedNode::new("http://example.org/object")?);
+store.insert_triples_bulk(&[(subject.clone(), predicate.clone(), object)])?;
 
-let mut txn = store.begin_transaction_with_options(txn_options)?;
-
-// Bulk insert
-let triples = vec![
-    Triple::new(/* ... */),
-    Triple::new(/* ... */),
-    // ... more triples
-];
-
-txn.insert_triples_batch(&triples)?;
-txn.commit()?;
+// Explicit WAL-backed transaction (governs locking; mutate via the store API
+// while it is active, then hand the transaction back to commit/abort it)
+let txn = store.begin_transaction()?;
+store.commit_transaction(txn)?;
 ```
 
 ## Configuration
@@ -143,27 +129,19 @@ txn.commit()?;
 ### TdbConfig Options
 
 ```rust
-let config = TdbConfig::new()
-    // Storage location
-    .with_directory("./data/tdb")
-    
+let config = TdbConfig::new("./data/tdb")
     // Memory management
-    .with_cache_size(1_073_741_824) // 1GB
-    .with_page_size(8192)           // 8KB pages
-    
-    // Transaction settings
-    .with_mvcc_enabled(true)
-    .with_wal_enabled(true)
-    .with_checkpoint_interval(Duration::from_secs(300))
-    
-    // Performance tuning
-    .with_sync_mode(true)
-    .with_compression_enabled(true)
-    .with_statistics_enabled(true)
-    
-    // Concurrency
-    .with_max_concurrent_transactions(1000)
-    .with_deadlock_detection_enabled(true);
+    .with_buffer_pool_size(2000) // number of pages kept in the buffer pool
+
+    // Storage engine features
+    .with_compression(true)
+    .with_bloom_filters(true)
+    .with_spatial_indexing(true) // GeoSPARQL support
+
+    // Query features
+    .with_query_cache(true)
+    .with_statistics(true)
+    .with_query_monitoring(true);
 ```
 
 ## Testing
@@ -196,11 +174,11 @@ cargo nextest run --no-fail-fast --release -- --ignored
 ### Benchmark Results
 
 ```bash
-# Run benchmarks
-cargo bench
+# Run all benchmarks (bloom_filter_benchmark, storage_bench)
+cargo bench -p oxirs-tdb
 
-# Profile with specific datasets
-cargo run --release --bin tdb-benchmark -- --dataset large --queries complex
+# Run a specific benchmark
+cargo bench -p oxirs-tdb --bench storage_bench
 ```
 
 ## Development
@@ -226,19 +204,22 @@ cargo fmt --all
 ```
 oxirs-tdb/
 ├── src/
-│   ├── lib.rs              # Public API
-│   ├── assembler.rs        # Low-level operations
-│   ├── nodes.rs            # Node table implementation
-│   ├── page.rs             # Page management
-│   ├── triple_store.rs     # Triple storage engine
-│   └── wal/                # Write-ahead logging
-│       ├── mod.rs
-│       ├── recovery.rs
-│       └── log.rs
-├── tests/                  # Integration tests
-├── benches/               # Performance benchmarks
+│   ├── lib.rs             # Public API surface
+│   ├── store/             # TdbStore, TdbConfig, TdbStats
+│   ├── transaction/       # WAL, lock manager, 2PC, 3PC, group commit
+│   ├── distributed/       # Coordinator, saga, deadlock detector, replication
+│   ├── consensus/         # Paxos
+│   ├── btree/, btree_index.rs         # B+ tree storage engine
+│   ├── index/, six_index_store.rs     # SPO/POS/OSP/SOP/PSO/OPS indices
+│   ├── dictionary/        # Term dictionary / interning
+│   ├── storage/           # Page & buffer pool management
+│   ├── tdb2/              # TDB2-parity node table & triple index
+│   ├── mvcc/              # Snapshot isolation
+│   └── recovery.rs, backup.rs, wal_archive.rs, ...  # Crash recovery & backup
+├── tests/                 # Integration tests
+├── benches/               # bloom_filter_benchmark, storage_bench
 ├── examples/              # Usage examples
-└── data/                  # Test datasets
+└── docs/                  # BENCHMARK_RESULTS.md, etc.
 ```
 
 ### Contributing
@@ -262,52 +243,55 @@ OxiRS TDB provides feature parity with Apache Jena TDB2:
 - ✅ Write-ahead logging for crash recovery
 - ✅ Statistics collection for query optimization
 
-### Migration from TDB2
+### TDB2-Compatible Storage
 
-```rust
-// Convert TDB2 database to OxiRS TDB
-use oxirs_tdb::migration::tdb2_converter;
+`oxirs_tdb::tdb2` provides a TDB2-parity node table and triple index (BNode ID
+interning, prefix compression) for workloads that need on-disk semantics
+equivalent to Apache Jena's TDB2 layer via `tdb2::Tdb2Database`.
 
-let converter = tdb2_converter::Tdb2Converter::new()
-    .with_source_directory("./jena-tdb2-data")
-    .with_target_directory("./oxirs-tdb-data");
-
-converter.convert()?;
-```
+Note: this is an OxiRS-native TDB2-compatible storage layer, not a bundled
+converter for existing Apache Jena TDB2 database files — there is currently no
+`migration` module.
 
 ## Troubleshooting
 
 ### Common Issues
 
 **Q: Database corruption after crash**
-A: Run the recovery tool:
-```bash
-cargo run --bin tdb-recovery -- --database ./data/tdb --verify
+A: Use the store's built-in recovery API:
+```rust
+let store = TdbStore::open("./data/tdb")?;
+let recovery_report = store.recover()?;
+let corruption_report = store.detect_corruption()?;
+store.verify_indexes()?;
 ```
 
 **Q: Poor query performance**
-A: Check statistics and indices:
-```bash
-cargo run --bin tdb-analyze -- --database ./data/tdb --verbose
+A: Inspect statistics and slow-query history:
+```rust
+let stats = store.enhanced_stats();
+let slow_queries = store.slow_query_history();
 ```
 
 **Q: High memory usage**
-A: Adjust cache size in configuration:
+A: Reduce the buffer pool size in configuration:
 ```rust
-let config = TdbConfig::new()
-    .with_cache_size(512 * 1024 * 1024) // Reduce to 512MB
-    .with_page_size(4096);               // Smaller pages
+let config = TdbConfig::new("./data/tdb")
+    .with_buffer_pool_size(256); // fewer pages kept resident
 ```
 
 ### Debug Mode
 
-Enable debug logging:
+Enable debug logging and run a deep diagnostic pass:
 
 ```rust
-env_logger::init();
-let config = TdbConfig::new()
-    .with_debug_mode(true)
-    .with_statistics_enabled(true);
+tracing_subscriber::fmt()
+    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    .init();
+
+let config = TdbConfig::new("./data/tdb").with_statistics(true);
+let store = TdbStore::open_with_config(config)?;
+let report = store.run_deep_diagnostics();
 ```
 
 ## License

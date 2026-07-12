@@ -186,9 +186,9 @@ pub enum QueryComplexity {
 /// Validation complexity levels
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationComplexity {
-    Basic,      // Simple constraints
-    Moderate,   // Logical constraints
-    Complex,    // SPARQL constraints
+    Basic,       // Simple constraints
+    Moderate,    // Logical constraints
+    Complex,     // SPARQL constraints
     VeryComplex, // Deep nesting, custom components
 }
 
@@ -540,7 +540,7 @@ impl OxirsPerformanceBenchmarkSuite {
             stats_analyzer: StatisticalAnalyzer::new(StatisticsConfig::default()),
             regression_detector: RegressionDetector::new(
                 RegressionDetectionConfig::default(),
-                RegressionThresholds::default()
+                RegressionThresholds::default(),
             ),
         }
     }
@@ -788,26 +788,24 @@ impl OxirsPerformanceBenchmarkSuite {
 
     /// Add RDF-star module benchmarks
     fn add_star_benchmarks(&mut self) -> Result<()> {
-        let scenarios = vec![
-            BenchmarkScenario {
-                name: "quoted_triple_parsing".to_string(),
-                description: "RDF-star quoted triple parsing performance".to_string(),
-                setup_fn: "setup_star_data".to_string(),
-                benchmark_fn: "benchmark_star_parsing".to_string(),
-                expected_performance: ExpectedPerformance {
-                    execution_time_range: (Duration::from_millis(1), Duration::from_millis(100)),
-                    memory_usage_range: (1024 * 1024, 50 * 1024 * 1024),
-                    throughput_range: (100.0, 10000.0),
-                    max_error_rate: 0.001,
-                },
-                resource_requirements: ResourceRequirements {
-                    memory_mb: 100,
-                    cpu_cores: 1,
-                    disk_space_mb: 50,
-                    network_bandwidth: None,
-                },
+        let scenarios = vec![BenchmarkScenario {
+            name: "quoted_triple_parsing".to_string(),
+            description: "RDF-star quoted triple parsing performance".to_string(),
+            setup_fn: "setup_star_data".to_string(),
+            benchmark_fn: "benchmark_star_parsing".to_string(),
+            expected_performance: ExpectedPerformance {
+                execution_time_range: (Duration::from_millis(1), Duration::from_millis(100)),
+                memory_usage_range: (1024 * 1024, 50 * 1024 * 1024),
+                throughput_range: (100.0, 10000.0),
+                max_error_rate: 0.001,
             },
-        ];
+            resource_requirements: ResourceRequirements {
+                memory_mb: 100,
+                cpu_cores: 1,
+                disk_space_mb: 50,
+                network_bandwidth: None,
+            },
+        }];
 
         let config = ModuleSpecificConfig::StarConfig {
             nesting_depths: vec![1, 2, 5, 10, 20],
@@ -833,26 +831,24 @@ impl OxirsPerformanceBenchmarkSuite {
 
     /// Add rule engine benchmarks
     fn add_rule_benchmarks(&mut self) -> Result<()> {
-        let scenarios = vec![
-            BenchmarkScenario {
-                name: "forward_chaining".to_string(),
-                description: "Forward chaining reasoning performance".to_string(),
-                setup_fn: "setup_rule_base".to_string(),
-                benchmark_fn: "benchmark_forward_chaining".to_string(),
-                expected_performance: ExpectedPerformance {
-                    execution_time_range: (Duration::from_millis(10), Duration::from_secs(10)),
-                    memory_usage_range: (10 * 1024 * 1024, 1000 * 1024 * 1024),
-                    throughput_range: (1.0, 1000.0),
-                    max_error_rate: 0.001,
-                },
-                resource_requirements: ResourceRequirements {
-                    memory_mb: 1000,
-                    cpu_cores: 4,
-                    disk_space_mb: 500,
-                    network_bandwidth: None,
-                },
+        let scenarios = vec![BenchmarkScenario {
+            name: "forward_chaining".to_string(),
+            description: "Forward chaining reasoning performance".to_string(),
+            setup_fn: "setup_rule_base".to_string(),
+            benchmark_fn: "benchmark_forward_chaining".to_string(),
+            expected_performance: ExpectedPerformance {
+                execution_time_range: (Duration::from_millis(10), Duration::from_secs(10)),
+                memory_usage_range: (10 * 1024 * 1024, 1000 * 1024 * 1024),
+                throughput_range: (1.0, 1000.0),
+                max_error_rate: 0.001,
             },
-        ];
+            resource_requirements: ResourceRequirements {
+                memory_mb: 1000,
+                cpu_cores: 4,
+                disk_space_mb: 500,
+                network_bandwidth: None,
+            },
+        }];
 
         let config = ModuleSpecificConfig::RuleConfig {
             rule_counts: vec![10, 50, 100, 500, 1000],
@@ -879,26 +875,24 @@ impl OxirsPerformanceBenchmarkSuite {
 
     /// Add core module benchmarks
     fn add_core_benchmarks(&mut self) -> Result<()> {
-        let scenarios = vec![
-            BenchmarkScenario {
-                name: "rdf_parsing".to_string(),
-                description: "Core RDF parsing performance".to_string(),
-                setup_fn: "setup_rdf_data".to_string(),
-                benchmark_fn: "benchmark_rdf_parsing".to_string(),
-                expected_performance: ExpectedPerformance {
-                    execution_time_range: (Duration::from_millis(1), Duration::from_millis(50)),
-                    memory_usage_range: (1024 * 1024, 20 * 1024 * 1024),
-                    throughput_range: (1000.0, 100000.0),
-                    max_error_rate: 0.001,
-                },
-                resource_requirements: ResourceRequirements {
-                    memory_mb: 50,
-                    cpu_cores: 1,
-                    disk_space_mb: 25,
-                    network_bandwidth: None,
-                },
+        let scenarios = vec![BenchmarkScenario {
+            name: "rdf_parsing".to_string(),
+            description: "Core RDF parsing performance".to_string(),
+            setup_fn: "setup_rdf_data".to_string(),
+            benchmark_fn: "benchmark_rdf_parsing".to_string(),
+            expected_performance: ExpectedPerformance {
+                execution_time_range: (Duration::from_millis(1), Duration::from_millis(50)),
+                memory_usage_range: (1024 * 1024, 20 * 1024 * 1024),
+                throughput_range: (1000.0, 100000.0),
+                max_error_rate: 0.001,
             },
-        ];
+            resource_requirements: ResourceRequirements {
+                memory_mb: 50,
+                cpu_cores: 1,
+                disk_space_mb: 25,
+                network_bandwidth: None,
+            },
+        }];
 
         let config = ModuleSpecificConfig::CoreConfig {
             operation_types: vec![
@@ -927,7 +921,12 @@ impl OxirsPerformanceBenchmarkSuite {
         self.cross_module_benchmarks.push(CrossModuleBenchmark {
             name: "knowledge_graph_workflow".to_string(),
             description: "End-to-end knowledge graph processing workflow".to_string(),
-            modules: vec![ModuleId::Core, ModuleId::Vec, ModuleId::Arq, ModuleId::Shacl],
+            modules: vec![
+                ModuleId::Core,
+                ModuleId::Vec,
+                ModuleId::Arq,
+                ModuleId::Shacl,
+            ],
             workflow_steps: vec![
                 WorkflowStep {
                     name: "data_ingestion".to_string(),
@@ -1016,7 +1015,9 @@ impl OxirsPerformanceBenchmarkSuite {
 
         // Run module benchmarks
         for (module_id, module_benchmark) in &self.module_benchmarks {
-            let module_results = self.run_module_benchmarks(*module_id, module_benchmark).await?;
+            let module_results = self
+                .run_module_benchmarks(*module_id, module_benchmark)
+                .await?;
             results.extend(module_results);
         }
 
@@ -1210,7 +1211,10 @@ impl OxirsPerformanceBenchmarkSuite {
     }
 
     /// Detect performance regressions
-    async fn detect_regressions(&self, results: &[BenchmarkResult]) -> Result<Vec<RegressionAlert>> {
+    async fn detect_regressions(
+        &self,
+        results: &[BenchmarkResult],
+    ) -> Result<Vec<RegressionAlert>> {
         self.regression_detector.detect(results).await
     }
 
@@ -1224,7 +1228,11 @@ impl OxirsPerformanceBenchmarkSuite {
                 result.scenario.clone(),
             );
 
-            history.history.entry(key).or_insert_with(Vec::new).push(result.clone());
+            history
+                .history
+                .entry(key)
+                .or_insert_with(Vec::new)
+                .push(result.clone());
         }
 
         Ok(())
@@ -1235,7 +1243,9 @@ impl OxirsPerformanceBenchmarkSuite {
         Ok(SystemInfo {
             os: std::env::consts::OS.to_string(),
             cpu_model: "Unknown CPU".to_string(), // Would use system APIs in real implementation
-            cpu_cores: num_cpus::get(),
+            cpu_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             total_memory: 16 * 1024 * 1024 * 1024, // Placeholder
             available_memory: 8 * 1024 * 1024 * 1024, // Placeholder
             rust_version: env!("RUSTC_VERSION").to_string(),
@@ -1246,18 +1256,11 @@ impl OxirsPerformanceBenchmarkSuite {
     /// Export benchmark results
     pub fn export_results(&self, report: &BenchmarkReport) -> Result<String> {
         match self.config.output_format {
-            BenchmarkOutputFormat::Json => {
-                serde_json::to_string_pretty(report).map_err(|e| anyhow!("JSON export failed: {}", e))
-            }
-            BenchmarkOutputFormat::Html => {
-                self.generate_html_report(report)
-            }
-            BenchmarkOutputFormat::Csv => {
-                self.generate_csv_report(report)
-            }
-            BenchmarkOutputFormat::Prometheus => {
-                self.generate_prometheus_metrics(report)
-            }
+            BenchmarkOutputFormat::Json => serde_json::to_string_pretty(report)
+                .map_err(|e| anyhow!("JSON export failed: {}", e)),
+            BenchmarkOutputFormat::Html => self.generate_html_report(report),
+            BenchmarkOutputFormat::Csv => self.generate_csv_report(report),
+            BenchmarkOutputFormat::Prometheus => self.generate_prometheus_metrics(report),
         }
     }
 
@@ -1283,7 +1286,9 @@ impl OxirsPerformanceBenchmarkSuite {
     /// Generate CSV report
     fn generate_csv_report(&self, report: &BenchmarkReport) -> Result<String> {
         let mut csv = String::new();
-        csv.push_str("Module,Scenario,Mean Time (ms),Peak Memory (MB),Throughput (ops/sec),Error Rate\n");
+        csv.push_str(
+            "Module,Scenario,Mean Time (ms),Peak Memory (MB),Throughput (ops/sec),Error Rate\n",
+        );
 
         for result in &report.results {
             csv.push_str(&format!(
@@ -1314,16 +1319,12 @@ impl OxirsPerformanceBenchmarkSuite {
 
             metrics.push_str(&format!(
                 "oxirs_benchmark_memory_usage{{module=\"{}\",scenario=\"{}\"}} {}\n",
-                result.module,
-                result.scenario,
-                result.metrics.memory_usage.peak_usage
+                result.module, result.scenario, result.metrics.memory_usage.peak_usage
             ));
 
             metrics.push_str(&format!(
                 "oxirs_benchmark_throughput{{module=\"{}\",scenario=\"{}\"}} {}\n",
-                result.module,
-                result.scenario,
-                result.metrics.throughput.ops_per_second
+                result.module, result.scenario, result.metrics.throughput.ops_per_second
             ));
         }
 

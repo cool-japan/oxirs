@@ -4,7 +4,7 @@
 //! Supports password-based and keyfile-based encryption for secure backup storage.
 
 use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
+    aead::{Aead, KeyInit},
     Aes256Gcm, Key, Nonce,
 };
 use argon2::{
@@ -47,13 +47,19 @@ pub fn encrypt_backup(
     let mut plaintext = Vec::new();
     source_file.read_to_end(&mut plaintext)?;
 
-    // Generate random nonce (96 bits for GCM)
+    // Generate random nonce (96 bits for GCM). aes-gcm 0.11 removed
+    // AeadCore::generate_nonce and the aead::OsRng re-export; use the same
+    // scirs2-core CSPRNG this file already uses for salt/key material.
+    use scirs2_core::random::rng;
+    use scirs2_core::RngExt;
     let cipher = Aes256Gcm::new(&key);
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let mut nonce_rng = rng();
+    let nonce_bytes: [u8; 12] = std::array::from_fn(|_| nonce_rng.random::<u8>());
+    let nonce = <&Nonce<_>>::from(&nonce_bytes);
 
     // Encrypt data
     let ciphertext = cipher
-        .encrypt(&nonce, plaintext.as_ref())
+        .encrypt(nonce, plaintext.as_ref())
         .map_err(|e| format!("Encryption failed: {}", e))?;
 
     // Create metadata
@@ -66,7 +72,7 @@ pub fn encrypt_backup(
             "Keyfile".to_string()
         },
         salt: salt_b64,
-        nonce: nonce.to_vec(),
+        nonce: nonce_bytes.to_vec(),
         created_at: chrono::Utc::now().to_rfc3339(),
     };
 
@@ -106,7 +112,8 @@ pub fn decrypt_backup(
     if metadata.nonce.len() != 12 {
         return Err("Invalid nonce length".into());
     }
-    let nonce = Nonce::from_slice(&metadata.nonce);
+    let nonce = <&Nonce<_>>::try_from(&metadata.nonce[..])
+        .map_err(|_| "Invalid nonce length".to_string())?;
 
     // Decrypt data
     let cipher = Aes256Gcm::new(&key);
@@ -174,7 +181,8 @@ fn derive_key_from_password(
         return Err("Key derivation produced insufficient bytes".into());
     }
 
-    let key = Key::<Aes256Gcm>::from_slice(&key_bytes[..32]);
+    let key = <&Key<Aes256Gcm>>::try_from(&key_bytes[..32])
+        .map_err(|_| "Invalid derived key length".to_string())?;
     Ok((*key, salt.to_string()))
 }
 
@@ -192,10 +200,11 @@ fn derive_key_from_keyfile(keyfile: &Path) -> Result<Key<Aes256Gcm>, Box<dyn std
         // `ring::digest` implementation. `hash_fixed` is an inherent method on
         // `Sha256`, so the `Hash` trait does not need to be in scope.
         let hash: [u8; 32] = oxicrypto_hash::Sha256.hash_fixed(&key_data);
-        let key = Key::<Aes256Gcm>::from_slice(&hash);
+        let key = <&Key<Aes256Gcm>>::from(&hash);
         Ok(*key)
     } else {
-        let key = Key::<Aes256Gcm>::from_slice(&key_data);
+        let key = <&Key<Aes256Gcm>>::try_from(&key_data[..])
+            .map_err(|_| "Invalid keyfile length".to_string())?;
         Ok(*key)
     }
 }

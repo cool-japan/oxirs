@@ -784,17 +784,26 @@ impl NumaStreamProcessor {
                 num_nodes: 1,
                 nodes: vec![NumaNode {
                     id: 0,
-                    cpus: (0..num_cpus::get()).collect(),
+                    cpus: (0..std::thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or(1))
+                        .collect(),
                     total_memory: 8 * 1024 * 1024 * 1024, // 8GB default
                     free_memory: 4 * 1024 * 1024 * 1024,
                     memory_bandwidth_mbps: 50000,
                     distances: HashMap::from([(0, 10)]),
                     online: true,
                 }],
-                total_cpus: num_cpus::get(),
+                total_cpus: std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1),
                 total_memory: 8 * 1024 * 1024 * 1024,
                 distance_matrix: vec![vec![10]],
-                cpu_to_node: (0..num_cpus::get()).map(|cpu| (cpu, 0)).collect(),
+                cpu_to_node: (0..std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1))
+                    .map(|cpu| (cpu, 0))
+                    .collect(),
             });
         }
 
@@ -983,7 +992,9 @@ impl NumaStreamProcessor {
     }
 
     async fn detect_fallback_topology() -> Result<NumaTopology> {
-        let num_cpus = num_cpus::get();
+        let num_cpus = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
 
         Ok(NumaTopology {
             num_nodes: 1,

@@ -46,7 +46,10 @@ impl Default for PerformanceConfig {
             memory_pool_size: 1024 * 1024 * 10, // 10MB
             enable_zero_copy: true,
             enable_parallel_processing: true,
-            parallel_workers: num_cpus::get().max(1),
+            parallel_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .max(1),
             enable_event_filtering: true,
             enable_compression: true,
             compression_threshold: 1024, // 1KB
@@ -200,7 +203,10 @@ pub enum LoadBalancingStrategy {
 impl Default for ParallelConfig {
     fn default() -> Self {
         Self {
-            worker_threads: num_cpus::get().max(1),
+            worker_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .max(1),
             queue_capacity: 1000,
             enable_work_stealing: true,
             load_balancing: LoadBalancingStrategy::LeastLoaded,

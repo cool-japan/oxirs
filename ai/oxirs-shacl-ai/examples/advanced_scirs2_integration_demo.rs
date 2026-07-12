@@ -131,7 +131,9 @@ async fn demo_parallel_queries() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Example 3: Parallel SPARQL Query Execution ---");
 
     let config = AdvancedSciRS2Config {
-        parallel_workers: num_cpus::get(),
+        parallel_workers: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1),
         enable_profiling: true,
         ..Default::default()
     };
@@ -195,7 +197,7 @@ async fn demo_memory_efficient_processing() -> Result<(), Box<dyn std::error::Er
 
     let start = std::time::Instant::now();
     let mmap = engine
-        .load_large_dataset(test_file.to_str().unwrap())
+        .load_large_dataset(test_file.to_str().expect("path is valid UTF-8"))
         .await?;
     println!(
         "✓ Loaded dataset with memory mapping: {} dimensions",
@@ -263,7 +265,9 @@ async fn demo_configurations() -> Result<(), Box<dyn std::error::Error>> {
     let hp_config = AdvancedSciRS2Config {
         enable_gpu: true,
         enable_simd: true,
-        parallel_workers: num_cpus::get(),
+        parallel_workers: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1),
         memory_limit_mb: 8192,
         ..Default::default()
     };
@@ -283,7 +287,9 @@ async fn demo_configurations() -> Result<(), Box<dyn std::error::Error>> {
     let cpu_config = AdvancedSciRS2Config {
         enable_gpu: false,
         enable_simd: true,
-        parallel_workers: num_cpus::get(),
+        parallel_workers: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1),
         ..Default::default()
     };
 

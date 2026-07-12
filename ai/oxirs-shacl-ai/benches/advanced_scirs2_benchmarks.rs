@@ -161,7 +161,15 @@ fn bench_parallel_scalability(c: &mut Criterion) {
 
     let rt = Runtime::new().unwrap();
 
-    let worker_counts = vec![1, 2, 4, 8, num_cpus::get()];
+    let worker_counts = vec![
+        1,
+        2,
+        4,
+        8,
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1),
+    ];
     let triple_count = 50000;
 
     for workers in worker_counts {
@@ -262,7 +270,9 @@ fn bench_end_to_end_workflow(c: &mut Criterion) {
         let full_config = AdvancedSciRS2Config {
             enable_gpu: true,
             enable_simd: true,
-            parallel_workers: num_cpus::get(),
+            parallel_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             enable_profiling: true,
             enable_metrics: true,
             ..Default::default()

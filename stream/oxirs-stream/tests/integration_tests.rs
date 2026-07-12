@@ -109,7 +109,7 @@ fn create_test_stream_config(backend: StreamBackendType) -> StreamConfig {
             health_check_interval: Duration::from_secs(10),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         },
     }
@@ -253,83 +253,6 @@ mod memory_backend_tests {
         println!("Consumed {received_count} events in {consume_duration:?}");
 
         assert_eq!(received_count, event_count);
-        stream.close().await?;
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-#[cfg(feature = "kafka")]
-mod kafka_backend_tests {
-    use super::*;
-
-    #[tokio::test]
-    #[ignore] // Requires Kafka server
-    async fn test_kafka_backend_integration() -> Result<()> {
-        let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackendType::Kafka {
-            brokers: vec![test_config.kafka_url],
-            security_protocol: None,
-            sasl_config: None,
-        });
-
-        let mut producer = Stream::new(config.clone()).await?;
-        let mut consumer = Stream::new(config).await?;
-
-        // Test round-trip
-        let events = create_test_events(3);
-        for event in &events {
-            producer.publish(event.clone()).await?;
-        }
-
-        // Give some time for messages to be processed
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        let mut received_events = Vec::new();
-        for _ in 0..3 {
-            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(10), consumer.consume()).await
-            {
-                received_events.push(event);
-            }
-        }
-
-        assert_eq!(received_events.len(), 3);
-
-        producer.close().await?;
-        consumer.close().await?;
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore] // Requires Kafka server
-    async fn test_kafka_transaction_support() -> Result<()> {
-        let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackendType::Kafka {
-            brokers: vec![test_config.kafka_url],
-            security_protocol: None,
-            sasl_config: None,
-        });
-
-        let mut stream = Stream::new(config).await?;
-
-        // Test transaction begin/commit
-        stream.begin_transaction().await?;
-
-        let events = create_test_events(2);
-        for event in &events {
-            stream.publish(event.clone()).await?;
-        }
-
-        stream.commit_transaction().await?;
-
-        // Test transaction rollback
-        stream.begin_transaction().await?;
-
-        let rollback_event = create_test_events(1);
-        stream.publish(rollback_event[0].clone()).await?;
-
-        stream.rollback_transaction().await?;
-
         stream.close().await?;
         Ok(())
     }
@@ -496,72 +419,6 @@ mod redis_backend_tests {
         }
 
         assert!(received_count > 0); // Should receive at least some messages
-
-        stream.close().await?;
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-#[cfg(feature = "pulsar")]
-mod pulsar_backend_tests {
-    use super::*;
-
-    #[tokio::test]
-    #[ignore] // Requires Pulsar server
-    async fn test_pulsar_integration() -> Result<()> {
-        let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackendType::Pulsar {
-            service_url: test_config.pulsar_url,
-            auth_config: None,
-        });
-
-        let mut stream = Stream::new(config).await?;
-
-        // Test Pulsar messaging
-        let events = create_test_events(4);
-        for event in &events {
-            stream.publish(event.clone()).await?;
-        }
-
-        let mut received_events = Vec::new();
-        for _ in 0..4 {
-            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(5), stream.consume()).await {
-                received_events.push(event);
-            }
-        }
-
-        assert_eq!(received_events.len(), 4);
-
-        stream.close().await?;
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore] // Requires Pulsar server with auth
-    async fn test_pulsar_authentication() -> Result<()> {
-        let test_config = TestConfig::default();
-        let mut config = create_test_stream_config(StreamBackendType::Pulsar {
-            service_url: test_config.pulsar_url,
-            auth_config: None,
-        });
-
-        // Enable TLS and authentication
-        config.security.enable_tls = true;
-        config.security.sasl_config = Some(SaslConfig {
-            mechanism: SaslMechanism::Plain,
-            username: "test_user".to_string(),
-            password: "test_password".to_string(),
-        });
-
-        let mut stream = Stream::new(config).await?;
-
-        let event = create_test_events(1);
-        stream.publish(event[0].clone()).await?;
-
-        if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(5), stream.consume()).await {
-            // Authentication successful
-        }
 
         stream.close().await?;
         Ok(())
@@ -791,7 +648,7 @@ mod monitoring_integration_tests {
             health_check_interval: Duration::from_millis(200),
             enable_profiling: true,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "debug".to_string(),
         };
 
@@ -851,7 +708,7 @@ mod monitoring_integration_tests {
             health_check_interval: Duration::from_millis(100),
             enable_profiling: false,
             prometheus_endpoint: None,
-            jaeger_endpoint: None,
+            otlp_endpoint: None,
             log_level: "info".to_string(),
         };
 

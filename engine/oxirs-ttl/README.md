@@ -1,12 +1,12 @@
 # OxiRS TTL - RDF Turtle Family Parser & Serializer
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
-[![Tests](https://img.shields.io/badge/tests-1%2C726%20passing-green)](https://github.com/cool-japan/oxirs)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Tests](https://img.shields.io/badge/tests-1%2C779%20passing-green)](https://github.com/cool-japan/oxirs)
 [![Compliance](https://img.shields.io/badge/W3C-97%25%20compliant-brightgreen)](https://www.w3.org/TR/turtle/)
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
-✨ **Production-Ready**: API-stable with comprehensive testing (1,726 tests), W3C compliance, and performance optimizations.
+✨ **Production-Ready**: API-stable with comprehensive testing (1,779 tests), W3C compliance, and performance optimizations.
 
 High-performance parsers and serializers for RDF formats in the Turtle family including Turtle, N-Triples, TriG, N-Quads, and N3. Ported from Oxigraph's oxttl crate with extensive enhancements for OxiRS.
 
@@ -41,10 +41,16 @@ ex:greeting "Hello"@en--ltr .  # Left-to-right
 ex:greeting "مرحبا"@ar--rtl .  # Right-to-left
 ```
 
-Enable with feature flag:
+The `rdf-12` feature is **enabled by default**, so no extra flag is needed:
 ```toml
 [dependencies]
-oxirs-ttl = { version = "0.3.1", features = ["rdf-12"] }
+oxirs-ttl = "0.3.2"
+```
+
+To build without RDF 1.2 support, disable default features and re-enable the ones you need:
+```toml
+[dependencies]
+oxirs-ttl = { version = "0.3.2", default-features = false }
 ```
 
 ### Advanced Features
@@ -65,10 +71,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = "0.3.1"
+oxirs-ttl = "0.3.2"  # rdf-12 (quoted triples, directional language tags) is on by default
 
 # With all features
-oxirs-ttl = { version = "0.3.1", features = ["async-tokio", "parallel", "rdf-12"] }
+oxirs-ttl = { version = "0.3.2", features = ["async-tokio", "parallel"] }
 ```
 
 ## Quick Start
@@ -428,7 +434,7 @@ Measured on Apple M1 with typical RDF datasets:
 
 ### Test Coverage
 
-- **1,726 tests passing** (437 integration + 24 doc tests)
+- **1,779 tests passing**
 - **Property-based testing** with proptest
 - **Memory leak tests** for production safety
 - **Performance regression tests** for baseline tracking
@@ -512,11 +518,16 @@ let config = SerializationConfig::default()
 
 ## Status
 
+### v0.3.2 (Current Release - July 2026) ✅
+
+Maintenance release: no functional/API changes since v0.3.1. Workspace-wide dependency
+modernization (`lazy_static` → `once_cell::sync::Lazy`) and rustdoc intra-doc link fixes.
+
 ### v0.2.3 Release (March 2026) ✅
 
 **Core Features** (100% Complete):
 - ✅ Turtle, TriG, N-Triples, N-Quads parsing & serialization
-- ✅ RDF 1.2: Quoted triples + directional language tags
+- ✅ RDF 1.2: Quoted triples + directional language tags (on by default via the `rdf-12` feature)
 - ✅ Streaming, async I/O, parallel processing
 - ✅ Error recovery with lenient mode
 - ✅ Incremental parsing with checkpointing
@@ -526,7 +537,7 @@ let config = SerializationConfig::default()
 - ✅ Serialization optimizations (predicate grouping, collections)
 - ✅ Fuzzing infrastructure
 - ✅ Memory leak testing
-- ✅ Comprehensive documentation (24 doc tests)
+- ✅ Comprehensive documentation
 
 **Advanced Features** (v0.2.3):
 - ✅ RFC 3987 IRI validation
@@ -535,10 +546,12 @@ let config = SerializationConfig::default()
 - ✅ Profiling & performance metrics
 - ✅ Sample data infrastructure
 
+**Since v0.3.0** (`tests/w3c_compliance.rs`, `tests/w3c_rdf12_compliance_tests.rs`):
+- ✅ W3C RDF 1.1/1.2 conformance test suite (Turtle, N-Triples, N-Quads, TriG, RDF 1.2 quoted triples), vendored under `tests/fixtures/w3c-rdf-tests/`
+
 **Future Work**:
 - 🚧 Full N3 formula parsing
 - 🚧 N3 reasoning primitives
-- 🚧 RDF 1.2 official compliance tests
 
 ## Contributing
 

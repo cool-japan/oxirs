@@ -27,8 +27,8 @@ use crate::StreamEvent;
 pub struct TelemetryConfig {
     /// Enable OpenTelemetry integration
     pub enable_opentelemetry: bool,
-    /// Jaeger endpoint for distributed tracing
-    pub jaeger_endpoint: Option<String>,
+    /// OTLP endpoint for distributed tracing (any OTLP-compatible backend)
+    pub otlp_endpoint: Option<String>,
     /// Prometheus metrics endpoint
     pub prometheus_endpoint: Option<String>,
     /// Custom metrics collection interval
@@ -47,7 +47,7 @@ impl Default for TelemetryConfig {
     fn default() -> Self {
         Self {
             enable_opentelemetry: true,
-            jaeger_endpoint: Some("http://localhost:14268/api/traces".to_string()),
+            otlp_endpoint: Some("http://localhost:4317".to_string()),
             prometheus_endpoint: Some("http://localhost:9090".to_string()),
             metrics_interval: Duration::from_secs(30),
             enable_profiling: false,
@@ -269,7 +269,7 @@ impl StreamObservability {
         // Initialize OpenTelemetry tracer if enabled
         #[cfg(feature = "opentelemetry")]
         let tracer = if config.enable_opentelemetry {
-            Self::setup_jaeger_tracer(&config).ok()
+            Self::setup_otlp_tracer(&config).ok()
         } else {
             None
         };
@@ -294,15 +294,15 @@ impl StreamObservability {
         }
     }
 
-    /// Set up Jaeger tracer for distributed tracing
+    /// Set up OTLP tracer for distributed tracing
     #[cfg(feature = "opentelemetry")]
-    fn setup_jaeger_tracer(config: &TelemetryConfig) -> Result<Arc<BoxedTracer>> {
+    fn setup_otlp_tracer(config: &TelemetryConfig) -> Result<Arc<BoxedTracer>> {
         // For now, return a placeholder implementation
-        // Full OpenTelemetry integration will be implemented when dependencies are stable
-        warn!("OpenTelemetry Jaeger integration is disabled pending dependency stability");
+        // Full OTLP export (opentelemetry-otlp) will be wired in when the pipeline is enabled
+        warn!("OpenTelemetry OTLP export is disabled pending full pipeline integration");
 
-        if let Some(jaeger_endpoint) = &config.jaeger_endpoint {
-            info!("Jaeger endpoint configured: {}", jaeger_endpoint);
+        if let Some(otlp_endpoint) = &config.otlp_endpoint {
+            info!("OTLP endpoint configured: {}", otlp_endpoint);
         }
 
         // Return a no-op tracer for now
@@ -359,7 +359,7 @@ impl StreamObservability {
 
             // In a real implementation, you'd send this to your tracing backend
             if self.config.enable_opentelemetry {
-                self.export_span_to_jaeger(&span).await?;
+                self.export_span_to_otlp(&span).await?;
             }
         }
 
@@ -637,30 +637,30 @@ impl StreamObservability {
         Ok(())
     }
 
-    /// Export span to Jaeger using OpenTelemetry tracer
-    async fn export_span_to_jaeger(&self, span: &TraceSpan) -> Result<()> {
+    /// Export span to the OTLP endpoint using the OpenTelemetry tracer
+    async fn export_span_to_otlp(&self, span: &TraceSpan) -> Result<()> {
         #[cfg(feature = "opentelemetry")]
         {
             if let Some(_tracer) = &self.tracer {
                 debug!(
-                    "OpenTelemetry span export is disabled pending dependency stability. Span: {}",
+                    "OpenTelemetry span export is disabled pending full OTLP pipeline integration. Span: {}",
                     span.span_id
                 );
-                // Full OpenTelemetry integration will be implemented when dependencies are stable
-            } else if let Some(jaeger_endpoint) = &self.config.jaeger_endpoint {
+                // Full OTLP export (opentelemetry-otlp) will be wired in when the pipeline is enabled
+            } else if let Some(otlp_endpoint) = &self.config.otlp_endpoint {
                 debug!(
                     "Tracer not initialized, skipping span export to {}",
-                    jaeger_endpoint
+                    otlp_endpoint
                 );
             }
         }
 
         #[cfg(not(feature = "opentelemetry"))]
         {
-            if let Some(jaeger_endpoint) = &self.config.jaeger_endpoint {
+            if let Some(otlp_endpoint) = &self.config.otlp_endpoint {
                 debug!(
                     "OpenTelemetry feature not enabled, skipping span export to {}. Span: {}",
-                    jaeger_endpoint, span.span_id
+                    otlp_endpoint, span.span_id
                 );
             }
         }

@@ -1,7 +1,8 @@
 //! SSO session bridge — integrates SSO user identity with OxiRS chat session attributes.
 //!
-//! [`SsoSessionBridge`] converts [`SsoUserInfo`] into the flat key-value attribute map
-//! expected by the session store, and provides convenience methods for group/role checks.
+//! [`crate::sso::session::SsoSessionBridge`] converts [`crate::sso::oidc::SsoUserInfo`] into the
+//! flat key-value attribute map expected by the session store, and provides
+//! convenience methods for group/role checks.
 //!
 //! # Example
 //!

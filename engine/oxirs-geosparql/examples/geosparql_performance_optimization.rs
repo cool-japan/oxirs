@@ -142,7 +142,8 @@ fn example_distance_matrix() -> Result<()> {
             geometries
                 .iter()
                 .map(|g2| {
-                    oxirs_geosparql::functions::geometric_operations::distance(g1, g2).unwrap()
+                    oxirs_geosparql::functions::geometric_operations::distance(g1, g2)
+                        .expect("invariant: value is valid")
                 })
                 .collect()
         })
@@ -288,7 +289,10 @@ fn example_performance_comparison() -> Result<()> {
     let start = Instant::now();
     let _: Vec<_> = targets
         .iter()
-        .map(|t| oxirs_geosparql::functions::geometric_operations::distance(&query, t).unwrap())
+        .map(|t| {
+            oxirs_geosparql::functions::geometric_operations::distance(&query, t)
+                .expect("invariant: value is valid")
+        })
         .collect();
     let seq_time = start.elapsed();
     println!("   Sequential (standard):  {:?}", seq_time);

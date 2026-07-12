@@ -25,9 +25,9 @@
 //!
 //! ## Sub-modules
 //!
-//! - [`codec`] — `ClusterMessage` enum and `MessageCodec` (length-prefixed framing)
-//! - [`node`]  — `TcpClusterNode`, `TcpNodeConfig`, `GossipState`
-//! - [`network`] — `TcpClusterNetwork`, `NetworkStats`
+//! - [`tcp_cluster::codec`] — `ClusterMessage` enum and `MessageCodec` (length-prefixed framing)
+//! - [`tcp_cluster::node`]  — `TcpClusterNode`, `TcpNodeConfig`, `GossipState`
+//! - [`tcp_cluster::network`] — `TcpClusterNetwork`, `NetworkStats`
 
 pub mod codec;
 pub mod network;

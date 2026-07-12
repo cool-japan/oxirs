@@ -1,7 +1,7 @@
 //! Vocabulary extraction and ontology loading for [`SchemaGenerator`].
 //!
 //! Implements the methods that populate an
-//! [`RdfVocabulary`](crate::schema_types::RdfVocabulary): SPARQL-based
+//! [`RdfVocabulary`]: SPARQL-based
 //! extraction from an [`RdfStore`](crate::RdfStore), loading and parsing of
 //! remote/local ontology documents, and a mock vocabulary used for
 //! demonstration purposes.

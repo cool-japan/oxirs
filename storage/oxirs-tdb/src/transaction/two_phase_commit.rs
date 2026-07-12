@@ -43,6 +43,7 @@
 //! ```
 
 use crate::error::{Result, TdbError};
+use crate::transaction::txn_context::{Transaction, TransactionManager};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use parking_lot::{Mutex, RwLock};
@@ -413,6 +414,10 @@ pub struct TwoPhaseParticipant {
     active_txns: Arc<Mutex<HashSet<String>>>,
     /// Statistics
     stats: Arc<Mutex<TpcParticipantStats>>,
+    /// Optional injected TransactionManager (None in unit tests without real storage)
+    txn_manager: Option<Arc<TransactionManager>>,
+    /// Map distributed txn_id string → local Transaction
+    local_txns: Arc<Mutex<HashMap<String, Transaction>>>,
 }
 
 /// Two-Phase Commit Participant Statistics
@@ -438,6 +443,20 @@ impl TwoPhaseParticipant {
             state: Arc::new(RwLock::new(TpcState::Init)),
             active_txns: Arc::new(Mutex::new(HashSet::new())),
             stats: Arc::new(Mutex::new(TpcParticipantStats::default())),
+            txn_manager: None,
+            local_txns: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Create a participant backed by a real TransactionManager
+    pub fn with_transaction_manager(node_id: String, txn_manager: Arc<TransactionManager>) -> Self {
+        Self {
+            node_id,
+            state: Arc::new(RwLock::new(TpcState::Init)),
+            active_txns: Arc::new(Mutex::new(HashSet::new())),
+            stats: Arc::new(Mutex::new(TpcParticipantStats::default())),
+            txn_manager: Some(txn_manager),
+            local_txns: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -481,10 +500,11 @@ impl TwoPhaseParticipant {
     }
 
     /// Check if participant can commit transaction
-    async fn can_commit(&self, _txn_id: &str) -> Result<bool> {
-        // TODO: Implement actual resource checking
-        // For now, always return true (optimistic)
-        tokio::time::sleep(Duration::from_millis(5)).await;
+    async fn can_commit(&self, txn_id: &str) -> Result<bool> {
+        if let Some(tm) = &self.txn_manager {
+            let txn = tm.begin()?;
+            self.local_txns.lock().insert(txn_id.to_string(), txn);
+        }
         Ok(true)
     }
 
@@ -505,9 +525,11 @@ impl TwoPhaseParticipant {
     }
 
     /// Execute commit operation
-    async fn execute_commit(&self, _txn_id: &str) -> Result<()> {
-        // TODO: Implement actual commit logic
-        tokio::time::sleep(Duration::from_millis(5)).await;
+    async fn execute_commit(&self, txn_id: &str) -> Result<()> {
+        if let Some(txn) = self.local_txns.lock().remove(txn_id) {
+            txn.commit()
+                .map_err(|e| TdbError::Transaction(e.to_string()))?;
+        }
         Ok(())
     }
 
@@ -528,9 +550,11 @@ impl TwoPhaseParticipant {
     }
 
     /// Execute abort operation
-    async fn execute_abort(&self, _txn_id: &str) -> Result<()> {
-        // TODO: Implement actual abort logic
-        tokio::time::sleep(Duration::from_millis(5)).await;
+    async fn execute_abort(&self, txn_id: &str) -> Result<()> {
+        if let Some(txn) = self.local_txns.lock().remove(txn_id) {
+            txn.abort()
+                .map_err(|e| TdbError::Transaction(e.to_string()))?;
+        }
         Ok(())
     }
 
@@ -754,5 +778,75 @@ mod tests {
 
         let votes_after = coordinator.get_votes();
         assert_eq!(votes_after.get("node1").unwrap(), &Some(Vote::Yes));
+    }
+
+    #[tokio::test]
+    async fn test_2pc_participant_with_txn_manager_commit() {
+        use crate::transaction::{lock_manager::LockManager, wal::WriteAheadLog};
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs_2pc_commit_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wal = Arc::new(WriteAheadLog::new(&dir).unwrap());
+        let lm = Arc::new(LockManager::new());
+        let tm = Arc::new(TransactionManager::new(Arc::clone(&wal), Arc::clone(&lm)));
+
+        let participant =
+            TwoPhaseParticipant::with_transaction_manager("node-tm-1".to_string(), tm);
+
+        let vote = participant
+            .handle_prepare("dist-txn-001".to_string())
+            .await
+            .unwrap();
+        assert_eq!(vote, Vote::Yes);
+        assert_eq!(participant.state(), TpcState::Prepared);
+
+        participant
+            .handle_commit("dist-txn-001".to_string())
+            .await
+            .unwrap();
+        assert_eq!(participant.state(), TpcState::Committed);
+
+        let stats = participant.stats();
+        assert_eq!(stats.total_commits, 1);
+        assert_eq!(stats.total_prepare_requests, 1);
+    }
+
+    #[tokio::test]
+    async fn test_2pc_participant_with_txn_manager_abort() {
+        use crate::transaction::{lock_manager::LockManager, wal::WriteAheadLog};
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs_2pc_abort_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wal = Arc::new(WriteAheadLog::new(&dir).unwrap());
+        let lm = Arc::new(LockManager::new());
+        let tm = Arc::new(TransactionManager::new(Arc::clone(&wal), Arc::clone(&lm)));
+
+        let participant =
+            TwoPhaseParticipant::with_transaction_manager("node-tm-2".to_string(), tm);
+
+        let vote = participant
+            .handle_prepare("dist-txn-002".to_string())
+            .await
+            .unwrap();
+        assert_eq!(vote, Vote::Yes);
+
+        participant
+            .handle_abort("dist-txn-002".to_string())
+            .await
+            .unwrap();
+        assert_eq!(participant.state(), TpcState::Aborted);
+
+        let stats = participant.stats();
+        assert_eq!(stats.total_aborts, 1);
     }
 }

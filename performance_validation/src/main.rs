@@ -6,11 +6,11 @@
 
 use anyhow::Result;
 use clap::{Arg, Command};
-use log::info;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Instant;
 use tokio::fs;
+use tracing::info;
 
 mod benchmarks;
 mod datasets;
@@ -272,7 +272,9 @@ impl ValidationRunner {
 
     async fn collect_system_info(&self) -> Result<SystemInfo> {
         let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
-        let cpu_cores = num_cpus::get();
+        let cpu_cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
         let memory_gb = 16.0; // Simulated
         let gpu_available = self.detect_gpu_availability();
         let simd_support = self.detect_simd_features();
@@ -450,7 +452,9 @@ impl ValidationRunner {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let matches = Command::new("oxirs-performance-validation")
         .version("1.0.0")

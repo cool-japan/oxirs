@@ -49,13 +49,14 @@ impl QueryResult {
     }
 
     fn to_bytes(&self) -> Vec<u8> {
-        oxicode::serde::encode_to_vec(self, oxicode::config::standard()).unwrap()
+        oxicode::serde::encode_to_vec(self, oxicode::config::standard())
+            .expect("invariant: value is valid")
     }
 
     fn from_bytes(bytes: &[u8]) -> Self {
         oxicode::serde::decode_from_slice(bytes, oxicode::config::standard())
             .map(|(v, _)| v)
-            .unwrap()
+            .expect("invariant: value is valid")
     }
 }
 
@@ -115,7 +116,9 @@ fn demo_basic_caching() {
 
     // Simulate query execution
     let query1 = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 100";
-    let fingerprint1 = fingerprinter.fingerprint(query1).unwrap();
+    let fingerprint1 = fingerprinter
+        .fingerprint(query1)
+        .expect("invariant: value is valid");
     let fp_hash = fingerprint1.hash.clone();
 
     println!("Executing query:\n  {}", query1);
@@ -134,7 +137,9 @@ fn demo_basic_caching() {
             println!("  Fetched {} bindings", result.row_count);
 
             // Store in cache
-            cache.put(fp_hash.clone(), result.to_bytes()).unwrap();
+            cache
+                .put(fp_hash.clone(), result.to_bytes())
+                .expect("invariant: value is valid");
             println!("✓ Result cached");
 
             result
@@ -190,13 +195,15 @@ fn demo_cache_configuration() {
             "SELECT ?s ?p ?o WHERE {{ ?s ?p ?o . FILTER(?x = {}) }} LIMIT 100",
             i
         );
-        let fingerprint = fingerprinter.fingerprint(&query).unwrap();
+        let fingerprint = fingerprinter
+            .fingerprint(&query)
+            .expect("invariant: value is valid");
 
         if cache.get(&fingerprint.hash).is_none() {
             let result = QueryResult::mock_query_execution(&query);
             cache
                 .put(fingerprint.hash.clone(), result.to_bytes())
-                .unwrap();
+                .expect("invariant: value is valid");
         }
     }
 
@@ -219,14 +226,16 @@ fn demo_ttl_expiration() {
     let fingerprinter = QueryFingerprinter::new(FingerprintConfig::default());
 
     let query = "SELECT ?s WHERE { ?s a :Person } LIMIT 50";
-    let fingerprint = fingerprinter.fingerprint(query).unwrap();
+    let fingerprint = fingerprinter
+        .fingerprint(query)
+        .expect("invariant: value is valid");
 
     // First execution
     println!("Caching query result with 2-second TTL...");
     let result = QueryResult::mock_query_execution(query);
     cache
         .put(fingerprint.hash.clone(), result.to_bytes())
-        .unwrap();
+        .expect("invariant: value is valid");
     println!("✓ Result cached");
 
     // Immediate retrieval - should hit
@@ -274,12 +283,18 @@ fn demo_lru_eviction() {
 
     let fingerprints: Vec<_> = queries
         .iter()
-        .map(|q| fingerprinter.fingerprint(q).unwrap())
+        .map(|q| {
+            fingerprinter
+                .fingerprint(q)
+                .expect("invariant: value is valid")
+        })
         .collect();
 
     for (i, (query, fp)) in queries.iter().zip(fingerprints.iter()).enumerate() {
         let result = QueryResult::mock_query_execution(query);
-        cache.put(fp.hash.clone(), result.to_bytes()).unwrap();
+        cache
+            .put(fp.hash.clone(), result.to_bytes())
+            .expect("invariant: value is valid");
         println!(
             "  Added query {} (fingerprint: {}...)",
             i + 1,
@@ -317,12 +332,18 @@ fn demo_invalidation() {
 
     let fingerprints: Vec<_> = queries
         .iter()
-        .map(|q| fingerprinter.fingerprint(q).unwrap())
+        .map(|q| {
+            fingerprinter
+                .fingerprint(q)
+                .expect("invariant: value is valid")
+        })
         .collect();
 
     for (query, fp) in queries.iter().zip(fingerprints.iter()) {
         let result = QueryResult::mock_query_execution(query);
-        cache.put(fp.hash.clone(), result.to_bytes()).unwrap();
+        cache
+            .put(fp.hash.clone(), result.to_bytes())
+            .expect("invariant: value is valid");
     }
 
     println!("✓ All queries cached");
@@ -330,7 +351,9 @@ fn demo_invalidation() {
 
     // Selective invalidation
     println!("\nInvalidating first query...");
-    cache.invalidate(&fingerprints[0].hash).unwrap();
+    cache
+        .invalidate(&fingerprints[0].hash)
+        .expect("invariant: value is valid");
     println!("✓ Invalidated. Cache size: {} entries", cache.size());
 
     // Verify invalidation
@@ -342,7 +365,7 @@ fn demo_invalidation() {
 
     // Global clear
     println!("\nClearing entire cache...");
-    cache.invalidate_all().unwrap();
+    cache.invalidate_all().expect("invariant: value is valid");
     println!("✓ Cache cleared. Size: {} entries", cache.size());
 
     print_stats(&cache);
@@ -354,7 +377,9 @@ fn demo_performance() {
 
     let query =
         "SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?s :created ?date } ORDER BY DESC(?date) LIMIT 1000";
-    let fingerprint = fingerprinter.fingerprint(query).unwrap();
+    let fingerprint = fingerprinter
+        .fingerprint(query)
+        .expect("invariant: value is valid");
 
     // Measure uncached execution time (simulated)
     println!("Simulating query execution without cache...");
@@ -370,7 +395,7 @@ fn demo_performance() {
     // Cache the result
     cache
         .put(fingerprint.hash.clone(), result.to_bytes())
-        .unwrap();
+        .expect("invariant: value is valid");
     println!("✓ Result cached");
 
     // Measure cached retrieval time
@@ -380,7 +405,7 @@ fn demo_performance() {
     let cached_time = start.elapsed();
 
     assert!(cached_data.is_some(), "Cache should have the result");
-    let cached_result = QueryResult::from_bytes(&cached_data.unwrap());
+    let cached_result = QueryResult::from_bytes(&cached_data.expect("invariant: value is valid"));
     println!("  Retrieval time: {}µs", cached_time.as_micros());
     println!("  Result size: {} bindings", cached_result.row_count);
 

@@ -393,7 +393,13 @@ impl QuantumVectorSearch {
         let query_f32 = query_vector.as_f32();
 
         // Use parallel processing for large datasets
-        let chunk_size = std::cmp::max(candidate_vectors.len() / num_cpus::get(), 1);
+        let chunk_size = std::cmp::max(
+            candidate_vectors.len()
+                / std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1),
+            1,
+        );
 
         let results: Result<Vec<Vec<QuantumSearchResult>>> = candidate_vectors
             .par_chunks(chunk_size)

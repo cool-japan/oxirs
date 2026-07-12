@@ -575,7 +575,11 @@ fn extract_graph_from_query(query: &str) -> Option<String> {
     for pair in query.split('&') {
         if let Some((key, value)) = pair.split_once('=') {
             if key == "graph" || key == "default" {
-                return Some(urlencoding::decode(value).ok()?.into_owned());
+                return Some(
+                    oxirs_core::encoding::percent_decode(value)
+                        .ok()?
+                        .into_owned(),
+                );
             }
         }
     }

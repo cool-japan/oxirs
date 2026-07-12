@@ -857,7 +857,11 @@ impl BatchProcessor {
 #[cfg(feature = "parallel")]
 impl Default for BatchProcessor {
     fn default() -> Self {
-        Self::new(num_cpus::get())
+        Self::new(
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
+        )
     }
 }
 

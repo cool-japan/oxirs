@@ -68,7 +68,7 @@ async fn example_basic_incremental_parsing() -> Result<(), Box<dyn std::error::E
                 "\rProgress: {:.1}% ({}/{})",
                 percent, bytes_parsed, total_bytes
             );
-            std::io::stdout().flush().unwrap();
+            std::io::stdout().flush().expect("stdout flush succeeds");
             true // Continue parsing
         })
         .await?;

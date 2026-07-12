@@ -1,9 +1,9 @@
 //! Configuration and state types for novel embedding architectures
 //!
 //! Contains every config struct, enum, parameter container and runtime state
-//! shared by the [`NovelArchitectureModel`](crate::novel_arch_impl::NovelArchitectureModel)
-//! implementation: graph transformers, neural ODEs, hyperbolic embeddings,
-//! geometric deep learning, quantum-inspired layers and continuous flows.
+//! shared by the [`NovelArchitectureModel`] implementation: graph
+//! transformers, neural ODEs, hyperbolic embeddings, geometric deep learning,
+//! quantum-inspired layers and continuous flows.
 
 use crate::{ModelConfig, TrainingStats};
 use scirs2_core::ndarray_ext::{Array1, Array2, Array3};

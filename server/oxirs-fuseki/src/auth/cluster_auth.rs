@@ -296,7 +296,7 @@ impl ClusterAuthManager {
         format!("{}.{}", encoded_payload, token.signature)
     }
 
-    /// Decode a bearer string produced by [`encode_token`] back into a
+    /// Decode a bearer string produced by [`Self::encode_token`] back into a
     /// [`ClusterNodeToken`].
     ///
     /// # Errors

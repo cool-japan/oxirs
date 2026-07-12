@@ -5,6 +5,66 @@ All notable changes to OxiRS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-07-12
+
+### Added
+- **oxirs-core**: new `encoding` module — pure-`std` RFC 3986 percent-encoding (`percent_encode`, `percent_encode_strict`, `percent_decode`), replacing the external `urlencoding` crate; now backs SPARQL's `ENCODE_FOR_URI()` and oxirs-fuseki's OAuth2/SAML/LDF URL handling
+- **oxirs-shacl**: `advanced_features::subclass_closure` — reflexive+transitive `rdfs:subClassOf` closure (Floyd–Warshall over a boolean adjacency matrix); `sh:class` and implicit-class targets now honor subclassing instead of exact-type matching only
+- **oxirs-shacl**: SPARQL-based (`sh:target` SPARQLTarget) and single-hop property-path targets now execute for real against the store, replacing stub implementations that returned empty or unchanged results
+- **oxirs-vec**: `real_time_embedding_pipeline` gains a full consistency/versioning/monitoring stack — `consistency` (inconsistency repair engine with severity-based outcomes), `versioning` (per-ID embedding version history with configurable retention), and a rewritten `monitoring` (metrics collection, health checks, severity-throttled alerting); all four submodules (`consistency`, `versioning`, `monitoring`, `coordination`) are now compiled and wired live into `RealTimeEmbeddingPipeline` — previously declared but commented out as unimplemented
+- **oxirs-chat**: `nl2sparql::context_aware` — `extract_entities_rich()` rule-based NL entity extraction returning typed, span-and-confidence-scored `ExtractedEntity` values (IRIs, prefixed names, quoted literals, multi-word capitalized concepts)
+- **oxirs-stream**: MQTT 5.0 property codec (`backend::mqtt::properties`) — encode/decode for the PUBLISH-relevant property set (Payload Format Indicator, Message Expiry Interval, Content Type, Response Topic, Correlation Data, Subscription Identifier, Topic Alias, repeatable User Properties), wired into `MqttClient::parse_properties_from_bytes()`
+- **oxirs-federate**: NATS federation now dispatches inbound messages to registered `FederationMessageHandler`s by type (`register_handler()`), replacing a no-op stub
+- **oxirs-gql**: adaptive query batching (`QueryBatcher::analyze_batch_dependencies()` plus topological wave execution), an activated ML-driven `DynamicQueryPlanner` (real `MLQueryOptimizer` + `PerformanceTracker` behind `enable_ml_prediction`), and real parallel-field-resolver timing metrics — all previously dead or stubbed code paths
+- **oxirs-tdb**: saga steps now run real registered forward-action/compensation callbacks (`SagaCallbackRegistry`) with reverse-order compensation on failure; 2PC/3PC participants can now commit/abort a real WAL-backed `Transaction` via `with_transaction_manager()`; the deadlock detector's `LeastWork` victim-selection strategy is implemented instead of silently falling back
+- **oxirs-geosparql**: shapefile writer now emits interior rings (holes) for `Polygon`/`MultiPolygon`; WKT parser accepts optional Z/M coordinate dimensions; `GeoPackage::checkpoint()` for explicit WAL flush
+- **oxirs-wasm**: SPARQL queries may declare a `PREFIX`/`BASE` prologue (`query::prefix_expand::expand_prologue`), expanded before parsing; a per-store solution budget (`setSolutionBudget`/`clearSolutionBudget`) fails a query fast once a join produces more intermediate rows than configured, instead of running an unselective join to completion
+
+### Added — Pure-Rust Policy v2 (COOLJAPAN)
+- Six previously in-tree, feature-gated C-FFI integrations were extracted into new `publish = false` adapter crates, each reusing the original crate's public types so the two stay API-compatible:
+  - **oxirs-gpu-monitor**: `NvmlGpuMonitor` — live NVIDIA GPU telemetry (utilization, memory, temperature, power draw) via NVML
+  - **oxirs-vec-adapter-cuda**: `CudaBuffer`/`CudaStream`/`CudaKernel` and device enumeration, backed by `cuda-runtime-sys`
+  - **oxirs-geosparql-adapter-geos**: GEOS-backed Egenhofer relations, RCC8 relations, and buffer/boundary operations
+  - **oxirs-tsdb-adapter-duckdb**: Arrow `RecordBatch` bridge between DuckDB SQL and `oxirs_tsdb::TimeChunk`/`DataPoint`
+  - **oxirs-stream-adapter-rdkafka**: the former in-tree Kafka backend (consumer, producer, schema registry), moved verbatim
+  - **oxirs-stream-adapter-pulsar**: the former in-tree Pulsar backend, moved verbatim
+- New internal `crates/zstd-shim`, redirected to via workspace-wide `[patch.crates-io] zstd = ...`: a Pure-Rust shim backed by `oxiarc-zstd` that replaces the C-FFI `zstd`/`zstd-sys` crate for every transitive consumer (tantivy, parquet, pulsar, wasmtime) — removes the last transitive `zstd-sys` C dependency from the default build
+
+### Changed
+- **oxirs-geosparql**: `GeoPackage`'s SQLite backend migrated from `rusqlite` (bundled C libsqlite3) to Pure-Rust `oxisql-core`/`oxisql-sqlite-compat`
+- **oxirs-arq**: removed the `ordered-float` dependency; float-valued SPARQL terms now use in-house `TotalF32`/`TotalF64` total-order wrappers (`total_float.rs`) with identical NaN-equality and zero-sign semantics
+- **oxirs-wasm**: triple pattern and property-path evaluation now drives off the store's subject/predicate/object indexes instead of scanning every triple, so a join costs a hash lookup per solution rather than a full graph scan
+- **oxirs-stream**: `DiagnosticsConfig.jaeger_endpoint` renamed to `otlp_endpoint` (env var `OTEL_EXPORTER_JAEGER_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT`), reflecting the workspace-wide drop of the deprecated `opentelemetry-jaeger` exporter in favor of OTLP (`opentelemetry*` 0.31 → 0.32)
+- Workspace-wide: `lazy_static` → `once_cell::sync::Lazy`; `num_cpus::get()` → `std::thread::available_parallelism()`; `blake3` now built with `features = ["pure"]` (no C/asm via `cc`)
+- COOLJAPAN ecosystem: `oxisql-core`/`oxisql-sqlite-compat` introduced at 0.3.2 (new Pure-Rust SQLite-compatible engine; first consumer is GeoSPARQL's GeoPackage backend, see above); `oxiarc-*` compression crates 0.3.3 → 0.3.5; `oxicrypto-{core,aead,rand,mac,hash,kdf}` and `oxitls`/`oxitls-rcgen` 0.1.1 → 0.2.0; `scirs2-{core,linalg,stats,neural,graph,integrate}` 0.5.0 → 0.6.0
+- Security-relevant dependency bumps: `bytes` 1.11.1 → 1.12.0 (CVE-2026-25541 fix); `kube` 3.1 → 4.0 with `k8s-openapi` 0.27 → 0.28 (`v1_31` → `v1_32` schema snapshot) for oxirs-fuseki's optional `k8s` feature
+- Routine dependency bumps: tokio 1.52.3, hyper 1.10.1, tower-http 0.7, serde_json 1.0.150, async-nats 0.49, chrono 0.4.45, nalgebra 0.35, quick-xml 0.41, rstar 0.13, redis 1.3, cranelift-* 0.133.1, jsonwebtoken 10.4, aes-gcm 0.11, sha3 0.12, arrow/parquet 59, plus assorted per-crate bumps (tera, wasmi, pdf-extract, sha2, utoipa, axum-test, pbkdf2, mdns-sd, pulsar client 6.8, lapin, time, shlex, wasmparser, wasmtime, pyo3/numpy 0.29)
+- Removed unused workspace dependencies: `rio_api`/`rio_turtle`/`rio_xml` (zero remaining references), `rand_distr`, `log`, `env_logger`, `urlencoding` (superseded by oxirs-core's `encoding` module), `serial_test`, `crossbeam-utils`, `tracing-opentelemetry`, `http-body-util`, `rust_decimal`, `multibase`, `k256`, `digest`, `deadpool`, `wasm-bindgen-futures`, `tracing-wasm`, `oxicrypto-sig`
+
+### Removed — Pure-Rust Policy v2 (COOLJAPAN)
+- **Breaking**: the following Cargo features were removed outright (their functionality moved to the corresponding adapter crate listed under Added — see above; building with the old feature flag now fails and the adapter crate must be added as a direct dependency):
+  - `oxirs-core`'s `gpu` feature (NVML via `nvml-wrapper`)
+  - `oxirs-vec`'s `cuda` and `gpu-full` features (`cuda-runtime-sys`, `cudarc`, `candle-core`); the legacy, already-unused duplicate `gpu_acceleration` module (945 lines) was also deleted in favor of `gpu`
+  - `oxirs-geosparql`'s `geos-backend` feature (`geos`/`geos-sys`) — the in-tree Egenhofer/RCC8/buffer functions now return `UnsupportedOperation` directing callers to the adapter crate
+  - `oxirs-tsdb`'s `duckdb` feature (`duckdb`/`libduckdb-sys`)
+  - `oxirs-stream`'s `kafka` feature (`rdkafka`/`rdkafka-sys`/`libz-sys`)
+  - `oxirs-stream`'s `pulsar` feature (`pulsar`/`native-tls`/`lz4-sys`)
+- Net effect: every published OxiRS crate's `--all-features` dependency surface is now 100% Pure Rust; all six C-FFI integrations remain available, just as separate `publish = false` adapter crates rather than in-tree feature flags
+
+### Fixed
+- **oxirs-core**: `rdfxml::serializer` no longer collides two or more distinct unmapped namespaces on the same subject onto one hardcoded `xmlns:oxprefix` attribute; each namespace now gets its own synthetic prefix
+- **oxirs-core**: `query::update`'s `INSERT DATA`/`DELETE DATA` blocks whose final triple omits the trailing `.` (legal in SPARQL's grammar, illegal in the Turtle grammar used to re-parse the block) now parse correctly
+- **oxirs-core**: JSON-LD expansion no longer silently drops `@index` on indexed containers and node objects; `@protected` term-redefinition detection now also compares the `protected` flag itself; `@set` containers now expand to flat triples instead of a no-op
+- **oxirs-tdb**: `DistributedTdbStore::execute_saga` previously reported success without ever calling `saga.execute()` — sagas silently never ran; they now execute for real, with results recorded to the replication log via `commit_distributed_transaction`
+- **oxirs-tdb**: deadlock detector's `YoungestTransaction`/`OldestTransaction` victim selection no longer panics on an empty cycle; the distributed coordinator's `abort_transaction` now notifies all registered participants instead of a no-op
+- **oxirs-chat**: AES-256-GCM key/nonce construction (`persistence_storage.rs`, `security/encryption.rs`) no longer panics on a malformed key or nonce length — returns a proper error instead
+- **oxirs-chat**: `DensePassageRetriever`'s dense encoder was content-blind (embeddings were derived only from word position/count, so unrelated texts of equal length produced identical vectors); it now uses content-sensitive term-frequency plus hash-trick encoding
+- **oxirs-physics**: `ResultInjector` generated invalid SPARQL — numeric/boolean values combined with an explicit `^^xsd:type` datatype annotation must be quoted strings, but were emitted as bare tokens; `execute_update()` was also a no-op that logged but never wrote to the store, so simulation results were never actually persisted — both fixed
+- **oxirs-shacl**: `sh:languageIn` now does BCP47/RFC-4647 basic-filtering range matching (`"de"` matches `"de-CH"`) instead of exact string equality
+- **oxirs-graphrag**: `GraphSummarizer`'s representative and relation ordering is now deterministic (lexicographically-smallest IRI, sorted-by-frequency relations) instead of depending on hash iteration order
+- **oxirs-geosparql**: `compressed_storage` decompression previously collapsed polygon holes and multi-part `MultiLineString`/`MultiPolygon` geometries down to a single ring/part on round-trip; a new `ring_counts` field fixes reconstruction; `Cargo.toml`'s `cuda`/`wgpu_backend` features referenced nonexistent `scirs2-core` sub-features, breaking dependency resolution for any workspace build after the scirs2-core 0.6.0 bump — corrected
+- **oxirs-wasm**: pattern and property-path matching now treats the two IRI spellings that reach the store — bracketed `<iri>` (as parsers emit) and bare `iri` (as `insert()` accepts) — as equal, so a query no longer silently misses matches depending on which form was used; property paths also gained support for the `a` (`rdf:type`) keyword
+
 ## [0.3.1] - 2026-06-06
 
 ### Added
@@ -511,6 +571,7 @@ Production Impact (100K QPS):
 
 *"Rust makes memory safety table stakes; OxiRS makes knowledge-graph engineering table stakes."*
 
+[0.3.2]: https://github.com/cool-japan/oxirs/releases/tag/v0.3.2
 [0.3.1]: https://github.com/cool-japan/oxirs/releases/tag/v0.3.1
 [0.3.0]: https://github.com/cool-japan/oxirs/releases/tag/v0.3.0
 [0.2.4]: https://github.com/cool-japan/oxirs/releases/tag/v0.2.4

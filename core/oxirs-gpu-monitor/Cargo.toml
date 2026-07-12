@@ -1,0 +1,24 @@
+[package]
+name = "oxirs-gpu-monitor"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Quarantined NVIDIA NVML GPU-telemetry adapter for oxirs-core (publish=false; isolates nvml-wrapper-sys FFI off the published Pure-Rust surface)."
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+# Reuse oxirs-core's public GpuStats type so telemetry is API-compatible with
+# the Pure-Rust stub that ships inside oxirs-core.
+oxirs-core = { workspace = true }
+# C FFI quarantined HERE (publish = false) — keeps oxirs-core's published
+# --all-features closure free of nvml-wrapper-sys per COOLJAPAN Pure Rust Policy v2.
+nvml-wrapper = "0.12"
+anyhow.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

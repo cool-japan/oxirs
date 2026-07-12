@@ -44,10 +44,19 @@ fn main() {
 
     // Step 2: Display shape properties
     println!("2️⃣  Shape Properties:");
-    println!("   Label: {}", person_shape.label.as_ref().unwrap());
+    println!(
+        "   Label: {}",
+        person_shape
+            .label
+            .as_ref()
+            .expect("invariant: value is valid")
+    );
     println!(
         "   Description: {}",
-        person_shape.description.as_ref().unwrap()
+        person_shape
+            .description
+            .as_ref()
+            .expect("invariant: value is valid")
     );
     println!("   Severity: {:?}", person_shape.severity);
     println!("   Active: {}", person_shape.is_active());

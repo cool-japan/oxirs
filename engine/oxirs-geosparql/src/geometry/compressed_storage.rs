@@ -123,6 +123,10 @@ pub struct CompressedGeometry {
 
     /// CRS information (if any)
     crs: Option<String>,
+
+    /// Ring/part boundary counts for multi-ring geometries
+    #[serde(default)]
+    ring_counts: Vec<u32>,
 }
 
 /// Serializable compression config
@@ -200,8 +204,8 @@ impl CompressedGeometry {
             }
         };
 
-        // Extract coordinates
-        let coords = extract_coordinates(&geometry.geom)?;
+        // Extract coordinates and ring/part boundary metadata
+        let (coords, ring_counts) = extract_coordinates_with_rings(&geometry.geom)?;
         let original_size = coords.len() * std::mem::size_of::<f64>() * 2; // x, y pairs
 
         // Quantize coordinates
@@ -233,6 +237,7 @@ impl CompressedGeometry {
             config: config.into(),
             geom_type,
             crs: Some(geometry.crs.to_string()),
+            ring_counts,
         })
     }
 
@@ -265,8 +270,8 @@ impl CompressedGeometry {
         // Dequantize coordinates
         let dequantized = dequantize_coordinates(&coords, self.config.decimal_places);
 
-        // Reconstruct geometry
-        let geom = reconstruct_geometry(&dequantized, self.geom_type)?;
+        // Reconstruct geometry using ring/part boundary metadata
+        let geom = reconstruct_geometry(&dequantized, self.geom_type, &self.ring_counts)?;
 
         // Create Geometry with CRS
         let mut geometry = Geometry::new(geom);
@@ -307,13 +312,91 @@ impl CompressedGeometry {
     }
 }
 
-/// Extract all coordinates from a geometry
-fn extract_coordinates(geom: &geo_types::Geometry) -> Result<Vec<(f64, f64)>> {
-    use geo::CoordsIter;
+/// Flat coordinate list paired with ring/part boundary counts.
+type FlatCoordsWithRings = (Vec<(f64, f64)>, Vec<u32>);
 
-    let coords: Vec<(f64, f64)> = geom.coords_iter().map(|coord| (coord.x, coord.y)).collect();
-
-    Ok(coords)
+/// Extract coordinates and ring/part boundary counts from a geometry
+/// Returns (flat_coords, ring_counts) where ring_counts encodes the structure:
+/// - Point/LineString/MultiPoint: ring_counts is empty
+/// - Polygon: [exterior_len, hole1_len, hole2_len, ...]
+/// - MultiLineString: [part1_len, part2_len, ...]
+/// - MultiPolygon: [num_rings_in_poly1, ext_len, hole1_len, ..., num_rings_in_poly2, ext_len, ...]
+fn extract_coordinates_with_rings(geom: &geo_types::Geometry) -> Result<FlatCoordsWithRings> {
+    match geom {
+        geo_types::Geometry::Polygon(p) => {
+            let mut coords = Vec::new();
+            let mut ring_counts = Vec::new();
+            let ext: Vec<_> = p.exterior().0.iter().map(|c| (c.x, c.y)).collect();
+            ring_counts.push(ext.len() as u32);
+            coords.extend(ext);
+            for hole in p.interiors() {
+                let h: Vec<_> = hole.0.iter().map(|c| (c.x, c.y)).collect();
+                ring_counts.push(h.len() as u32);
+                coords.extend(h);
+            }
+            Ok((coords, ring_counts))
+        }
+        geo_types::Geometry::MultiLineString(mls) => {
+            let mut coords = Vec::new();
+            let mut ring_counts = Vec::new();
+            for ls in &mls.0 {
+                let part: Vec<_> = ls.0.iter().map(|c| (c.x, c.y)).collect();
+                ring_counts.push(part.len() as u32);
+                coords.extend(part);
+            }
+            Ok((coords, ring_counts))
+        }
+        geo_types::Geometry::MultiPolygon(mp) => {
+            let mut coords = Vec::new();
+            let mut ring_counts = Vec::new();
+            for poly in &mp.0 {
+                let num_rings = 1 + poly.interiors().len();
+                ring_counts.push(num_rings as u32);
+                let ext: Vec<_> = poly.exterior().0.iter().map(|c| (c.x, c.y)).collect();
+                ring_counts.push(ext.len() as u32);
+                coords.extend(ext);
+                for hole in poly.interiors() {
+                    let h: Vec<_> = hole.0.iter().map(|c| (c.x, c.y)).collect();
+                    ring_counts.push(h.len() as u32);
+                    coords.extend(h);
+                }
+            }
+            Ok((coords, ring_counts))
+        }
+        geo_types::Geometry::Point(p) => Ok((vec![(p.x(), p.y())], vec![])),
+        geo_types::Geometry::Line(l) => {
+            Ok((vec![(l.start.x, l.start.y), (l.end.x, l.end.y)], vec![]))
+        }
+        geo_types::Geometry::LineString(ls) => {
+            let coords: Vec<_> = ls.0.iter().map(|c| (c.x, c.y)).collect();
+            Ok((coords, vec![]))
+        }
+        geo_types::Geometry::MultiPoint(mp) => {
+            let coords: Vec<_> = mp.0.iter().map(|pt| (pt.x(), pt.y())).collect();
+            Ok((coords, vec![]))
+        }
+        geo_types::Geometry::GeometryCollection(gc) => {
+            let mut coords = Vec::new();
+            for g in &gc.0 {
+                let (sub_coords, _) = extract_coordinates_with_rings(g)?;
+                coords.extend(sub_coords);
+            }
+            Ok((coords, vec![]))
+        }
+        // Rect/Triangle are treated as their equivalent single-ring polygons.
+        geo_types::Geometry::Rect(r) => {
+            let poly = r.to_polygon();
+            let ext: Vec<_> = poly.exterior().0.iter().map(|c| (c.x, c.y)).collect();
+            let ring_counts = vec![ext.len() as u32];
+            Ok((ext, ring_counts))
+        }
+        geo_types::Geometry::Triangle(t) => {
+            let poly = t.to_polygon();
+            let ext: Vec<_> = poly.exterior().0.iter().map(|c| (c.x, c.y)).collect();
+            let ring_counts = vec![ext.len() as u32];
+            Ok((ext, ring_counts))
+        }
+    }
 }
 
 /// Quantize coordinates to specified decimal places
@@ -466,8 +549,8 @@ fn bytes_to_coords(data: &[u8]) -> Vec<(i64, i64)> {
         }
         let x_bytes = &data[offset..offset + 8];
         let y_bytes = &data[offset + 8..offset + 16];
-        let x = i64::from_le_bytes(x_bytes.try_into().unwrap_or([0; 8]));
-        let y = i64::from_le_bytes(y_bytes.try_into().unwrap_or([0; 8]));
+        let x = i64::from_le_bytes(x_bytes.try_into().unwrap_or_default());
+        let y = i64::from_le_bytes(y_bytes.try_into().unwrap_or_default());
         result.push((x, y));
         offset += 16;
     }
@@ -475,10 +558,11 @@ fn bytes_to_coords(data: &[u8]) -> Vec<(i64, i64)> {
     result
 }
 
-/// Reconstruct geometry from coordinates
+/// Reconstruct geometry from coordinates and ring/part boundary metadata
 fn reconstruct_geometry(
     coords: &[(f64, f64)],
     geom_type: GeometryType,
+    ring_counts: &[u32],
 ) -> Result<geo_types::Geometry> {
     use geo_types::{
         Geometry, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
@@ -501,15 +585,47 @@ fn reconstruct_geometry(
             Ok(Geometry::LineString(LineString::new(line_coords)))
         }
         GeometryType::Polygon => {
-            // Simple implementation: assume first ring is exterior
-            // TODO: Handle holes properly
-            let ring_coords: Vec<_> = coords
+            if ring_counts.is_empty() {
+                // Fallback: treat all coords as exterior ring (no holes)
+                let ring_coords: Vec<_> = coords
+                    .iter()
+                    .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
+                    .collect();
+                return Ok(Geometry::Polygon(Polygon::new(
+                    LineString::new(ring_coords),
+                    vec![],
+                )));
+            }
+            // ring_counts[0] = exterior length, rest = hole lengths
+            let ext_len = ring_counts[0] as usize;
+            if coords.len() < ext_len {
+                return Err(GeoSparqlError::ParseError(
+                    "Insufficient coordinates for Polygon exterior ring".to_string(),
+                ));
+            }
+            let exterior: Vec<_> = coords[..ext_len]
                 .iter()
                 .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
                 .collect();
+            let mut holes = Vec::new();
+            let mut offset = ext_len;
+            for &hole_len in &ring_counts[1..] {
+                let hole_len = hole_len as usize;
+                if offset + hole_len > coords.len() {
+                    return Err(GeoSparqlError::ParseError(
+                        "Insufficient coordinates for Polygon hole ring".to_string(),
+                    ));
+                }
+                let hole: Vec<_> = coords[offset..offset + hole_len]
+                    .iter()
+                    .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
+                    .collect();
+                holes.push(LineString::new(hole));
+                offset += hole_len;
+            }
             Ok(Geometry::Polygon(Polygon::new(
-                LineString::new(ring_coords),
-                vec![],
+                LineString::new(exterior),
+                holes,
             )))
         }
         GeometryType::MultiPoint => {
@@ -517,27 +633,92 @@ fn reconstruct_geometry(
             Ok(Geometry::MultiPoint(MultiPoint(points)))
         }
         GeometryType::MultiLineString => {
-            // Simple implementation: treat all coords as one linestring
-            // TODO: Handle multiple linestrings properly
-            let line_coords: Vec<_> = coords
-                .iter()
-                .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
-                .collect();
-            Ok(Geometry::MultiLineString(MultiLineString(vec![
-                LineString::new(line_coords),
-            ])))
+            if ring_counts.is_empty() {
+                // Fallback: treat all coords as one linestring
+                let line_coords: Vec<_> = coords
+                    .iter()
+                    .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
+                    .collect();
+                return Ok(Geometry::MultiLineString(MultiLineString(vec![
+                    LineString::new(line_coords),
+                ])));
+            }
+            // Each element of ring_counts is the length of one line part
+            let mut lines = Vec::new();
+            let mut offset = 0usize;
+            for &part_len in ring_counts {
+                let part_len = part_len as usize;
+                if offset + part_len > coords.len() {
+                    return Err(GeoSparqlError::ParseError(
+                        "Insufficient coordinates for MultiLineString part".to_string(),
+                    ));
+                }
+                let part: Vec<_> = coords[offset..offset + part_len]
+                    .iter()
+                    .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
+                    .collect();
+                lines.push(LineString::new(part));
+                offset += part_len;
+            }
+            Ok(Geometry::MultiLineString(MultiLineString(lines)))
         }
         GeometryType::MultiPolygon => {
-            // Simple implementation: treat all coords as one polygon
-            // TODO: Handle multiple polygons properly
-            let ring_coords: Vec<_> = coords
-                .iter()
-                .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
-                .collect();
-            Ok(Geometry::MultiPolygon(MultiPolygon(vec![Polygon::new(
-                LineString::new(ring_coords),
-                vec![],
-            )])))
+            if ring_counts.is_empty() {
+                // Fallback: treat all coords as one polygon
+                let ring_coords: Vec<_> = coords
+                    .iter()
+                    .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
+                    .collect();
+                return Ok(Geometry::MultiPolygon(MultiPolygon(vec![Polygon::new(
+                    LineString::new(ring_coords),
+                    vec![],
+                )])));
+            }
+            // Encoding: ring_counts = [num_rings_in_poly1, ext_len, hole1_len, ..., num_rings_in_poly2, ...]
+            let mut polygons = Vec::new();
+            let mut rc_idx = 0usize; // index into ring_counts
+            let mut coord_offset = 0usize;
+            while rc_idx < ring_counts.len() {
+                let num_rings = ring_counts[rc_idx] as usize;
+                rc_idx += 1;
+                if rc_idx + num_rings > ring_counts.len() {
+                    return Err(GeoSparqlError::ParseError(
+                        "Truncated ring_counts for MultiPolygon".to_string(),
+                    ));
+                }
+                // First ring is exterior
+                let ext_len = ring_counts[rc_idx] as usize;
+                rc_idx += 1;
+                if coord_offset + ext_len > coords.len() {
+                    return Err(GeoSparqlError::ParseError(
+                        "Insufficient coordinates for MultiPolygon exterior ring".to_string(),
+                    ));
+                }
+                let exterior: Vec<_> = coords[coord_offset..coord_offset + ext_len]
+                    .iter()
+                    .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
+                    .collect();
+                coord_offset += ext_len;
+                // Remaining rings are holes
+                let mut holes = Vec::new();
+                for _ in 1..num_rings {
+                    let hole_len = ring_counts[rc_idx] as usize;
+                    rc_idx += 1;
+                    if coord_offset + hole_len > coords.len() {
+                        return Err(GeoSparqlError::ParseError(
+                            "Insufficient coordinates for MultiPolygon hole ring".to_string(),
+                        ));
+                    }
+                    let hole: Vec<_> = coords[coord_offset..coord_offset + hole_len]
+                        .iter()
+                        .map(|(x, y)| geo_types::coord! { x: *x, y: *y })
+                        .collect();
+                    holes.push(LineString::new(hole));
+                    coord_offset += hole_len;
+                }
+                polygons.push(Polygon::new(LineString::new(exterior), holes));
+            }
+            Ok(Geometry::MultiPolygon(MultiPolygon(polygons)))
         }
     }
 }
@@ -746,5 +927,137 @@ mod tests {
         let int_coords: Vec<(i64, i64)> = vec![];
         let delta_encoded = delta_encode(&int_coords);
         assert!(delta_encoded.is_empty());
+    }
+
+    #[test]
+    fn test_compress_decompress_polygon_with_holes() {
+        use geo_types::{coord, Polygon};
+
+        // Exterior ring
+        let exterior = geo_types::LineString::new(vec![
+            coord! { x: 0.0, y: 0.0 },
+            coord! { x: 10.0, y: 0.0 },
+            coord! { x: 10.0, y: 10.0 },
+            coord! { x: 0.0, y: 10.0 },
+            coord! { x: 0.0, y: 0.0 },
+        ]);
+        // Hole
+        let hole = geo_types::LineString::new(vec![
+            coord! { x: 2.0, y: 2.0 },
+            coord! { x: 2.0, y: 8.0 },
+            coord! { x: 8.0, y: 8.0 },
+            coord! { x: 8.0, y: 2.0 },
+            coord! { x: 2.0, y: 2.0 },
+        ]);
+        let polygon = Polygon::new(exterior, vec![hole]);
+        let geom = Geometry::new(GeoGeometry::Polygon(polygon));
+
+        let compressed = CompressedGeometry::compress(&geom).expect("compress should succeed");
+        let decompressed = compressed.decompress().expect("decompress should succeed");
+
+        if let geo_types::Geometry::Polygon(p) = &decompressed.geom {
+            assert_eq!(
+                p.exterior().0.len(),
+                5,
+                "exterior ring should have 5 coords"
+            );
+            assert_eq!(p.interiors().len(), 1, "should have 1 hole");
+            assert_eq!(
+                p.interiors()[0].0.len(),
+                5,
+                "hole ring should have 5 coords"
+            );
+        } else {
+            panic!("Expected Polygon geometry");
+        }
+    }
+
+    #[test]
+    fn test_compress_decompress_multipolygon() {
+        use geo_types::{coord, MultiPolygon, Polygon};
+
+        // Polygon 1: simple square
+        let ext1 = geo_types::LineString::new(vec![
+            coord! { x: 0.0, y: 0.0 },
+            coord! { x: 5.0, y: 0.0 },
+            coord! { x: 5.0, y: 5.0 },
+            coord! { x: 0.0, y: 5.0 },
+            coord! { x: 0.0, y: 0.0 },
+        ]);
+        let poly1 = Polygon::new(ext1, vec![]);
+
+        // Polygon 2: with a hole
+        let ext2 = geo_types::LineString::new(vec![
+            coord! { x: 10.0, y: 10.0 },
+            coord! { x: 20.0, y: 10.0 },
+            coord! { x: 20.0, y: 20.0 },
+            coord! { x: 10.0, y: 20.0 },
+            coord! { x: 10.0, y: 10.0 },
+        ]);
+        let hole2 = geo_types::LineString::new(vec![
+            coord! { x: 12.0, y: 12.0 },
+            coord! { x: 12.0, y: 18.0 },
+            coord! { x: 18.0, y: 18.0 },
+            coord! { x: 18.0, y: 12.0 },
+            coord! { x: 12.0, y: 12.0 },
+        ]);
+        let poly2 = Polygon::new(ext2, vec![hole2]);
+
+        let multipolygon = MultiPolygon(vec![poly1, poly2]);
+        let geom = Geometry::new(GeoGeometry::MultiPolygon(multipolygon));
+
+        let compressed = CompressedGeometry::compress(&geom).expect("compress should succeed");
+        let decompressed = compressed.decompress().expect("decompress should succeed");
+
+        if let geo_types::Geometry::MultiPolygon(mp) = &decompressed.geom {
+            assert_eq!(mp.0.len(), 2, "should have 2 polygons");
+            assert_eq!(mp.0[0].interiors().len(), 0, "poly1 should have no holes");
+            assert_eq!(mp.0[1].interiors().len(), 1, "poly2 should have 1 hole");
+            assert_eq!(
+                mp.0[1].exterior().0.len(),
+                5,
+                "poly2 exterior should have 5 coords"
+            );
+            assert_eq!(
+                mp.0[1].interiors()[0].0.len(),
+                5,
+                "poly2 hole should have 5 coords"
+            );
+        } else {
+            panic!("Expected MultiPolygon geometry");
+        }
+    }
+
+    #[test]
+    fn test_compress_decompress_multilinestring() {
+        use geo_types::{coord, MultiLineString};
+
+        let line1 = geo_types::LineString::new(vec![
+            coord! { x: 0.0, y: 0.0 },
+            coord! { x: 1.0, y: 1.0 },
+            coord! { x: 2.0, y: 2.0 },
+        ]);
+        let line2 =
+            geo_types::LineString::new(vec![coord! { x: 5.0, y: 5.0 }, coord! { x: 6.0, y: 6.0 }]);
+        let line3 = geo_types::LineString::new(vec![
+            coord! { x: 10.0, y: 10.0 },
+            coord! { x: 11.0, y: 11.0 },
+            coord! { x: 12.0, y: 12.0 },
+            coord! { x: 13.0, y: 13.0 },
+        ]);
+        let mls = MultiLineString(vec![line1, line2, line3]);
+        let geom = Geometry::new(GeoGeometry::MultiLineString(mls));
+
+        let compressed = CompressedGeometry::compress(&geom).expect("compress should succeed");
+        let decompressed = compressed.decompress().expect("decompress should succeed");
+
+        if let geo_types::Geometry::MultiLineString(mls) = &decompressed.geom {
+            assert_eq!(mls.0.len(), 3, "should have 3 line parts");
+            assert_eq!(mls.0[0].0.len(), 3, "line1 should have 3 coords");
+            assert_eq!(mls.0[1].0.len(), 2, "line2 should have 2 coords");
+            assert_eq!(mls.0[2].0.len(), 4, "line3 should have 4 coords");
+        } else {
+            panic!("Expected MultiLineString geometry");
+        }
     }
 }

@@ -335,7 +335,7 @@ pub async fn handle_saml_slo(
         let slo_response_url = format!(
             "{}?SAMLResponse={}&RelayState={}",
             get_idp_slo_url(auth_service)?,
-            urlencoding::encode(&encoded_response),
+            oxirs_core::encoding::percent_encode(&encoded_response),
             params.relay_state.unwrap_or_default()
         );
 
@@ -417,7 +417,7 @@ pub async fn initiate_saml_logout(
     let logout_url = format!(
         "{}?SAMLRequest={}&RelayState=logout",
         idp_slo_url,
-        urlencoding::encode(&encoded_request)
+        oxirs_core::encoding::percent_encode(&encoded_request)
     );
 
     // Invalidate local session

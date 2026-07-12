@@ -12,7 +12,7 @@
 //! - [`ml_predictor_model`](super::ml_predictor_model) – configuration, model
 //!   parameter container, and prediction record types.
 //! - [`ml_predictor_training`](super::ml_predictor_training) – the
-//!   [`MLPredictor`](super::ml_predictor_training::MLPredictor) struct,
+//!   [`MLPredictor`] struct,
 //!   training, prediction, and (de)serialization logic.
 //!
 //! All public items remain available from this path for backward compatibility

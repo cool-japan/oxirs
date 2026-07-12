@@ -434,19 +434,23 @@ fn polygon_rings_to_polygons_z(
     Ok(polygons)
 }
 
-/// Shapefile writing support
+/// Write geometries to a shapefile
 ///
-/// NOTE: The current implementation of shapefile writing requires further
-/// investigation of the shapefile crate's Writer API. The reading functionality
-/// is fully implemented and tested. Writing will be completed in a future version
-/// with proper API compatibility.
+/// Writes a collection of geometries to an ESRI Shapefile. All geometries must
+/// have the same type and the same coordinate reference system.
 ///
-/// For now, users can:
-/// 1. Convert geometries to other formats (WKT, GeoJSON, GML, GeoPackage)
-/// 2. Use those formats for data exchange
-/// 3. Wait for the complete writing implementation
+/// # Arguments
 ///
-/// TODO: Complete shapefile writing implementation with proper shapefile crate API usage
+/// * `path` - Path to the output .shp file
+/// * `geometries` - Slice of Geometry objects to write
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The geometry collection is empty
+/// - Geometries have mixed CRS
+/// - An unsupported geometry type is encountered
+/// - I/O errors occur while writing
 #[cfg(feature = "shapefile-support")]
 pub fn write_shapefile<P: AsRef<Path>>(path: P, geometries: &[Geometry]) -> Result<()> {
     if geometries.is_empty() {
@@ -621,32 +625,45 @@ fn write_polygon_shapefile<P: AsRef<Path>>(path: P, geometries: &[Geometry]) -> 
     for geom in geometries {
         match &geom.geom {
             GeoGeometry::Polygon(polygon) => {
-                // For now, only write simple polygons without holes
-                // TODO: Support interior rings when shapefile crate API is clarified
+                let mut rings: Vec<PolygonRing<ShpPoint>> = Vec::new();
+                // Exterior ring
                 let exterior_points: Vec<ShpPoint> = polygon
                     .exterior()
                     .0
                     .iter()
                     .map(|c| ShpPoint::new(c.x, c.y))
                     .collect();
-                let shp_polygon = ShpPolygon::new(PolygonRing::Outer(exterior_points));
-
+                rings.push(PolygonRing::Outer(exterior_points));
+                // Interior rings (holes)
+                for hole in polygon.interiors() {
+                    let hole_points: Vec<ShpPoint> =
+                        hole.0.iter().map(|c| ShpPoint::new(c.x, c.y)).collect();
+                    rings.push(PolygonRing::Inner(hole_points));
+                }
+                let shp_polygon = ShpPolygon::with_rings(rings);
                 writer.write_shape(&shp_polygon).map_err(|e| {
                     GeoSparqlError::SerializationError(format!("Failed to write polygon: {}", e))
                 })?;
             }
             GeoGeometry::MultiPolygon(multipolygon) => {
-                // Write each polygon as a separate shape
+                // Each polygon in the MultiPolygon is written as a separate shapefile shape
                 for polygon in &multipolygon.0 {
-                    // For now, only write simple polygons without holes
+                    let mut rings: Vec<PolygonRing<ShpPoint>> = Vec::new();
+                    // Exterior ring
                     let exterior_points: Vec<ShpPoint> = polygon
                         .exterior()
                         .0
                         .iter()
                         .map(|c| ShpPoint::new(c.x, c.y))
                         .collect();
-                    let shp_polygon = ShpPolygon::new(PolygonRing::Outer(exterior_points));
-
+                    rings.push(PolygonRing::Outer(exterior_points));
+                    // Interior rings (holes)
+                    for hole in polygon.interiors() {
+                        let hole_points: Vec<ShpPoint> =
+                            hole.0.iter().map(|c| ShpPoint::new(c.x, c.y)).collect();
+                        rings.push(PolygonRing::Inner(hole_points));
+                    }
+                    let shp_polygon = ShpPolygon::with_rings(rings);
                     writer.write_shape(&shp_polygon).map_err(|e| {
                         GeoSparqlError::SerializationError(format!(
                             "Failed to write multipolygon part: {}",
@@ -889,5 +906,48 @@ mod tests {
         // Test unknown CRS defaults to WGS84
         let wkt = uri_to_prj_wkt("http://example.com/unknown");
         assert!(wkt.contains("GCS_WGS_1984"));
+    }
+
+    #[test]
+    fn test_write_read_polygon_with_holes() {
+        use std::env::temp_dir;
+        use std::fs;
+
+        let temp_path = temp_dir().join("test_polygon_holes.shp");
+
+        // Create polygon with one hole: POLYGON((0 0, 10 0, 10 10, 0 10, 0 0),(2 2, 2 8, 8 8, 8 2, 2 2))
+        let geom =
+            Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0),(2 2, 2 8, 8 8, 8 2, 2 2))")
+                .expect("WKT parsing should succeed");
+
+        let geometries = vec![geom];
+
+        // Write shapefile
+        let result = write_shapefile(&temp_path, &geometries);
+        assert!(
+            result.is_ok(),
+            "Failed to write polygon with holes shapefile: {:?}",
+            result.err()
+        );
+
+        // Read back and verify
+        let read_back = read_shapefile(&temp_path).expect("reading shapefile should succeed");
+        assert_eq!(read_back.len(), 1, "should read back 1 geometry");
+
+        if let GeoGeometry::Polygon(p) = &read_back[0].geom {
+            assert_eq!(
+                p.interiors().len(),
+                1,
+                "polygon should have 1 interior ring (hole)"
+            );
+        } else {
+            panic!("Expected Polygon geometry, got: {:?}", read_back[0].geom);
+        }
+
+        // Clean up
+        let _ = fs::remove_file(&temp_path);
+        let _ = fs::remove_file(temp_path.with_extension("shx"));
+        let _ = fs::remove_file(temp_path.with_extension("prj"));
+        let _ = fs::remove_file(temp_path.with_extension("dbf"));
     }
 }

@@ -722,7 +722,7 @@ impl FileUploadManager {
         let url = format!(
             "https://storage.googleapis.com/upload/storage/v1/b/{}/o?uploadType=media&name={}",
             bucket,
-            urlencoding::encode(&object_name)
+            oxirs_core::encoding::percent_encode(&object_name)
         );
 
         let client = reqwest::Client::new();
@@ -1023,7 +1023,7 @@ impl FileUploadManager {
         let url = format!(
             "https://storage.googleapis.com/storage/v1/b/{}/o/{}",
             bucket,
-            urlencoding::encode(&object_name)
+            oxirs_core::encoding::percent_encode(&object_name)
         );
 
         let client = reqwest::Client::new();

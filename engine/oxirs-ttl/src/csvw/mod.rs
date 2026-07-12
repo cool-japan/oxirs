@@ -9,9 +9,9 @@
 //! annotates the columns with datatypes, predicate IRIs and URI templates.
 //! This module provides:
 //!
-//! - **[`schema`]** — typed deserialization of the JSON metadata.
-//! - **[`reader`]** — a pure-Rust RFC 4180 CSV reader (no external `csv` crate).
-//! - **[`converter`]** — maps parsed CSV rows to [`RdfStatement`] triples.
+//! - **[`schema`](crate::csvw::schema)** — typed deserialization of the JSON metadata.
+//! - **[`reader`](crate::csvw::reader)** — a pure-Rust RFC 4180 CSV reader (no external `csv` crate).
+//! - **[`converter`](crate::csvw::converter)** — maps parsed CSV rows to [`RdfStatement`](crate::csvw::converter::RdfStatement) triples.
 //!
 //! # Quick example
 //!

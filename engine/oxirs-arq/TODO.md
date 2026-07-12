@@ -1,10 +1,10 @@
 # OxiRS ARQ - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Current Status
 
-OxiRS ARQ v0.3.1 is production-ready, providing a SPARQL 1.1/1.2 query engine with histogram-based optimization and advanced caching.
+OxiRS ARQ v0.3.2 is production-ready, providing a SPARQL 1.1/1.2 query engine with histogram-based optimization and advanced caching.
 
 ### Production Features
 - ✅ **SPARQL 1.1/1.2 Query Engine** - Full W3C compliance
@@ -15,7 +15,8 @@ OxiRS ARQ v0.3.1 is production-ready, providing a SPARQL 1.1/1.2 query engine wi
 - ✅ **Federation Support** - SERVICE clause execution
 - ✅ **Query Caching** - Result caching with fingerprinting
 - ✅ **SciRS2 Integration** - Full scientific computing compliance
-- ✅ **2688 tests passing** with zero warnings
+- ✅ **Total-Order Float Terms** - In-house `TotalF32`/`TotalF64` wrappers (`total_float.rs`) replace the `ordered-float` dependency, with identical NaN-equality and zero-sign semantics
+- ✅ **3115 tests passing** with zero warnings
 
 ### Key Performance Metrics
 - Query optimization: ~3.0 µs for all profiles (3.8x faster)
@@ -105,7 +106,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS ARQ v0.2.3 - High-performance SPARQL query engine with histogram optimization*
+*OxiRS ARQ v0.3.2 - High-performance SPARQL query engine with histogram optimization*
 
 ## Proposed follow-ups
 

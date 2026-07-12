@@ -92,7 +92,9 @@ impl Default for NsgConfig {
             distance_metric: DistanceMetric::Euclidean,
             random_seed: None,
             parallel_construction: true,
-            num_threads: num_cpus::get(),
+            num_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             initial_knn_degree: 64,
             pruning_threshold: 1.0,
         }

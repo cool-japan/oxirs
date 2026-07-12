@@ -4,6 +4,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/oxirs-graphrag.svg)](https://crates.io/crates/oxirs-graphrag)
 [![docs.rs](https://docs.rs/oxirs-graphrag/badge.svg)](https://docs.rs/oxirs-graphrag)
+[![Tests](https://img.shields.io/badge/tests-1125%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
 
 Microsoft-style GraphRAG implementation combining vector similarity search with knowledge graph topology for enhanced retrieval-augmented generation.
 
@@ -11,9 +12,16 @@ Microsoft-style GraphRAG implementation combining vector similarity search with 
 
 - **RRF (Reciprocal Rank Fusion)**: Combines vector and keyword search results
 - **N-hop Graph Expansion**: SPARQL-based graph traversal for context retrieval
-- **Community Detection**: Louvain algorithm for hierarchical clustering
-- **LLM Context Building**: Converts graph structures to natural language
+- **Community Detection**: Louvain and Leiden clustering (`graph::community`), deterministic for a given `CommunityConfig::random_seed` and guaranteed never to score below the trivial single-community partition's modularity
+- **LLM Context Building**: Converts graph structures to natural language (`context_builder`, `summarizer`, `graph_summarization`)
 - **SPARQL Extensions**: Custom functions for hybrid queries
+- **Entity Linking & Classification**: Mention detection, candidate ranking, and type classification (`entity_linker`, `entity_linking`, `entity_classifier`)
+- **Explainability**: Attention-weight contributions, explanation paths, and provenance chains (`explainability`)
+- **Interactive Feedback**: Session-scoped relevance feedback that reweights subsequent retrieval (`feedback`)
+- **GNN Encoder**: GraphSAGE-style structural embeddings with hand-rolled backprop (`gnn_encoder`)
+- **Hybrid GNN+LLM**: Frozen-GNN soft-prompt projection into LLM context, plus a joint-training scaffold (`hybrid`)
+- **Neuro-Symbolic Fusion**: PINN-driven physics-plausibility scoring blended with neural similarity (`neuro_symbolic`)
+- **GGUF Model Loader** *(feature `gguf-loader`)*: Pure-Rust GGUF metadata parser and model registry, plus a LoRA adapter/trainer (`model_loader`, `hybrid::lora`)
 
 ## Architecture
 
@@ -112,13 +120,29 @@ SELECT ?related WHERE {
 }
 ```
 
+## Feature Flags
+
+| Feature | Default | Description |
+|---|---|---|
+| `community-detection` | ✅ | Louvain/Leiden community detection (`graph::community`) |
+| `hierarchical-summarization` | ✅ | Cluster-based subgraph summarization |
+| `sparql-extensions` |  | Custom SPARQL functions for hybrid queries |
+| `gguf-loader` |  | Pure-Rust GGUF metadata parser + `ModelRegistry` (`model_loader`) |
+
 ## Integration with OxiRS
 
-Requires:
-- `oxirs-vec` - Vector index (HNSW)
-- `oxirs-embed` - Embedding models (TransE, GNN, Transformers)
-- `oxirs-chat` - LLM client integration
-- `oxirs-arq` - SPARQL query engine
+`oxirs-graphrag` only has one compile-time OxiRS dependency (`oxirs-rule`); the
+standalone pipeline (triple extraction, community detection, path finding,
+summarization) runs entirely in-process with no network calls, as shown in
+the Quick Start above.
+
+For the full async `GraphRAGEngine`, you implement four small traits with
+your own backends rather than pulling in additional crates directly:
+
+- `VectorIndexTrait` — e.g. backed by `oxirs-vec` (HNSW)
+- `EmbeddingModelTrait` — e.g. backed by `oxirs-embed` (TransE, GNN, Transformers)
+- `SparqlEngineTrait` — e.g. backed by `oxirs-arq`
+- `LlmClientTrait` — e.g. backed by `oxirs-chat`'s LLM providers
 
 ## License
 

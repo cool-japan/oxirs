@@ -1,13 +1,15 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use futures_util::StreamExt;
 use oxirs_chat::llm::config::ProviderConfig;
 use oxirs_chat::llm::providers::LLMProvider;
-use oxirs_chat::llm::types::{LLMRequest, LLMResponse, LLMResponseStream, Usage};
+use oxirs_chat::llm::types::{LLMRequest, LLMResponse, LLMResponseChunk, LLMResponseStream, Usage};
 use oxirs_chat::llm::LLMConfig;
 use oxirs_chat::*;
 use oxirs_core::ConcreteStore;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -57,11 +59,61 @@ impl LLMProvider for MockLLMProvider {
 
     async fn generate_stream(
         &self,
-        _model: &str,
-        _request: &LLMRequest,
+        model: &str,
+        request: &LLMRequest,
     ) -> Result<LLMResponseStream> {
-        // For simplicity, not implementing streaming in mock
-        unimplemented!("Streaming not implemented for mock provider")
+        let started_at = Instant::now();
+
+        // Build the same canned response used by `generate`, then split it
+        // into four deterministic chunks so callers can verify accumulation.
+        let full_content = format!(
+            "Mock response to: {}",
+            request
+                .messages
+                .first()
+                .map(|m| m.content.as_str())
+                .unwrap_or("")
+        );
+
+        // Split into roughly equal chunks; the last one carries `is_final`.
+        let chunk_count = 4usize;
+        let chars: Vec<char> = full_content.chars().collect();
+        // Guard against empty content: at least one chunk of size 1.
+        let chunk_size = ((chars.len() + chunk_count - 1) / chunk_count).max(1);
+
+        let model_name = model.to_string();
+        let provider_name = self.name.clone();
+
+        // Collect into a Vec so we know the total before building is_final flags.
+        let raw_chunks: Vec<Vec<char>> = chars.chunks(chunk_size).map(|s| s.to_vec()).collect();
+        let total_chunks = raw_chunks.len();
+
+        let chunks: Vec<Result<LLMResponseChunk>> = raw_chunks
+            .into_iter()
+            .enumerate()
+            .map(|(idx, slice)| {
+                let content: String = slice.into_iter().collect();
+                let is_final = idx == total_chunks.saturating_sub(1);
+                Ok(LLMResponseChunk {
+                    content,
+                    is_final,
+                    chunk_index: idx,
+                    model_used: model_name.clone(),
+                    provider_used: provider_name.clone(),
+                    latency: started_at.elapsed(),
+                    metadata: HashMap::new(),
+                })
+            })
+            .collect();
+
+        let stream = futures_util::stream::iter(chunks);
+
+        Ok(LLMResponseStream {
+            stream: Box::pin(stream),
+            model_used: model.to_string(),
+            provider_used: self.name.clone(),
+            started_at,
+        })
     }
 
     fn get_available_models(&self) -> Vec<String> {
@@ -69,7 +121,7 @@ impl LLMProvider for MockLLMProvider {
     }
 
     fn supports_streaming(&self) -> bool {
-        false
+        true
     }
 
     fn get_provider_name(&self) -> &str {
@@ -470,4 +522,164 @@ async fn test_session_expiration_and_cleanup() {
     assert!(session_result.expect("Should get result").is_none());
 
     println!("✅ Session expiration and cleanup test passed!");
+}
+
+/// Verify that `MockLLMProvider::generate_stream` yields chunks whose
+/// accumulated text equals the non-streaming response, and that the
+/// assembled assistant message can be stored in and retrieved from the
+/// session layer exactly like a non-streamed message.
+#[tokio::test]
+async fn test_streaming_accumulation_and_session_persistence() {
+    // ---- Setup -------------------------------------------------------
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let persistence_path = temp_dir.path().join("stream_test_sessions");
+
+    let store = Arc::new(ConcreteStore::new().expect("Failed to create store"));
+    let manager = ChatManager::with_persistence(store.clone(), &persistence_path)
+        .await
+        .expect("Failed to create chat manager");
+
+    let session_id = "stream_session_001".to_string();
+    let session = manager
+        .get_or_create_session(session_id.clone())
+        .await
+        .expect("Failed to create session");
+
+    // ---- Stream through MockLLMProvider --------------------------------
+    let provider = MockLLMProvider::new("mock".to_string());
+    assert!(
+        provider.supports_streaming(),
+        "MockLLMProvider must advertise streaming support"
+    );
+
+    let input_text = "Hello from the streaming test";
+
+    let request = LLMRequest {
+        messages: vec![oxirs_chat::llm::types::ChatMessage {
+            role: oxirs_chat::llm::types::ChatRole::User,
+            content: input_text.to_string(),
+            metadata: None,
+        }],
+        system_prompt: Some("You are a helpful assistant.".to_string()),
+        max_tokens: Some(1000),
+        temperature: 0.7,
+        use_case: oxirs_chat::llm::types::UseCase::Conversation,
+        priority: oxirs_chat::llm::types::Priority::Normal,
+        timeout: Some(std::time::Duration::from_secs(30)),
+    };
+
+    // Obtain the stream and collect all chunks.
+    let mut stream_wrapper = provider
+        .generate_stream("mock-model", &request)
+        .await
+        .expect("generate_stream must not fail on MockLLMProvider");
+
+    let mut accumulated = String::new();
+    let mut chunk_count = 0usize;
+    let mut saw_final = false;
+
+    while let Some(chunk_result) = stream_wrapper.stream.next().await {
+        let chunk = chunk_result.expect("Stream chunk must not be an error");
+        accumulated.push_str(&chunk.content);
+        chunk_count += 1;
+        if chunk.is_final {
+            saw_final = true;
+        }
+        // chunk_index must be strictly monotone within a single stream.
+        assert_eq!(
+            chunk.chunk_index,
+            chunk_count - 1,
+            "chunk_index must equal the iteration counter"
+        );
+        assert_eq!(chunk.model_used, "mock-model");
+        assert_eq!(chunk.provider_used, "mock");
+    }
+
+    // Must have emitted at least one chunk and signalled completion.
+    assert!(chunk_count > 0, "Stream must yield at least one chunk");
+    assert!(saw_final, "Last chunk must have is_final == true");
+
+    // The accumulated text must be identical to what non-streaming `generate`
+    // would return for the same request.
+    let expected_content = format!("Mock response to: {}", input_text);
+    assert_eq!(
+        accumulated, expected_content,
+        "Accumulated streaming text must equal the non-streaming response"
+    );
+
+    // ---- Persist the assembled assistant message ----------------------
+    {
+        let mut guard = session.lock().await;
+
+        let user_msg = oxirs_chat::messages::Message {
+            id: format!("msg_{}", Uuid::new_v4()),
+            role: oxirs_chat::messages::MessageRole::User,
+            content: oxirs_chat::messages::MessageContent::Text(input_text.to_string()),
+            timestamp: chrono::Utc::now(),
+            metadata: None,
+            thread_id: None,
+            parent_message_id: None,
+            token_count: Some(20),
+            reactions: Vec::new(),
+            attachments: Vec::new(),
+            rich_elements: Vec::new(),
+        };
+        guard.messages.push(user_msg.clone());
+
+        let assistant_msg = oxirs_chat::messages::Message {
+            id: format!("msg_{}", Uuid::new_v4()),
+            role: oxirs_chat::messages::MessageRole::Assistant,
+            content: oxirs_chat::messages::MessageContent::Text(accumulated.clone()),
+            timestamp: chrono::Utc::now(),
+            metadata: Some(oxirs_chat::messages::MessageMetadata {
+                source: Some("mock-stream".to_string()),
+                confidence: Some(0.85),
+                processing_time_ms: Some(50),
+                model_used: Some("mock-model".to_string()),
+                temperature: Some(0.7),
+                max_tokens: Some(1000),
+                custom_fields: std::collections::HashMap::new(),
+            }),
+            thread_id: None,
+            parent_message_id: Some(user_msg.id),
+            token_count: Some(chunk_count),
+            reactions: Vec::new(),
+            attachments: Vec::new(),
+            rich_elements: Vec::new(),
+        };
+        guard.messages.push(assistant_msg);
+    }
+
+    // ---- Verify the session layer recorded the message -----------------
+    let stats = manager.get_session_stats().await;
+    assert_eq!(stats.total_sessions, 1);
+    assert_eq!(stats.active_sessions, 1);
+
+    let metrics = manager.get_detailed_metrics().await;
+    assert!(
+        metrics.total_messages >= 2,
+        "Session must contain at least user + assistant messages"
+    );
+
+    // Re-read the session and confirm accumulated content was stored.
+    let stored = manager
+        .get_session(&session_id)
+        .await
+        .expect("Session lookup must not error")
+        .expect("Session must still exist after writing messages");
+
+    let stored_guard = stored.lock().await;
+    let assistant_stored = stored_guard
+        .messages
+        .iter()
+        .find(|m| m.role == oxirs_chat::messages::MessageRole::Assistant)
+        .expect("Assistant message must be present in persisted session");
+
+    assert_eq!(
+        assistant_stored.content.to_string(),
+        expected_content,
+        "Persisted assistant content must match the accumulated stream text"
+    );
+
+    println!("✅ Streaming accumulation and session persistence test passed!");
 }

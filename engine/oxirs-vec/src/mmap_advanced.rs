@@ -16,6 +16,7 @@ use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+use tracing::warn;
 
 /// Page size for lazy loading (16KB for better vector alignment)
 const VECTOR_PAGE_SIZE: usize = 16384;
@@ -128,6 +129,9 @@ pub struct AdvancedMemoryMap {
     /// Base file mapping
     mmap: Option<Mmap>,
 
+    /// Path to the backing file for dirty-page write-back
+    file_path: Option<std::path::PathBuf>,
+
     /// Page cache
     page_cache: Arc<RwLock<LruCache<usize, Arc<PageCacheEntry>>>>,
 
@@ -173,6 +177,7 @@ impl AdvancedMemoryMap {
 
         Self {
             mmap,
+            file_path: None,
             page_cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
             access_patterns: Arc::new(RwLock::new(VecDeque::with_capacity(1000))),
             page_frequency: Arc::new(RwLock::new(HashMap::new())),
@@ -187,6 +192,17 @@ impl AdvancedMemoryMap {
             page_size: VECTOR_PAGE_SIZE,
             prefetch_distance: 3,
         }
+    }
+
+    /// Create a new advanced memory map with a backing file path for dirty-page write-back
+    pub fn new_with_path(
+        mmap: Option<Mmap>,
+        max_pages: usize,
+        file_path: Option<std::path::PathBuf>,
+    ) -> Self {
+        let mut s = Self::new(mmap, max_pages);
+        s.file_path = file_path;
+        s
     }
 
     /// Get a page with lazy loading
@@ -410,7 +426,9 @@ impl AdvancedMemoryMap {
 
                 // Write back if dirty
                 if entry.dirty {
-                    // TODO: Implement write-back
+                    if let Err(e) = self.write_back_page(entry.page_id, &entry.data) {
+                        warn!("Failed to write back page {}: {}", entry.page_id, e);
+                    }
                 }
             }
         }
@@ -439,6 +457,11 @@ impl AdvancedMemoryMap {
             if let Some(entry) = cache.pop(page_id) {
                 self.total_memory
                     .fetch_sub(entry.data.len(), Ordering::Relaxed);
+                if entry.dirty {
+                    if let Err(e) = self.write_back_page(entry.page_id, &entry.data) {
+                        warn!("Failed to write back dirty page {}: {}", entry.page_id, e);
+                    }
+                }
             }
         }
 
@@ -484,6 +507,11 @@ impl AdvancedMemoryMap {
             if let Some(entry) = cache.pop(page_id) {
                 self.total_memory
                     .fetch_sub(entry.data.len(), Ordering::Relaxed);
+                if entry.dirty {
+                    if let Err(e) = self.write_back_page(entry.page_id, &entry.data) {
+                        warn!("Failed to write back dirty page {}: {}", entry.page_id, e);
+                    }
+                }
             }
         }
 
@@ -519,6 +547,7 @@ impl AdvancedMemoryMap {
     fn clone_ref(&self) -> Self {
         Self {
             mmap: None, // Don't clone the mmap
+            file_path: self.file_path.clone(),
             page_cache: Arc::clone(&self.page_cache),
             access_patterns: Arc::clone(&self.access_patterns),
             page_frequency: Arc::clone(&self.page_frequency),
@@ -533,6 +562,39 @@ impl AdvancedMemoryMap {
             page_size: self.page_size,
             prefetch_distance: self.prefetch_distance,
         }
+    }
+
+    /// Write a dirty page back to the backing file.
+    fn write_back_page(&self, page_id: usize, data: &[u8]) -> Result<()> {
+        use std::io::{Seek, SeekFrom, Write};
+        let path = match &self.file_path {
+            Some(p) => p,
+            None => return Ok(()), // No file path configured — skip write-back
+        };
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .map_err(|e| anyhow::anyhow!("Failed to open file for write-back: {}", e))?;
+        let offset = (page_id * self.page_size) as u64;
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|e| anyhow::anyhow!("Failed to seek to page {}: {}", page_id, e))?;
+        file.write_all(data)
+            .map_err(|e| anyhow::anyhow!("Failed to write page {}: {}", page_id, e))?;
+        Ok(())
+    }
+
+    /// Flush all dirty pages back to the backing file.
+    pub fn flush_dirty_pages(&self) -> Result<()> {
+        if self.file_path.is_none() {
+            return Ok(());
+        }
+        let cache = self.page_cache.read();
+        for (_, entry) in cache.iter() {
+            if entry.dirty {
+                self.write_back_page(entry.page_id, &entry.data)?;
+            }
+        }
+        Ok(())
     }
 }
 

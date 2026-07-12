@@ -6,6 +6,7 @@
 use crate::error::{PhysicsError, PhysicsResult};
 use chrono::{DateTime, Utc};
 use oxirs_core::model::NamedNode;
+use oxirs_core::query::{UpdateExecutor, UpdateParser};
 use oxirs_core::rdf_store::RdfStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -152,17 +153,15 @@ impl ResultInjector {
     }
 
     /// Execute SPARQL UPDATE
-    async fn execute_update(&self, _store: &RdfStore, update_query: &str) -> PhysicsResult<()> {
-        // Note: Current oxirs-core doesn't have update() method yet
-        // For now, we'll log the update and return Ok
-        // TODO: Implement when oxirs-core adds SPARQL UPDATE support
-
-        tracing::debug!("SPARQL UPDATE:\n{}", update_query);
-
-        // Future implementation:
-        // store.update(update_query)
-        //     .map_err(|e| PhysicsError::ResultInjection(format!("Update failed: {}", e)))?;
-
+    async fn execute_update(&self, store: &RdfStore, update_query: &str) -> PhysicsResult<()> {
+        let parser = UpdateParser::new();
+        let parsed = parser
+            .parse(update_query)
+            .map_err(|e| PhysicsError::ResultInjection(format!("Parse failed: {e}")))?;
+        let executor = UpdateExecutor::new(store);
+        executor
+            .execute(&parsed)
+            .map_err(|e| PhysicsError::ResultInjection(format!("Execute failed: {e}")))?;
         Ok(())
     }
 
@@ -179,9 +178,9 @@ impl ResultInjector {
                 <{run_id}> a phys:SimulationRun .
                 <{run_id}> phys:simulatesEntity <{entity}> .
                 <{run_id}> phys:timestamp "{timestamp}"^^xsd:dateTime .
-                <{run_id}> phys:converged {converged}^^xsd:boolean .
-                <{run_id}> phys:iterations {iterations}^^xsd:integer .
-                <{run_id}> phys:finalResidual {residual}^^xsd:double .
+                <{run_id}> phys:converged "{converged}"^^xsd:boolean .
+                <{run_id}> phys:iterations "{iterations}"^^xsd:integer .
+                <{run_id}> phys:finalResidual "{residual}"^^xsd:double .
             }}
             "#,
             phys = phys,
@@ -211,14 +210,14 @@ impl ResultInjector {
                 state_id = state_id
             ));
             triples.push(format!(
-                "<{state_id}> phys:time {time}^^xsd:double .",
+                "<{state_id}> phys:time \"{time}\"^^xsd:double .",
                 state_id = state_id,
                 time = state.time
             ));
 
             for (key, value) in &state.state {
                 triples.push(format!(
-                    "<{state_id}> phys:{key} {value}^^xsd:double .",
+                    "<{state_id}> phys:{key} \"{value}\"^^xsd:double .",
                     state_id = state_id,
                     key = key,
                     value = value
@@ -229,7 +228,7 @@ impl ResultInjector {
         // Add derived quantities
         for (key, value) in &result.derived_quantities {
             triples.push(format!(
-                "<{run_id}> phys:{key} {value}^^xsd:double .",
+                "<{run_id}> phys:{key} \"{value}\"^^xsd:double .",
                 run_id = result.simulation_run_id,
                 key = key,
                 value = value
@@ -271,7 +270,7 @@ impl ResultInjector {
                 <{software_agent}> prov:label "{software}"^^xsd:string .
                 <{software_agent}> phys:version "{version}"^^xsd:string .
                 <{run_id}> phys:parametersHash "{params_hash}"^^xsd:string .
-                <{run_id}> phys:executionTimeMs {exec_time}^^xsd:integer .
+                <{run_id}> phys:executionTimeMs "{exec_time}"^^xsd:integer .
             }}
             "#,
             prov = prov,
@@ -312,14 +311,14 @@ impl ResultInjector {
                     state_id = state_id
                 ));
                 triples.push(format!(
-                    "<{state_id}> phys:time {time}^^xsd:double .",
+                    "<{state_id}> phys:time \"{time}\"^^xsd:double .",
                     state_id = state_id,
                     time = state.time
                 ));
 
                 for (key, value) in &state.state {
                     triples.push(format!(
-                        "<{state_id}> phys:{key} {value}^^xsd:double .",
+                        "<{state_id}> phys:{key} \"{value}\"^^xsd:double .",
                         state_id = state_id,
                         key = key,
                         value = value
@@ -383,7 +382,7 @@ impl ResultInjector {
 
                     INSERT DATA {{
                         <{node}> phys:property "{property}"^^xsd:string .
-                        <{node}> phys:value {value}^^xsd:double .
+                        <{node}> phys:value "{value}"^^xsd:double .
                         <{node}> phys:timestamp "{timestamp}"^^xsd:dateTime .
                     }}
                     "#,
@@ -409,7 +408,7 @@ impl ResultInjector {
 
                 for (i, v) in vec.iter().enumerate() {
                     triples.push(format!(
-                        "<{node}> phys:component{i} {v}^^xsd:double .",
+                        "<{node}> phys:component{i} \"{v}\"^^xsd:double .",
                         node = result_node.as_str(),
                         i = i,
                         v = v
@@ -440,7 +439,7 @@ impl ResultInjector {
                 for (i, row) in tensor.iter().enumerate() {
                     for (j, v) in row.iter().enumerate() {
                         triples.push(format!(
-                            "<{node}> phys:tensor_{i}_{j} {v}^^xsd:double .",
+                            "<{node}> phys:tensor_{i}_{j} \"{v}\"^^xsd:double .",
                             node = result_node.as_str(),
                             i = i,
                             j = j,
@@ -478,12 +477,12 @@ impl ResultInjector {
                         point_id = point_id
                     ));
                     triples.push(format!(
-                        "<{point_id}> phys:time {time}^^xsd:double .",
+                        "<{point_id}> phys:time \"{time}\"^^xsd:double .",
                         point_id = point_id,
                         time = time
                     ));
                     triples.push(format!(
-                        "<{point_id}> phys:value {value}^^xsd:double .",
+                        "<{point_id}> phys:value \"{value}\"^^xsd:double .",
                         point_id = point_id,
                         value = value
                     ));
@@ -636,6 +635,8 @@ pub struct SimulationProvenance {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // `find_quads` is provided by the `Store` trait, which must be in scope.
+    use oxirs_core::Store;
 
     fn create_test_result() -> SimulationResult {
         let mut trajectory = Vec::new();
@@ -868,5 +869,36 @@ mod tests {
 
         assert!(!tx.id.is_empty());
         assert!(tx.updates.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_execute_update_insert_data() {
+        let store = RdfStore::default();
+        let injector = ResultInjector::new();
+        let update =
+            "INSERT DATA { <http://example.org/s> <http://example.org/p> <http://example.org/o> }";
+        let result = injector.execute_update(&store, update).await;
+        assert!(
+            result.is_ok(),
+            "execute_update should succeed: {:?}",
+            result
+        );
+        // Verify the triple landed
+        let quads = store
+            .find_quads(None, None, None, None)
+            .expect("find_quads failed");
+        assert!(
+            !quads.is_empty(),
+            "Store should have quads after INSERT DATA"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_update_parse_error() {
+        let store = RdfStore::default();
+        let injector = ResultInjector::new();
+        let bad_update = "NOT VALID SPARQL UPDATE";
+        let result = injector.execute_update(&store, bad_update).await;
+        assert!(result.is_err(), "Should fail on invalid SPARQL");
     }
 }

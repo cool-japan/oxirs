@@ -7,6 +7,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io;
 use std::io::Write;
 #[cfg(feature = "async-tokio")]
@@ -226,6 +227,7 @@ impl RdfXmlSerializer {
             custom_default_prefix,
             prefixes_by_iri: prefixes,
             base_iri: self.base_iri,
+            used_synthetic_prefixes: HashMap::new(),
         }
     }
 }
@@ -387,6 +389,10 @@ pub struct InnerRdfXmlWriter {
     custom_default_prefix: bool,
     prefixes_by_iri: BTreeMap<String, String>,
     base_iri: Option<Iri<String>>,
+    /// Maps namespace IRI → synthetic prefix name (e.g. "http://ns1.example.com/vocab#" → "oxprefix").
+    /// Ensures each distinct namespace gets a unique synthetic prefix and prevents attribute-name
+    /// collisions when multiple predicates from different unknown namespaces appear in the same element.
+    used_synthetic_prefixes: HashMap<String, String>,
 }
 
 impl InnerRdfXmlWriter {
@@ -568,7 +574,10 @@ impl InnerRdfXmlWriter {
         output.push(Event::End(BytesEnd::new("rdf:RDF")));
     }
 
-    fn uri_to_qname_and_xmlns(&self, uri: &NamedNode) -> (Cow<'_, str>, Option<(String, String)>) {
+    fn uri_to_qname_and_xmlns(
+        &mut self,
+        uri: &NamedNode,
+    ) -> (Cow<'_, str>, Option<(String, String)>) {
         let uri_str = uri.as_str();
         let (prop_prefix, prop_value) = split_iri(uri_str);
         if let Some(prefix) = self.prefixes_by_iri.get(prop_prefix) {
@@ -588,10 +597,29 @@ impl InnerRdfXmlWriter {
                 Some(("xmlns".to_string(), prop_prefix.to_string())),
             )
         } else {
-            // TODO: does not work on recursive elements
+            // Assign a unique synthetic prefix per namespace IRI to avoid xmlns attribute collisions
+            // when multiple predicates from different unknown namespaces appear in the same element.
+            let syn_prefix = if let Some(existing) = self.used_synthetic_prefixes.get(prop_prefix) {
+                existing.clone()
+            } else {
+                // Generate a unique synthetic prefix name not already in used_synthetic_prefixes
+                // and not already used as a value in prefixes_by_iri.
+                let mut candidate = if self.used_synthetic_prefixes.is_empty() {
+                    "oxprefix".to_string()
+                } else {
+                    format!("oxprefix{}", self.used_synthetic_prefixes.len())
+                };
+                // Ensure no clash with user-defined prefix names
+                while self.prefixes_by_iri.values().any(|v| v == &candidate) {
+                    candidate = format!("{}x", candidate);
+                }
+                self.used_synthetic_prefixes
+                    .insert(prop_prefix.to_string(), candidate.clone());
+                candidate
+            };
             (
-                Cow::Owned(format!("oxprefix:{prop_value}")),
-                Some(("xmlns:oxprefix".to_string(), prop_prefix.to_string())),
+                Cow::Owned(format!("{syn_prefix}:{prop_value}")),
+                Some((format!("xmlns:{syn_prefix}"), prop_prefix.to_string())),
             )
         }
     }
@@ -637,6 +665,81 @@ fn relative_iri<'a>(iri: &'a str, base_iri: &Option<Iri<String>>) -> Cow<'a, str
 mod tests {
     use super::*;
     use std::error::Error;
+
+    /// Regression test for the synthetic-prefix cycle-safety fix.
+    ///
+    /// When two predicates belong to entirely different namespaces that have no user-defined
+    /// prefix, both used to receive `xmlns:oxprefix=<ns>`.  The second declaration would
+    /// silently overwrite the first, producing invalid XML (duplicate attribute names) or
+    /// incorrect namespace resolution.  After the fix each distinct namespace receives a
+    /// unique synthetic prefix (`oxprefix`, `oxprefix1`, …).
+    #[test]
+    fn test_synthetic_prefix_cycle_safety() -> Result<(), Box<dyn Error>> {
+        let subject = NamedNode::new("http://example.org/subject")?;
+        let pred1 = NamedNode::new("http://ns1.example.com/vocab#hasLabel")?;
+        let pred2 = NamedNode::new("http://ns2.example.com/vocab#hasComment")?;
+        let obj1 = Literal::new_simple_literal("hello");
+        let obj2 = Literal::new_simple_literal("world");
+
+        // We use a custom default prefix so that both predicates fall through to the
+        // synthetic-prefix branch (otherwise they would match the `!custom_default_prefix`
+        // branch and each just emit `xmlns=<ns>` without a prefix, which is a different path).
+        let mut serializer = RdfXmlSerializer::new()
+            .with_prefix("", "http://placeholder.example/")?
+            .for_writer(Vec::new());
+
+        serializer.serialize_triple(TripleRef::new(
+            SubjectRef::NamedNode(&subject),
+            PredicateRef::NamedNode(&pred1),
+            ObjectRef::Literal(&obj1),
+        ))?;
+        serializer.serialize_triple(TripleRef::new(
+            SubjectRef::NamedNode(&subject),
+            PredicateRef::NamedNode(&pred2),
+            ObjectRef::Literal(&obj2),
+        ))?;
+
+        let xml = String::from_utf8(serializer.finish()?)?;
+
+        // Both namespace URIs must appear in the output.
+        assert!(
+            xml.contains("ns1.example.com"),
+            "Expected ns1 namespace in output: {xml}"
+        );
+        assert!(
+            xml.contains("ns2.example.com"),
+            "Expected ns2 namespace in output: {xml}"
+        );
+
+        // The two namespaces must each appear exactly once (no duplication / collision).
+        assert_eq!(
+            xml.matches("ns1.example.com").count(),
+            1,
+            "ns1 namespace should appear exactly once: {xml}"
+        );
+        assert_eq!(
+            xml.matches("ns2.example.com").count(),
+            1,
+            "ns2 namespace should appear exactly once: {xml}"
+        );
+
+        // At least one synthetic prefix must be present.
+        assert!(
+            xml.contains("oxprefix:") || xml.contains("oxprefix1:"),
+            "Expected at least one synthetic prefix in output: {xml}"
+        );
+
+        // The two synthetic xmlns declarations must be distinct attribute names.
+        // If both got "oxprefix" the XML would contain `xmlns:oxprefix=` twice; with the
+        // fix one gets `xmlns:oxprefix=` and the other `xmlns:oxprefix1=`.
+        let base_decl_count = xml.matches("xmlns:oxprefix=").count();
+        assert!(
+            base_decl_count <= 1,
+            "xmlns:oxprefix= appeared {base_decl_count} times — indicates a duplicate-attribute clash: {xml}"
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn test_split_iri() {

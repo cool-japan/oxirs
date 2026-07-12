@@ -298,8 +298,8 @@ impl CrossRegionReplicator {
     }
 
     /// Apply a single record at `target_region`. Used internally by
-    /// [`drain_pending`] but exposed so callers can simulate finer-grained
-    /// drains in tests.
+    /// [`CrossRegionReplicator::drain_pending`] but exposed so callers can
+    /// simulate finer-grained drains in tests.
     pub fn apply_remote(
         &mut self,
         target_region: &RegionId,

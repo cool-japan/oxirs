@@ -6,8 +6,8 @@
 use crate::extensions::{CustomFunction, ExecutionContext, Value, ValueType};
 use anyhow::{bail, Context, Result};
 
+use oxirs_core::encoding::percent_encode;
 use regex::Regex;
-use urlencoding;
 
 // String Functions
 
@@ -630,7 +630,7 @@ impl CustomFunction for EncodeForUriFunction {
             _ => bail!("encode-for-uri() argument must be a string"),
         };
 
-        let encoded = urlencoding::encode(string);
+        let encoded = percent_encode(string);
         Ok(Value::String(encoded.to_string()))
     }
 }

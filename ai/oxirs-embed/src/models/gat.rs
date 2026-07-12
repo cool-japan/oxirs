@@ -432,9 +432,9 @@ impl GatEmbedder {
     /// Multi-head attention forward pass for a single entity.
     ///
     /// For each head `h`:
-    ///   Q_h = W_query[h] · e_i
-    ///   K_h = W_key[h]   · e_j  for each neighbour j
-    ///   V_h = W_value[h] · e_j
+    ///   Q_h = W_query\[h\] · e_i
+    ///   K_h = W_key\[h\]   · e_j  for each neighbour j
+    ///   V_h = W_value\[h\] · e_j
     ///   score_j = LeakyReLU(Q_h · K_h_j / √head_dim)
     ///   α_j = softmax({score_j})
     ///   head_out_h = Σ_j α_j · V_h_j

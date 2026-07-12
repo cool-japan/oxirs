@@ -39,7 +39,7 @@ pub struct ScoredEntity {
     pub entity_id: String,
     /// Normalised cosine similarity `(cos+1)/2 ∈ [0,1]`.
     pub neural_score: f64,
-    /// Physics plausibility ∈ [0,1].
+    /// Physics plausibility ∈ \[0,1\].
     pub physics_score: f64,
     /// Combined score `(1−λ)·neural + λ·physics`.
     pub combined_score: f64,
@@ -152,9 +152,9 @@ impl PinnEntityScorer {
 
     /// Encode the `kg` graph first, then score entities against `query_embedding`.
     ///
-    /// Note: The [`HybridLlmHead`] also encodes the same graph internally when
-    /// `answer()` is called; the double-encode is accepted to keep the APIs
-    /// independent.
+    /// Note: The [`HybridLlmHead`](crate::hybrid::HybridLlmHead) also encodes
+    /// the same graph internally when `answer()` is called; the double-encode
+    /// is accepted to keep the APIs independent.
     pub fn encode_and_score(
         &self,
         kg: &KgGraph,
@@ -165,8 +165,8 @@ impl PinnEntityScorer {
         self.score_entities(&embeddings, entities, query_embedding)
     }
 
-    /// Like [`encode_and_score`], but returns entities sorted by `combined_score`
-    /// descending (highest first).
+    /// Like [`Self::encode_and_score`], but returns entities sorted by
+    /// `combined_score` descending (highest first).
     pub fn rank(
         &self,
         kg: &KgGraph,

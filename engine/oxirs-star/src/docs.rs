@@ -395,7 +395,7 @@ let parsed_graph = profiler.profile_parsing(
     large_dataset.len(),
     || {
         let mut parser = StarParser::new();
-        parser.parse_str(&large_dataset, StarFormat::TurtleStar).unwrap()
+        parser.parse_str(&large_dataset, StarFormat::TurtleStar).expect("parse large dataset")
     }
 );
 

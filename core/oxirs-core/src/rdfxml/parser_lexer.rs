@@ -469,7 +469,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// The base IRI considered at the current step of the parsing.
     ///
     /// ```
-    /// # [tokio::main(flavor = "current_thread")]
+    /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxirs_core::rdfxml::RdfXmlParser;
     ///

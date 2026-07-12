@@ -11,10 +11,13 @@ Full implementation of W3C Decentralized Identifiers (DID) and Verifiable Creden
 
 - **DID Core 1.0**: W3C Recommendation compliant
 - **VC Data Model 2.0**: Verifiable Credentials with Ed25519 proofs
-- **did:key**: Deterministic DIDs from public keys (no network)
-- **did:web**: HTTPS-based DID resolution (optional)
+- **DID Methods**: `did:key` (default, no network), `did:web` (feature `did-web`), `did:ethr` (default, ERC-1056), `did:ion` (default, Sidetree/ION), `did:pkh` (CAIP-10 blockchain accounts)
 - **RDFC-1.0**: RDF Dataset Canonicalization for graph signing
-- **Ed25519Signature2020**: Cryptographic proof suite
+- **Proof Suites**: Ed25519Signature2020, JWS (`JsonWebSignature2020`), BBS+ signatures (feature `bbs-plus`, default)
+- **Key Management**: Key rotation and lifecycle tracking, ECDH key agreement
+- **Revocation**: W3C `StatusList2021` and `RevocationList2020`
+- **Trust & Presentation**: Trust chain verification, Verifiable Presentation builder/presenter
+- **Selective Disclosure**: ZKP-based Pedersen commitments (feature `zkp`, default)
 
 ## Standards Compliance
 
@@ -57,31 +60,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Issue Verifiable Credential
 
 ```rust
-use oxirs_did::{Did, VerifiableCredential, VcIssuer};
-use oxirs_did::proof::ed25519::Ed25519Signer;
-use serde_json::json;
+use oxirs_did::{CredentialIssuer, CredentialSubject, DidResolver, Keystore};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Issuer identity
-    let issuer_signer = Ed25519Signer::generate();
-    let issuer_did = Did::new_key_ed25519(&issuer_signer.public_key_bytes())?;
+    // Issuer identity — the keystore generates and holds the signing key
+    let keystore = Arc::new(Keystore::new());
+    let issuer_did = keystore.generate_ed25519().await?;
 
-    // Create credential
-    let mut vc = VerifiableCredential::new(
-        issuer_did.clone(),
-        json!({
-            "id": "did:key:z6Mk...",
-            "email": "alice@example.com",
-            "role": "Researcher"
-        }),
-    )
-    .with_type("EmailCredential")
-    .with_expiration_days(365);
+    // Create credential subject
+    let subject = CredentialSubject::new(Some("did:key:z6Mk..."))
+        .with_claim("email", "alice@example.com")
+        .with_claim("role", "Researcher");
 
     // Issue (sign) the credential
-    let issuer = VcIssuer::new(issuer_signer);
-    issuer.issue(&mut vc, None).await?;
+    let resolver = Arc::new(DidResolver::new());
+    let issuer = CredentialIssuer::new(keystore, resolver);
+    let vc = issuer
+        .issue(&issuer_did, subject, vec!["EmailCredential".to_string()])
+        .await?;
 
     println!("{}", serde_json::to_string_pretty(&vc)?);
 
@@ -92,14 +90,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Verify Credential
 
 ```rust
-use oxirs_did::{DidResolver, VcVerifier, VerifiableCredential};
+use oxirs_did::{CredentialVerifier, DidResolver, VerifiableCredential};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let resolver = DidResolver::new();
-    let verifier = VcVerifier::new(resolver);
+    let resolver = Arc::new(DidResolver::new());
+    let verifier = CredentialVerifier::new(resolver);
 
-    // Parse VC from JSON
+    // Parse a VC received as JSON (e.g. from an API or file)
     let vc: VerifiableCredential = serde_json::from_str(vc_json)?;
 
     // Verify
@@ -107,12 +106,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if result.valid {
         println!("✓ Credential is VALID");
-        println!("  Issued by: {}", result.issuer.unwrap());
+        println!("  Issued by: {}", result.issuer.unwrap_or_default());
     } else {
-        println!("✗ Credential is INVALID");
-        for error in &result.errors {
-            println!("  - {}", error);
-        }
+        println!("✗ Credential is INVALID: {}", result.error.unwrap_or_default());
+    }
+
+    for check in &result.checks {
+        println!("  [{}] {}", if check.passed { "✓" } else { "✗" }, check.name);
     }
 
     Ok(())
@@ -186,20 +186,33 @@ did:web:example.com%3A8080
 → https://example.com:8080/.well-known/did.json
 ```
 
+### Additional Methods (Default)
+
+- **did:ethr** — `did:ethr:[network:]<ethereum-address>`, based on the ERC-1056 Ethereum DID Registry contract
+- **did:ion** — `did:ion:<unique-suffix>`, Sidetree-anchored DIDs on the ION network (Bitcoin-anchored PKI)
+- **did:pkh** — `did:pkh:<CAIP-2 chain namespace>:<account address>`, wraps an existing blockchain account (Ethereum, Solana, Bitcoin, ...) as a DID with no separate registration step
+
 ## Feature Flags
 
 ```toml
 [dependencies]
-oxirs-did = { version = "0.1", features = ["did-web", "signed-graphs"] }
+oxirs-did = { version = "0.3.2", features = ["did-web", "signed-graphs"] }
 ```
 
 Available features:
 - `did-key` (default) - did:key method
 - `did-web` - did:web method (requires reqwest)
-- `did-ebsi` - European Blockchain Services Infrastructure
+- `did-ebsi` - European Blockchain Services Infrastructure (requires reqwest)
+- `did-ethr` (default) - did:ethr method (ERC-1056)
+- `did-ion` (default) - did:ion method (Sidetree/ION)
 - `vc-data-model-2` (default) - W3C VC 2.0
 - `signed-graphs` - RDF graph signing/verification
 - `key-management` - Key storage
+- `bbs-plus` (default) - BBS+ signatures for selective disclosure
+- `zkp` (default) - ZKP-based selective disclosure (Pedersen commitments)
+- `zkp-ristretto` - Hardened Pedersen commitments over the Ristretto255 group
+- `keygen` - RSA key-pair generation helpers
+- `fips` - FIPS 140-2 cryptographic boundary marker (see `docs/policies/fips-boundary.md`)
 
 ## Use Cases
 
@@ -212,8 +225,9 @@ Available features:
 ## Dependencies
 
 - `ed25519-dalek` - Ed25519 signatures
-- `multibase`, `bs58` - Multiformat encoding
-- `sha2` - Cryptographic hashing
+- `p256`, `bls12_381_plus`, `rsa` - Additional signature suites (ECDSA P-256, BLS12-381/BBS+, RSA)
+- `sha2`, `sha3`, `hmac` - Cryptographic hashing
+- `bs58` - Multiformat (multibase) encoding
 - `scirs2-core` - Secure random number generation
 
 ## License

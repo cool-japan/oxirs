@@ -23,7 +23,7 @@ fn build_patch_router(store: Arc<ConcreteStore>) -> Router {
 /// Send a PATCH request and return (status, body_bytes)
 async fn do_patch(app: Router, patch_body: &str, graph: Option<&str>) -> (StatusCode, Vec<u8>) {
     let uri = match graph {
-        Some(g) => format!("/patch?graph={}", urlencoding::encode(g)),
+        Some(g) => format!("/patch?graph={}", oxirs_core::encoding::percent_encode(g)),
         None => "/patch".to_string(),
     };
 

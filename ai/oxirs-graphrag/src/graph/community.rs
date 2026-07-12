@@ -78,7 +78,7 @@ impl CommunityDetector {
 
         // Detect communities based on algorithm
         let communities = match self.config.algorithm {
-            CommunityAlgorithm::Louvain => self.louvain(&graph, &node_map),
+            CommunityAlgorithm::Louvain => self.louvain(&graph, &node_map)?,
             CommunityAlgorithm::Leiden => self.leiden(&graph, &node_map)?,
             CommunityAlgorithm::LabelPropagation => self.label_propagation(&graph, &node_map),
             CommunityAlgorithm::ConnectedComponents => self.connected_components(&graph, &node_map),
@@ -119,10 +119,10 @@ impl CommunityDetector {
         &self,
         graph: &UnGraph<String, ()>,
         node_map: &HashMap<String, NodeIndex>,
-    ) -> Vec<HashSet<String>> {
+    ) -> GraphRAGResult<Vec<HashSet<String>>> {
         let node_count = graph.node_count();
         if node_count == 0 {
-            return vec![];
+            return Ok(vec![]);
         }
 
         // Initialize: each node in its own community
@@ -135,14 +135,14 @@ impl CommunityDetector {
         let m = graph.edge_count() as f64;
         if m == 0.0 {
             // No edges, each node is its own community
-            return node_map
+            return Ok(node_map
                 .keys()
                 .map(|k| {
                     let mut set = HashSet::new();
                     set.insert(k.clone());
                     set
                 })
-                .collect();
+                .collect());
         }
 
         // Degree of each node
@@ -151,21 +151,45 @@ impl CommunityDetector {
             .map(|&idx| (idx, graph.neighbors(idx).count() as f64))
             .collect();
 
+        // Build a deterministic node processing order. Rust's default
+        // HashMap/HashSet hasher is reseeded from OS entropy every process
+        // start, so `node_map.values()` iteration order is not reproducible
+        // across runs even with a fixed `random_seed`. Sort the base vector
+        // first (NodeIndex implements Ord), then Fisher-Yates shuffle it
+        // using the seeded RNG so the resulting order is a deterministic
+        // function of `random_seed` alone.
+        let mut node_order: Vec<NodeIndex> = node_map.values().copied().collect();
+        node_order.sort();
+        let mut rng = seeded_rng(self.config.random_seed);
+        for i in (1..node_order.len()).rev() {
+            let j = (rng.random_range(0.0..1.0) * (i + 1) as f64) as usize;
+            node_order.swap(i, j);
+        }
+
         // Iterate
         for _ in 0..self.config.max_iterations {
             let mut changed = false;
 
-            for (&node, &current_comm) in community.clone().iter() {
+            for &node in &node_order {
+                let current_comm = match community.get(&node) {
+                    Some(&c) => c,
+                    None => continue,
+                };
                 let node_degree = degree.get(&node).copied().unwrap_or(0.0);
 
                 // Calculate modularity gain for each neighbor's community
                 let mut best_comm = current_comm;
                 let mut best_gain = 0.0;
 
-                let neighbor_comms: HashSet<usize> = graph
+                // Sorted (not raw HashSet iteration) so ties always break
+                // the same way regardless of hasher seed.
+                let mut neighbor_comms: Vec<usize> = graph
                     .neighbors(node)
                     .filter_map(|n| community.get(&n).copied())
+                    .collect::<HashSet<usize>>()
+                    .into_iter()
                     .collect();
+                neighbor_comms.sort_unstable();
 
                 for &neighbor_comm in &neighbor_comms {
                     if neighbor_comm == current_comm {
@@ -204,8 +228,26 @@ impl CommunityDetector {
             }
         }
 
+        // Never settle for a partition worse than the trivial single-community
+        // partition: greedy hill-climbing can get stuck in a local optimum
+        // with negative modularity, which is strictly worse than "no
+        // community structure at all". The trivial partition is always a
+        // valid candidate — per `calculate_modularity`'s doc comment it has
+        // Q = 1 - resolution = 0 at the default resolution for any graph —
+        // so compare against it via the real formula (rather than
+        // hardcoding that constant) and fall back if the greedy result did
+        // worse.
+        let trivial: HashMap<NodeIndex, usize> =
+            node_map.values().map(|&idx| (idx, 0usize)).collect();
+        let greedy_modularity = self.calculate_modularity(graph, &community, m, &degree)?;
+        let trivial_modularity = self.calculate_modularity(graph, &trivial, m, &degree)?;
+
+        if trivial_modularity >= greedy_modularity {
+            return Ok(self.group_by_community(graph, &trivial));
+        }
+
         // Group nodes by community
-        self.group_by_community(graph, &community)
+        Ok(self.group_by_community(graph, &community))
     }
 
     /// Label propagation algorithm
@@ -316,6 +358,11 @@ impl CommunityDetector {
 
             // Phase 1: Local moving (like Louvain)
             let mut node_order: Vec<NodeIndex> = node_map.values().copied().collect();
+            // Sort for a deterministic base order first — HashMap iteration
+            // order is randomized per-process, so shuffling it (even with a
+            // fixed seed) would only permute an already-random sequence and
+            // the final order would still not be reproducible.
+            node_order.sort();
             // Shuffle for randomness
             for i in (1..node_order.len()).rev() {
                 let j = (rng.random_range(0.0..1.0) * (i + 1) as f64) as usize;
@@ -332,11 +379,15 @@ impl CommunityDetector {
                 let mut best_comm = current_comm;
                 let mut best_gain = 0.0;
 
-                // Get neighbor communities
-                let neighbor_comms: HashSet<usize> = graph
+                // Get neighbor communities (sorted so ties always break the
+                // same way regardless of HashSet iteration/hasher seed).
+                let mut neighbor_comms: Vec<usize> = graph
                     .neighbors(node)
                     .filter_map(|n| community.get(&n).copied())
+                    .collect::<HashSet<usize>>()
+                    .into_iter()
                     .collect();
+                neighbor_comms.sort_unstable();
 
                 for &neighbor_comm in &neighbor_comms {
                     if neighbor_comm == current_comm {
@@ -370,14 +421,25 @@ impl CommunityDetector {
             }
 
             // Phase 2: Refinement (what makes Leiden better than Louvain)
-            // Split communities and re-merge if it improves modularity
-            let unique_comms: HashSet<usize> = community.values().copied().collect();
+            // Split communities and re-merge if it improves modularity.
+            // `refine_community` mutates `community` in place, so the order
+            // in which communities are visited can affect the outcome —
+            // sort instead of iterating the HashSet directly so this is a
+            // deterministic function of `random_seed`.
+            let mut unique_comms: Vec<usize> = community
+                .values()
+                .copied()
+                .collect::<HashSet<usize>>()
+                .into_iter()
+                .collect();
+            unique_comms.sort_unstable();
             for &comm_id in &unique_comms {
-                let comm_nodes: Vec<NodeIndex> = community
+                let mut comm_nodes: Vec<NodeIndex> = community
                     .iter()
                     .filter(|(_, &c)| c == comm_id)
                     .map(|(&n, _)| n)
                     .collect();
+                comm_nodes.sort();
 
                 if comm_nodes.len() <= 1 {
                     continue;
@@ -406,6 +468,22 @@ impl CommunityDetector {
             tracing::warn!("Leiden modularity {:.3} below target 0.75", best_modularity);
         } else {
             tracing::info!("Leiden achieved modularity: {:.3}", best_modularity);
+        }
+
+        // Never settle for a partition worse than the trivial single-community
+        // partition (see `louvain`'s and `calculate_modularity`'s doc
+        // comments for why the trivial partition is always a valid,
+        // zero-modularity-at-default-resolution candidate). `community` here
+        // is the actual final assignment (post Phase 1 + Phase 2 of the last
+        // iteration), so recompute its modularity fresh rather than reusing
+        // `best_modularity`, which may reference an earlier, discarded state.
+        let trivial: HashMap<NodeIndex, usize> =
+            node_map.values().map(|&idx| (idx, 0usize)).collect();
+        let greedy_modularity = self.calculate_modularity(graph, &community, m, &degree)?;
+        let trivial_modularity = self.calculate_modularity(graph, &trivial, m, &degree)?;
+
+        if trivial_modularity >= greedy_modularity {
+            return Ok(self.group_by_community(graph, &trivial));
         }
 
         Ok(self.group_by_community(graph, &community))
@@ -447,9 +525,14 @@ impl CommunityDetector {
                 }
             }
 
-            // Find best subcommunity
-            if let Some((&best_sub, _)) = sub_edges
-                .iter()
+            // Find best subcommunity. `max_by` returns the *last* maximal
+            // element on ties, and HashMap iteration order is randomized
+            // per-process, so sort by subcommunity id first — this makes
+            // ties break the same way on every run for a given seed.
+            let mut sorted_sub_edges: Vec<(&usize, &f64)> = sub_edges.iter().collect();
+            sorted_sub_edges.sort_unstable_by_key(|(sub, _)| **sub);
+            if let Some((&best_sub, _)) = sorted_sub_edges
+                .into_iter()
                 .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             {
                 if best_sub != current_sub {
@@ -461,7 +544,16 @@ impl CommunityDetector {
 
         // If we found a better partition, create new communities
         if changed {
-            let unique_subs: HashSet<usize> = subcomm.values().copied().collect();
+            // Sort so relabeling (via `.enumerate()` below) is a
+            // deterministic function of `random_seed` instead of depending
+            // on HashSet iteration/hasher seed order.
+            let mut unique_subs: Vec<usize> = subcomm
+                .values()
+                .copied()
+                .collect::<HashSet<usize>>()
+                .into_iter()
+                .collect();
+            unique_subs.sort_unstable();
             if unique_subs.len() > 1 {
                 let max_comm = community.values().max().copied().unwrap_or(0);
                 for (i, sub_id) in unique_subs.iter().enumerate() {
@@ -478,7 +570,28 @@ impl CommunityDetector {
         Ok(())
     }
 
-    /// Calculate modularity of a community assignment
+    /// Calculate the modularity of a community assignment.
+    ///
+    /// Standard Newman-Girvan modularity:
+    ///
+    /// ```text
+    /// Q = (1/2m) * Σ_{i,j} [A_ij - resolution·k_i·k_j/2m] · δ(c_i, c_j)
+    /// ```
+    ///
+    /// Computed here in its algebraically equivalent per-community form for
+    /// O(edges + nodes) efficiency instead of the O(n²) double sum:
+    ///
+    /// ```text
+    /// Q = Σ_c [ e_c/m - resolution · (d_c / 2m)² ]
+    /// ```
+    ///
+    /// where `e_c` is the number of intra-community edges and `d_c` is the
+    /// sum of degrees of nodes in community `c` (see
+    /// `community_detector::CommunityDetector::compute_modularity` for the
+    /// O(n²) form these two agree with). Sanity check: a single community
+    /// spanning the whole graph must give exactly `Q = 0` (no structure
+    /// beyond the null model) — `e_c = m`, `d_c = 2m` ⇒ `1 - resolution`,
+    /// which is `0` at the default `resolution = 1.0`.
     fn calculate_modularity(
         &self,
         graph: &UnGraph<String, ()>,
@@ -490,23 +603,36 @@ impl CommunityDetector {
             return Ok(0.0);
         }
 
-        let mut modularity = 0.0;
-
+        // e_c: intra-community edge counts.
+        let mut intra_edges: HashMap<usize, f64> = HashMap::new();
         for edge in graph.edge_indices() {
             if let Some((a, b)) = graph.edge_endpoints(edge) {
-                let comm_a = community.get(&a);
-                let comm_b = community.get(&b);
-
-                if comm_a == comm_b && comm_a.is_some() {
-                    let deg_a = degree.get(&a).copied().unwrap_or(0.0);
-                    let deg_b = degree.get(&b).copied().unwrap_or(0.0);
-
-                    modularity += 1.0 - (deg_a * deg_b) / (2.0 * m * m);
+                if let (Some(&ca), Some(&cb)) = (community.get(&a), community.get(&b)) {
+                    if ca == cb {
+                        *intra_edges.entry(ca).or_insert(0.0) += 1.0;
+                    }
                 }
             }
         }
 
-        Ok(modularity / m)
+        // d_c: sum of node degrees per community.
+        let mut comm_degree_sum: HashMap<usize, f64> = HashMap::new();
+        for (&node, &comm) in community {
+            let deg = degree.get(&node).copied().unwrap_or(0.0);
+            *comm_degree_sum.entry(comm).or_insert(0.0) += deg;
+        }
+
+        let two_m = 2.0 * m;
+        let q: f64 = comm_degree_sum
+            .keys()
+            .map(|comm_id| {
+                let e_c = intra_edges.get(comm_id).copied().unwrap_or(0.0);
+                let d_c = comm_degree_sum.get(comm_id).copied().unwrap_or(0.0);
+                e_c / m - self.config.resolution * (d_c / two_m).powi(2)
+            })
+            .sum();
+
+        Ok(q)
     }
 
     /// Hierarchical community detection (multi-level)
@@ -636,25 +762,14 @@ impl CommunityDetector {
             .map(|&idx| (idx, graph.neighbors(idx).count() as f64))
             .collect();
 
-        // Calculate overall partition modularity (Newman-Girvan formula)
-        let overall_modularity = if m > 0.0 {
-            let mut q = 0.0;
-            for edge in graph.edge_indices() {
-                if let Some((a, b)) = graph.edge_endpoints(edge) {
-                    let comm_a = community_map.get(&a);
-                    let comm_b = community_map.get(&b);
-
-                    if comm_a.is_some() && comm_a == comm_b {
-                        let deg_a = degree.get(&a).copied().unwrap_or(0.0);
-                        let deg_b = degree.get(&b).copied().unwrap_or(0.0);
-                        q += 1.0 - (deg_a * deg_b) / (2.0 * m);
-                    }
-                }
-            }
-            q / (2.0 * m)
-        } else {
-            0.0
-        };
+        // Calculate overall partition modularity (Newman-Girvan formula).
+        // Delegate to `calculate_modularity` so there is a single
+        // implementation of the formula (previously this duplicated — and
+        // diverged from — the computation above, with its own normalization
+        // bug on top).
+        let overall_modularity = self
+            .calculate_modularity(&graph, &community_map, m, &degree)
+            .unwrap_or(0.0);
 
         communities
             .into_iter()

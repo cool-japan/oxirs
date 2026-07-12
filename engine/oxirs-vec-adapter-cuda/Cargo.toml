@@ -1,0 +1,26 @@
+[package]
+name = "oxirs-vec-adapter-cuda"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Quarantined NVIDIA CUDA GPU-acceleration adapter for oxirs-vec (publish=false; isolates the cuda-runtime-sys C FFI off the published Pure-Rust surface)."
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+# Reuse oxirs-vec's public Pure-Rust GPU types (e.g. `gpu::GpuDevice`) so the
+# CUDA backend is API-compatible with the CPU stubs that ship inside oxirs-vec.
+oxirs-vec = { workspace = true }
+# C FFI quarantined HERE (publish = false) — keeps oxirs-vec's published
+# --all-features closure free of cuda-runtime-sys per COOLJAPAN Pure Rust Policy v2.
+# NOTE: only `0.3.0-alpha.1` exists on crates.io (no stable release); per the
+# Latest-crates policy this latest-available pre-release pin is unavoidable.
+cuda-runtime-sys = "0.3.0-alpha.1"
+anyhow.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

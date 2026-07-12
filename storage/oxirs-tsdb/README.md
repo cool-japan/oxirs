@@ -8,7 +8,7 @@ Time-series optimizations for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.3.1) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.3.2, 2026-07-12) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 
@@ -29,6 +29,11 @@ Time-series optimizations for the OxiRS semantic web platform.
 - ✅ **Columnar storage** - Disk-backed binary format with LRU cache
 - ✅ **Series indexing** - Efficient time-based chunk lookups
 - ✅ **Sub-200ms queries** - 180ms p50 for 1M data points
+- ✅ **100% Pure Rust by default** - the former in-tree `duckdb` feature (C FFI via
+  `libduckdb-sys`) has been removed; the DuckDB ↔ TSDB chunk bridge now lives in the
+  separate, `publish = false` `oxirs-tsdb-adapter-duckdb` crate (depend on it directly
+  for embedded DuckDB SQL over TSDB chunks) — `oxirs-tsdb`'s own `--all-features` build
+  has no C dependencies
 
 ## Quick Start
 
@@ -36,31 +41,33 @@ Time-series optimizations for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-tsdb = "0.3.1"
+oxirs-tsdb = "0.3.2"
 ```
 
 ### Basic Usage
 
 ```rust
-use oxirs_tsdb::{TsdbStore, DataPoint};
-use chrono::Utc;
+use chrono::{Duration, Utc};
+use oxirs_tsdb::{ColumnarStore, DataPoint, TimeChunk, WriteBuffer};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create time-series store
-    let mut store = TsdbStore::new("./data")?;
+    // Buffer incoming points in memory for high-throughput ingestion
+    let buffer = WriteBuffer::with_defaults();
+    buffer.insert(1, DataPoint::new(Utc::now(), 22.5)).await?;
 
-    // Insert data point
-    let point = DataPoint {
-        timestamp: Utc::now(),
-        value: 22.5,
-    };
-    store.insert(1, point).await?;
+    // Flush the series and persist it as a compressed, durable chunk
+    let points = buffer.flush_series(1).await?;
+    let chunk_start = points[0].timestamp;
+    let chunk = TimeChunk::new(1, chunk_start, Duration::hours(2), points)?;
 
-    // Query time range
-    let start = Utc::now() - chrono::Duration::hours(1);
+    let store = ColumnarStore::new("./data", Duration::hours(2), 128)?;
+    store.write_chunk(&chunk)?;
+
+    // Query a time range (Gorilla / delta-of-delta decompression is transparent)
+    let start = Utc::now() - Duration::hours(1);
     let end = Utc::now();
-    let points = store.query_range(1, start, end).await?;
+    let results = store.query_range(1, start, end)?;
 
     Ok(())
 }
@@ -220,7 +227,7 @@ See `/tmp/oxirs_cli_phase_d_guide.md` for complete CLI documentation.
 
 ## Production Status
 
-- ✅ **1,127 tests passing** - 100% success rate
+- ✅ **1,285 tests passing** - 100% success rate
 - ✅ **Zero warnings** - Strict code quality enforcement
 - ✅ **10 examples** - Complete usage documentation
 - ✅ **3 benchmarks** - Performance validation

@@ -17,6 +17,17 @@
 //! | [`client`] | [`ModbusClientFacade`] trait + [`MockModbusClient`] |
 //! | [`bridge`] | [`OpcuaModbusBridge`] — the main tokio task |
 //!
+//! [`config`]: crate::opcua::config
+//! [`type_coercion`]: crate::opcua::type_coercion
+//! [`mapper`]: crate::opcua::mapper
+//! [`server`]: crate::opcua::server
+//! [`OpcuaServerFacade`]: crate::opcua::server::OpcuaServerFacade
+//! [`MockOpcuaServer`]: crate::opcua::server::MockOpcuaServer
+//! [`client`]: crate::opcua::client
+//! [`ModbusClientFacade`]: crate::opcua::client::ModbusClientFacade
+//! [`MockModbusClient`]: crate::opcua::client::MockModbusClient
+//! [`bridge`]: crate::opcua::bridge
+//!
 //! # Quick start (with mocks)
 //!
 //! ```rust,no_run

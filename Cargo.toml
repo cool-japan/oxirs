@@ -2,19 +2,24 @@
 resolver = "2"
 members = [
     "core/oxirs-core",
+    "core/oxirs-gpu-monitor",
     "server/oxirs-fuseki",
     "server/oxirs-gql",
     "engine/oxirs-arq",
     "engine/oxirs-geosparql",
+    "engine/oxirs-geosparql-adapter-geos",
     "engine/oxirs-rule",
     "engine/oxirs-samm",
     "engine/oxirs-shacl",
     "engine/oxirs-star",
     "engine/oxirs-ttl",
     "engine/oxirs-vec",
+    "engine/oxirs-vec-adapter-cuda",
     "storage/oxirs-tdb",
     "storage/oxirs-cluster",
     "stream/oxirs-stream",
+    "stream/oxirs-stream-adapter-rdkafka",
+    "stream/oxirs-stream-adapter-pulsar",
     "stream/oxirs-federate",
     "ai/oxirs-embed",
     "ai/oxirs-shacl-ai",
@@ -25,6 +30,7 @@ members = [
     "platforms/oxirs-wasm",
     "stream/oxirs-modbus",
     "storage/oxirs-tsdb",
+    "storage/oxirs-tsdb-adapter-duckdb",
     "stream/oxirs-canbus",
     "tools/oxirs",
     "desktop/oxirs-tauri",
@@ -36,7 +42,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.3.1"
+version = "0.3.2"
 authors = ["KitaSan <info@kitasan.io>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -67,39 +73,53 @@ unsafe_code = "warn"
 
 [workspace.dependencies]
 # Internal OxiRS crates (version inherited from workspace.package)
-oxirs-core = { version = "0.3.1", path = "core/oxirs-core" }
-oxirs-fuseki = { version = "0.3.1", path = "server/oxirs-fuseki" }
-oxirs-gql = { version = "0.3.1", path = "server/oxirs-gql" }
-oxirs-arq = { version = "0.3.1", path = "engine/oxirs-arq" }
-oxirs-geosparql = { version = "0.3.1", path = "engine/oxirs-geosparql" }
-oxirs-rule = { version = "0.3.1", path = "engine/oxirs-rule" }
-oxirs-samm = { version = "0.3.1", path = "engine/oxirs-samm" }
-oxirs-shacl = { version = "0.3.1", path = "engine/oxirs-shacl" }
-oxirs-star = { version = "0.3.1", path = "engine/oxirs-star" }
-oxirs-ttl = { version = "0.3.1", path = "engine/oxirs-ttl" }
-oxirs-vec = { version = "0.3.1", path = "engine/oxirs-vec" }
-oxirs-tdb = { version = "0.3.1", path = "storage/oxirs-tdb" }
-oxirs-cluster = { version = "0.3.1", path = "storage/oxirs-cluster" }
-oxirs-stream = { version = "0.3.1", path = "stream/oxirs-stream" }
-oxirs-federate = { version = "0.3.1", path = "stream/oxirs-federate" }
-oxirs-embed = { version = "0.3.1", path = "ai/oxirs-embed" }
-oxirs-shacl-ai = { version = "0.3.1", path = "ai/oxirs-shacl-ai" }
-oxirs-chat = { version = "0.3.1", path = "ai/oxirs-chat" }
-oxirs-physics = { version = "0.3.1", path = "ai/oxirs-physics" }
-oxirs-graphrag = { version = "0.3.1", path = "ai/oxirs-graphrag" }
-oxirs-did = { version = "0.3.1", path = "security/oxirs-did" }
-oxirs-wasm = { version = "0.3.1", path = "platforms/oxirs-wasm" }
-oxirs-modbus = { version = "0.3.1", path = "stream/oxirs-modbus" }
-oxirs-tsdb = { version = "0.3.1", path = "storage/oxirs-tsdb" }
-oxirs-canbus = { version = "0.3.1", path = "stream/oxirs-canbus" }
+oxirs-core = { version = "0.3.2", path = "core/oxirs-core" }
+# Quarantined NVML telemetry adapter (publish = false; no version — never published)
+oxirs-gpu-monitor = { path = "core/oxirs-gpu-monitor" }
+oxirs-fuseki = { version = "0.3.2", path = "server/oxirs-fuseki" }
+oxirs-arq = { version = "0.3.2", path = "engine/oxirs-arq" }
+oxirs-geosparql = { version = "0.3.2", path = "engine/oxirs-geosparql" }
+# Quarantined GEOS computational-geometry adapter (publish = false; no version —
+# never published). Holds the geos crate / geos-sys C FFI kept off
+# oxirs-geosparql's published Pure-Rust --all-features surface (Pure Rust Policy v2).
+oxirs-geosparql-adapter-geos = { path = "engine/oxirs-geosparql-adapter-geos" }
+oxirs-rule = { version = "0.3.2", path = "engine/oxirs-rule" }
+oxirs-samm = { version = "0.3.2", path = "engine/oxirs-samm" }
+oxirs-shacl = { version = "0.3.2", path = "engine/oxirs-shacl" }
+oxirs-star = { version = "0.3.2", path = "engine/oxirs-star" }
+oxirs-ttl = { version = "0.3.2", path = "engine/oxirs-ttl" }
+oxirs-vec = { version = "0.3.2", path = "engine/oxirs-vec" }
+# Quarantined CUDA GPU-acceleration adapter (publish = false; no version — never
+# published). Holds the cuda-runtime-sys C FFI kept off oxirs-vec's published
+# Pure-Rust --all-features surface (Pure Rust Policy v2).
+oxirs-vec-adapter-cuda = { path = "engine/oxirs-vec-adapter-cuda" }
+oxirs-tdb = { version = "0.3.2", path = "storage/oxirs-tdb" }
+oxirs-cluster = { version = "0.3.2", path = "storage/oxirs-cluster" }
+oxirs-stream = { version = "0.3.2", path = "stream/oxirs-stream" }
+# Quarantined streaming backend adapters (publish = false; no version — never published).
+# They hold the C/FFI backends (rdkafka→rdkafka-sys/libz-sys, pulsar→native-tls/lz4-sys)
+# kept off oxirs-stream's published Pure-Rust surface (Pure Rust Policy v2).
+oxirs-stream-adapter-rdkafka = { path = "stream/oxirs-stream-adapter-rdkafka" }
+oxirs-stream-adapter-pulsar = { path = "stream/oxirs-stream-adapter-pulsar" }
+oxirs-federate = { version = "0.3.2", path = "stream/oxirs-federate" }
+oxirs-embed = { version = "0.3.2", path = "ai/oxirs-embed" }
+oxirs-shacl-ai = { version = "0.3.2", path = "ai/oxirs-shacl-ai" }
+oxirs-physics = { version = "0.3.2", path = "ai/oxirs-physics" }
+oxirs-graphrag = { version = "0.3.2", path = "ai/oxirs-graphrag" }
+oxirs-did = { version = "0.3.2", path = "security/oxirs-did" }
+oxirs-wasm = { version = "0.3.2", path = "platforms/oxirs-wasm" }
+oxirs-modbus = { version = "0.3.2", path = "stream/oxirs-modbus" }
+oxirs-tsdb = { version = "0.3.2", path = "storage/oxirs-tsdb" }
+# Quarantined DuckDB analytics-bridge adapter (publish = false; no version — never published).
+# Holds the libduckdb-sys C FFI kept off oxirs-tsdb's published Pure-Rust surface (Pure Rust Policy v2).
+oxirs-tsdb-adapter-duckdb = { path = "storage/oxirs-tsdb-adapter-duckdb" }
+oxirs-canbus = { version = "0.3.2", path = "stream/oxirs-canbus" }
 
 # Core RDF and SPARQL functionality (native OxiRS implementations)
 # oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations
 # oxjsonld = "0.1.0"   # REMOVED: Replaced with native implementations
 # oxrdf = "0.2.0"      # REMOVED: Replaced with native implementations
-rio_api = "0.8"
-rio_turtle = "0.8"
-rio_xml = "0.8"
+# rio_api/rio_turtle/rio_xml = "0.8"  # REMOVED: Unused (zero member references)
 
 # Stable OxiGraph parser dependencies (v0.2.x/v0.3.x)
 oxttl = "0.2.3"         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
@@ -113,13 +133,13 @@ oxilangtag = "0.1"    # Fast language tag validation
 oxsdatatypes = "0.2"  # Fast XSD datatype validation and parsing
 
 # Async runtime and HTTP
-tokio = { version = "1.52.1", features = ["full"] }
+tokio = { version = "1.52.3", features = ["full"] }
 tokio-util = "0.7"
 tokio-stream = { version = "0.1", features = ["sync"] }
-hyper = { version = "1.9.0", features = ["full"] }
+hyper = { version = "1.10.1", features = ["full"] }
 hyper-util = { version = "0.1.20", features = ["full"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.7", features = ["cors", "trace"] }
 
 # GraphQL
 juniper = "0.17"
@@ -128,7 +148,7 @@ async-graphql = "7.2"
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 serde_yaml = "0.9"
 rmp-serde = "1.3"
 toml = "1.1"
@@ -140,16 +160,12 @@ thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 
-# Storage and persistence
-
 # Text search (upgraded to 0.25 for lru security fix)
 tantivy = "0.26"
 
-# Vector search
-
 # Streaming
 rdkafka = "0.39"
-async-nats = "0.47"
+async-nats = "0.49"
 
 # Clustering
 openraft = "0.9"
@@ -163,7 +179,6 @@ proptest = "1.11"
 tempfile = "3.27"
 tokio-test = "0.4"
 wiremock = "0.6"
-serial_test = "3.4"
 
 # HTTP framework and TLS
 axum = { version = "0.8", features = ["ws", "multipart"] }
@@ -175,13 +190,9 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["loggin
 rustls-pemfile = "2.2"
 webpki-roots = "1.0"
 rcgen = "0.14"
-tracing-opentelemetry = "0.32"
-http-body-util = "0.1"
 
 # Data structures and utilities
-lazy_static = "1.5"
-blake3 = "1.8"
-crossbeam-utils = "0.8"
+blake3 = { version = "1.8", features = ["pure"] }  # Pure Rust (no C/asm via cc) per COOLJAPAN Pure Rust Policy
 bumpalo = "3.20"
 num-complex = "0.4"
 indicatif = "0.18"
@@ -189,7 +200,7 @@ async-stream = "0.3"
 handlebars = "6.4"
 config = "0.15"
 image = "0.25"
-rust_xlsxwriter = "0.94"
+rust_xlsxwriter = "0.96"
 
 # Rate limiting, metrics, caching
 governor = "0.10"
@@ -198,15 +209,26 @@ metrics = "0.24"
 moka = { version = "0.12", features = ["future"] }
 
 # Kubernetes
-kube = { version = "3.1", default-features = false, features = ["client", "config", "runtime", "derive"] }
-k8s-openapi = { version = "0.27", default-features = false, features = ["v1_31"] }
+kube = { version = "4.0", default-features = false, features = ["client", "config", "runtime", "derive"] }
+# NOTE (cargo-upgrade sweep, 2026-07-02): k8s-openapi 0.28.0 dropped the `v1_31`
+# k8s-API-schema-snapshot feature (only `v1_32` ships now) -- this is a required,
+# mechanical companion change of the k8s-openapi 0.27->0.28 major bump itself (the
+# old `v1_31` feature name unconditionally broke workspace-wide dependency
+# resolution, same failure mode regardless of whether oxirs-fuseki's optional `k8s`
+# feature is enabled). server/oxirs-fuseki/src/k8s_operator.rs only references
+# stable/GA resource types (apps/v1::Deployment, core/v1::{Container,Service,...},
+# autoscaling/v2::HorizontalPodAutoscaler, meta/v1::{ObjectMeta,LabelSelector}) whose
+# generated shape does not change between adjacent k8s schema snapshots, so this is
+# expected to be source-compatible -- left for phase 2 to give oxirs-fuseki's `k8s`
+# feature a dedicated build/test pass to confirm.
+k8s-openapi = { version = "0.28", default-features = false, features = ["v1_32"] }
 
 # Additional dependencies
 async-trait = "0.1"
 uuid = { version = "1.23", features = ["v4", "serde"] }
-chrono = { version = "0.4.44", features = ["serde"] }
+chrono = { version = "0.4.45", features = ["serde"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "form", "query", "multipart", "http2"] }
-bytes = "1.11.1"  # HTTP body handling - CVE-2026-25541 fix
+bytes = "1.12.0"  # HTTP body handling - CVE-2026-25541 fix
 http = "1.4"    # HTTP types
 
 # Arrow crates (temporarily disabled due to chrono compatibility issues)
@@ -245,86 +267,77 @@ futures = "0.3"
 
 # SciRS2 dependencies (Scientific Computing Library) - crates.io
 # Note: scirs2 meta crate removed - we only use specific sub-crates as needed
-scirs2-core = { version = "0.5.0", features = ["random"] }
-scirs2-linalg = "0.5.0"
-scirs2-stats = "0.5.0"
-scirs2-neural = "0.5.0"
-scirs2-graph = "0.5.0"
-scirs2-metrics = "0.5.0"
-scirs2-fft = "0.5.0"
-scirs2-signal = "0.5.0"
-scirs2-optimize = "0.5.0"
-scirs2-integrate = "0.5.0"
-scirs2-cluster = "0.5.0"
-scirs2-text = "0.5.0"
+scirs2-core = { version = "0.6.0", features = ["random"] }
+scirs2-linalg = "0.6.0"
+scirs2-stats = "0.6.0"
+scirs2-neural = "0.6.0"
+scirs2-graph = "0.6.0"
+scirs2-integrate = "0.6.0"
 # array! macro is now in scirs2-core, scirs2-autograd not needed
 
 # Proc-macro utilities (used by oxirs-core api_surface module)
 syn = { version = "2", features = ["full", "parsing"] }
 quote = "1"
 
+# OxiSQL - Pure Rust SQLite-compatible engine (replaces rusqlite per COOLJAPAN Policy)
+oxisql-core = "0.3.2"
+oxisql-sqlite-compat = "0.3.2"
+
 # OxiCode - modern binary serialization (replaces bincode per COOLJAPAN Policy)
 oxicode = { version = "0.2.4", features = ["serde", "derive"] }
 
 # OxiArc - Pure Rust archive handling (replaces zip crate per COOLJAPAN Policy)
-oxiarc-archive = "0.3.3"
+oxiarc-archive = "0.3.5"
 
 # System utilities
 ctor = "1.0"  # Pre-main constructors (pure Rust) — used to install process-default rustls CryptoProvider
-num_cpus = "1.17"
 rand = "0.10"
-rand_distr = "0.6"
-log = "0.4"
-env_logger = "0.11"
 url = { version = "2.5.8", features = ["serde"] }
 rayon = "1.12"
 once_cell = "1.21"
-sysinfo = "0.38"  # System information for memory/CPU monitoring
-regex = "1.12.3"
-urlencoding = "2.1.3"
+sysinfo = "0.39"  # System information for memory/CPU monitoring
+regex = "1.12.4"
 fastrand = "2.4.1"
 
 # Tauri desktop application framework
-tauri = { version = "2.11.0", default-features = false }
-tauri-build = { version = "2.6.0" }
+tauri = { version = "2.11.5", default-features = false }
+tauri-build = { version = "2.6.3" }
 parking_lot = "0.12"
 seahash = "4.1"
-dashmap = "6.1"
-ordered-float = "5.3"
-rust_decimal = "1.41"
+dashmap = "6.2"
 libc = "0.2"
 
 # Cranelift JIT compilation (optional, feature-gated)
-cranelift-codegen = { version = "0.131.1", default-features = false, features = ["std", "host-arch"] }
-cranelift-frontend = { version = "0.131.1" }
-cranelift-jit = { version = "0.131.1" }
-cranelift-module = { version = "0.131.1" }
-cranelift-native = { version = "0.131.1" }
+cranelift-codegen = { version = "0.133.1", default-features = false, features = ["std", "host-arch"] }
+cranelift-frontend = { version = "0.133.1" }
+cranelift-jit = { version = "0.133.1" }
+cranelift-module = { version = "0.133.1" }
+cranelift-native = { version = "0.133.1" }
 
 # Compression libraries
-oxiarc-zstd = "0.3.3"  # Zstandard compression (Pure Rust)
-oxiarc-lz4 = "0.3.3"  # LZ4 compression (Pure Rust)
-oxiarc-lzma = "0.3.3"  # LZMA/LZMA2 compression (Pure Rust, replaces xz2/lzma-sys)
-oxiarc-brotli  = "0.3.3"  # Brotli compression (Pure Rust)
-oxiarc-snappy  = "0.3.3"  # Snappy compression (Pure Rust)
-oxiarc-deflate = "0.3.3"  # DEFLATE compression (Pure Rust)
+oxiarc-zstd = "0.3.5"  # Zstandard compression (Pure Rust)
+oxiarc-lz4 = "0.3.5"  # LZ4 compression (Pure Rust)
+oxiarc-lzma = "0.3.5"  # LZMA/LZMA2 compression (Pure Rust, replaces xz2/lzma-sys)
+oxiarc-brotli  = "0.3.5"  # Brotli compression (Pure Rust)
+oxiarc-snappy  = "0.3.5"  # Snappy compression (Pure Rust)
+oxiarc-deflate = "0.3.5"  # DEFLATE compression (Pure Rust)
 
 # Memory and data structures
 memmap2 = "0.9"
 indexmap = "2.14"
-nalgebra = "0.34"
+nalgebra = "0.35"
 
 # XML parsing
-quick-xml = "0.39"
+quick-xml = "0.41"
 
 # Geospatial libraries (GeoSPARQL support)
 geo = "0.33"       # Geospatial algorithms
-rstar = "0.12"     # R*-tree spatial indexing
+rstar = "0.13"     # R*-tree spatial indexing
 geojson = "1.0"   # GeoJSON serialization
 wkt = "0.14"       # Well-Known Text parsing
 
 # Caching
-redis = { version = "1.2", features = ["tokio-comp"] }
+redis = { version = "1.3", features = ["tokio-comp"] }
 lru = "0.18.0"
 
 # Cryptography
@@ -334,29 +347,24 @@ md5 = "0.8"
 hmac = "0.13.0"
 hex = "0.4.3"
 base64 = "0.22"
-oxicrypto-core = "0.1.1"  # Aead/Rng traits + CryptoError (OxiCrypto subcrate)
-oxicrypto-aead = "0.1.1"  # AES-256-GCM / ChaCha20-Poly1305 (OxiCrypto subcrate)
-oxicrypto-rand = "0.1.1"  # CSPRNG: random_bytes / random_nonce (OxiCrypto subcrate)
-oxicrypto-mac  = "0.1.1"  # HMAC-SHA256/384 (OxiCrypto subcrate)
-oxicrypto-sig  = "0.1.1"  # Ed25519 / RSA / ECDSA signatures (OxiCrypto subcrate)
-oxicrypto-hash = "0.1.1"  # SHA-256/384/512 incremental hashing (OxiCrypto subcrate)
-oxicrypto-kdf  = "0.1.1"  # PBKDF2-SHA256 (OxiCrypto subcrate)
-oxitls         = { version = "0.1.1", features = ["pure", "webpki-roots"] }  # Pure Rust TLS facade
-oxitls-rcgen   = "0.1.1"  # Pure Rust certificate generation for OxiTLS
-jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
-aes-gcm = "0.10"
-chacha20poly1305 = "0.10"
+oxicrypto-core = "0.2.0"  # Aead/Rng traits + CryptoError (OxiCrypto subcrate)
+oxicrypto-aead = "0.2.0"  # AES-256-GCM / ChaCha20-Poly1305 (OxiCrypto subcrate)
+oxicrypto-rand = "0.2.0"  # CSPRNG: random_bytes / random_nonce (OxiCrypto subcrate)
+oxicrypto-mac  = "0.2.0"  # HMAC-SHA256/384 (OxiCrypto subcrate)
+oxicrypto-hash = "0.2.0"  # SHA-256/384/512 incremental hashing (OxiCrypto subcrate)
+oxicrypto-kdf  = "0.2.0"  # PBKDF2-SHA256 (OxiCrypto subcrate)
+oxitls         = { version = "0.2.0", features = ["pure", "webpki-roots"] }  # Pure Rust TLS facade
+oxitls-rcgen   = "0.2.0"  # Pure Rust certificate generation for OxiTLS
+jsonwebtoken = { version = "10.4", features = ["rust_crypto"] }
+aes-gcm = "0.11"
 argon2 = "0.5"
 ed25519-dalek = { version = "2.2", features = ["rand_core", "serde"] }
 curve25519-dalek = { version = "4", features = ["rand_core", "serde"] }
-multibase = "0.9"
 bs58 = "0.5"
-k256 = { version = "0.13.4", features = ["ecdsa", "sha256"] }
 p256 = { version = "0.13.2", features = ["ecdsa", "sha256"] }
 rsa = { version = "0.9.10", features = ["sha2"] }
 bls12_381_plus = { version = "0.8.18" }
-sha3 = "0.11"
-digest = "0.11"
+sha3 = "0.12"
 # Post-quantum cryptography (C-backed, must be feature-gated per Pure Rust Policy)
 pqcrypto-dilithium = { version = "0.5", default-features = false, features = ["std"] }
 pqcrypto-falcon = { version = "0.4", default-features = false, features = ["std"] }
@@ -371,35 +379,34 @@ apple-native-keyring-store = { version = "1.0", features = ["keychain"] }
 petgraph = "0.8"
 
 # Phase D: Industrial Connectivity Dependencies
-tokio-serial = "5.4"      # Modbus RTU serial port support
-socketcan = "3.5"         # Linux CAN interface
+tokio-serial = "5.5"      # Modbus RTU serial port support
+socketcan = "3.6"         # Linux CAN interface
 bit-vec = "0.9"           # Bit manipulation for Gorilla compression
-arrow = "58"              # Apache Arrow for zero-copy Python integration
-parquet = "58"            # Apache Parquet columnar storage format
-duckdb = "1.10502"        # DuckDB embedded analytics engine (C-deps, must be feature-gated per Pure Rust Policy)
+arrow = "59"              # Apache Arrow for zero-copy Python integration
+parquet = "59"            # Apache Parquet columnar storage format
+duckdb = "1.10504"        # DuckDB embedded analytics engine (C-deps, must be feature-gated per Pure Rust Policy)
 crc32fast = "1.5"         # Fast SIMD-accelerated CRC32 checksum
-deadpool = "0.13"         # Generic async connection pooling
 humantime-serde = "1.1"   # Human-readable duration serialization
 
 # WASM support
 wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console", "Window", "Performance"] }
 console_error_panic_hook = "0.1"
-tracing-wasm = "0.2"
 
 # OpenTelemetry for observability
-opentelemetry = { version = "0.31", features = ["trace", "metrics"] }
-opentelemetry-jaeger = { version = "0.22", features = ["collector_client", "rt-tokio"] }  # Deprecated, latest version
-opentelemetry-otlp = { version = "0.31", features = ["trace", "metrics"] }
-opentelemetry_sdk = { version = "0.31", features = ["trace", "rt-tokio"] }
-opentelemetry-semantic-conventions = "0.31"
+opentelemetry = { version = "0.32", features = ["trace", "metrics"] }
+opentelemetry-otlp = { version = "0.32", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.32", features = ["trace", "rt-tokio"] }
+opentelemetry-semantic-conventions = "0.32"
 
 [patch.crates-io]
 # pathfinder_simd 0.5.6 uses simd_minimum_number_nsz/simd_maximum_number_nsz
 # which were removed in Rust nightly; patched locally to use simd_fmin/simd_fmax
 pathfinder_simd = { path = "patches/pathfinder_simd" }
+# Pure-Rust patch: replace the C-FFI `zstd` (zstd-sys) with a pure shim backed by
+# oxiarc-zstd; tantivy/parquet/pulsar/wasmtime are the consumers (COOLJAPAN Pure Rust v2).
+zstd = { path = "crates/zstd-shim" }
 
 [workspace.metadata.docs.rs]
 # Note: Individual crates override with [package.metadata.docs.rs] to exclude

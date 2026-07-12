@@ -295,7 +295,7 @@ pub(super) fn fn_encode_for_uri(args: &[Term]) -> Result<Term, OxirsError> {
 
     match &args[0] {
         Term::Literal(lit) => {
-            let encoded = urlencoding::encode(lit.value());
+            let encoded = crate::encoding::percent_encode(lit.value());
             Ok(Term::Literal(Literal::new(encoded.as_ref())))
         }
         _ => Err(OxirsError::Query(

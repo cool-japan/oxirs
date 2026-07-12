@@ -200,18 +200,24 @@ fn integration_performance_example() -> anyhow::Result<()> {
         // Generate RDF triples and add to store
         for i in 0..200 {
             let subject_iri = format!("http://example.org/person{i}");
-            let subject = oxirs_core::NamedNode::new(&subject_iri).unwrap();
+            let subject = oxirs_core::NamedNode::new(&subject_iri).expect("literal IRI is valid");
             let predicate =
                 oxirs_core::NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                    .unwrap();
-            let object = oxirs_core::NamedNode::new("http://example.org/Person").unwrap();
+                    .expect("invariant: value is valid");
+            let object = oxirs_core::NamedNode::new("http://example.org/Person")
+                .expect("literal IRI is valid");
 
             let triple = oxirs_core::Triple::new(subject, predicate, object);
-            integration.store.insert_triple(triple).unwrap();
+            integration
+                .store
+                .insert_triple(triple)
+                .expect("invariant: value is valid");
         }
 
         // Apply rules and measure performance
-        integration.apply_rules().unwrap()
+        integration
+            .apply_rules()
+            .expect("invariant: value is valid")
     });
 
     println!("Integration test derived {integration_result} facts");

@@ -316,7 +316,9 @@ pub async fn sparql_query_post(
 
         for part in body_str.split('&') {
             if let Some((key, value)) = part.split_once('=') {
-                let decoded_value = urlencoding::decode(value).unwrap_or_default().to_string();
+                let decoded_value = oxirs_core::encoding::percent_decode(value)
+                    .unwrap_or_default()
+                    .to_string();
                 match key {
                     "query" => query = Some(decoded_value),
                     "default-graph-uri" => {

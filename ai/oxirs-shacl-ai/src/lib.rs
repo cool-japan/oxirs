@@ -1,9 +1,9 @@
 //! # OxiRS SHACL-AI
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Production Release (v0.3.1)
+//! **Status**: Production Release (v0.3.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.
@@ -422,6 +422,7 @@ pub mod ab_testing;
 pub mod advanced_features;
 pub mod advanced_neural;
 pub mod advanced_pattern_mining;
+#[cfg(feature = "gpu")]
 pub mod advanced_scirs2_integration;
 pub mod advanced_validation_strategies;
 pub mod advanced_visualization;
@@ -683,6 +684,7 @@ pub use advanced_pattern_mining::{
     PatternMiningStats, PatternType as MiningPatternType, SeasonalityComponent,
     SuggestedConstraint, TemporalPatternInfo, TrendDirection as MiningTrendDirection,
 };
+#[cfg(feature = "gpu")]
 pub use advanced_scirs2_integration::{
     AdvancedSciRS2Config, AdvancedSciRS2Engine, BenchmarkResults, CloudProviderType,
 };

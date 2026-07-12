@@ -437,7 +437,7 @@ impl DomFreeStreamingRdfXmlParser {
             let attr_value = if self.config.enable_zero_copy {
                 self.process_attribute_value_zero_copy(&attr_name, &attr.value)?
             } else {
-                attr.unescape_value()
+                attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
                     .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?
                     .into_owned()
             };

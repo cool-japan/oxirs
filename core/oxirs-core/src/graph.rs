@@ -1009,7 +1009,11 @@ impl GraphThreadPool {
         #[cfg(feature = "parallel")]
         {
             let pool = rayon::ThreadPoolBuilder::new()
-                .num_threads(num_cpus::get())
+                .num_threads(
+                    std::thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or(1),
+                )
                 .thread_name(|index| format!("oxirs-graph-{index}"))
                 .build()
                 .map_err(|e| crate::OxirsError::ConcurrencyError(e.to_string()))?;

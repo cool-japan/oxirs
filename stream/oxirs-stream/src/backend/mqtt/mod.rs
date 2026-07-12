@@ -8,6 +8,7 @@
 
 pub mod client;
 pub mod payload_parser;
+pub mod properties;
 #[cfg(feature = "sparkplug")]
 pub mod sparkplug_b;
 pub mod topic_mapping;

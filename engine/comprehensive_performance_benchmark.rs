@@ -587,25 +587,32 @@ impl ComprehensiveBenchmarkSuite {
 
     /// Load vector search integration tests
     fn load_vector_search_tests(&mut self) -> Result<()> {
-        let vector_tests = vec![
-            BenchmarkTest {
-                id: "vector_similarity_search".to_string(),
-                name: "Vector Similarity Search".to_string(),
-                description: "Semantic similarity with embeddings".to_string(),
-                category: BenchmarkCategory::VectorSearch,
-                dataset_file: Some("text_corpus.ttl".to_string()),
-                query_file: Some("similarity_queries.sparql".to_string()),
-                rules_file: None,
-                shapes_file: None,
-                expected_results: Some(1000),
-                parameters: {
-                    let mut params = HashMap::new();
-                    params.insert("embedding_model".to_string(), serde_json::Value::String("sentence-transformers".to_string()));
-                    params.insert("similarity_threshold".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(0.8).expect("0.8 is a finite, valid JSON number")));
-                    params
-                },
+        let vector_tests = vec![BenchmarkTest {
+            id: "vector_similarity_search".to_string(),
+            name: "Vector Similarity Search".to_string(),
+            description: "Semantic similarity with embeddings".to_string(),
+            category: BenchmarkCategory::VectorSearch,
+            dataset_file: Some("text_corpus.ttl".to_string()),
+            query_file: Some("similarity_queries.sparql".to_string()),
+            rules_file: None,
+            shapes_file: None,
+            expected_results: Some(1000),
+            parameters: {
+                let mut params = HashMap::new();
+                params.insert(
+                    "embedding_model".to_string(),
+                    serde_json::Value::String("sentence-transformers".to_string()),
+                );
+                params.insert(
+                    "similarity_threshold".to_string(),
+                    serde_json::Value::Number(
+                        serde_json::Number::from_f64(0.8)
+                            .expect("0.8 is a finite, valid JSON number"),
+                    ),
+                );
+                params
             },
-        ];
+        }];
 
         self.tests.extend(vector_tests);
         Ok(())
@@ -638,7 +645,10 @@ impl ComprehensiveBenchmarkSuite {
                 expected_results: Some(5000),
                 parameters: {
                     let mut params = HashMap::new();
-                    params.insert("thread_count".to_string(), serde_json::Value::Number(serde_json::Number::from(8)));
+                    params.insert(
+                        "thread_count".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(8)),
+                    );
                     params
                 },
             },
@@ -653,8 +663,7 @@ impl ComprehensiveBenchmarkSuite {
         println!("Starting comprehensive benchmark suite...");
 
         // Ensure output directory exists
-        fs::create_dir_all(&self.config.output_dir)
-            .context("Failed to create output directory")?;
+        fs::create_dir_all(&self.config.output_dir).context("Failed to create output directory")?;
 
         // Verify Jena installation
         self.verify_jena_installation()?;
@@ -686,15 +695,18 @@ impl ComprehensiveBenchmarkSuite {
         println!("  Benchmarking: {}", test.description);
 
         // Run OxiRS benchmark
-        let oxirs_results = self.run_oxirs_benchmark(test)
+        let oxirs_results = self
+            .run_oxirs_benchmark(test)
             .map_err(|e| anyhow!("OxiRS benchmark failed: {}", e))?;
 
         // Run Jena benchmark
-        let jena_results = self.run_jena_benchmark(test)
+        let jena_results = self
+            .run_jena_benchmark(test)
             .map_err(|e| anyhow!("Jena benchmark failed: {}", e))?;
 
         // Calculate comparison metrics
-        let comparison_metrics = self.calculate_comparison_metrics(&oxirs_results, &jena_results)?;
+        let comparison_metrics =
+            self.calculate_comparison_metrics(&oxirs_results, &jena_results)?;
 
         // Get system information
         let system_info = self.get_system_info()?;
@@ -759,7 +771,9 @@ impl ComprehensiveBenchmarkSuite {
 
         let throughput_stats = ThroughputStats {
             queries_per_second: 1.0 / execution_stats.mean_ms * 1000.0,
-            triples_per_second: test.expected_results.map(|r| r as f64 / execution_stats.mean_ms * 1000.0),
+            triples_per_second: test
+                .expected_results
+                .map(|r| r as f64 / execution_stats.mean_ms * 1000.0),
             validations_per_second: None,
             inferences_per_second: None,
         };
@@ -838,7 +852,9 @@ impl ComprehensiveBenchmarkSuite {
 
         let throughput_stats = ThroughputStats {
             queries_per_second: 1.0 / execution_stats.mean_ms * 1000.0,
-            triples_per_second: test.expected_results.map(|r| r as f64 / execution_stats.mean_ms * 1000.0),
+            triples_per_second: test
+                .expected_results
+                .map(|r| r as f64 / execution_stats.mean_ms * 1000.0),
             validations_per_second: None,
             inferences_per_second: None,
         };
@@ -885,9 +901,8 @@ impl ComprehensiveBenchmarkSuite {
         let p99_ms = times_ms[p99_idx.min(times_ms.len() - 1)];
 
         // Calculate standard deviation
-        let variance = times_ms.iter()
-            .map(|x| (x - mean_ms).powi(2))
-            .sum::<f64>() / times_ms.len() as f64;
+        let variance =
+            times_ms.iter().map(|x| (x - mean_ms).powi(2)).sum::<f64>() / times_ms.len() as f64;
         let std_dev_ms = variance.sqrt();
 
         Ok(ExecutionTimeStats {
@@ -908,13 +923,20 @@ impl ComprehensiveBenchmarkSuite {
         jena: &PerformanceMetrics,
     ) -> Result<ComparisonMetrics> {
         let speed_ratio = jena.execution_time.mean_ms / oxirs.execution_time.mean_ms;
-        let memory_ratio = jena.memory_usage.average_memory_mb / oxirs.memory_usage.average_memory_mb;
-        let throughput_ratio = oxirs.throughput.queries_per_second / jena.throughput.queries_per_second;
+        let memory_ratio =
+            jena.memory_usage.average_memory_mb / oxirs.memory_usage.average_memory_mb;
+        let throughput_ratio =
+            oxirs.throughput.queries_per_second / jena.throughput.queries_per_second;
 
         // Calculate overall performance score (weighted combination)
-        let performance_score = (speed_ratio * 0.4) + (memory_ratio * 0.3) + (throughput_ratio * 0.3);
+        let performance_score =
+            (speed_ratio * 0.4) + (memory_ratio * 0.3) + (throughput_ratio * 0.3);
 
-        let winner = if performance_score > 1.0 { "OxiRS" } else { "Jena" };
+        let winner = if performance_score > 1.0 {
+            "OxiRS"
+        } else {
+            "Jena"
+        };
         let improvement_percent = (performance_score - 1.0) * 100.0;
 
         Ok(ComparisonMetrics {
@@ -993,33 +1015,24 @@ impl ComprehensiveBenchmarkSuite {
         content.push_str("@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\n");
 
         for i in 0..size {
-            content.push_str(&format!(
-                "ub:Student{} rdf:type ub:Student .\n",
-                i
-            ));
-            content.push_str(&format!(
-                "ub:Student{} ub:name \"Student {}\" .\n",
-                i, i
-            ));
+            content.push_str(&format!("ub:Student{} rdf:type ub:Student .\n", i));
+            content.push_str(&format!("ub:Student{} ub:name \"Student {}\" .\n", i, i));
             content.push_str(&format!(
                 "ub:Student{} ub:email \"student{}@university.edu\" .\n",
                 i, i
             ));
 
             if i % 10 == 0 {
-                content.push_str(&format!(
-                    "ub:Professor{} rdf:type ub:Professor .\n",
-                    i / 10
-                ));
+                content.push_str(&format!("ub:Professor{} rdf:type ub:Professor .\n", i / 10));
                 content.push_str(&format!(
                     "ub:Student{} ub:advisor ub:Professor{} .\n",
-                    i, i / 10
+                    i,
+                    i / 10
                 ));
             }
         }
 
-        fs::write(&file_path, content)
-            .context("Failed to write LUBM dataset")?;
+        fs::write(&file_path, content).context("Failed to write LUBM dataset")?;
 
         println!("Generated {} with {} entities", filename, size);
         Ok(())
@@ -1038,26 +1051,20 @@ impl ComprehensiveBenchmarkSuite {
         content.push_str("@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n");
 
         for i in 0..size {
-            content.push_str(&format!(
-                "foaf:Person{} rdf:type foaf:Person .\n",
-                i
-            ));
-            content.push_str(&format!(
-                "foaf:Person{} foaf:name \"Person {}\" .\n",
-                i, i
-            ));
+            content.push_str(&format!("foaf:Person{} rdf:type foaf:Person .\n", i));
+            content.push_str(&format!("foaf:Person{} foaf:name \"Person {}\" .\n", i, i));
 
             // Add some friendships
             if i > 0 {
                 content.push_str(&format!(
                     "foaf:Person{} foaf:knows foaf:Person{} .\n",
-                    i, i - 1
+                    i,
+                    i - 1
                 ));
             }
         }
 
-        fs::write(&file_path, content)
-            .context("Failed to write FOAF dataset")?;
+        fs::write(&file_path, content).context("Failed to write FOAF dataset")?;
 
         Ok(())
     }
@@ -1077,16 +1084,17 @@ impl ComprehensiveBenchmarkSuite {
         for i in 0..size {
             content.push_str(&format!(
                 "stats:Record{} stats:value \"{}\"^^xsd:integer .\n",
-                i, i * 10
+                i,
+                i * 10
             ));
             content.push_str(&format!(
                 "stats:Record{} stats:category \"Category{}\" .\n",
-                i, i % 5
+                i,
+                i % 5
             ));
         }
 
-        fs::write(&file_path, content)
-            .context("Failed to write statistics dataset")?;
+        fs::write(&file_path, content).context("Failed to write statistics dataset")?;
 
         Ok(())
     }
@@ -1106,21 +1114,14 @@ impl ComprehensiveBenchmarkSuite {
         data_content.push_str("@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n");
 
         for i in 0..100 {
-            data_content.push_str(&format!(
-                "ex:Person{} rdf:type ex:Person .\n",
-                i
-            ));
+            data_content.push_str(&format!("ex:Person{} rdf:type ex:Person .\n", i));
             if i % 2 == 0 {
-                data_content.push_str(&format!(
-                    "ex:Person{} ex:name \"Valid Name {}\" .\n",
-                    i, i
-                ));
+                data_content.push_str(&format!("ex:Person{} ex:name \"Valid Name {}\" .\n", i, i));
             }
             // Some invalid data for testing
         }
 
-        fs::write(&data_path, data_content)
-            .context("Failed to write validation dataset")?;
+        fs::write(&data_path, data_content).context("Failed to write validation dataset")?;
 
         // Generate SHACL shapes
         let shapes_content = r#"
@@ -1138,8 +1139,7 @@ ex:PersonShape
     ] .
 "#;
 
-        fs::write(&shapes_path, shapes_content)
-            .context("Failed to write SHACL shapes")?;
+        fs::write(&shapes_path, shapes_content).context("Failed to write SHACL shapes")?;
 
         Ok(())
     }
@@ -1147,31 +1147,41 @@ ex:PersonShape
     /// Implementation stubs for specific benchmark types
     fn run_oxirs_sparql_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         // In practice, would use actual OxiRS SPARQL engine
-        std::thread::sleep(Duration::from_millis(10 + (test.expected_results.unwrap_or(100) / 100) as u64));
+        std::thread::sleep(Duration::from_millis(
+            10 + (test.expected_results.unwrap_or(100) / 100) as u64,
+        ));
         Ok(())
     }
 
     fn run_oxirs_parsing_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         // In practice, would use actual OxiRS parser
-        std::thread::sleep(Duration::from_millis(50 + (test.expected_results.unwrap_or(1000) / 1000) as u64));
+        std::thread::sleep(Duration::from_millis(
+            50 + (test.expected_results.unwrap_or(1000) / 1000) as u64,
+        ));
         Ok(())
     }
 
     fn run_oxirs_reasoning_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         // In practice, would use actual OxiRS reasoning engine
-        std::thread::sleep(Duration::from_millis(100 + (test.expected_results.unwrap_or(1000) / 100) as u64));
+        std::thread::sleep(Duration::from_millis(
+            100 + (test.expected_results.unwrap_or(1000) / 100) as u64,
+        ));
         Ok(())
     }
 
     fn run_oxirs_shacl_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         // In practice, would use actual OxiRS SHACL validator
-        std::thread::sleep(Duration::from_millis(20 + (test.expected_results.unwrap_or(100) / 10) as u64));
+        std::thread::sleep(Duration::from_millis(
+            20 + (test.expected_results.unwrap_or(100) / 10) as u64,
+        ));
         Ok(())
     }
 
     fn run_oxirs_vector_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         // In practice, would use actual OxiRS vector search
-        std::thread::sleep(Duration::from_millis(30 + (test.expected_results.unwrap_or(1000) / 100) as u64));
+        std::thread::sleep(Duration::from_millis(
+            30 + (test.expected_results.unwrap_or(1000) / 100) as u64,
+        ));
         Ok(())
     }
 
@@ -1184,9 +1194,13 @@ ex:PersonShape
     fn run_jena_sparql_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         let sparql_cmd = self.config.jena_path.join("bin").join("sparql");
 
-        let data_file = test.dataset_file.as_ref()
+        let data_file = test
+            .dataset_file
+            .as_ref()
             .ok_or_else(|| anyhow!("No dataset file specified"))?;
-        let query_file = test.query_file.as_ref()
+        let query_file = test
+            .query_file
+            .as_ref()
             .ok_or_else(|| anyhow!("No query file specified"))?;
 
         let data_path = self.config.datasets_path.join(data_file);
@@ -1213,7 +1227,9 @@ ex:PersonShape
         // Use riot for parsing
         let riot_cmd = self.config.jena_path.join("bin").join("riot");
 
-        let data_file = test.dataset_file.as_ref()
+        let data_file = test
+            .dataset_file
+            .as_ref()
             .ok_or_else(|| anyhow!("No dataset file specified"))?;
         let data_path = self.config.datasets_path.join(data_file);
 
@@ -1235,13 +1251,17 @@ ex:PersonShape
     fn run_jena_reasoning_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         // Would use Jena's reasoning capabilities
         // For now, simulate with sleep proportional to expected work
-        std::thread::sleep(Duration::from_millis(150 + (test.expected_results.unwrap_or(1000) / 100) as u64));
+        std::thread::sleep(Duration::from_millis(
+            150 + (test.expected_results.unwrap_or(1000) / 100) as u64,
+        ));
         Ok(())
     }
 
     fn run_jena_shacl_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         // Would use Jena's SHACL implementation
-        std::thread::sleep(Duration::from_millis(40 + (test.expected_results.unwrap_or(100) / 10) as u64));
+        std::thread::sleep(Duration::from_millis(
+            40 + (test.expected_results.unwrap_or(100) / 10) as u64,
+        ));
         Ok(())
     }
 
@@ -1256,7 +1276,9 @@ ex:PersonShape
             hostname: std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".to_string()),
             os: std::env::consts::OS.to_string(),
             cpu_model: self.get_cpu_model(),
-            cpu_cores: num_cpus::get(),
+            cpu_cores: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             total_memory_gb: self.get_total_memory_gb(),
             rust_version: self.get_rust_version(),
             java_version: self.get_java_version(),
@@ -1340,18 +1362,23 @@ ex:PersonShape
     }
 
     fn get_jena_version(&self) -> String {
-        self.config.jena_version.clone().unwrap_or_else(|| "unknown".to_string())
+        self.config
+            .jena_version
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string())
     }
 
     /// Save intermediate results
     fn save_intermediate_results(&self, test_id: &str) -> Result<()> {
-        let results_file = self.config.output_dir.join(format!("{}_results.json", test_id));
+        let results_file = self
+            .config
+            .output_dir
+            .join(format!("{}_results.json", test_id));
 
         if let Some(result) = self.results.iter().find(|r| r.test.id == test_id) {
             let json = serde_json::to_string_pretty(result)
                 .context("Failed to serialize benchmark result")?;
-            fs::write(&results_file, json)
-                .context("Failed to write intermediate results")?;
+            fs::write(&results_file, json).context("Failed to write intermediate results")?;
         }
 
         Ok(())
@@ -1449,11 +1476,26 @@ ex:PersonShape
         html.push_str("<h2>Executive Summary</h2>\n");
         html.push_str("<table class='summary-table'>\n");
         html.push_str("<tr><th>Metric</th><th>Value</th></tr>\n");
-        html.push_str(&format!("<tr><td>Total Tests</td><td>{}</td></tr>\n", summary.total_tests));
-        html.push_str(&format!("<tr><td>OxiRS Wins</td><td>{}</td></tr>\n", summary.oxirs_wins));
-        html.push_str(&format!("<tr><td>Jena Wins</td><td>{}</td></tr>\n", summary.jena_wins));
-        html.push_str(&format!("<tr><td>Overall Speed Ratio</td><td>{:.2}x</td></tr>\n", summary.overall_speed_ratio));
-        html.push_str(&format!("<tr><td>Overall Memory Ratio</td><td>{:.2}x</td></tr>\n", summary.overall_memory_ratio));
+        html.push_str(&format!(
+            "<tr><td>Total Tests</td><td>{}</td></tr>\n",
+            summary.total_tests
+        ));
+        html.push_str(&format!(
+            "<tr><td>OxiRS Wins</td><td>{}</td></tr>\n",
+            summary.oxirs_wins
+        ));
+        html.push_str(&format!(
+            "<tr><td>Jena Wins</td><td>{}</td></tr>\n",
+            summary.jena_wins
+        ));
+        html.push_str(&format!(
+            "<tr><td>Overall Speed Ratio</td><td>{:.2}x</td></tr>\n",
+            summary.overall_speed_ratio
+        ));
+        html.push_str(&format!(
+            "<tr><td>Overall Memory Ratio</td><td>{:.2}x</td></tr>\n",
+            summary.overall_memory_ratio
+        ));
         html.push_str("</table>\n");
 
         // Detailed results
@@ -1476,8 +1518,7 @@ ex:PersonShape
         html.push_str("</table>\n");
         html.push_str("</body>\n</html>");
 
-        fs::write(&report_path, html)
-            .context("Failed to write HTML report")?;
+        fs::write(&report_path, html).context("Failed to write HTML report")?;
 
         Ok(())
     }
@@ -1495,16 +1536,23 @@ ex:PersonShape
                 result.test.name,
                 result.test.category,
                 result.comparison_metrics.winner,
-                result.oxirs_results.as_ref().map(|r| r.execution_time.mean_ms).unwrap_or(0.0),
-                result.jena_results.as_ref().map(|r| r.execution_time.mean_ms).unwrap_or(0.0),
+                result
+                    .oxirs_results
+                    .as_ref()
+                    .map(|r| r.execution_time.mean_ms)
+                    .unwrap_or(0.0),
+                result
+                    .jena_results
+                    .as_ref()
+                    .map(|r| r.execution_time.mean_ms)
+                    .unwrap_or(0.0),
                 result.comparison_metrics.speed_ratio,
                 result.comparison_metrics.memory_ratio,
                 result.comparison_metrics.performance_score
             ));
         }
 
-        fs::write(&csv_path, csv)
-            .context("Failed to write CSV export")?;
+        fs::write(&csv_path, csv).context("Failed to write CSV export")?;
 
         Ok(())
     }
@@ -1515,8 +1563,7 @@ ex:PersonShape
         let json = serde_json::to_string_pretty(&self.results)
             .context("Failed to serialize results to JSON")?;
 
-        fs::write(&json_path, json)
-            .context("Failed to write JSON export")?;
+        fs::write(&json_path, json).context("Failed to write JSON export")?;
 
         Ok(())
     }
@@ -1526,14 +1573,23 @@ ex:PersonShape
 
         let mut md = String::new();
         md.push_str("# OxiRS vs Apache Jena Performance Benchmark Summary\n\n");
-        md.push_str(&format!("**Report Generated:** {:?}\n\n", SystemTime::now()));
+        md.push_str(&format!(
+            "**Report Generated:** {:?}\n\n",
+            SystemTime::now()
+        ));
 
         md.push_str("## Executive Summary\n\n");
         md.push_str(&format!("- **Total Tests:** {}\n", summary.total_tests));
         md.push_str(&format!("- **OxiRS Wins:** {}\n", summary.oxirs_wins));
         md.push_str(&format!("- **Jena Wins:** {}\n", summary.jena_wins));
-        md.push_str(&format!("- **Overall Speed Ratio:** {:.2}x\n", summary.overall_speed_ratio));
-        md.push_str(&format!("- **Overall Memory Ratio:** {:.2}x\n\n", summary.overall_memory_ratio));
+        md.push_str(&format!(
+            "- **Overall Speed Ratio:** {:.2}x\n",
+            summary.overall_speed_ratio
+        ));
+        md.push_str(&format!(
+            "- **Overall Memory Ratio:** {:.2}x\n\n",
+            summary.overall_memory_ratio
+        ));
 
         md.push_str("## Category Breakdown\n\n");
         for (category, stats) in &summary.category_stats {
@@ -1541,8 +1597,14 @@ ex:PersonShape
             md.push_str(&format!("- Tests: {}\n", stats.test_count));
             md.push_str(&format!("- OxiRS Wins: {}\n", stats.oxirs_wins));
             md.push_str(&format!("- Jena Wins: {}\n", stats.jena_wins));
-            md.push_str(&format!("- Avg Speed Ratio: {:.2}x\n", stats.avg_speed_ratio));
-            md.push_str(&format!("- Avg Memory Ratio: {:.2}x\n\n", stats.avg_memory_ratio));
+            md.push_str(&format!(
+                "- Avg Speed Ratio: {:.2}x\n",
+                stats.avg_speed_ratio
+            ));
+            md.push_str(&format!(
+                "- Avg Memory Ratio: {:.2}x\n\n",
+                stats.avg_memory_ratio
+            ));
         }
 
         md.push_str("## Key Findings\n\n");
@@ -1553,13 +1615,14 @@ ex:PersonShape
         }
 
         if summary.overall_memory_ratio > 1.0 {
-            md.push_str("✅ **OxiRS is more memory efficient** than Jena in most test scenarios.\n\n");
+            md.push_str(
+                "✅ **OxiRS is more memory efficient** than Jena in most test scenarios.\n\n",
+            );
         } else {
             md.push_str("⚠️ **Jena is more memory efficient**, highlighting OxiRS memory optimization opportunities.\n\n");
         }
 
-        fs::write(&md_path, md)
-            .context("Failed to write markdown summary")?;
+        fs::write(&md_path, md).context("Failed to write markdown summary")?;
 
         Ok(())
     }
@@ -1609,34 +1672,36 @@ impl BenchmarkRunner {
         let mut suite = ComprehensiveBenchmarkSuite::new(config);
 
         // Load only essential tests for quick run
-        suite.tests = vec![
-            BenchmarkTest {
-                id: "quick_sparql".to_string(),
-                name: "Quick SPARQL Test".to_string(),
-                description: "Basic SPARQL query performance".to_string(),
-                category: BenchmarkCategory::SparqlQuery,
-                dataset_file: Some("lubm_1000.ttl".to_string()),
-                query_file: Some("simple_select.sparql".to_string()),
-                rules_file: None,
-                shapes_file: None,
-                expected_results: Some(100),
-                parameters: HashMap::new(),
-            }
-        ];
+        suite.tests = vec![BenchmarkTest {
+            id: "quick_sparql".to_string(),
+            name: "Quick SPARQL Test".to_string(),
+            description: "Basic SPARQL query performance".to_string(),
+            category: BenchmarkCategory::SparqlQuery,
+            dataset_file: Some("lubm_1000.ttl".to_string()),
+            query_file: Some("simple_select.sparql".to_string()),
+            rules_file: None,
+            shapes_file: None,
+            expected_results: Some(100),
+            parameters: HashMap::new(),
+        }];
 
         suite.run_all_benchmarks()
     }
 
     /// Run specific category benchmarks
-    pub fn run_category_benchmarks(category: BenchmarkCategory) -> Result<Vec<BenchmarkComparison>> {
+    pub fn run_category_benchmarks(
+        category: BenchmarkCategory,
+    ) -> Result<Vec<BenchmarkComparison>> {
         let config = ComprehensiveBenchmarkConfig::default();
         let mut suite = ComprehensiveBenchmarkSuite::new(config);
         suite.load_standard_tests()?;
 
         // Filter tests by category
-        suite.tests.retain(|test| match (&test.category, &category) {
-            (a, b) => std::mem::discriminant(a) == std::mem::discriminant(b)
-        });
+        suite
+            .tests
+            .retain(|test| match (&test.category, &category) {
+                (a, b) => std::mem::discriminant(a) == std::mem::discriminant(b),
+            });
 
         suite.run_all_benchmarks()
     }
@@ -1764,7 +1829,9 @@ mod tests {
             },
         };
 
-        let comparison = suite.calculate_comparison_metrics(&oxirs_metrics, &jena_metrics).unwrap();
+        let comparison = suite
+            .calculate_comparison_metrics(&oxirs_metrics, &jena_metrics)
+            .unwrap();
 
         assert_eq!(comparison.speed_ratio, 2.0); // Jena 20ms / OxiRS 10ms
         assert_eq!(comparison.memory_ratio, 2.0); // Jena 160MB / OxiRS 80MB

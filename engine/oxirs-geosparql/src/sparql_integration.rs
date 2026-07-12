@@ -103,7 +103,9 @@ pub fn get_simple_features_functions() -> Vec<GeoSparqlFunction> {
 }
 
 /// Get all registered GeoSPARQL Egenhofer functions
-#[cfg(feature = "geos-backend")]
+///
+/// NOTE: the working `ehMeet`/`ehInside`/`ehContains` implementations require GEOS,
+/// provided by the quarantined `oxirs-geosparql-adapter-geos` crate.
 pub fn get_egenhofer_functions() -> Vec<GeoSparqlFunction> {
     vec![
         GeoSparqlFunction {
@@ -166,7 +168,9 @@ pub fn get_egenhofer_functions() -> Vec<GeoSparqlFunction> {
 }
 
 /// Get all registered GeoSPARQL RCC8 functions
-#[cfg(feature = "geos-backend")]
+///
+/// NOTE: the working boundary-dependent RCC8 implementations require GEOS, provided
+/// by the quarantined `oxirs-geosparql-adapter-geos` crate.
 pub fn get_rcc8_functions() -> Vec<GeoSparqlFunction> {
     vec![
         GeoSparqlFunction {
@@ -355,11 +359,10 @@ pub fn get_all_geosparql_functions() -> Vec<GeoSparqlFunction> {
 
     functions.extend(get_simple_features_functions());
 
-    #[cfg(feature = "geos-backend")]
-    {
-        functions.extend(get_egenhofer_functions());
-        functions.extend(get_rcc8_functions());
-    }
+    // The Egenhofer/RCC8 boundary predicates require GEOS (the quarantined
+    // `oxirs-geosparql-adapter-geos` crate) and are therefore not registered by
+    // default; their descriptors remain available via `get_egenhofer_functions()` /
+    // `get_rcc8_functions()` for callers wiring up the adapter.
 
     functions.extend(get_property_functions());
     functions.extend(get_distance_functions());
@@ -413,7 +416,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "geos-backend")]
     fn test_get_egenhofer_functions() {
         let functions = get_egenhofer_functions();
         assert_eq!(functions.len(), 8);
@@ -425,7 +427,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "geos-backend")]
     fn test_get_rcc8_functions() {
         let functions = get_rcc8_functions();
         assert_eq!(functions.len(), 8);
@@ -471,13 +472,10 @@ mod tests {
     fn test_get_all_geosparql_functions() {
         let functions = get_all_geosparql_functions();
 
+        // Default registration is Pure Rust only: the GEOS-dependent Egenhofer/RCC8
+        // predicates live in the quarantined `oxirs-geosparql-adapter-geos` crate.
         // SF(8) + Property(10) + Distance(1) + OGC11-filter(3) = 22
-        #[cfg(not(feature = "geos-backend"))]
         assert_eq!(functions.len(), 8 + 10 + 1 + 3);
-
-        // SF(8) + Egenhofer(8) + RCC8(8) + Property(10) + Distance(1) + OGC11-filter(3) = 38
-        #[cfg(feature = "geos-backend")]
-        assert_eq!(functions.len(), 8 + 8 + 8 + 10 + 1 + 3);
     }
 
     #[test]

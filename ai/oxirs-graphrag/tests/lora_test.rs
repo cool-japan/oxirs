@@ -117,8 +117,11 @@ fn test_grad_norm_zero_after_zero_grad() {
 
 // ── Test 8: LoraTrainer reduces loss over 100 epochs ─────────────────────────
 //
-// `train_epoch` uses `base_output` as the LoRA input and adds `delta` to it,
-// so d_in must equal d_out for the addition to be shape-consistent.
+// `train_epoch` takes the raw `input` fed into the frozen base projection
+// and the frozen projector's `base_output` (= W · input) as two separate
+// `[batch, d_in]` / `[batch, d_out]` tensors, so d_in and d_out are free to
+// differ. This test uses a square adapter purely for a simple toy setup —
+// see `test_trainer_rectangular_dims_loss_decreases` below for d_in != d_out.
 
 #[test]
 fn test_trainer_loss_decreases_over_epochs() {
@@ -126,20 +129,51 @@ fn test_trainer_loss_decreases_over_epochs() {
     let adapter = LoraAdapter::new(4, 4, 2, 2.0, 42);
     let mut trainer = LoraTrainer::new(adapter, 0.05);
 
-    // Constant frozen projector output (all 1.0) [batch=3, d_in=4].
+    // Constant raw input / frozen projector output (all 1.0) [batch=3, d=4].
     // Target: all-zeros [batch=3, d_out=4].
+    let input = Array2::from_elem((3, 4), 1.0);
     let base_out = Array2::from_elem((3, 4), 1.0);
     let targets = Array2::zeros((3, 4));
 
-    let initial_loss = trainer.train_epoch(&base_out, &targets);
+    let initial_loss = trainer.train_epoch(&input, &base_out, &targets);
     let mut current_loss = initial_loss;
     for _ in 0..99 {
-        current_loss = trainer.train_epoch(&base_out, &targets);
+        current_loss = trainer.train_epoch(&input, &base_out, &targets);
     }
 
     assert!(
         current_loss < initial_loss * 0.9 || current_loss < 1e-6,
         "loss must decrease: initial={initial_loss:.6}, after 100 epochs={current_loss:.6}"
+    );
+}
+
+// ── Test 8b: LoraTrainer with a rectangular adapter (d_in != d_out) ──────────
+//
+// Regression test for the fix that separated `input` from `base_output`:
+// LoRA's ΔW = B·A decomposition is rectangular by construction, so training
+// must work when d_in != d_out (the common case for real projections).
+
+#[test]
+fn test_trainer_rectangular_dims_loss_decreases() {
+    // d_in = 6, d_out = 3; LoRA rank = 2.
+    let adapter = LoraAdapter::new(6, 3, 2, 2.0, 43);
+    let mut trainer = LoraTrainer::new(adapter, 0.05);
+
+    let input = Array2::from_elem((4, 6), 1.0);
+    let base_out = Array2::from_elem((4, 3), 1.0);
+    let targets = Array2::zeros((4, 3));
+
+    let initial_loss = trainer.train_epoch(&input, &base_out, &targets);
+    assert!(initial_loss.is_finite() && initial_loss >= 0.0);
+
+    let mut current_loss = initial_loss;
+    for _ in 0..99 {
+        current_loss = trainer.train_epoch(&input, &base_out, &targets);
+    }
+
+    assert!(
+        current_loss < initial_loss * 0.9 || current_loss < 1e-6,
+        "loss must decrease with d_in != d_out: initial={initial_loss:.6}, after 100 epochs={current_loss:.6}"
     );
 }
 

@@ -293,7 +293,7 @@ impl SpatialRtreeIndex {
     pub fn query_bbox(&self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> Vec<&RtreeEntry> {
         let envelope = AABB::from_corners([min_x, min_y], [max_x, max_y]);
         self.tree
-            .locate_in_envelope_intersecting(&envelope)
+            .locate_in_envelope_intersecting(envelope)
             .collect()
     }
 
@@ -307,7 +307,7 @@ impl SpatialRtreeIndex {
     ) -> Vec<RtreeEntry> {
         let envelope = AABB::from_corners([min_x, min_y], [max_x, max_y]);
         self.tree
-            .locate_in_envelope_intersecting(&envelope)
+            .locate_in_envelope_intersecting(envelope)
             .cloned()
             .collect()
     }
@@ -321,7 +321,7 @@ impl SpatialRtreeIndex {
         max_y: f64,
     ) -> Vec<&RtreeEntry> {
         let envelope = AABB::from_corners([min_x, min_y], [max_x, max_y]);
-        self.tree.locate_in_envelope(&envelope).collect()
+        self.tree.locate_in_envelope(envelope).collect()
     }
 
     // ── K-Nearest Neighbour ───────────────────────────────────────────────────
@@ -351,7 +351,7 @@ impl SpatialRtreeIndex {
         if k == 0 {
             return vec![];
         }
-        self.tree.nearest_neighbor_iter(&[x, y]).take(k).collect()
+        self.tree.nearest_neighbor_iter([x, y]).take(k).collect()
     }
 
     /// Find the `k` nearest entries within a maximum distance `max_dist`.
@@ -361,7 +361,7 @@ impl SpatialRtreeIndex {
         }
         let max_dist_sq = max_dist * max_dist;
         self.tree
-            .nearest_neighbor_iter(&[x, y])
+            .nearest_neighbor_iter([x, y])
             .take_while(|e| e.distance_2(&[x, y]) <= max_dist_sq)
             .take(k)
             .collect()
@@ -371,7 +371,7 @@ impl SpatialRtreeIndex {
 
     /// Find the nearest single entry to `(x, y)`, or `None` if the index is empty.
     pub fn nearest(&self, x: f64, y: f64) -> Option<&RtreeEntry> {
-        self.tree.nearest_neighbor(&[x, y])
+        self.tree.nearest_neighbor([x, y])
     }
 
     // ── Iteration ─────────────────────────────────────────────────────────────

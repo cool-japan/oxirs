@@ -134,7 +134,7 @@ impl SystemLoadMonitor {
 
         #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
         {
-            // Fallback: estimate based on num_cpus and available parallelism
+            // Fallback: estimate based on available parallelism
             Ok((50.0, 50.0)) // Conservative estimates
         }
     }
@@ -182,7 +182,9 @@ impl SystemLoadMonitor {
         if let Ok(loadavg) = fs::read_to_string("/proc/loadavg") {
             if let Some(load_str) = loadavg.split_whitespace().next() {
                 if let Ok(load) = load_str.parse::<f64>() {
-                    let num_cpus = num_cpus::get() as f64;
+                    let num_cpus = std::thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or(1) as f64;
                     // Convert load average to percentage
                     return Ok((load / num_cpus * 100.0).min(100.0));
                 }

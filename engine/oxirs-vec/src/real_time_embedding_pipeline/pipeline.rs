@@ -8,15 +8,14 @@ use uuid::Uuid;
 
 use crate::real_time_embedding_pipeline::{
     config::PipelineConfig,
-    // consistency::ConsistencyManager,  // TODO: Implement consistency module
-    // coordination::UpdateCoordinator,  // TODO: Implement coordination module
-    // monitoring::PipelinePerformanceMonitor,  // TODO: Implement monitoring module
+    consistency::ConsistencyManager,
+    coordination::UpdateCoordinator,
+    monitoring::{ConsoleAlertHandler, PipelinePerformanceMonitor},
     streaming::{StreamConfig, StreamProcessor},
     traits::{EmbeddingGenerator, IncrementalVectorIndex},
     types::PipelineStatistics,
-    // versioning::VersionManager,  // TODO: Implement versioning module
-    PipelineError,
-    PipelineResult,
+    versioning::VersionManager,
+    PipelineError, PipelineResult,
 };
 
 /// Real-time embedding pipeline for streaming updates
@@ -29,14 +28,14 @@ pub struct RealTimeEmbeddingPipeline {
     indices: Arc<RwLock<HashMap<String, Box<dyn IncrementalVectorIndex>>>>,
     /// Stream processors
     stream_processors: Arc<RwLock<HashMap<String, StreamProcessor>>>,
-    // /// Update coordinator
-    // update_coordinator: Arc<UpdateCoordinator>,  // TODO: Implement coordination module
-    // /// Performance monitor
-    // performance_monitor: Arc<PipelinePerformanceMonitor>,  // TODO: Implement monitoring module
-    // /// Version manager
-    // version_manager: Arc<VersionManager>,  // TODO: Implement versioning module
-    // /// Consistency manager
-    // consistency_manager: Arc<ConsistencyManager>,  // TODO: Implement consistency module
+    /// Update coordinator
+    update_coordinator: Arc<UpdateCoordinator>,
+    /// Performance monitor
+    performance_monitor: Arc<PipelinePerformanceMonitor>,
+    /// Version manager
+    version_manager: Arc<VersionManager>,
+    /// Consistency manager
+    consistency_manager: Arc<ConsistencyManager>,
     /// Running flag
     is_running: AtomicBool,
     /// Statistics
@@ -50,36 +49,33 @@ impl RealTimeEmbeddingPipeline {
         let indices = Arc::new(RwLock::new(HashMap::new()));
         let stream_processors = Arc::new(RwLock::new(HashMap::new()));
 
-        // TODO: Implement these modules
-        // let update_coordinator = Arc::new(UpdateCoordinator::new(&config).map_err(|e| {
-        //     PipelineError::ConfigurationError {
-        //         message: format!("Failed to create update coordinator: {}", e),
-        //     }
-        // })?);
+        let update_coordinator = Arc::new(UpdateCoordinator::new(&config).map_err(|e| {
+            PipelineError::ConfigurationError {
+                message: format!("Failed to create update coordinator: {}", e),
+            }
+        })?);
 
-        // let performance_monitor = Arc::new(
-        //     PipelinePerformanceMonitor::new(config.monitoring_config.clone()).map_err(|e| {
-        //         PipelineError::MonitoringError {
-        //             message: format!("Failed to create performance monitor: {}", e),
-        //         }
-        //     })?,
-        // );
+        let alert_handler = Arc::new(ConsoleAlertHandler);
+        let performance_monitor = Arc::new(PipelinePerformanceMonitor::new(
+            config.monitoring_config.clone(),
+            alert_handler,
+        ));
 
-        // let version_manager = Arc::new(
-        //     VersionManager::new(config.version_control.clone()).map_err(|e| {
-        //         PipelineError::VersionError {
-        //             message: format!("Failed to create version manager: {}", e),
-        //         }
-        //     })?,
-        // );
+        let version_manager = Arc::new(
+            VersionManager::new(config.version_control.clone()).map_err(|e| {
+                PipelineError::VersionError {
+                    message: format!("Failed to create version manager: {}", e),
+                }
+            })?,
+        );
 
-        // let consistency_manager = Arc::new(
-        //     ConsistencyManager::new(config.consistency_level.clone()).map_err(|e| {
-        //         PipelineError::ConsistencyError {
-        //             message: format!("Failed to create consistency manager: {}", e),
-        //         }
-        //     })?,
-        // );
+        let consistency_manager = Arc::new(
+            ConsistencyManager::new(config.consistency_level.clone()).map_err(|e| {
+                PipelineError::ConsistencyError {
+                    message: format!("Failed to create consistency manager: {}", e),
+                }
+            })?,
+        );
 
         let stats = Arc::new(PipelineStatistics::default());
 
@@ -88,10 +84,10 @@ impl RealTimeEmbeddingPipeline {
             embedding_generators,
             indices,
             stream_processors,
-            // update_coordinator,  // TODO: Implement coordination module
-            // performance_monitor,  // TODO: Implement monitoring module
-            // version_manager,  // TODO: Implement versioning module
-            // consistency_manager,  // TODO: Implement consistency module
+            update_coordinator,
+            performance_monitor,
+            version_manager,
+            consistency_manager,
             is_running: AtomicBool::new(false),
             stats,
         })
@@ -105,38 +101,35 @@ impl RealTimeEmbeddingPipeline {
 
         self.is_running.store(true, Ordering::Release);
 
-        // TODO: Implement performance monitoring
-        // // Start performance monitoring
-        // self.performance_monitor
-        //     .start()
-        //     .await
-        //     .map_err(|e| PipelineError::MonitoringError {
-        //         message: format!("Failed to start performance monitor: {}", e),
-        //     })?;
+        // Start performance monitoring
+        self.performance_monitor
+            .start()
+            .await
+            .map_err(|e| PipelineError::MonitoringError {
+                message: format!("Failed to start performance monitor: {}", e),
+            })?;
 
-        // TODO: Implement update coordination
-        // // Start update coordinator
-        // self.start_update_coordinator().await?;
+        // Start update coordinator
+        self.start_update_coordinator().await?;
 
         // Start stream processors
         self.start_stream_processors().await?;
 
-        // TODO: Implement consistency and version management
-        // // Start consistency checking
-        // self.consistency_manager
-        //     .start_consistency_checking()
-        //     .await
-        //     .map_err(|e| PipelineError::ConsistencyError {
-        //         message: format!("Failed to start consistency checking: {}", e),
-        //     })?;
+        // Start consistency checking
+        self.consistency_manager
+            .start_consistency_checking()
+            .await
+            .map_err(|e| PipelineError::ConsistencyError {
+                message: format!("Failed to start consistency checking: {}", e),
+            })?;
 
-        // // Start version cleanup
-        // self.version_manager
-        //     .start_cleanup_task()
-        //     .await
-        //     .map_err(|e| PipelineError::VersionError {
-        //         message: format!("Failed to start version cleanup: {}", e),
-        //     })?;
+        // Start version manager
+        self.version_manager
+            .start()
+            .await
+            .map_err(|e| PipelineError::VersionError {
+                message: format!("Failed to start version manager: {}", e),
+            })?;
 
         Ok(())
     }
@@ -145,32 +138,14 @@ impl RealTimeEmbeddingPipeline {
     pub async fn stop(&self) -> PipelineResult<()> {
         self.is_running.store(false, Ordering::Release);
 
-        // TODO: Implement performance monitoring
-        // // Stop all components
-        // self.performance_monitor
-        //     .stop()
-        //     .await
-        //     .map_err(|e| PipelineError::MonitoringError {
-        //         message: format!("Failed to stop performance monitor: {}", e),
-        //     })?;
+        // Stop performance monitoring (ignore NotRunning — monitor may not have been started)
+        let _ = self.performance_monitor.stop().await;
 
-        // TODO: Implement consistency and version management
-        // self.consistency_manager
-        //     .stop()
-        //     .await
-        //     .map_err(|e| PipelineError::ConsistencyError {
-        //         message: format!("Failed to stop consistency manager: {}", e),
-        //     })?;
-
-        // self.version_manager
-        //     .stop()
-        //     .await
-        //     .map_err(|e| PipelineError::VersionError {
-        //         message: format!("Failed to stop version manager: {}", e),
-        //     })?;
+        // Stop consistency and version managers (ignore NotRunning)
+        let _ = self.consistency_manager.stop().await;
+        let _ = self.version_manager.stop().await;
 
         // Stop stream processors - simplified approach to avoid cloning issues
-        // TODO: Implement proper stream processor stopping once StreamProcessor is made cloneable
         debug!("Stream processor stopping not yet implemented to avoid cloning issues");
 
         Ok(())
@@ -268,42 +243,30 @@ impl RealTimeEmbeddingPipeline {
     ) -> PipelineResult<crate::real_time_embedding_pipeline::types::HealthCheckResult> {
         let mut components = HashMap::new();
 
-        // TODO: Implement performance monitoring
-        // // Check performance monitor health
-        // components.insert(
-        //     "performance_monitor".to_string(),
-        //     self.performance_monitor.health_check().await.map_err(|e| {
-        //         PipelineError::MonitoringError {
-        //             message: format!("Performance monitor health check failed: {}", e),
-        //         }
-        //     })?,
-        // );
+        // Check performance monitor health
+        let monitor_health = self.performance_monitor.get_health_status().await?;
+        components.insert("performance_monitor".to_string(), monitor_health);
 
-        // TODO: Implement consistency management
-        // // Check consistency manager health
-        // components.insert(
-        //     "consistency_manager".to_string(),
-        //     self.consistency_manager.health_check().await.map_err(|e| {
-        //         PipelineError::ConsistencyError {
-        //             message: format!("Consistency manager health check failed: {}", e),
-        //         }
-        //     })?,
-        // );
+        // Check consistency manager health
+        let consistency_health = self.consistency_manager.health_check().await.map_err(|e| {
+            PipelineError::ConsistencyError {
+                message: format!("Consistency manager health check failed: {}", e),
+            }
+        })?;
+        components.insert("consistency_manager".to_string(), consistency_health);
 
-        // TODO: Implement version management
-        // // Check version manager health
-        // components.insert(
-        //     "version_manager".to_string(),
-        //     self.version_manager
-        //         .health_check()
-        //         .await
-        //         .map_err(|e| PipelineError::VersionError {
-        //             message: format!("Version manager health check failed: {}", e),
-        //         })?,
-        // );
+        // Check version manager health
+        let version_health =
+            self.version_manager
+                .health_check()
+                .await
+                .map_err(|e| PipelineError::VersionError {
+                    message: format!("Version manager health check failed: {}", e),
+                })?;
+        components.insert("version_manager".to_string(), version_health);
 
         // Check stream processors health
-        // First, collect processor names to avoid holding lock during async calls
+        // Collect processor names first to avoid holding lock during async calls
         let processor_names: Vec<String> = {
             let processors =
                 self.stream_processors
@@ -314,8 +277,7 @@ impl RealTimeEmbeddingPipeline {
             processors.keys().cloned().collect()
         };
 
-        // For now, assume all processors are healthy to avoid mutex await issue
-        // TODO: Implement proper async health checking mechanism
+        // Assume healthy for stream processors (they don't have async health check)
         for name in processor_names {
             components.insert(
                 format!("stream_processor_{name}"),
@@ -417,9 +379,12 @@ impl RealTimeEmbeddingPipeline {
     // Private helper methods
 
     async fn start_update_coordinator(&self) -> PipelineResult<()> {
-        // TODO: Implement update coordinator once coordination module is ready
-        debug!("Update coordinator not yet implemented");
-        Ok(())
+        self.update_coordinator
+            .start()
+            .await
+            .map_err(|e| PipelineError::CoordinationError {
+                message: format!("Failed to start update coordinator: {}", e),
+            })
     }
 
     async fn start_stream_processors(&self) -> PipelineResult<()> {

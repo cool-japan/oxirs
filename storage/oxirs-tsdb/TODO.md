@@ -1,6 +1,6 @@
 # OxiRS TSDB - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
@@ -38,7 +38,7 @@
 - **Query Router** - Automatic backend routing
 
 ### Test Coverage
-- **1127 tests passing** with comprehensive coverage
+- **1285 tests passing** with comprehensive coverage
 - Integration, SPARQL, storage, query, and write path tests
 
 ## Roadmap
@@ -46,7 +46,7 @@
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ Gorilla compression, delta-of-delta, columnar storage, WAL, hybrid RDF/TSDB, 128 tests
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ 1M+ writes/sec sustained performance
 - ✅ Memory usage profiling and optimization
 - ✅ Advanced compression (adaptive, dictionary, RLE)
@@ -59,7 +59,7 @@
 - ✅ Anomaly detector, series metadata, compression codec
 - ✅ 1127 tests passing
 
-### v0.3.0 - Planned (Q2 2026)
+### v0.3.0 - Released (Q2 2026)
 - [x] GPU-accelerated aggregations (implemented 2026-04-28)
   - **Goal:** GPU dispatch for SUM/MIN/MAX/AVG/COUNT and rolling-window reductions over chunked columnar data.
   - **Design:** Feature gate `gpu` (default off). Free-function columnar API: `gpu_sum` dispatches to `scirs2_core::gpu` when `gpu` feature is on; `sum_column`, `min_column`, `max_column`, `avg_column`, `count_column`, `rolling_sum`, `rolling_avg` always available with CPU fallback. `GpuAggError` enum for typed errors.
@@ -71,10 +71,10 @@
   - **Files:** src/analytics/forecasting.rs, src/analytics/kalman.rs, src/sparql/temporal.rs
   - **Tests:** Synthetic noisy sine wave: Kalman smoothed MAE < raw MAE; state round-trip serialization; SPARQL binding integration test; online adaptation on non-stationary series
   - **Risk:** Divergence on non-stationary series; adaptive Q noise tuning mitigates
-- [x] DuckDB integration (implemented 2026-04-30)
+- [x] DuckDB integration (implemented 2026-04-30) — **superseded 2026-06-29, see v0.3.2 note below**
   - **Goal:** Two-way DuckDB bridge feature-gated behind `duckdb` (default off — duckdb-rs has C deps per COOLJAPAN policy). User explicitly approved reopen 2026-04-30.
   - **Design:** Feature gate `duckdb`. Optional dep `duckdb` (1.10502 latest crates.io) with `bundled`, `vtab-arrow`, `appender-arrow`. Export: TSDB chunk → DuckDB table via Arrow `RecordBatch` appender (zero-copy through workspace-aligned `arrow = 58`). Import: DuckDB SQL → Arrow `RecordBatch` → TSDB `TimeChunk`. CLI helper `oxirs tsdb duck-db <chunk> <sql>` to inspect TSDB chunks via DuckDB SQL.
-  - **Files:** `src/duckdb_bridge.rs` (feature-gated, new), `Cargo.toml` (feature flags + optional deps), `tests/duckdb_bridge.rs` (new), `tools/oxirs/src/tools/tsdb_duckdb.rs` (new CLI subcommand)
+  - **Files (original, now removed from this crate):** `src/duckdb_bridge.rs`, `Cargo.toml` (feature flags + optional deps), `tests/duckdb_bridge.rs`, `tools/oxirs/src/tools/tsdb_duckdb.rs` (CLI subcommand)
   - **Tests:** 12 unit tests on DuckDB round-trip + 12 integration tests gated on `duckdb` feature; 4 CLI tests gated on `tsdb-duckdb`. All pass with zero clippy warnings on both feature configurations.
   - **Risk:** duckdb-rs C deps. Mitigation: feature-gated, default off; CI without `duckdb` stays pure-Rust.
 - [x] Raft replication for high availability (implemented 2026-04-28)
@@ -90,9 +90,28 @@
   - **Tests:** 40 unit tests + 20 integration tests in `tests/multi_region.rs` (3-region simulator with kill/recover cycle, routing rule priority, LWW resolution, failover chain). All pass.
   - **Risk:** cross-region split-brain. Mitigation: per-region Raft groups isolated; cross-region async with deterministic LWW conflict resolution.
 
+### v0.3.2 - Current Release (July 12, 2026)
+- [x] DuckDB C-FFI quarantine (completed 2026-06-29, per COOLJAPAN Pure Rust Policy v2)
+  - **Goal:** Remove the last in-tree C dependency (`libduckdb-sys` via the `duckdb` crate) from
+    `oxirs-tsdb`'s `--all-features` closure while keeping the DuckDB↔TSDB bridge available.
+  - **Design:** Deleted `src/duckdb_bridge.rs` and `tests/duckdb_bridge.rs`, removed the `duckdb`
+    feature and dependency from `Cargo.toml`. The bridge was moved verbatim into a new
+    `publish = false` crate, `oxirs-tsdb-adapter-duckdb`, which depends on `oxirs-tsdb` and
+    reuses its public `TimeChunk`/`DataPoint`/`TsdbError` types to stay API-compatible.
+    `tools/oxirs`'s `tsdb-duckdb` CLI feature now points at the adapter crate instead of an
+    in-tree module.
+  - **Files:** `Cargo.toml` (feature/dependency removed), `src/lib.rs` (explanatory `NOTE`
+    comment in place of the old `duckdb_bridge` module), `storage/oxirs-tsdb-adapter-duckdb/`
+    (new crate)
+  - **Result:** `oxirs-tsdb`'s own `--all-features` build has zero C dependencies; DuckDB SQL
+    access to TSDB chunks requires depending on `oxirs-tsdb-adapter-duckdb` directly
+  - Doc-comment / rustdoc intra-link fixes across `analytics/kalman_forecasting.rs`,
+    `multi_region/mod.rs`, `multi_region/replication.rs`, `replication/wal_replicator.rs`
+    (no functional changes)
+
 ## Documentation
 
-- 9 working examples included:
+- 10 working examples included:
   - compression_demo.rs - Gorilla + delta-of-delta encoding
   - query_demo.rs - Range queries and aggregations
   - window_functions.rs - Moving averages and window operations
@@ -102,6 +121,7 @@
   - hybrid_store_demo.rs - Advanced hybrid routing
   - auto_detection_demo.rs - Intelligent auto-detection
   - columnar_storage_demo.rs - Disk-backed storage
+  - temporal_functions_demo.rs - SPARQL ts:window/ts:resample/ts:interpolate functions
 
 ## Contributing
 
@@ -109,4 +129,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TSDB v0.3.1 - Time-series database for IoT-scale workloads*
+*OxiRS TSDB v0.3.2 - Time-series database for IoT-scale workloads*

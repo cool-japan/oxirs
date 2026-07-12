@@ -198,19 +198,34 @@ Key metrics emitted:
 ### Tracing / distributed traces
 
 `oxirs-chat` is instrumented with `#[tracing::instrument]` on hot paths. To
-forward traces to an OpenTelemetry collector:
+forward traces to an OpenTelemetry collector via OTLP (Jaeger >= 1.35 ingests
+OTLP natively):
 
 ```rust
-use opentelemetry::sdk::trace;
+use opentelemetry::global;
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{trace::SdkTracerProvider, Resource};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::prelude::*;
 
-let tracer = opentelemetry_jaeger::new_agent_pipeline()
-    .with_service_name("oxirs-chat")
-    .install_batch(opentelemetry::runtime::Tokio)?;
+let exporter = opentelemetry_otlp::SpanExporter::builder()
+    .with_http()
+    .with_endpoint("http://localhost:4318/v1/traces")
+    .build()?;
+
+let provider = SdkTracerProvider::builder()
+    .with_batch_exporter(exporter)
+    .with_resource(
+        Resource::builder_empty()
+            .with_service_name("oxirs-chat")
+            .build(),
+    )
+    .build();
+global::set_tracer_provider(provider.clone());
 
 tracing_subscriber::registry()
-    .with(OpenTelemetryLayer::new(tracer))
+    .with(OpenTelemetryLayer::new(provider.tracer("oxirs-chat")))
     .with(tracing_subscriber::EnvFilter::from_default_env())
     .init();
 ```

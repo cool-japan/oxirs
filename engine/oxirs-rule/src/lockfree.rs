@@ -54,6 +54,7 @@
 
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
+use once_cell::sync::Lazy;
 use scirs2_core::metrics::{Counter, Gauge};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -61,12 +62,14 @@ use std::sync::Arc;
 use tracing::{debug, info};
 
 // Global metrics for lock-free engine
-lazy_static::lazy_static! {
-    static ref LOCKFREE_FACT_INSERTIONS: Counter = Counter::new("lockfree_fact_insertions".to_string());
-    static ref LOCKFREE_RULE_APPLICATIONS: Counter = Counter::new("lockfree_rule_applications".to_string());
-    static ref LOCKFREE_ACTIVE_WORKERS: Gauge = Gauge::new("lockfree_active_workers".to_string());
-    static ref LOCKFREE_CAS_RETRIES: Counter = Counter::new("lockfree_cas_retries".to_string());
-}
+static LOCKFREE_FACT_INSERTIONS: Lazy<Counter> =
+    Lazy::new(|| Counter::new("lockfree_fact_insertions".to_string()));
+static LOCKFREE_RULE_APPLICATIONS: Lazy<Counter> =
+    Lazy::new(|| Counter::new("lockfree_rule_applications".to_string()));
+static LOCKFREE_ACTIVE_WORKERS: Lazy<Gauge> =
+    Lazy::new(|| Gauge::new("lockfree_active_workers".to_string()));
+static LOCKFREE_CAS_RETRIES: Lazy<Counter> =
+    Lazy::new(|| Counter::new("lockfree_cas_retries".to_string()));
 
 /// Lock-free concurrent inference engine
 #[derive(Debug)]

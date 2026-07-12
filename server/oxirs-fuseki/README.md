@@ -1,10 +1,10 @@
 # OxiRS Fuseki
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility**
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -18,7 +18,7 @@
 - **SPARQL 1.2 Support**: Extended features and optimizations
 - **Fuseki Compatibility**: Drop-in replacement for Apache Fuseki
 - **Multi-Dataset Support**: Host multiple datasets on different endpoints
-- **Authentication & Authorization**: Flexible security framework
+- **Authentication & Authorization**: OAuth2/OIDC, JWT, SAML 2.0 SP, LDAP (with HA failover), RBAC/ReBAC, graph-level ACLs, MFA, and cluster node auth
 - **GraphQL Integration**: Dual protocol support (SPARQL + GraphQL)
 - **Real-time Features**: WebSocket subscriptions and live queries
 - **High Performance**: Async I/O with Tokio and optimized query execution
@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-oxirs-fuseki = "0.3.1"
+oxirs-fuseki = "0.3.2"
 ```
 
 ### As a Binary
@@ -309,7 +309,7 @@ GET /health
 ```json
 {
   "status": "healthy",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "uptime": "2h 15m 30s",
   "datasets": {
     "example": {
@@ -548,16 +548,19 @@ Licensed under:
 
 ## Status
 
-🚀 **Production Release (v0.3.1)** - 2026-06-06
+🚀 **Production Release (v0.3.2)** - 2026-07-12
+
+**2,350 tests passing**, zero warnings
 
 Current features:
 - ✅ SPARQL query/update endpoints backed by persisted N-Quads datasets
 - ✅ Federation (`SERVICE` clause) with retries, `SERVICE SILENT`, and result merging
 - ✅ OAuth2/OIDC + JWT security with hardened headers and HSTS
+- ✅ Enterprise authentication: SAML 2.0 SP (`auth/saml*.rs`), LDAP with HA failover (`auth/ldap_ha.rs`), RBAC/ReBAC, graph-level ACLs, MFA, and cluster node auth tokens (`auth/cluster_auth.rs`)
+- ✅ Audit log export (`GET /$/audit/log`, `GET /$/audit/log/stats`) with JSON/JSONL/CSV output and actor/action/time filtering
+- ✅ GraphQL integration (`graphql_integration` module, async-graphql-based) alongside SPARQL
+- ✅ Admin UI dashboard (`admin_ui`) and configuration hot-reload (`config_reload`, `hot-reload` feature)
 - ✅ Prometheus metrics, slow-query tracing, and structured logging via SciRS2
 - ✅ Multi-dataset support with auto save/load and CLI integration
-- 🚧 Advanced admin UI & live reconfiguration (planned for future release)
-- 🚧 Authentication system (in progress)
-- 🚧 GraphQL integration (in progress)
 
 APIs follow semantic versioning. See CHANGELOG.md for details.

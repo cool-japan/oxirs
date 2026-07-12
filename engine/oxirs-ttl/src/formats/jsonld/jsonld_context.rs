@@ -2,7 +2,7 @@
 //!
 //! Exports: [`JsonLdContext`], [`TermDefinition`], [`ContainerType`],
 //! [`JsonLdError`], [`JsonLdResult`], [`JsonLdTerm`], [`JsonLdQuad`],
-//! XSD/RDF constants, and the [`next_blank_node`] utility.
+//! XSD/RDF constants, and the `next_blank_node` utility.
 
 use serde_json::{Map, Value};
 use std::collections::HashMap;

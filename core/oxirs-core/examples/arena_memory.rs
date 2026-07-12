@@ -82,7 +82,7 @@ fn example_concurrent_arena() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     for handle in handles {
-        handle.join().unwrap();
+        handle.join().expect("thread completed without panic");
     }
 
     println!("\nTotal allocated: {} bytes", arena.total_allocated());

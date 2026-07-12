@@ -584,27 +584,17 @@ impl ConfigManager {
         if let Ok(backend) = std::env::var(format!("{prefix}_BACKEND")) {
             config.backend = match backend.as_str() {
                 "kafka" => {
-                    #[cfg(feature = "kafka")]
-                    {
-                        let brokers: Vec<String> = std::env::var(format!("{prefix}_KAFKA_BROKERS"))
-                            .unwrap_or_else(|_| "localhost:9092".to_string())
-                            .split(',')
-                            .map(|s| s.to_string())
-                            .collect();
-                        StreamBackendType::Kafka {
-                            brokers,
-                            security_protocol: std::env::var(format!("{}_KAFKA_SECURITY", prefix))
-                                .ok(),
-                            sasl_config: None,
-                        }
-                    }
-                    #[cfg(not(feature = "kafka"))]
-                    {
-                        let _ = std::env::var(format!("{prefix}_KAFKA_BROKERS"));
-                        StreamBackendType::Memory {
-                            max_size: Some(10000),
-                            persistence: false,
-                        }
+                    // The Kafka *config selector* stays in oxirs-stream (pure data); the
+                    // rdkafka-backed runtime lives in the publish=false adapter crate.
+                    let brokers: Vec<String> = std::env::var(format!("{prefix}_KAFKA_BROKERS"))
+                        .unwrap_or_else(|_| "localhost:9092".to_string())
+                        .split(',')
+                        .map(|s| s.to_string())
+                        .collect();
+                    StreamBackendType::Kafka {
+                        brokers,
+                        security_protocol: std::env::var(format!("{prefix}_KAFKA_SECURITY")).ok(),
+                        sasl_config: None,
                     }
                 }
                 "memory" => StreamBackendType::Memory {
@@ -640,7 +630,6 @@ impl ConfigManager {
     /// Apply secrets to configuration
     async fn apply_secrets(&self, mut config: StreamConfig) -> Result<StreamConfig> {
         // Apply SASL password if using Kafka
-        #[cfg(feature = "kafka")]
         if let StreamBackendType::Kafka {
             brokers,
             security_protocol,
@@ -650,7 +639,6 @@ impl ConfigManager {
             if security_protocol.as_deref() == Some("SASL_SSL") {
                 if let Ok(username) = self.secret_manager.get_secret("kafka_username").await {
                     if let Ok(password) = self.secret_manager.get_secret("kafka_password").await {
-                        #[cfg(feature = "kafka")]
                         {
                             config.backend = StreamBackendType::Kafka {
                                 brokers: brokers.clone(),
@@ -730,7 +718,6 @@ impl ConfigManager {
 
         // Backend-specific validation
         match &config.backend {
-            #[cfg(feature = "kafka")]
             StreamBackendType::Kafka { brokers, .. } if brokers.is_empty() => {
                 return Err(anyhow!("Kafka brokers list cannot be empty"));
             }

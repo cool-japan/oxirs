@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use cranelift_codegen::ir::{
     condcodes::{FloatCC, IntCC},
-    types, AbiParam, InstBuilder, MemFlags, Signature,
+    types, AbiParam, InstBuilder, MemFlagsData, Signature,
 };
 use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings::{self, Configurable};
@@ -289,12 +289,14 @@ fn emit_key_comparison(
 
     // Load left[left_idx] and right[right_idx] as f64.
     // SAFETY comment for generated IR: caller guarantees indices are in-bounds.
+    // cranelift 0.133: the old `MemFlags::trusted()` value type is now `MemFlagsData`
+    // (InstBuilder interns it into the DFG's MemFlagsSet internally).
     let lv = builder
         .ins()
-        .load(types::F64, MemFlags::trusted(), left_ptr, left_offset);
+        .load(types::F64, MemFlagsData::trusted(), left_ptr, left_offset);
     let rv = builder
         .ins()
-        .load(types::F64, MemFlags::trusted(), right_ptr, right_offset);
+        .load(types::F64, MemFlagsData::trusted(), right_ptr, right_offset);
 
     if spec.numeric_epsilon {
         // |lv - rv| < 1e-9
@@ -310,8 +312,8 @@ fn emit_key_comparison(
         // Exact bit equality: bitcast both to i64 then icmp Equal.
         // Under this mode two NaN values with identical bit patterns compare as equal,
         // because icmp treats them as plain integers — documented behaviour.
-        let li = builder.ins().bitcast(types::I64, MemFlags::new(), lv);
-        let ri = builder.ins().bitcast(types::I64, MemFlags::new(), rv);
+        let li = builder.ins().bitcast(types::I64, MemFlagsData::new(), lv);
+        let ri = builder.ins().bitcast(types::I64, MemFlagsData::new(), rv);
         // icmp returns I8 (0 or 1) in modern Cranelift.
         let cmp = builder.ins().icmp(IntCC::Equal, li, ri);
         Ok(cmp)

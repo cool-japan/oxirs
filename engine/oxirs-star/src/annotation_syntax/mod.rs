@@ -17,8 +17,8 @@
 //! The `{| ... |}` block introduces annotation triples about the preceding triple.
 //!
 //! ## Modules
-//! - [`tokenizer`] — tokenize `{| ... |}` blocks
-//! - [`expander`] — expand annotation shorthand to explicit triples
+//! - [`crate::annotation_syntax::tokenizer`] — tokenize `{| ... |}` blocks
+//! - [`crate::annotation_syntax::expander`] — expand annotation shorthand to explicit triples
 
 pub mod expander;
 pub mod tests;

@@ -314,14 +314,16 @@ fn demonstrate_regression_detection() -> Result<(), Box<dyn std::error::Error>> 
 
 fn create_complex_query_pattern() -> GraphPattern {
     // Create triple patterns
-    let person_var = Variable::new("person").unwrap();
-    let name_var = Variable::new("name").unwrap();
-    let email_var = Variable::new("email").unwrap();
+    let person_var = Variable::new("person").expect("literal variable name is valid");
+    let name_var = Variable::new("name").expect("literal variable name is valid");
+    let email_var = Variable::new("email").expect("literal variable name is valid");
 
-    let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
-    let foaf_person = NamedNode::new("http://xmlns.com/foaf/0.1/Person").unwrap();
-    let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
-    let foaf_mbox = NamedNode::new("http://xmlns.com/foaf/0.1/mbox").unwrap();
+    let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        .expect("literal IRI is valid");
+    let foaf_person =
+        NamedNode::new("http://xmlns.com/foaf/0.1/Person").expect("literal IRI is valid");
+    let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("literal IRI is valid");
+    let foaf_mbox = NamedNode::new("http://xmlns.com/foaf/0.1/mbox").expect("literal IRI is valid");
 
     let pattern1 = AlgebraTriplePattern {
         subject: TermPattern::Variable(person_var.clone()),

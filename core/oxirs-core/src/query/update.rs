@@ -948,6 +948,18 @@ impl UpdateParser {
         turtle_doc.push('\n');
         turtle_doc.push_str(data_block);
 
+        // SPARQL's own `QuadData`/`TriplesTemplate` grammar makes the '.' that
+        // terminates the LAST triple optional (unlike Turtle's `triples`
+        // production, where it is mandatory) -- e.g.
+        // `INSERT DATA { <s> <p> <o> }` is valid SPARQL Update syntax even
+        // though it would be an incomplete Turtle document on its own. Since
+        // the block is handed off to a real Turtle parser below, make sure it
+        // is Turtle-terminated even when the caller relied on the
+        // SPARQL-only-optional final period.
+        if !data_block.trim().is_empty() && !data_block.trim_end().ends_with('.') {
+            turtle_doc.push_str(" .\n");
+        }
+
         // Parse using Turtle parser
         let parser = RdfParser::new(RdfFormat::Turtle);
         let turtle_bytes = turtle_doc.into_bytes();

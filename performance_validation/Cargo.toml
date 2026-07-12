@@ -13,43 +13,26 @@ publish = false
 [dependencies]
 # SciRS2 Core Dependencies (Full Usage - MANDATORY)
 scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling", "memory_management", "ml_pipeline"] }
-scirs2-graph = { workspace = true }
-scirs2-linalg = { workspace = true }
-scirs2-stats = { workspace = true }
-scirs2-neural = { workspace = true }
-scirs2-optimize = { workspace = true }
-scirs2-cluster = { workspace = true }
 
 # Async Runtime
 tokio = { workspace = true, features = ["full"] }
-futures = { workspace = true }
 
 # Standard Library Extensions
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-toml = { workspace = true }
 
 # Logging and Tracing
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-log = { workspace = true }
-env_logger = { workspace = true }
 
 # Random number generation (direct usage in benchmark files)
 rand = { workspace = true }
-rand_distr = { workspace = true }
-num_cpus = { workspace = true }
 clap = { workspace = true }
 
 # Time Handling
 chrono = { workspace = true, features = ["serde"] }
-
-[dev-dependencies]
-tempfile = { workspace = true }
-proptest = { workspace = true }
-criterion = { workspace = true, features = ["html_reports"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cuda", "opencl"))'] }

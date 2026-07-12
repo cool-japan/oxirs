@@ -104,7 +104,9 @@ impl ParallelQueryExecutor {
     /// Create a new parallel query executor
     pub fn new() -> Self {
         Self {
-            worker_count: num_cpus::get(),
+            worker_count: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             profiler: Arc::new(Mutex::new(Profiler::new())),
             query_cache: Arc::new(Mutex::new(HashMap::new())),
         }

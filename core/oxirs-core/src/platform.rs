@@ -48,7 +48,9 @@ impl PlatformCapabilities {
                 avx2_available: false,
                 avx512_available: false,
                 neon_available: false,
-                cpu_cores: num_cpus::get(),
+                cpu_cores: std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1),
                 arch: std::env::consts::ARCH.to_string(),
                 os: std::env::consts::OS.to_string(),
             };

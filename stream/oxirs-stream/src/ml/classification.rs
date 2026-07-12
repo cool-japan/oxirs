@@ -88,7 +88,7 @@ pub struct LogisticConfig {
     pub learning_rate: f64,
     /// L2 regularisation strength (`0.0` disables).
     pub l2: f64,
-    /// Min samples required before [`predict`] returns.
+    /// Min samples required before [`OnlineLogisticClassifier::predict`] returns.
     pub min_samples: u64,
 }
 
@@ -322,7 +322,7 @@ pub struct KnnConfig {
     pub window_size: usize,
     /// If true, weight votes inversely with distance.
     pub distance_weighted: bool,
-    /// Minimum number of samples required before [`predict`] returns.
+    /// Minimum number of samples required before [`StreamingKnnClassifier::predict`] returns.
     pub min_samples: u64,
 }
 

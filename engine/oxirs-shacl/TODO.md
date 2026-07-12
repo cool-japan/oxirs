@@ -1,10 +1,10 @@
 # OxiRS SHACL - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Current Status
 
-OxiRS SHACL v0.3.1 is production-ready, providing W3C SHACL validation with cross-module integration and advanced features.
+OxiRS SHACL v0.3.2 is production-ready, providing W3C SHACL validation with cross-module integration and advanced features.
 
 ### Production Features
 - ✅ **W3C SHACL Compliance** - 27/27 W3C constraint types passing
@@ -19,7 +19,9 @@ OxiRS SHACL v0.3.1 is production-ready, providing W3C SHACL validation with cros
 - ✅ **ShEx Migration** - ShEx to SHACL migration tool
 - ✅ **LSP Integration** - Language Server Protocol for IDE support
 - ✅ **Interactive Designer** - Step-by-step shape creation wizard
-- ✅ **2008 tests passing** with zero warnings
+- ✅ **Subclass-Aware Targeting** - Reflexive+transitive `rdfs:subClassOf` closure so `sh:class`/implicit-class targets honor subclassing
+- ✅ **Live SPARQL & Property-Path Targets** - `sh:target` SPARQLTarget and single-hop property-path targets execute against the store
+- ✅ **2140 tests passing** with zero warnings
 
 ## Roadmap
 
@@ -54,10 +56,24 @@ OxiRS SHACL v0.3.1 is production-ready, providing W3C SHACL validation with cros
   - **Tests:** `cargo doc --no-deps -p oxirs-shacl` warning-free; 29 doctests pass; 2040/2040 unit tests pass; clippy clean; fmt clean.
   - **Risk:** docs drift from code. Mitigation: spec-mapping table is generated from a single doctest harness later (out of scope for this run; spec-mapping is hand-authored and reviewed).
 
+### v0.3.2 - Current Release (July 12, 2026)
+- [x] Subclass-aware target closure (completed 2026-07-11)
+  - **Goal:** `sh:class` and implicit-class targets only matched exact `rdf:type` values; a resource typed as a subclass of the target class was silently skipped.
+  - **Design:** `advanced_features::subclass_closure` computes the reflexive+transitive closure of `rdfs:subClassOf` over a boolean adjacency matrix via Floyd–Warshall, then target evaluation consults the closure instead of exact-type matching.
+  - **Files:** `src/advanced_features/subclass_closure.rs` (new, 201 lines), `src/advanced_features/mod.rs`, `src/advanced_features/advanced_targets.rs`, `src/constraints/value_constraints.rs`.
+- [x] Live SPARQL-based and property-path targets (completed 2026-07-11)
+  - **Goal:** `sh:target` SPARQLTarget and single-hop property-path targets were stub implementations that returned empty or unchanged results.
+  - **Design:** Both target kinds now execute for real against the backing store during target selection.
+  - **Files:** `src/advanced_features/advanced_targets.rs`, `src/advanced_features/shape_inference.rs`.
+- [x] `sh:languageIn` BCP47/RFC-4647 matching (completed 2026-07-11)
+  - **Goal:** `sh:languageIn` compared language tags with exact string equality, so `"de"` did not match a value tagged `"de-CH"`.
+  - **Design:** Basic-filtering range matching per BCP47/RFC-4647 §3.3.
+  - **Files:** `src/constraints/string_constraints.rs`.
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS SHACL v0.2.3 - W3C SHACL validation engine*
+*OxiRS SHACL v0.3.2 - W3C SHACL validation engine*

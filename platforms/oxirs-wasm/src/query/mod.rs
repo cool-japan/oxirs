@@ -23,6 +23,7 @@ mod construct_tests;
 pub mod construct_types;
 pub mod filter;
 pub mod jsonld;
+pub mod prefix_expand;
 pub mod property_path;
 pub mod subquery;
 
@@ -51,19 +52,36 @@ pub fn execute_select(
     sparql: &str,
     store: &OxiRSStore,
 ) -> WasmResult<Vec<HashMap<String, String>>> {
-    let query = parse_select_query(sparql)?;
+    let sparql = prefix_expand::expand_prologue(sparql)?;
+    let query = parse_select_query(&sparql)?;
     evaluate_select(&query, store)
 }
 
 /// Execute a SPARQL ASK query
 pub fn execute_ask(sparql: &str, store: &OxiRSStore) -> WasmResult<bool> {
-    let query = parse_ask_query(sparql)?;
+    let sparql = prefix_expand::expand_prologue(sparql)?;
+    let query = parse_ask_query(&sparql)?;
     evaluate_ask(&query, store)
 }
 
-/// Execute a SPARQL CONSTRUCT query
+/// Execute a SPARQL CONSTRUCT query.
+///
+/// A query carrying the `CONSTRUCT` keyword is handed to
+/// [`crate::query::construct::ConstructEngine`], which instantiates the
+/// template once per solution of the WHERE clause — the SPARQL 1.1 semantics.
+///
+/// For backward compatibility a *`SELECT`-shaped* query is still accepted: its
+/// `?s`/`?p`/`?o` (or `?subject`/`?predicate`/`?object`) bindings are harvested
+/// as triples. New callers should write a real CONSTRUCT template.
 pub fn execute_construct(sparql: &str, store: &OxiRSStore) -> WasmResult<Vec<Triple>> {
-    let query = parse_select_query(sparql)?;
+    let sparql = prefix_expand::expand_prologue(sparql)?;
+
+    if sparql.to_uppercase().contains("CONSTRUCT") {
+        let (triples, _stats) = construct::ConstructEngine::new().execute(&sparql, store)?;
+        return Ok(triples);
+    }
+
+    let query = parse_select_query(&sparql)?;
     let bindings = evaluate_select(&query, store)?;
 
     let mut triples = Vec::new();
@@ -151,17 +169,32 @@ pub(crate) enum PatternTerm {
     Value(String),
 }
 
+/// Strip the N-Triples angle brackets from an IRI term. Literals, blank nodes
+/// and already-bare IRIs are returned unchanged.
+pub(crate) fn iri_body(term: &str) -> &str {
+    match term.strip_prefix('<').and_then(|t| t.strip_suffix('>')) {
+        Some(body) => body,
+        None => term,
+    }
+}
+
+/// Compare two RDF term strings across the two serialisations that reach the
+/// store: the N-Triples form the parsers emit (`<iri>`, `"lit"@en`) and the
+/// bare form [`OxiRSStore::insert`] accepts (`iri`). Only IRIs are bracket
+/// insensitive — a literal keeps its quotes, language tag and datatype, so
+/// `"air"` and `"air"@en` remain distinct terms.
+pub(crate) fn terms_equal(a: &str, b: &str) -> bool {
+    a == b || iri_body(a) == iri_body(b)
+}
+
 impl PatternTerm {
     pub(crate) fn matches(&self, value: &str, bindings: &HashMap<String, String>) -> bool {
         match self {
-            PatternTerm::Variable(name) => {
-                if let Some(bound_value) = bindings.get(name) {
-                    bound_value == value
-                } else {
-                    true
-                }
-            }
-            PatternTerm::Value(v) => v == value,
+            PatternTerm::Variable(name) => match bindings.get(name) {
+                Some(bound_value) => terms_equal(bound_value, value),
+                None => true,
+            },
+            PatternTerm::Value(v) => terms_equal(v, value),
         }
     }
 
@@ -1287,6 +1320,20 @@ pub(crate) fn evaluate_pattern(
     }
 }
 
+/// Stop a join that is building more intermediate solutions than the store's
+/// [`OxiRSStore::set_solution_budget`] allows. Checked as the solutions are
+/// produced, so an unselective join fails fast instead of running to completion.
+fn exceeds_budget(produced: usize, store: &OxiRSStore) -> WasmResult<()> {
+    match store.solution_budget() {
+        Some(budget) if produced >= budget => Err(WasmError::QueryError(format!(
+            "query exceeds the solution budget of {budget} intermediate rows: \
+             it joins too broadly. Add a more selective pattern, or order the \
+             patterns so that each one joins to a variable the previous ones bound."
+        ))),
+        _ => Ok(()),
+    }
+}
+
 /// Evaluate a basic triple pattern (inner join)
 fn evaluate_triple_pattern(
     tp: &TriplePattern,
@@ -1296,30 +1343,28 @@ fn evaluate_triple_pattern(
     let mut output = Vec::new();
 
     for binding in &input {
-        // Use indexes when possible for performance
-        let triples_iter: Box<dyn Iterator<Item = _>> = match (
+        // Drive the pattern off whichever position is already bound, so a join
+        // costs a hash lookup per solution rather than a scan of the graph.
+        // Subject first (the most selective in practice), then object, then
+        // predicate; only a wholly unbound pattern reads every triple.
+        let candidates: Vec<&crate::store::InternalTriple> = match (
             tp.subject.resolve(binding),
             tp.predicate.resolve(binding),
             tp.object.resolve(binding),
         ) {
-            (Some(s), Some(p), Some(o)) => {
-                // All bound: existence check
-                Box::new(
-                    store
-                        .all_triples()
-                        .filter(move |t| t.subject == s && t.predicate == p && t.object == o),
-                )
-            }
-            (Some(s), _, _) => Box::new(store.all_triples().filter(move |t| t.subject == s)),
-            (_, Some(p), _) => Box::new(store.all_triples().filter(move |t| t.predicate == p)),
-            _ => Box::new(store.all_triples()),
+            (Some(s), _, _) => store.triples_with_subject(s),
+            (_, _, Some(o)) => store.triples_with_object(o),
+            (_, Some(p), _) => store.triples_with_predicate(p),
+            _ => store.all_triples().collect(),
         };
 
-        for triple in triples_iter {
+        for triple in candidates {
             if tp.subject.matches(&triple.subject, binding)
                 && tp.predicate.matches(&triple.predicate, binding)
                 && tp.object.matches(&triple.object, binding)
             {
+                exceeds_budget(output.len(), store)?;
+
                 let mut new_binding = binding.clone();
                 if let PatternTerm::Variable(name) = &tp.subject {
                     new_binding.insert(name.clone(), triple.subject.clone());
@@ -1353,7 +1398,7 @@ fn evaluate_property_path(
             (Some(subj_val), Some(obj_val)) => {
                 // Both bound: check if object is reachable from subject via path
                 let reached = path.evaluate(subj_val, store);
-                if reached.iter().any(|r| r == obj_val) {
+                if reached.iter().any(|r| terms_equal(r, obj_val)) {
                     output.push(binding.clone());
                 }
             }
@@ -1361,6 +1406,7 @@ fn evaluate_property_path(
                 // Subject bound, object unbound: enumerate reachable objects
                 let reached = path.evaluate(subj_val, store);
                 for obj in reached {
+                    exceeds_budget(output.len(), store)?;
                     let mut new_binding = binding.clone();
                     if let PatternTerm::Variable(name) = object {
                         new_binding.insert(name.clone(), obj);
@@ -1372,6 +1418,7 @@ fn evaluate_property_path(
                 // Object bound, subject unbound: enumerate subjects that can reach object
                 let subjects = path.evaluate_reverse(obj_val, store);
                 for subj in subjects {
+                    exceeds_budget(output.len(), store)?;
                     let mut new_binding = binding.clone();
                     if let PatternTerm::Variable(name) = subject {
                         new_binding.insert(name.clone(), subj);
@@ -1387,6 +1434,7 @@ fn evaluate_property_path(
                 for subj_val in subjects {
                     let reached = path.evaluate(&subj_val, store);
                     for obj in reached {
+                        exceeds_budget(output.len(), store)?;
                         let mut new_binding = binding.clone();
                         if let PatternTerm::Variable(name) = subject {
                             new_binding.insert(name.clone(), subj_val.clone());

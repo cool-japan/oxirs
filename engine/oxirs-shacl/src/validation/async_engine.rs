@@ -77,7 +77,9 @@ pub struct AsyncValidationConfig {
 impl Default for AsyncValidationConfig {
     fn default() -> Self {
         Self {
-            max_concurrent_tasks: num_cpus::get(),
+            max_concurrent_tasks: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             validation_timeout: Duration::from_secs(30),
             stream_batch_size: 100,
             enable_progress_reporting: true,

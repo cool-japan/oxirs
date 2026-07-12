@@ -189,7 +189,10 @@ pub struct ParallelStarConfig {
 impl Default for ParallelStarConfig {
     fn default() -> Self {
         Self {
-            worker_count: num_cpus::get().max(2),
+            worker_count: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .max(2),
             max_queue_depth: 1024,
             max_depth: 8,
             query_timeout: Duration::from_secs(30),

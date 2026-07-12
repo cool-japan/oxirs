@@ -57,19 +57,21 @@ fn demo_zero_copy_parsing() {
     let mut parser = ZeroCopyIriParser::new();
 
     // Simple IRI - no allocation (borrowed)
-    let iri1 = parser.parse_iri_ref(b"<http://example.org/>").unwrap();
+    let iri1 = parser
+        .parse_iri_ref(b"<http://example.org/>")
+        .expect("invariant: value is valid");
     println!("✓ Parsed simple IRI: {} (borrowed, zero allocations)", iri1);
 
     // IRI with escapes - allocates only when needed
     let iri2 = parser
         .parse_iri_ref(b"<http://example.org/sp%20ace>")
-        .unwrap();
+        .expect("invariant: value is valid");
     println!("✓ Parsed IRI with escape: {} (owned, cached)", iri2);
 
     // Repeated parse hits cache
     let _iri3 = parser
         .parse_iri_ref(b"<http://example.org/sp%20ace>")
-        .unwrap();
+        .expect("invariant: value is valid");
     println!(
         "✓ Cache size: {} entries (avoiding re-decoding)\n",
         parser.cache_size()
@@ -154,7 +156,8 @@ fn demo_simd_lexing() {
 
     // Find directive using SIMD
     let directive_end = lexer.scan_until_whitespace(pos);
-    let directive = std::str::from_utf8(lexer.slice(pos, directive_end)).unwrap();
+    let directive =
+        std::str::from_utf8(lexer.slice(pos, directive_end)).expect("invariant: value is valid");
     println!("✓ Found directive: {}", directive);
 
     // Count lines using SIMD
@@ -179,7 +182,7 @@ fn demo_lazy_iri_resolution() {
         let prefix = if i % 2 == 0 { "foaf" } else { "ex" };
         resolver
             .resolve_prefixed(prefix, predicate, &prefixes)
-            .unwrap();
+            .expect("invariant: value is valid");
     }
     let duration = start.elapsed();
 

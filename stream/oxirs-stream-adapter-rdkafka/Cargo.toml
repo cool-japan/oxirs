@@ -1,0 +1,39 @@
+[package]
+name = "oxirs-stream-adapter-rdkafka"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Quarantined Apache Kafka (rdkafka) backend adapter for oxirs-stream (publish=false; isolates rdkafka-sys + libz-sys C FFI off the published Pure-Rust surface)."
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+# Reuse oxirs-stream's public `StreamBackend` trait + `StreamConfig`/`StreamEvent`
+# types so the Kafka backend stays API-compatible with the published crate.
+oxirs-stream = { workspace = true }
+# C FFI quarantined HERE (publish = false) — `rdkafka` pulls `rdkafka-sys` + `libz-sys`,
+# kept off oxirs-stream's published `--all-features` closure per COOLJAPAN Pure Rust Policy v2.
+# Gated by a default-on `kafka` feature so the moved backend's existing
+# `#[cfg(feature = "kafka")]` plumbing compiles unchanged; `--no-default-features`
+# yields the Pure-Rust stub path with no C dependency.
+rdkafka = { workspace = true, optional = true }
+# Kafka Schema Registry HTTP client (rustls-no-provider in the workspace → Pure Rust).
+reqwest = { workspace = true, optional = true }
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[features]
+default = ["kafka"]
+kafka = ["dep:rdkafka", "dep:reqwest"]
+
+[lints]
+workspace = true

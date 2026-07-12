@@ -10,10 +10,16 @@ Lightweight RDF and SPARQL implementation compiled to WebAssembly for browser, N
 
 ## Features
 
-- **In-memory RDF Store**: HashSet-based triple storage with O(1) lookups
-- **RDF Parsing**: Turtle and N-Triples format support
-- **SPARQL Queries**: SELECT, ASK, CONSTRUCT with pattern matching
-- **TypeScript Support**: Full type definitions
+- **In-memory RDF Store**: Subject/predicate/object hash-indexed triple storage; pattern and property-path evaluation looks up matches in the index instead of scanning every triple in the store
+- **RDF Parsing**: Turtle, N-Triples, N-Quads, TriG, plus a streaming/incremental chunk-based parser
+- **SPARQL 1.1 Queries**: SELECT, ASK, CONSTRUCT with OPTIONAL, UNION, FILTER (LANG/STR/DATATYPE/BOUND/regex/isIRI/isLiteral/isBlank/STRSTARTS/STRENDS/CONTAINS/STRLEN, `&&`/`||`/`!`), FILTER EXISTS/NOT EXISTS, property paths (`/ | * + ? ^ !()`), subqueries, GROUP BY + aggregates, ORDER BY, LIMIT/OFFSET
+- **SPARQL UPDATE**: INSERT DATA, DELETE DATA, INSERT/DELETE ... WHERE, CLEAR, DROP
+- **PREFIX/BASE Prologues**: queries may declare `PREFIX`/`BASE` and use prefixed names, expanded before parsing
+- **Solution Budget**: cap intermediate join solutions per query so an unselective join fails fast instead of running to completion
+- **Named Graphs**: multi-graph (quad) storage with `GRAPH` pattern queries
+- **RDFS Inference**: forward-chaining subClassOf/subPropertyOf/domain/range entailment
+- **SHACL Validation (core subset)**: NodeShape/PropertyShape constraint checking
+- **TypeScript Support**: type definitions, plus React/Vue/Svelte adapters (`js/react`, `js/vue`, `js/svelte`)
 - **Zero Server Dependencies**: No Tokio, runs in single-threaded WASM
 - **Lightweight**: ~300KB optimized binary
 
@@ -29,7 +35,7 @@ npm install oxirs-wasm
 
 ```toml
 [dependencies]
-oxirs-wasm = "0.1"
+oxirs-wasm = "0.3.2"
 ```
 
 ## Quick Start
@@ -54,8 +60,9 @@ const turtle = `
 const count = await store.loadTurtle(turtle);
 console.log(`Loaded ${count} triples`);
 
-// Execute SPARQL query
+// Execute SPARQL query — PREFIX/BASE prologues are expanded before parsing
 const results = await store.query(`
+    PREFIX : <http://example.org/>
     SELECT ?person ?name WHERE {
         ?person :name ?name .
     }
@@ -65,6 +72,7 @@ console.log(results);
 
 // ASK query
 const exists = await store.ask(`
+    PREFIX : <http://example.org/>
     ASK { :alice :knows :bob }
 `);
 console.log('Alice knows Bob:', exists); // true
@@ -72,6 +80,30 @@ console.log('Alice knows Bob:', exists); // true
 // Export to N-Triples
 const ntriples = store.toNTriples();
 console.log(ntriples);
+```
+
+### Bounding Query Cost
+
+A join is evaluated left to right, so an unselective pattern early in a
+`WHERE` clause can build a huge intermediate result before a later pattern
+cuts it back down — `LIMIT` cannot bound this because it only applies at the
+end. `setSolutionBudget` caps the number of intermediate solutions a single
+query may produce, so a runaway join fails fast with a query error instead of
+running to completion:
+
+```typescript
+// Cap intermediate solutions (useful when answering queries under a
+// time/CPU budget, e.g. a serverless endpoint).
+store.setSolutionBudget(50_000);
+
+try {
+    await store.query('SELECT * WHERE { ?a ?p ?x . ?b ?p ?y }');
+} catch (e) {
+    console.error('Query exceeded its solution budget:', e);
+}
+
+// Remove the cap — queries go back to being unbounded.
+store.clearSolutionBudget();
 ```
 
 ### HTML Integration
@@ -84,11 +116,13 @@ console.log(ntriples);
 </head>
 <body>
     <script type="module">
-        import { initialize, createStore } from './pkg/oxirs_wasm.js';
+        // Loading the raw wasm-pack output directly (no npm wrapper): use
+        // the generated `init` loader and the `OxiRSStore` constructor.
+        import init, { OxiRSStore } from './pkg/oxirs_wasm.js';
 
         async function run() {
-            await initialize();
-            const store = await createStore();
+            await init();
+            const store = new OxiRSStore();
 
             await store.loadTurtle(`
                 @prefix : <http://example.org/> .
@@ -96,7 +130,7 @@ console.log(ntriples);
             `);
 
             const results = await store.query(
-                'SELECT ?s ?o WHERE { ?s :knows ?o }'
+                'PREFIX : <http://example.org/>\nSELECT ?s ?o WHERE { ?s :knows ?o }'
             );
 
             console.log('Results:', results);
@@ -143,10 +177,17 @@ class OxiRSStore {
     size(): number;
     clear(): void;
 
-    // SPARQL queries
+    // SPARQL queries (PREFIX/BASE prologues are supported)
     query(sparql: string): Promise<QueryResult[]>;
     ask(sparql: string): Promise<boolean>;
     construct(sparql: string): Promise<Triple[]>;
+
+    // Query cost control
+    setSolutionBudget(budget: number): void;
+    clearSolutionBudget(): void;
+
+    // RDFS forward-chaining inference
+    inferRdfs(): { added: number };
 
     // Export
     toTurtle(): string;
@@ -168,16 +209,19 @@ class OxiRSStore {
 
 ```html
 <script type="module">
-    import init, { createStore } from './pkg/oxirs_wasm.js';
+    import init, { OxiRSStore } from './pkg/oxirs_wasm.js';
     await init();
-    const store = await createStore();
+    const store = new OxiRSStore();
 </script>
 ```
 
 ### Node.js
 
+The `web` build target produces an ES module, so import it rather than
+`require()` it (Node.js cannot `require()` an ES module):
+
 ```javascript
-const { initialize, createStore } = require('oxirs-wasm');
+import { initialize, createStore } from 'oxirs-wasm';
 
 (async () => {
     await initialize();
@@ -220,16 +264,13 @@ Deno.serve(async (req) => {
 
 ## Limitations
 
-Current implementation focuses on core functionality:
-
 - ❌ No persistent storage (in-memory only)
-- ❌ No SPARQL UPDATE/DESCRIBE
-- ❌ No RDFS/OWL reasoning
-- ❌ No SHACL validation
-- ❌ No federated queries (SERVICE)
-- ❌ Limited SPARQL features (basic graph patterns only)
+- ❌ No SPARQL DESCRIBE
+- ❌ No OWL reasoning (RDFS forward-chaining entailment — subClassOf/subPropertyOf/domain/range — is supported via `inferRdfs()`)
+- ❌ SHACL validation covers a core subset only (NodeShape/PropertyShape with minCount, maxCount, datatype, pattern, minInclusive/maxInclusive, class, nodeKind, in, hasValue — not the full SHACL-AF/SPARQL-based constraint set)
+- ❌ No federated queries (SPARQL `SERVICE`)
 
-For full SPARQL support, use the server-side `oxirs-fuseki` crate.
+For full SPARQL 1.1 and complete SHACL support, use the server-side `oxirs-fuseki` / `oxirs-shacl` crates.
 
 ## Performance
 
@@ -238,6 +279,7 @@ For full SPARQL support, use the server-side `oxirs-fuseki` crate.
 - **Parsing**: 10K triples/sec (Turtle)
 - **Query execution**: 1K queries/sec (simple patterns)
 - **Memory**: ~200KB per 1K triples
+- **Indexed evaluation**: triple pattern and property-path matching go through the store's subject/predicate/object hash indexes rather than scanning every triple, so a join costs a hash lookup per solution instead of a full graph scan
 
 ## Use Cases
 
@@ -253,7 +295,9 @@ For full SPARQL support, use the server-side `oxirs-fuseki` crate.
 - `wasm-bindgen` - JavaScript interop
 - `js-sys` - JavaScript standard library bindings
 - `web-sys` - Web APIs (console, performance)
-- `getrandom` - Random number generation (js feature)
+- `console_error_panic_hook` - Readable panic messages in the browser console
+- `serde`, `serde_json` - Serialization
+- `thiserror` - Error types
 
 ## License
 

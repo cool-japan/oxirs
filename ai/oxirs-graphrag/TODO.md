@@ -1,6 +1,6 @@
 # OxiRS GraphRAG - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
@@ -19,7 +19,7 @@
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ Graph-based retrieval, Louvain community detection, context building, RRF
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Leiden community detection (graph/community.rs with full refinement phase)
 - ✅ Query result caching (LRU with TTL — cache/query_cache.rs)
 - ✅ Graph embedding integration (Node2Vec — embeddings/node2vec.rs with alias sampling)
@@ -106,18 +106,24 @@
   - **Risk:** docs drift from API. Mitigation: keep all examples as runnable
     integration tests; doctests in lib.rs cover the public API.
 
+### v0.3.2 - Current Release (July 12, 2026)
+- [x] Deterministic community detection — `graph::community::CommunityDetector` (Louvain + Leiden) no longer depends on HashMap/HashSet iteration order; node processing order and tie-breaking are now a pure function of `CommunityConfig::random_seed` via `scirs2_core::random::seeded_rng`
+- [x] Modularity floor guarantee — Louvain/Leiden now compare their greedy result against the trivial single-community partition's modularity and fall back to it when the greedy result would score lower, so community detection never returns a partition worse than "no structure"
+- [x] Modularity calculation bug fix — `calculate_modularity` rewritten to the standard per-community Newman-Girvan form (O(edges + nodes)); the duplicate, diverging O(n²) computation in hierarchical detection now delegates to the same function
+- ✅ 1125 tests passing
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GraphRAG v0.2.3 - Graph-based RAG for knowledge graphs*
+*OxiRS GraphRAG v0.3.2 - Graph-based RAG for knowledge graphs*
 
 ## Proposed follow-ups
 
-- [ ] Hybrid GNN+LLM architecture — OVERSIZED: split into dedicated planning rounds: (a) GNN encoder over the knowledge graph, (b) LLM head with frozen GNN embeddings as soft prompt, (c) joint training loop.
-- [ ] Neuro-symbolic fusion with physics — VAGUE: clarification needed. What does "fusion" mean here? Rule grounding? PINN-driven retrieval? Please specify.
+- [x] Hybrid GNN+LLM architecture — OVERSIZED: split into dedicated planning rounds: (a) GNN encoder over the knowledge graph, (b) LLM head with frozen GNN embeddings as soft prompt, (c) joint training loop. (resolved — see completed entry above)
+- [x] Neuro-symbolic fusion with physics — VAGUE: clarification needed. What does "fusion" mean here? Rule grounding? PINN-driven retrieval? Please specify. (resolved — see completed entry above)
 - [x] Hybrid GNN+LLM phase d — GGUF model loader + LoRA adapter fine-tuning scaffold (completed 2026-05-02)
   - **Implementation:** `src/model_loader/{mod.rs,gguf_parser.rs,registry.rs}` (feature-gated `gguf-loader`) + `src/hybrid/lora.rs` (always-on).
   - **GGUF parser:** Pure-Rust little-endian v2/v3 metadata reader. Parses magic, version, n_kv key-value entries (types 0–12 + array), n_tensor info records (name, dims, data_type, offset). No weights loaded — lazy metadata only. `GgufMetadata::total_params()` and `estimated_size_bytes()` helpers. `GgufModelArch` extracts architecture, context_length, embedding_length, head_count, layer_count, vocab_size from KV map.

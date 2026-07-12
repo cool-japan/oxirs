@@ -1,6 +1,7 @@
 # OxiRS Chat
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Tests](https://img.shields.io/badge/tests-1247%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
 
 **AI-powered conversational interface for RDF knowledge graphs with RAG and natural language to SPARQL**
 
@@ -16,6 +17,7 @@ semantic data, automatic SPARQL generation, and contextual explanations.
 Key capabilities:
 
 - **Natural Language to SPARQL** — Convert plain-English questions to SPARQL.
+- **Context-aware entity extraction** — Rule-based NL entity recognition returning typed, span-and-confidence-scored entities (`nl2sparql::context_aware::extract_entities_rich`).
 - **RAG Integration** — Retrieve relevant triples from the knowledge graph and pass them as context to the LLM.
 - **Multi-provider LLM** — OpenAI and Anthropic out of the box; local providers configurable.
 - **Streaming responses** — Word-by-word output via a channel-based API.
@@ -30,8 +32,8 @@ Key capabilities:
 
 ```toml
 [dependencies]
-oxirs-chat = "0.3.1"
-oxirs-core  = "0.3.1"
+oxirs-chat = "0.3.2"
+oxirs-core  = "0.3.2"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 ```
@@ -43,6 +45,7 @@ Optional features:
 | `llm-integration` | Enable extra LLM integration hooks |
 | `nl2sparql` | Enable the NL-to-SPARQL subsystem |
 | `excel-export` | Enable Excel (`.xlsx`) export of query results |
+| `openai` | Enable the OpenAI provider (chat + Whisper STT/TTS) via `async-openai` |
 
 ---
 
@@ -252,4 +255,4 @@ while let Some(chunk) = rx.recv().await {
 
 Apache-2.0 — see [LICENSE-APACHE](../../LICENSE-APACHE).
 
-*OxiRS Chat v0.3.1 — AI-powered conversational RDF interface by COOLJAPAN OU (Team Kitasan)*
+*OxiRS Chat v0.3.2 — AI-powered conversational RDF interface by COOLJAPAN OU (Team Kitasan)*

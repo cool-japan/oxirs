@@ -8,9 +8,9 @@
 //! The implementation is split across sibling modules (declared in
 //! `commands/mod.rs`):
 //!
-//! - [`jena_parity_types`](super::jena_parity_types): `ParityCategory`,
+//! - [`jena_parity_types`](crate::commands::jena_parity_types): `ParityCategory`,
 //!   `FeatureStatus`, `ParityFeature`, `ParitySummary`
-//! - [`jena_parity_checker`](super::jena_parity_checker): `JenaParityChecker`
+//! - [`jena_parity_checker`](crate::commands::jena_parity_checker): `JenaParityChecker`
 //!
 //! Unit tests live in `jena_parity_tests` (also declared in `commands/mod.rs`).
 //! All public items are re-exported below so existing imports continue to work.

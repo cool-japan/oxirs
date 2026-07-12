@@ -66,7 +66,9 @@ impl Default for ConcurrencyConfig {
             queue_timeout_secs: 300, // 5 minutes
             enable_load_shedding: true,
             load_shedding_threshold: 0.85,
-            worker_threads: num_cpus::get(),
+            worker_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             enable_fair_scheduling: true,
         }
     }

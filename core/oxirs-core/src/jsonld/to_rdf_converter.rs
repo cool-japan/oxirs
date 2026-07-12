@@ -24,6 +24,8 @@ pub(super) enum JsonLdToRdfState {
         reverse: bool,
     },
     List(Option<NamedOrBlankNode>),
+    /// `@set` container: members are emitted flat as direct quads (no rdf:first/rdf:rest chain).
+    Set,
     Graph(Option<GraphName>),
 }
 
@@ -89,6 +91,14 @@ impl JsonLdToRdfConverter {
                             nesting: nesting + 1,
                         });
                     }
+                    JsonLdEvent::IndexValue(_) => {
+                        // @index annotation: no RDF concept (spec §8.2), silently ignored.
+                        self.state.push(JsonLdToRdfState::StartObject {
+                            types,
+                            buffer,
+                            nesting,
+                        });
+                    }
                     _ => {
                         buffer.push(event);
                         self.state.push(JsonLdToRdfState::StartObject {
@@ -119,6 +129,10 @@ impl JsonLdToRdfConverter {
                     let graph_name = id.clone().map(Into::into);
                     self.state.push(JsonLdToRdfState::Object(id));
                     self.state.push(JsonLdToRdfState::Graph(graph_name));
+                }
+                JsonLdEvent::IndexValue(_) => {
+                    // @index annotation: no RDF concept (spec §8.2), silently ignored.
+                    self.state.push(JsonLdToRdfState::Object(id));
                 }
                 JsonLdEvent::StartObject { .. }
                 | JsonLdEvent::Value { .. }
@@ -157,7 +171,12 @@ impl JsonLdToRdfConverter {
                     self.state.push(state);
                     self.state.push(JsonLdToRdfState::List(None));
                 }
-                JsonLdEvent::StartSet | JsonLdEvent::EndSet => {
+                JsonLdEvent::StartSet => {
+                    self.state.push(state);
+                    self.state.push(JsonLdToRdfState::Set);
+                }
+                JsonLdEvent::IndexValue(_) => {
+                    // @index annotation: no RDF concept (spec §8.2), silently ignored.
                     self.state.push(state);
                 }
                 JsonLdEvent::StartProperty { .. }
@@ -165,7 +184,8 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::EndObject
                 | JsonLdEvent::StartGraph
                 | JsonLdEvent::EndGraph
-                | JsonLdEvent::EndList => unreachable!(),
+                | JsonLdEvent::EndList
+                | JsonLdEvent::EndSet => unreachable!(),
             },
             JsonLdToRdfState::List(current_node) => match event {
                 JsonLdEvent::StartObject { types } => {
@@ -213,7 +233,11 @@ impl JsonLdToRdfConverter {
                     }
                 }
                 JsonLdEvent::StartSet | JsonLdEvent::EndSet => {
-                    // TODO: this is bad
+                    // @set inside @list is semantically invalid in JSON-LD 1.1; silently drop.
+                    self.state.push(JsonLdToRdfState::List(current_node));
+                }
+                JsonLdEvent::IndexValue(_) => {
+                    // @index annotation: no RDF concept (spec §8.2), silently ignored.
                     self.state.push(JsonLdToRdfState::List(current_node));
                 }
                 JsonLdEvent::EndObject
@@ -222,6 +246,52 @@ impl JsonLdToRdfConverter {
                 | JsonLdEvent::Id(_)
                 | JsonLdEvent::StartGraph
                 | JsonLdEvent::EndGraph => unreachable!(),
+            },
+            JsonLdToRdfState::Set => match event {
+                JsonLdEvent::StartObject { types } => {
+                    self.state.push(JsonLdToRdfState::Set);
+                    self.state.push(JsonLdToRdfState::StartObject {
+                        types: types
+                            .into_iter()
+                            .filter_map(|t| self.convert_named_or_blank_node(t))
+                            .collect(),
+                        buffer: Vec::new(),
+                        nesting: 0,
+                    });
+                }
+                JsonLdEvent::Value {
+                    value,
+                    r#type,
+                    language,
+                } => {
+                    self.state.push(JsonLdToRdfState::Set);
+                    self.emit_quad_for_new_literal(
+                        self.convert_literal(value, language, r#type),
+                        results,
+                    );
+                }
+                JsonLdEvent::StartList => {
+                    self.state.push(JsonLdToRdfState::Set);
+                    self.state.push(JsonLdToRdfState::List(None));
+                }
+                JsonLdEvent::StartSet => {
+                    self.state.push(JsonLdToRdfState::Set);
+                    self.state.push(JsonLdToRdfState::Set);
+                }
+                JsonLdEvent::EndSet => {
+                    // Set is complete; no closing structure needed.
+                }
+                JsonLdEvent::IndexValue(_) => {
+                    // @index annotation: no RDF concept (spec §8.2), silently ignored.
+                    self.state.push(JsonLdToRdfState::Set);
+                }
+                JsonLdEvent::EndObject
+                | JsonLdEvent::StartProperty { .. }
+                | JsonLdEvent::EndProperty
+                | JsonLdEvent::Id(_)
+                | JsonLdEvent::StartGraph
+                | JsonLdEvent::EndGraph
+                | JsonLdEvent::EndList => unreachable!(),
             },
             JsonLdToRdfState::Graph(_) => match event {
                 JsonLdEvent::StartObject { types } => {
@@ -239,6 +309,10 @@ impl JsonLdToRdfConverter {
                     self.state.push(state);
                 }
                 JsonLdEvent::EndGraph => (),
+                JsonLdEvent::IndexValue(_) => {
+                    // @index annotation: no RDF concept (spec §8.2), silently ignored.
+                    self.state.push(state);
+                }
                 JsonLdEvent::StartGraph
                 | JsonLdEvent::StartProperty { .. }
                 | JsonLdEvent::EndProperty
@@ -431,7 +505,7 @@ impl JsonLdToRdfConverter {
                 JsonLdToRdfState::StartObject { .. } => {
                     unreachable!()
                 }
-                JsonLdToRdfState::Property { .. } => (),
+                JsonLdToRdfState::Property { .. } | JsonLdToRdfState::Set => (),
                 JsonLdToRdfState::List(id) => return id.as_ref(),
                 JsonLdToRdfState::Graph(_) => {
                     return None;
@@ -447,7 +521,9 @@ impl JsonLdToRdfConverter {
                 JsonLdToRdfState::Property { id, reverse } => {
                     return Some((id.as_ref()?.as_ref(), *reverse));
                 }
-                JsonLdToRdfState::StartObject { .. } | JsonLdToRdfState::Object(_) => (),
+                JsonLdToRdfState::StartObject { .. }
+                | JsonLdToRdfState::Object(_)
+                | JsonLdToRdfState::Set => (),
                 JsonLdToRdfState::List(_) => return Some((rdf::FIRST.as_ref(), false)),
                 JsonLdToRdfState::Graph(_) => {
                     return None;
@@ -475,7 +551,8 @@ impl JsonLdToRdfConverter {
                 JsonLdToRdfState::StartObject { .. }
                 | JsonLdToRdfState::Object(_)
                 | JsonLdToRdfState::Property { .. }
-                | JsonLdToRdfState::List(_) => (),
+                | JsonLdToRdfState::List(_)
+                | JsonLdToRdfState::Set => (),
             }
         }
         None

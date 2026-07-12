@@ -410,21 +410,17 @@ mod geometry_properties_conformance {
     /// Requirement 26: boundary property
     #[test]
     fn test_req26_boundary_property() {
-        #[cfg(feature = "geos-backend")]
-        {
-            let line = Geometry::from_wkt("LINESTRING(0 0, 1 1)").unwrap();
-            let boundary_geom = boundary(&line).unwrap();
-            // Boundary of a linestring should be its two endpoints (MultiPoint)
-            if let GeoGeometry::MultiPoint(mp) = &boundary_geom.geom {
-                assert_eq!(mp.0.len(), 2, "LineString boundary should have 2 points");
-            }
-        }
-
-        #[cfg(not(feature = "geos-backend"))]
-        {
-            // Test is only relevant with geos-backend feature
-            // Skip test when geos-backend is not enabled
-        }
+        // The facade boundary() is GEOS-backed; that capability has been quarantined
+        // into the `oxirs-geosparql-adapter-geos` crate (Pure Rust Policy v2), so the
+        // default Pure-Rust build returns an error directing callers to the adapter.
+        // (A Pure-Rust OGC SFA boundary is available at functions::de9im::boundary.)
+        let line = Geometry::from_wkt("LINESTRING(0 0, 1 1)").unwrap();
+        let result = boundary(&line);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("oxirs-geosparql-adapter-geos"));
     }
 
     /// Requirement 27: envelope property
@@ -478,16 +474,22 @@ mod spatial_analysis_conformance {
     }
 
     /// Requirement 30: buffer function
+    ///
+    /// Point buffering needs GEOS (quarantined into oxirs-geosparql-adapter-geos);
+    /// the Pure-Rust `rust-buffer` path covers Polygon/MultiPolygon, exercised here.
     #[test]
-    #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
+    #[cfg(feature = "rust-buffer")]
     fn test_req30_buffer_function() {
-        let point = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let buffered = buffer(&point, 1.0).unwrap();
+        let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+        let buffered = buffer(&poly, 1.0).unwrap();
 
-        // Buffer of a point should create a polygon
+        // Buffer of a polygon should be a polygon or multipolygon
         assert!(
-            matches!(buffered.geom, GeoGeometry::Polygon(_)),
-            "Buffer of point should be polygon"
+            matches!(
+                buffered.geom,
+                GeoGeometry::Polygon(_) | GeoGeometry::MultiPolygon(_)
+            ),
+            "Buffer of polygon should be polygon or multipolygon"
         );
     }
 
@@ -624,10 +626,12 @@ mod crs_conformance {
 // ============================================================================
 
 #[cfg(test)]
-#[cfg(feature = "geos-backend")]
 mod egenhofer_conformance {
     use super::*;
     use oxirs_geosparql::functions::egenhofer::*;
+    // NOTE: ehMeet/ehInside/ehContains need GEOS (quarantined into
+    // oxirs-geosparql-adapter-geos); only the Pure-Rust Egenhofer relations are
+    // asserted here.
 
     /// Requirement 38: ehEquals relation
     #[test]
@@ -650,18 +654,6 @@ mod egenhofer_conformance {
         assert!(
             eh_disjoint(&poly1, &poly2).unwrap(),
             "Separate polygons should satisfy ehDisjoint"
-        );
-    }
-
-    /// Requirement 40: ehMeet relation
-    #[test]
-    fn test_req40_eh_meet() {
-        let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-        let poly2 = Geometry::from_wkt("POLYGON((2 0, 4 0, 4 2, 2 2, 2 0))").unwrap();
-
-        assert!(
-            eh_meet(&poly1, &poly2).unwrap(),
-            "Polygons touching at edge should satisfy ehMeet"
         );
     }
 
@@ -700,30 +692,6 @@ mod egenhofer_conformance {
             "Inner polygon should be covered by outer polygon"
         );
     }
-
-    /// Requirement 44: ehInside relation
-    #[test]
-    fn test_req44_eh_inside() {
-        let point = Geometry::from_wkt("POINT(2 2)").unwrap();
-        let polygon = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-
-        assert!(
-            eh_inside(&point, &polygon).unwrap(),
-            "Point inside polygon should satisfy ehInside"
-        );
-    }
-
-    /// Requirement 45: ehContains relation
-    #[test]
-    fn test_req45_eh_contains() {
-        let polygon = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-        let point = Geometry::from_wkt("POINT(2 2)").unwrap();
-
-        assert!(
-            eh_contains(&polygon, &point).unwrap(),
-            "Polygon containing point should satisfy ehContains"
-        );
-    }
 }
 
 // ============================================================================
@@ -731,10 +699,11 @@ mod egenhofer_conformance {
 // ============================================================================
 
 #[cfg(test)]
-#[cfg(feature = "geos-backend")]
 mod rcc8_conformance {
     use super::*;
     use oxirs_geosparql::functions::rcc8::*;
+    // NOTE: the boundary-dependent RCC8 relations (EC/TPP/TPPi/NTPP/NTPPi) need GEOS
+    // (quarantined into oxirs-geosparql-adapter-geos); only EQ/DC/PO are asserted here.
 
     /// Requirement 46: rcc8eq relation
     #[test]
@@ -760,18 +729,6 @@ mod rcc8_conformance {
         );
     }
 
-    /// Requirement 48: rcc8ec (externally connected) relation
-    #[test]
-    fn test_req48_rcc8_ec() {
-        let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-        let poly2 = Geometry::from_wkt("POLYGON((2 0, 4 0, 4 2, 2 2, 2 0))").unwrap();
-
-        assert!(
-            rcc8_ec(&poly1, &poly2).unwrap(),
-            "Externally connected regions should satisfy rcc8ec"
-        );
-    }
-
     /// Requirement 49: rcc8po (partially overlapping) relation
     #[test]
     fn test_req49_rcc8_po() {
@@ -781,62 +738,6 @@ mod rcc8_conformance {
         assert!(
             rcc8_po(&poly1, &poly2).unwrap(),
             "Partially overlapping regions should satisfy rcc8po"
-        );
-    }
-
-    /// Requirement 50: rcc8tppi (tangential proper part inverse) relation
-    #[test]
-    fn test_req50_rcc8_tppi() {
-        let outer = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-        let inner = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").unwrap();
-
-        // rcc8_tppi(A, B) means B is a tangential proper part of A (B inside A, touching)
-        // So outer should be tppi of inner (inner is inside outer, potentially touching)
-        let result = rcc8_tppi(&outer, &inner).unwrap();
-        assert!(
-            result || rcc8_ntppi(&outer, &inner).unwrap(),
-            "Outer polygon should satisfy rcc8tppi or rcc8ntppi with inner (contains it)"
-        );
-    }
-
-    /// Requirement 51: rcc8tpp (tangential proper part) relation
-    #[test]
-    fn test_req51_rcc8_tpp() {
-        let inner = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").unwrap();
-        let outer = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-
-        // rcc8_tpp(A, B) means A is a tangential proper part of B (A inside B, touching)
-        // So inner should be tpp of outer (inner is inside outer, potentially touching)
-        let result = rcc8_tpp(&inner, &outer).unwrap();
-        assert!(
-            result || rcc8_ntpp(&inner, &outer).unwrap(),
-            "Inner polygon should satisfy rcc8tpp or rcc8ntpp with outer (is contained by it)"
-        );
-    }
-
-    /// Requirement 52: rcc8ntpp (non-tangential proper part) relation
-    #[test]
-    fn test_req52_rcc8_ntpp() {
-        let inner = Geometry::from_wkt("POLYGON((3 3, 7 3, 7 7, 3 7, 3 3))").unwrap();
-        let outer = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
-
-        // rcc8_ntpp(A, B) means A is a non-tangential proper part of B (A strictly inside B, not touching)
-        assert!(
-            rcc8_ntpp(&inner, &outer).unwrap(),
-            "Inner (strictly inside, not touching) should satisfy rcc8ntpp with outer"
-        );
-    }
-
-    /// Requirement 53: rcc8ntppi (non-tangential proper part inverse) relation
-    #[test]
-    fn test_req53_rcc8_ntppi() {
-        let outer = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
-        let inner = Geometry::from_wkt("POLYGON((3 3, 7 3, 7 7, 3 7, 3 3))").unwrap();
-
-        // rcc8_ntppi(A, B) means B is a non-tangential proper part of A (B strictly inside A, not touching)
-        assert!(
-            rcc8_ntppi(&outer, &inner).unwrap(),
-            "Outer (strictly contains, not touching) should satisfy rcc8ntppi with inner"
         );
     }
 }

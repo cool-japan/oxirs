@@ -11,11 +11,7 @@
 //! Reference: Randell, D. A., Cui, Z., & Cohn, A. G. (1992). "A spatial logic based on regions and connection"
 
 use crate::error::Result;
-#[cfg(feature = "geos-backend")]
-use crate::functions::bbox_utils::bbox_could_contain;
 use crate::functions::bbox_utils::bboxes_disjoint;
-#[cfg(feature = "geos-backend")]
-use crate::functions::geometric_operations::{boundary, intersection};
 use crate::functions::simple_features::{sf_disjoint, sf_equals};
 use crate::geometry::Geometry;
 use geo::{Contains, Intersects};
@@ -78,40 +74,21 @@ pub fn rcc8_dc(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
 /// let poly2 = Geometry::from_wkt("POLYGON((2 0, 4 0, 4 2, 2 2, 2 0))").expect("should succeed");
 ///
-/// assert!(rcc8_ec(&poly1, &poly2).expect("should succeed"));
+/// // These regions share only the boundary edge x=2 (a true "Externally
+/// // Connected" relation), but evaluating it requires GEOS boundary calculation,
+/// // which is not available in the pure-Rust build.
+/// let result = rcc8_ec(&poly1, &poly2);
+/// assert!(result.is_err());
 /// ```
-#[cfg(feature = "geos-backend")]
-pub fn rcc8_ec(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
-    geom1.validate_crs_compatibility(geom2)?;
-
-    // Fast path: if bboxes are disjoint, regions can't be externally connected
-    if bboxes_disjoint(geom1, geom2) {
-        return Ok(false);
-    }
-
-    // Boundaries must touch
-    let b1 = boundary(geom1)?;
-    let b2 = boundary(geom2)?;
-    let boundaries_touch = b1.geom.intersects(&b2.geom);
-
-    // Interiors must not overlap
-    let int = intersection(geom1, geom2)?;
-    let interiors_disjoint = int.is_none() || {
-        if let Some(i) = int {
-            i.is_empty()
-        } else {
-            true
-        }
-    };
-
-    Ok(boundaries_touch && interiors_disjoint)
-}
-
-/// RCC8 Externally Connected (fallback without GEOS)
-#[cfg(not(feature = "geos-backend"))]
+///
+/// This relation needs a geometric boundary, computed via GEOS. The GEOS C FFI has
+/// been quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false)
+/// under the COOLJAPAN Pure Rust Policy v2; call
+/// `oxirs_geosparql_adapter_geos::rcc8_ec` for the working implementation.
 pub fn rcc8_ec(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
     Err(crate::error::GeoSparqlError::UnsupportedOperation(
-        "RCC8 Externally Connected requires 'geos-backend' feature for boundary calculation"
+        "RCC8 Externally Connected requires GEOS boundary calculation; it is provided by the \
+         quarantined `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::rcc8_ec)."
             .to_string(),
     ))
 }
@@ -170,36 +147,22 @@ pub fn rcc8_po(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
 /// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
-/// assert!(rcc8_tpp(&poly1, &poly2).expect("should succeed"));
+/// // poly1 is a proper part of poly2 and their boundaries touch (a true
+/// // "Tangential Proper Part" relation), but evaluating it requires GEOS
+/// // boundary calculation, which is not available in the pure-Rust build.
+/// let result = rcc8_tpp(&poly1, &poly2);
+/// assert!(result.is_err());
 /// ```
-#[cfg(feature = "geos-backend")]
-pub fn rcc8_tpp(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
-    geom1.validate_crs_compatibility(geom2)?;
-
-    // Fast path: if geom1's bbox is not within geom2's bbox, geom1 can't be a proper part
-    if !bbox_could_contain(geom2, geom1) {
-        return Ok(false);
-    }
-
-    // geom1 must be contained in geom2
-    let contained = geom2.geom.contains(&geom1.geom);
-
-    // Boundaries must touch
-    let b1 = boundary(geom1)?;
-    let b2 = boundary(geom2)?;
-    let boundaries_touch = b1.geom.intersects(&b2.geom);
-
-    // Must be a proper part (not equal)
-    let not_equal = !sf_equals(geom1, geom2)?;
-
-    Ok(contained && boundaries_touch && not_equal)
-}
-
-/// RCC8 Tangential Proper Part (fallback without GEOS)
-#[cfg(not(feature = "geos-backend"))]
+///
+/// This relation needs a geometric boundary, computed via GEOS. The GEOS C FFI has
+/// been quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false)
+/// under the COOLJAPAN Pure Rust Policy v2; call
+/// `oxirs_geosparql_adapter_geos::rcc8_tpp` for the working implementation.
 pub fn rcc8_tpp(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
     Err(crate::error::GeoSparqlError::UnsupportedOperation(
-        "RCC8 TPP requires 'geos-backend' feature for boundary calculation".to_string(),
+        "RCC8 TPP requires GEOS boundary calculation; it is provided by the quarantined \
+         `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::rcc8_tpp)."
+            .to_string(),
     ))
 }
 
@@ -216,19 +179,22 @@ pub fn rcc8_tpp(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 /// let poly2 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
 ///
-/// assert!(rcc8_tppi(&poly1, &poly2).expect("should succeed"));
+/// // poly2 is a tangential proper part of poly1 (the inverse relation), but
+/// // evaluating it requires GEOS boundary calculation, which is not available
+/// // in the pure-Rust build.
+/// let result = rcc8_tppi(&poly1, &poly2);
+/// assert!(result.is_err());
 /// ```
-#[cfg(feature = "geos-backend")]
-pub fn rcc8_tppi(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
-    // TPPI is the inverse of TPP
-    rcc8_tpp(geom2, geom1)
-}
-
-/// RCC8 Tangential Proper Part Inverse (fallback without GEOS)
-#[cfg(not(feature = "geos-backend"))]
+///
+/// This relation needs a geometric boundary, computed via GEOS. The GEOS C FFI has
+/// been quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false)
+/// under the COOLJAPAN Pure Rust Policy v2; call
+/// `oxirs_geosparql_adapter_geos::rcc8_tppi` for the working implementation.
 pub fn rcc8_tppi(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
     Err(crate::error::GeoSparqlError::UnsupportedOperation(
-        "RCC8 TPPI requires 'geos-backend' feature for boundary calculation".to_string(),
+        "RCC8 TPPI requires GEOS boundary calculation; it is provided by the quarantined \
+         `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::rcc8_tppi)."
+            .to_string(),
     ))
 }
 
@@ -250,36 +216,23 @@ pub fn rcc8_tppi(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// let poly1 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").expect("should succeed");
 /// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
-/// assert!(rcc8_ntpp(&poly1, &poly2).expect("should succeed"));
+/// // poly1 lies entirely within poly2's interior, not touching its boundary
+/// // (a true "Non-Tangential Proper Part" relation), but evaluating it
+/// // requires GEOS boundary calculation, which is not available in the
+/// // pure-Rust build.
+/// let result = rcc8_ntpp(&poly1, &poly2);
+/// assert!(result.is_err());
 /// ```
-#[cfg(feature = "geos-backend")]
-pub fn rcc8_ntpp(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
-    geom1.validate_crs_compatibility(geom2)?;
-
-    // Fast path: if geom1's bbox is not within geom2's bbox, geom1 can't be a proper part
-    if !bbox_could_contain(geom2, geom1) {
-        return Ok(false);
-    }
-
-    // geom1 must be contained in geom2
-    let contained = geom2.geom.contains(&geom1.geom);
-
-    // Boundaries must NOT touch
-    let b1 = boundary(geom1)?;
-    let b2 = boundary(geom2)?;
-    let boundaries_disjoint = !b1.geom.intersects(&b2.geom);
-
-    // Must be a proper part (not equal)
-    let not_equal = !sf_equals(geom1, geom2)?;
-
-    Ok(contained && boundaries_disjoint && not_equal)
-}
-
-/// RCC8 Non-Tangential Proper Part (fallback without GEOS)
-#[cfg(not(feature = "geos-backend"))]
+///
+/// This relation needs a geometric boundary, computed via GEOS. The GEOS C FFI has
+/// been quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false)
+/// under the COOLJAPAN Pure Rust Policy v2; call
+/// `oxirs_geosparql_adapter_geos::rcc8_ntpp` for the working implementation.
 pub fn rcc8_ntpp(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
     Err(crate::error::GeoSparqlError::UnsupportedOperation(
-        "RCC8 NTPP requires 'geos-backend' feature for boundary calculation".to_string(),
+        "RCC8 NTPP requires GEOS boundary calculation; it is provided by the quarantined \
+         `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::rcc8_ntpp)."
+            .to_string(),
     ))
 }
 
@@ -296,24 +249,26 @@ pub fn rcc8_ntpp(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 /// let poly2 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").expect("should succeed");
 ///
-/// assert!(rcc8_ntppi(&poly1, &poly2).expect("should succeed"));
+/// // poly2 is a non-tangential proper part of poly1 (the inverse relation),
+/// // but evaluating it requires GEOS boundary calculation, which is not
+/// // available in the pure-Rust build.
+/// let result = rcc8_ntppi(&poly1, &poly2);
+/// assert!(result.is_err());
 /// ```
-#[cfg(feature = "geos-backend")]
-pub fn rcc8_ntppi(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
-    // NTPPI is the inverse of NTPP
-    rcc8_ntpp(geom2, geom1)
-}
-
-/// RCC8 Non-Tangential Proper Part Inverse (fallback without GEOS)
-#[cfg(not(feature = "geos-backend"))]
+///
+/// This relation needs a geometric boundary, computed via GEOS. The GEOS C FFI has
+/// been quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false)
+/// under the COOLJAPAN Pure Rust Policy v2; call
+/// `oxirs_geosparql_adapter_geos::rcc8_ntppi` for the working implementation.
 pub fn rcc8_ntppi(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
     Err(crate::error::GeoSparqlError::UnsupportedOperation(
-        "RCC8 NTPPI requires 'geos-backend' feature for boundary calculation".to_string(),
+        "RCC8 NTPPI requires GEOS boundary calculation; it is provided by the quarantined \
+         `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::rcc8_ntppi)."
+            .to_string(),
     ))
 }
 
 #[cfg(test)]
-#[cfg(feature = "geos-backend")]
 mod tests {
     use super::*;
     use geo_types::{Coord, Geometry as GeoGeometry, LineString, Polygon};
@@ -363,33 +318,6 @@ mod tests {
     }
 
     #[test]
-    fn test_rcc8_ec() {
-        let poly1 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 2.0, y: 0.0 },
-                Coord { x: 2.0, y: 2.0 },
-                Coord { x: 0.0, y: 2.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        let poly2 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 2.0, y: 0.0 },
-                Coord { x: 4.0, y: 0.0 },
-                Coord { x: 4.0, y: 2.0 },
-                Coord { x: 2.0, y: 2.0 },
-                Coord { x: 2.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        assert!(rcc8_ec(&poly1, &poly2).expect("should succeed"));
-    }
-
-    #[test]
     fn test_rcc8_po() {
         let poly1 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
             LineString::new(vec![
@@ -415,118 +343,9 @@ mod tests {
 
         assert!(rcc8_po(&poly1, &poly2).expect("should succeed"));
     }
-
-    #[test]
-    fn test_rcc8_tpp() {
-        let poly1 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 2.0, y: 0.0 },
-                Coord { x: 2.0, y: 2.0 },
-                Coord { x: 0.0, y: 2.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        let poly2 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 4.0, y: 0.0 },
-                Coord { x: 4.0, y: 4.0 },
-                Coord { x: 0.0, y: 4.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        assert!(rcc8_tpp(&poly1, &poly2).expect("should succeed"));
-    }
-
-    #[test]
-    fn test_rcc8_tppi() {
-        let poly1 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 4.0, y: 0.0 },
-                Coord { x: 4.0, y: 4.0 },
-                Coord { x: 0.0, y: 4.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        let poly2 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 2.0, y: 0.0 },
-                Coord { x: 2.0, y: 2.0 },
-                Coord { x: 0.0, y: 2.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        assert!(rcc8_tppi(&poly1, &poly2).expect("should succeed"));
-    }
-
-    #[test]
-    fn test_rcc8_ntpp() {
-        let poly1 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 1.0, y: 1.0 },
-                Coord { x: 3.0, y: 1.0 },
-                Coord { x: 3.0, y: 3.0 },
-                Coord { x: 1.0, y: 3.0 },
-                Coord { x: 1.0, y: 1.0 },
-            ]),
-            vec![],
-        )));
-
-        let poly2 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 4.0, y: 0.0 },
-                Coord { x: 4.0, y: 4.0 },
-                Coord { x: 0.0, y: 4.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        assert!(rcc8_ntpp(&poly1, &poly2).expect("should succeed"));
-    }
-
-    #[test]
-    fn test_rcc8_ntppi() {
-        let poly1 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 0.0, y: 0.0 },
-                Coord { x: 4.0, y: 0.0 },
-                Coord { x: 4.0, y: 4.0 },
-                Coord { x: 0.0, y: 4.0 },
-                Coord { x: 0.0, y: 0.0 },
-            ]),
-            vec![],
-        )));
-
-        let poly2 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
-            LineString::new(vec![
-                Coord { x: 1.0, y: 1.0 },
-                Coord { x: 3.0, y: 1.0 },
-                Coord { x: 3.0, y: 3.0 },
-                Coord { x: 1.0, y: 3.0 },
-                Coord { x: 1.0, y: 1.0 },
-            ]),
-            vec![],
-        )));
-
-        assert!(rcc8_ntppi(&poly1, &poly2).expect("should succeed"));
-    }
 }
 
 #[cfg(test)]
-#[cfg(not(feature = "geos-backend"))]
 mod tests_without_geos {
     use super::*;
     use geo_types::{Geometry as GeoGeometry, Point};

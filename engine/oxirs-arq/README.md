@@ -1,10 +1,10 @@
 # OxiRS ARQ
 
-[![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL query engine with algebra and optimization**
 
-**Status**: v0.3.1 - Released 2026-06-06
+**Status**: v0.3.2 - Released 2026-07-12
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -31,49 +31,34 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-arq = "0.3.1"
+oxirs-arq = "0.3.2"
 ```
 
 ## Quick Start
 
 ### Basic Query Execution
 
-```rust
-use oxirs_arq::{QueryEngine, Query};
-use oxirs_core::Dataset;
+`oxirs-arq` provides the SPARQL algebra, optimizer, and executor; the `QueryEngine`
+entry point that ties them to a store lives in `oxirs-core`:
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create dataset
-    let dataset = Dataset::from_file("data.ttl")?;
-    
-    // Create query engine
-    let engine = QueryEngine::new();
-    
-    // Parse and execute query
-    let query = Query::parse(r#"
-        SELECT ?person ?name ?age WHERE {
-            ?person a foaf:Person ;
-                   foaf:name ?name ;
-                   foaf:age ?age .
-            FILTER (?age > 18)
-        }
-        ORDER BY ?age
-    "#)?;
-    
-    let results = engine.execute(&query, &dataset).await?;
-    
-    // Process results
-    for binding in results {
-        println!("Person: {}, Name: {}, Age: {}", 
-                 binding.get("person")?,
-                 binding.get("name")?,
-                 binding.get("age")?);
-    }
-    
-    Ok(())
-}
+```rust
+use oxirs_core::query::QueryEngine;
+use oxirs_core::RdfStore;
+
+# fn example() -> Result<(), Box<dyn std::error::Error>> {
+let engine = QueryEngine::new();
+let store = RdfStore::new()?;
+
+let sparql = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10";
+let results = engine.query(sparql, &store)?;
+# Ok(())
+# }
 ```
+
+For query-plan-level access (algebra construction, the cost-based optimizer,
+JIT compilation, federation, and the other building blocks below), depend on
+`oxirs-arq` directly and see the `examples/` directory and `src/algebra/mod.rs`
+for the current `Algebra` enum and executor APIs.
 
 ### Custom Function Registration
 
@@ -418,8 +403,8 @@ match engine.execute(&query, &dataset).await {
 
 - [`oxirs-core`](../core/oxirs-core/): RDF data model and storage
 - [`oxirs-fuseki`](../server/oxirs-fuseki/): SPARQL HTTP server
-- [`oxirs-rule`](./oxirs-rule/): Rule-based reasoning
-- [`oxirs-shacl`](./oxirs-shacl/): Shape validation
+- [`oxirs-rule`](../oxirs-rule/): Rule-based reasoning
+- [`oxirs-shacl`](../oxirs-shacl/): Shape validation
 
 ## Development
 
@@ -458,13 +443,15 @@ Licensed under:
 
 ## Status
 
-🚀 **Production Release (v0.2.3)** - March 16, 2026
+🚀 **Production Release (v0.3.2)** - 2026-07-12
 
 Current implementation status:
 - ✅ Full SPARQL 1.1/1.2 parsing and execution across persisted datasets
 - ✅ Federation (`SERVICE`) with retries, `SERVICE SILENT`, and result merging
 - ✅ Parallel execution framework instrumented with SciRS2 metrics
 - ✅ Custom function framework with dynamic registration
+- ✅ Total-order float terms (`TotalF32`/`TotalF64` in `total_float.rs`) for SPARQL numeric comparison and ordering, replacing the external `ordered-float` dependency with identical NaN-equality and zero-sign semantics
+- ✅ 3,115 tests passing (`--all-features`)
 - 🚧 Adaptive cardinality estimation (in progress)
 
 APIs follow semantic versioning. See CHANGELOG.md for details.

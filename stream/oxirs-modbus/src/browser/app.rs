@@ -2,7 +2,7 @@
 //!
 //! The browser takes over the terminal (raw mode + alternate screen) and
 //! restores it on exit — even if an error or panic occurs — via
-//! [`TerminalGuard`].
+//! `TerminalGuard`.
 //!
 //! # Key bindings
 //!
@@ -184,7 +184,7 @@ impl RegisterBrowser {
     /// This method:
     /// 1. Switches the terminal to raw mode and alternate screen.
     /// 2. Runs the event loop until the user quits.
-    /// 3. Restores the terminal (via [`TerminalGuard`] drop) before returning.
+    /// 3. Restores the terminal (via `TerminalGuard` drop) before returning.
     pub fn run(mut self) -> Result<(), BrowserError> {
         let mut guard = TerminalGuard::enter()?;
         let tick = Duration::from_millis(self.config.poll_interval_ms.max(50));

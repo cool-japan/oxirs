@@ -398,6 +398,23 @@ impl TransE {
     }
 }
 
+impl Default for TransE {
+    /// Create a TransE model using [`ModelConfig::default`] (100-dimensional
+    /// embeddings, L2 distance, margin 1.0, learning rate 0.01).
+    ///
+    /// This mirrors the construction already used for "give me *a* TransE
+    /// model" call sites elsewhere in the crate (e.g. the model registry in
+    /// `persistence.rs`), and exists so `TransE` can satisfy generic bounds
+    /// like `M: EmbeddingModel + Default` used by quick smoke-test harnesses
+    /// such as [`crate::evaluation::kgc_evaluator::KgcEvaluationSuite::run_on_synthetic`].
+    /// Callers that care about a specific embedding dimension or learning
+    /// rate should use [`TransE::new`] with an explicit [`ModelConfig`]
+    /// instead.
+    fn default() -> Self {
+        Self::new(ModelConfig::default())
+    }
+}
+
 #[async_trait]
 impl EmbeddingModel for TransE {
     fn config(&self) -> &ModelConfig {

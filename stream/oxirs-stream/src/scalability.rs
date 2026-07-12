@@ -171,7 +171,9 @@ impl Default for ScalingConfig {
             partition_strategy: PartitionStrategy::RoundRobin,
             load_balancing: LoadBalancingStrategy::LeastLoaded,
             resource_limits: ResourceLimits {
-                max_cpu_cores: num_cpus::get(),
+                max_cpu_cores: std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1),
                 max_memory_bytes: 8 * 1024 * 1024 * 1024, // 8GB
                 max_network_bandwidth: 1_000_000_000,     // 1 Gbps
                 max_partitions: 100,

@@ -688,6 +688,12 @@ pub(super) fn handle_object_state(
                                 id: None,
                                 from_start: false,
                                 reverse: false,
+                                // `@id` here is a LATER key in an already-open node
+                                // object (we're past `ObjectStart`), so any pending
+                                // `@index` container annotation was already emitted
+                                // by `ObjectStart`'s own catch-all arm before this
+                                // state was ever reached.
+                                index_key: None,
                             });
                         }
                     }

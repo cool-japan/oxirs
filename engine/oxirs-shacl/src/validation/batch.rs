@@ -79,7 +79,10 @@ impl Default for BatchValidationConfig {
             batch_size: 1000,
             memory_threshold: 500 * 1024 * 1024, // 500MB
             enable_parallel: true,
-            max_workers: num_cpus::get().min(8),
+            max_workers: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .min(8),
             enable_progress_reporting: true,
             progress_interval: 10000,
             enable_error_recovery: true,

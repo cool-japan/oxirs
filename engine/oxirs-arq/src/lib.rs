@@ -1,9 +1,9 @@
 //! # OxiRS ARQ - SPARQL Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-arq/badge.svg)](https://docs.rs/oxirs-arq)
 //!
-//! **Status**: Production Release (v0.3.1)
+//! **Status**: Production Release (v0.3.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Advanced SPARQL 1.1/1.2 query engine with optimization, federation support, and custom functions.
@@ -122,6 +122,7 @@ pub mod streaming;
 pub mod string_functions_ext;
 pub mod system_load_monitor;
 pub mod term;
+pub mod total_float;
 pub mod triple_functions;
 pub mod update;
 pub mod update_graph_management;
@@ -218,7 +219,7 @@ pub use aggregates_ext::{
 };
 pub use algebra::{
     Aggregate, Algebra, BinaryOperator, Binding, Expression, GroupCondition, Iri, Literal,
-    OrderCondition, Solution, Term, TriplePattern, UnaryOperator, Variable,
+    OrderCondition, Solution, Term, Triple, TriplePattern, UnaryOperator, Variable,
 };
 pub use debug_utilities::{
     DebugBreakpoint, DebugConfig, DebugReport, ExecutionState as DebugExecutionState, JoinType,

@@ -116,7 +116,7 @@ impl FederationClient {
             .post(endpoint)
             .header("Accept", &self.config.accept)
             .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(format!("query={}", urlencoding::encode(query)))
+            .body(format!("query={}", crate::encoding::percent_encode(query)))
             .send()
             .await
             .map_err(|e| {

@@ -249,7 +249,7 @@ fn test_concurrent_profiling(profiler: Arc<QueryProfiler>) {
 
     // Wait for all threads to complete
     for handle in handles {
-        handle.join().unwrap();
+        handle.join().expect("thread completed without panic");
     }
 
     println!("✅ Concurrent profiling completed - 15 queries executed across 5 threads");

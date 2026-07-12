@@ -2,17 +2,17 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::sync::{mpsc, Semaphore};
 use uuid::Uuid;
 
 use crate::real_time_embedding_pipeline::{
     config::PipelineConfig,
-    types::{UpdateOperation, UpdateBatch, CoordinationState, NodeStatus},
-    traits::ProcessingPriority,
+    types::{CoordinationState, NodeStatus, UpdateBatch, UpdateOperation},
 };
 
 /// Configuration for update coordination
@@ -56,7 +56,7 @@ pub struct UpdateCoordinator {
     /// Coordination state
     state: Arc<RwLock<CoordinationState>>,
     /// Running flag
-    is_running: AtomicBool,
+    is_running: Arc<AtomicBool>,
     /// Processing statistics
     processed_count: AtomicU64,
     /// Failed operations count
@@ -89,7 +89,7 @@ impl UpdateCoordinator {
             config,
             update_sender: Arc::new(RwLock::new(None)),
             state,
-            is_running: AtomicBool::new(false),
+            is_running: Arc::new(AtomicBool::new(false)),
             processed_count: AtomicU64::new(0),
             failed_count: AtomicU64::new(0),
             active_workers: AtomicU64::new(0),
@@ -108,7 +108,9 @@ impl UpdateCoordinator {
         let (sender, mut receiver) = mpsc::unbounded_channel::<UpdateOperation>();
 
         {
-            let mut sender_guard = self.update_sender.write()
+            let mut sender_guard = self
+                .update_sender
+                .write()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire sender lock"))?;
             *sender_guard = Some(sender);
         }
@@ -136,7 +138,9 @@ impl UpdateCoordinator {
 
         // Close the update sender
         {
-            let mut sender_guard = self.update_sender.write()
+            let mut sender_guard = self
+                .update_sender
+                .write()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire sender lock"))?;
             *sender_guard = None;
         }
@@ -148,7 +152,9 @@ impl UpdateCoordinator {
 
         // Update coordination state
         {
-            let mut state = self.state.write()
+            let mut state = self
+                .state
+                .write()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire state lock"))?;
             state.status = NodeStatus::Leaving;
         }
@@ -162,14 +168,19 @@ impl UpdateCoordinator {
             return Err(anyhow::anyhow!("Update coordinator is not running"));
         }
 
-        let sender_guard = self.update_sender.read()
+        let sender_guard = self
+            .update_sender
+            .read()
             .map_err(|_| anyhow::anyhow!("Failed to acquire sender lock"))?;
 
         if let Some(sender) = sender_guard.as_ref() {
-            sender.send(operation)
+            sender
+                .send(operation)
                 .map_err(|_| anyhow::anyhow!("Failed to send update operation"))?;
         } else {
-            return Err(anyhow::anyhow!("Update coordinator not properly initialized"));
+            return Err(anyhow::anyhow!(
+                "Update coordinator not properly initialized"
+            ));
         }
 
         Ok(())
@@ -196,7 +207,9 @@ impl UpdateCoordinator {
 
     /// Get coordination state
     pub fn get_state(&self) -> Result<CoordinationState> {
-        let state = self.state.read()
+        let state = self
+            .state
+            .read()
             .map_err(|_| anyhow::anyhow!("Failed to acquire state lock"))?;
         Ok(state.clone())
     }
@@ -214,7 +227,7 @@ impl UpdateCoordinator {
             semaphore: self.semaphore.clone(),
             update_sender: self.update_sender.clone(),
             state: self.state.clone(),
-            is_running: AtomicBool::new(self.is_running.load(Ordering::Acquire)),
+            is_running: self.is_running.clone(),
             processed_count: AtomicU64::new(self.processed_count.load(Ordering::Acquire)),
             failed_count: AtomicU64::new(self.failed_count.load(Ordering::Acquire)),
             active_workers: AtomicU64::new(self.active_workers.load(Ordering::Acquire)),
@@ -223,7 +236,10 @@ impl UpdateCoordinator {
 
     async fn process_update_operation(&self, operation: UpdateOperation) -> Result<()> {
         // Acquire semaphore permit for concurrency control
-        let permit = self.semaphore.acquire().await
+        let permit = self
+            .semaphore
+            .acquire()
+            .await
             .map_err(|_| anyhow::anyhow!("Failed to acquire processing permit"))?;
 
         self.active_workers.fetch_add(1, Ordering::Relaxed);
@@ -241,32 +257,41 @@ impl UpdateCoordinator {
         result
     }
 
-    async fn execute_update_operation(&self, operation: UpdateOperation) -> Result<()> {
-        // Simulate update processing
-        match operation {
-            UpdateOperation::Insert { id, content } => {
-                // Process insert operation
-                tokio::time::sleep(Duration::from_millis(1)).await;
-                println!("Processed insert for id: {}", id);
-            }
-            UpdateOperation::Update { id, content, version } => {
-                // Process update operation
-                tokio::time::sleep(Duration::from_millis(1)).await;
-                println!("Processed update for id: {} (version: {:?})", id, version);
-            }
-            UpdateOperation::Delete { id } => {
-                // Process delete operation
-                tokio::time::sleep(Duration::from_millis(1)).await;
-                println!("Processed delete for id: {}", id);
-            }
-            UpdateOperation::Batch { operations } => {
-                // Process batch operations recursively
-                for op in operations {
-                    self.execute_update_operation(op).await?;
+    fn execute_update_operation<'a>(
+        &'a self,
+        operation: UpdateOperation,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            // Simulate update processing
+            match operation {
+                UpdateOperation::Insert { id, content: _ } => {
+                    // Process insert operation
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                    println!("Processed insert for id: {}", id);
+                }
+                UpdateOperation::Update {
+                    id,
+                    content: _,
+                    version,
+                } => {
+                    // Process update operation
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                    println!("Processed update for id: {} (version: {:?})", id, version);
+                }
+                UpdateOperation::Delete { id } => {
+                    // Process delete operation
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                    println!("Processed delete for id: {}", id);
+                }
+                UpdateOperation::Batch { operations } => {
+                    // Process batch operations recursively using Box::pin to avoid infinite-size future
+                    for op in operations {
+                        self.execute_update_operation(op).await?;
+                    }
                 }
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     async fn start_heartbeat_task(&self) {

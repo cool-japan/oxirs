@@ -585,7 +585,9 @@ impl AdvancedBenchmarkConfig {
             ann_benchmarks_mode: false,
             export_traces: false,
             parallel_config: ParallelBenchmarkConfig {
-                num_threads: num_cpus::get(),
+                num_threads: std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1),
                 numa_aware: false,
                 thread_affinity: false,
                 memory_bandwidth_test: false,

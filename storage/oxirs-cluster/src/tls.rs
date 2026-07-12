@@ -591,7 +591,7 @@ impl EncryptionManager {
         let nonce_bytes = counter.to_le_bytes();
         let mut nonce_array = [0u8; 12];
         nonce_array[..8].copy_from_slice(&nonce_bytes);
-        let nonce = Nonce::from_slice(&nonce_array);
+        let nonce = <&Nonce<_>>::from(&nonce_array);
 
         let encrypted = cipher
             .encrypt(nonce, data)
@@ -617,7 +617,8 @@ impl EncryptionManager {
         let cipher = Aes256Gcm::new_from_slice(&self.key)?;
 
         // Extract nonce and encrypted data
-        let nonce = Nonce::from_slice(&encrypted_data[..12]);
+        let nonce = <&Nonce<_>>::try_from(&encrypted_data[..12])
+            .map_err(|_| anyhow!("Invalid nonce length"))?;
         let ciphertext = &encrypted_data[12..];
 
         let decrypted = cipher

@@ -40,7 +40,10 @@ impl Default for OptimizationConfig {
     fn default() -> Self {
         Self {
             enable_parallel_validation: true,
-            max_parallel_threads: num_cpus::get().min(8),
+            max_parallel_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .min(8),
             enable_constraint_caching: true,
             cache_size_limit: 10000,
             cache_ttl_seconds: 3600, // 1 hour

@@ -13,8 +13,8 @@
 //!
 //! During fine-tuning the base weight `W` is frozen; only `A` and `B` receive
 //! gradient updates via a hand-rolled SGD step.  This mirrors the pattern used
-//! by the existing [`SoftPromptProjector`] and the GNN encoder — no autograd
-//! dependency required.
+//! by the existing [`SoftPromptProjector`](crate::hybrid::SoftPromptProjector)
+//! and the GNN encoder — no autograd dependency required.
 //!
 //! # Initialisation
 //!
@@ -261,7 +261,7 @@ impl LoraAdapter {
 
     /// L2 norm of the combined gradient (A and B).
     ///
-    /// Returns 0.0 after [`zero_grad`] is called.
+    /// Returns 0.0 after [`Self::zero_grad`] is called.
     pub fn grad_norm(&self) -> f64 {
         let sq_sum: f64 = self
             .grad_a
@@ -287,14 +287,19 @@ impl LoraAdapter {
 /// use oxirs_graphrag::hybrid::lora::{LoraAdapter, LoraTrainer};
 /// use scirs2_core::ndarray_ext::Array2;
 ///
+/// // Rectangular adapter (d_in = 8, d_out = 4) — LoRA's ΔW = B·A
+/// // decomposition is rectangular by construction, so d_in and d_out are
+/// // free to differ (the common case for real attention/MLP projections).
 /// let adapter = LoraAdapter::new(8, 4, 2, 2.0, 42);
 /// let mut trainer = LoraTrainer::new(adapter, 0.01);
 ///
-/// // Toy data: frozen projector output and targets (same shape)
+/// // Toy data: raw input to the frozen projection `[batch, d_in]`, the
+/// // frozen projector's output `[batch, d_out]`, and targets `[batch, d_out]`.
+/// let input    = Array2::from_elem((3, 8), 0.5);
 /// let base_out = Array2::from_elem((3, 4), 0.5);
 /// let targets  = Array2::zeros((3, 4));
 ///
-/// let loss = trainer.train_epoch(&base_out, &targets);
+/// let loss = trainer.train_epoch(&input, &base_out, &targets);
 /// assert!(loss >= 0.0);
 /// ```
 pub struct LoraTrainer {
@@ -313,39 +318,54 @@ impl LoraTrainer {
 
     /// Train for one epoch.
     ///
-    /// `base_output`: frozen projector output `[batch, d_in]`.
-    /// `targets`:     ground-truth targets `[batch, d_out]`.
+    /// `input`:       raw input to the frozen base projection, `[batch, d_in]`
+    ///                — the same tensor that produced `base_output` via the
+    ///                (external, frozen) `W`, and the tensor the LoRA delta
+    ///                `scale * (input @ A) @ B` is computed from.
+    /// `base_output`: frozen projector output `W · input`, `[batch, d_out]`.
+    /// `targets`:     ground-truth targets, `[batch, d_out]`.
     ///
-    /// Computes MSE loss, runs backward, updates A and B via SGD, and returns
-    /// the mean MSE loss for this epoch.
+    /// Computes MSE loss between `base_output + lora_delta(input)` and
+    /// `targets`, runs backward, updates A and B via SGD, and returns the
+    /// mean MSE loss for this epoch.
     ///
-    /// # Panics
-    ///
-    /// Panics if the adapter's `d_in != d_out`.  `train_epoch` treats
-    /// `base_output` as both the frozen projection *and* the residual input to
-    /// the LoRA delta (i.e. the same tensor is used as the "base" and as the
-    /// "input" to `forward_delta`).  This means `base_output + delta` is only
-    /// well-typed when `d_in == d_out`.  Construct the adapter with matching
-    /// dimensions, e.g. `LoraAdapter::new(d, d, rank, alpha, seed)`.
-    pub fn train_epoch(&mut self, base_output: &Array2<f64>, targets: &Array2<f64>) -> f64 {
+    /// `d_in` and `d_out` may differ: LoRA's `ΔW = B·A` decomposition is
+    /// rectangular by construction (`A ∈ ℝ^{d_in×r}`, `B ∈ ℝ^{r×d_out}`), so
+    /// there is no mathematical requirement that they match — `input` and
+    /// `base_output` are always kept as two separate tensors precisely so
+    /// that a rectangular adapter (e.g. attention Q/K/V or MLP up/down
+    /// projections, which are almost never square) trains correctly.
+    pub fn train_epoch(
+        &mut self,
+        input: &Array2<f64>,
+        base_output: &Array2<f64>,
+        targets: &Array2<f64>,
+    ) -> f64 {
         assert_eq!(
-            self.lora.d_in, self.lora.d_out,
-            "LoraTrainer::train_epoch requires d_in == d_out; got d_in={}, d_out={}",
-            self.lora.d_in, self.lora.d_out,
+            input.ncols(),
+            self.lora.d_in,
+            "input column count must equal adapter d_in ({}), got {}",
+            self.lora.d_in,
+            input.ncols(),
         );
         assert_eq!(
             base_output.ncols(),
-            self.lora.d_in,
-            "base_output column count must equal adapter d_in ({}), got {}",
-            self.lora.d_in,
+            self.lora.d_out,
+            "base_output column count must equal adapter d_out ({}), got {}",
+            self.lora.d_out,
             base_output.ncols(),
         );
-        let batch = base_output.nrows();
-        let d_out = base_output.ncols();
+        let batch = input.nrows();
+        let d_out = self.lora.d_out;
+        assert_eq!(
+            base_output.nrows(),
+            batch,
+            "base_output row count must match input batch size"
+        );
         assert_eq!(
             targets.nrows(),
             batch,
-            "targets row count must match base_output batch size"
+            "targets row count must match batch size"
         );
         assert_eq!(
             targets.ncols(),
@@ -353,12 +373,7 @@ impl LoraTrainer {
             "targets column count must match d_out"
         );
 
-        // The frozen projector output is the "input" to the LoRA delta.
-        // We treat base_output as a proxy for the GNN embedding after projection
-        // and learn a residual correction toward the target.
-        let input = base_output;
-
-        // Forward: augmented output = base_output + lora_delta
+        // Forward: augmented output = base_output + lora_delta(input)
         let delta = self.lora.forward_delta(input);
         let mut total_loss = 0.0_f64;
         let scale = (batch * d_out).max(1) as f64;
@@ -528,9 +543,10 @@ mod tests {
 
     // ── test 8: LoraTrainer reduces loss over 100 epochs ─────────────────────
     //
-    // `train_epoch` treats `base_output` as both the "input" to the LoRA delta
-    // and the base projection. So for `base_output + delta` to be well-formed,
-    // d_in == d_out. We use d_in = d_out = 4 here.
+    // `train_epoch` takes the raw `input` (fed into the frozen base
+    // projection) and `base_output` (= W · input) as two separate tensors,
+    // so d_in and d_out are free to differ. This test happens to use a
+    // square adapter (d_in == d_out == 4) purely for a simple toy setup.
 
     #[test]
     fn test_trainer_loss_converges() {
@@ -538,15 +554,16 @@ mod tests {
         let adapter = LoraAdapter::new(4, 4, 1, 1.0, 7);
         let mut trainer = LoraTrainer::new(adapter, 0.05);
 
-        // Frozen projector output: constant all-ones [batch=3, d_in=4].
-        // Target: all-zeros [batch=3, d_out=4].
+        // Raw input and frozen projector output: constant all-ones
+        // [batch=3, d_in=4] / [batch=3, d_out=4]. Target: all-zeros.
+        let input = Array2::from_elem((3, 4), 1.0);
         let base_out = Array2::from_elem((3, 4), 1.0);
         let targets = Array2::zeros((3, 4));
 
-        let initial_loss = trainer.train_epoch(&base_out, &targets);
+        let initial_loss = trainer.train_epoch(&input, &base_out, &targets);
         let mut final_loss = initial_loss;
         for _ in 0..99 {
-            final_loss = trainer.train_epoch(&base_out, &targets);
+            final_loss = trainer.train_epoch(&input, &base_out, &targets);
         }
 
         // Loss should have decreased by at least 10% (very conservative).
@@ -554,6 +571,40 @@ mod tests {
             final_loss < initial_loss * 0.9 || final_loss < 1e-6,
             "loss should decrease: initial={initial_loss:.6}, final={final_loss:.6}"
         );
+    }
+
+    // ── test 8b: LoraTrainer works with a rectangular adapter (d_in != d_out) ─
+    //
+    // Regression test: `train_epoch` used to conflate `input` and
+    // `base_output` into a single parameter, which only type-checked
+    // dimensionally when d_in == d_out. That was an implementation artifact,
+    // not a mathematical requirement of LoRA (ΔW = B·A is rectangular by
+    // construction), so this must work with d_in != d_out.
+
+    #[test]
+    fn test_trainer_rectangular_dims_loss_converges() {
+        // d_in = 8, d_out = 4; LoRA rank = 2.
+        let adapter = LoraAdapter::new(8, 4, 2, 2.0, 21);
+        let mut trainer = LoraTrainer::new(adapter, 0.05);
+
+        let input = Array2::from_elem((3, 8), 1.0);
+        let base_out = Array2::from_elem((3, 4), 1.0);
+        let targets = Array2::zeros((3, 4));
+
+        let initial_loss = trainer.train_epoch(&input, &base_out, &targets);
+        assert!(initial_loss.is_finite() && initial_loss >= 0.0);
+
+        let mut final_loss = initial_loss;
+        for _ in 0..99 {
+            final_loss = trainer.train_epoch(&input, &base_out, &targets);
+        }
+
+        assert!(
+            final_loss < initial_loss * 0.9 || final_loss < 1e-6,
+            "loss should decrease even with d_in != d_out: initial={initial_loss:.6}, final={final_loss:.6}"
+        );
+        assert_eq!(trainer.adapter().d_in, 8);
+        assert_eq!(trainer.adapter().d_out, 4);
     }
 
     // ── test 9: rank=1 adapter works correctly ────────────────────────────────

@@ -3,6 +3,14 @@
 //! This module provides GPU utilization monitoring across different platforms:
 //! - NVIDIA GPUs via NVML (NVIDIA Management Library)
 //! - Future support for Apple Metal, AMD ROCm, etc.
+//!
+//! NOTE (COOLJAPAN Pure Rust Policy v2): the real NVML (`nvml-wrapper`) backend
+//! has been quarantined into the `oxirs-gpu-monitor` crate (`publish = false`) so
+//! that `oxirs-core`'s published `--all-features` surface stays free of the
+//! `nvml-wrapper-sys` C FFI. `GpuMonitor` below is a Pure-Rust stub with an
+//! unchanged public API (it reports "no GPU" / zeros). Binaries that need live
+//! NVIDIA telemetry should use `oxirs_gpu_monitor::NvmlGpuMonitor`, which returns
+//! the same `GpuStats` type defined here.
 
 use anyhow::Result;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -30,13 +38,7 @@ pub struct GpuStats {
 }
 
 /// GPU monitor that provides cross-platform GPU statistics
-pub struct GpuMonitor {
-    #[cfg(feature = "gpu")]
-    nvml: Option<Arc<Mutex<nvml_wrapper::Nvml>>>,
-
-    #[cfg(feature = "gpu")]
-    device_index: u32,
-}
+pub struct GpuMonitor {}
 
 static GPU_MONITOR: OnceLock<Arc<Mutex<GpuMonitor>>> = OnceLock::new();
 
@@ -48,25 +50,8 @@ impl GpuMonitor {
 
     /// Create a new GPU monitor with specific device index
     pub fn with_device(device_index: u32) -> Self {
-        #[cfg(feature = "gpu")]
-        {
-            // Try to initialize NVML
-            let nvml = match nvml_wrapper::Nvml::init() {
-                Ok(nvml) => Some(Arc::new(Mutex::new(nvml))),
-                Err(e) => {
-                    tracing::warn!("Failed to initialize NVML: {}. GPU monitoring disabled.", e);
-                    None
-                }
-            };
-
-            Self { nvml, device_index }
-        }
-
-        #[cfg(not(feature = "gpu"))]
-        {
-            let _ = device_index; // Suppress unused variable warning
-            Self {}
-        }
+        let _ = device_index; // Suppress unused variable warning
+        Self {}
     }
 
     /// Get the global GPU monitor instance
@@ -78,50 +63,8 @@ impl GpuMonitor {
 
     /// Get current GPU statistics
     pub fn get_stats(&self) -> Result<GpuStats> {
-        #[cfg(feature = "gpu")]
-        {
-            if let Some(nvml_arc) = &self.nvml {
-                let nvml = nvml_arc
-                    .lock()
-                    .map_err(|e| anyhow::anyhow!("Failed to lock NVML: {}", e))?;
-
-                // Get device
-                let device = nvml.device_by_index(self.device_index)?;
-
-                // Get utilization rates
-                let utilization = device.utilization_rates()?;
-
-                // Get memory info
-                let memory_info = device.memory_info()?;
-
-                // Get temperature (optional, may fail on some GPUs)
-                let temperature = device
-                    .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-                    .unwrap_or(0);
-
-                // Get power usage (optional, may fail on some GPUs)
-                let power_usage = device.power_usage().unwrap_or(0) as f32 / 1000.0; // Convert mW to W
-
-                Ok(GpuStats {
-                    utilization: utilization.gpu as f32,
-                    memory_utilization: (memory_info.used as f32 / memory_info.total as f32)
-                        * 100.0,
-                    temperature: temperature as f32,
-                    power_usage,
-                    memory_free_mb: memory_info.free / (1024 * 1024),
-                    memory_total_mb: memory_info.total / (1024 * 1024),
-                })
-            } else {
-                // No GPU available
-                Ok(GpuStats::default())
-            }
-        }
-
-        #[cfg(not(feature = "gpu"))]
-        {
-            // GPU monitoring not enabled
-            Ok(GpuStats::default())
-        }
+        // GPU monitoring not enabled (Pure-Rust stub; see module docs / oxirs-gpu-monitor)
+        Ok(GpuStats::default())
     }
 
     /// Get GPU utilization percentage (0.0-100.0)
@@ -133,32 +76,12 @@ impl GpuMonitor {
 
     /// Check if GPU is available
     pub fn is_available(&self) -> bool {
-        #[cfg(feature = "gpu")]
-        {
-            self.nvml.is_some()
-        }
-
-        #[cfg(not(feature = "gpu"))]
-        {
-            false
-        }
+        false
     }
 
     /// Get number of available GPUs
     pub fn device_count() -> u32 {
-        #[cfg(feature = "gpu")]
-        {
-            if let Ok(nvml) = nvml_wrapper::Nvml::init() {
-                nvml.device_count().unwrap_or(0)
-            } else {
-                0
-            }
-        }
-
-        #[cfg(not(feature = "gpu"))]
-        {
-            0
-        }
+        0
     }
 }
 

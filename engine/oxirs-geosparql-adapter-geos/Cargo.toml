@@ -1,0 +1,25 @@
+[package]
+name = "oxirs-geosparql-adapter-geos"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Quarantined GEOS (libgeos C library) computational-geometry backend for oxirs-geosparql (publish=false; isolates the geos-sys C FFI off the published Pure-Rust --all-features surface)."
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+# Reuse oxirs-geosparql's public Pure-Rust geometry types and helpers so the
+# GEOS backend is API-compatible with the pure paths that ship inside the parent.
+oxirs-geosparql = { workspace = true }
+# C FFI quarantined HERE (publish = false) — `geos` pulls `geos-sys` (raw bindings
+# to the GEOS C library), kept off oxirs-geosparql's published --all-features
+# closure per the COOLJAPAN Pure Rust Policy v2. Same exact version the parent used.
+geos = "11.1"
+# `geo` traits (Intersects/Contains) used by the boundary-dependent predicates.
+geo = { workspace = true }
+
+[lints]
+workspace = true

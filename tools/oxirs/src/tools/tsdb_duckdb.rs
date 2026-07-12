@@ -22,8 +22,9 @@ use anyhow::{Context, Result};
 use arrow::array::Array;
 use arrow::record_batch::RecordBatch;
 use arrow::util::pretty::pretty_format_batches;
-use oxirs_tsdb::{
-    duckdb_open_in_memory, duckdb_run_sql, register_tsdb_chunk, DuckDbRegisterOptions, TimeChunk,
+use oxirs_tsdb::TimeChunk;
+use oxirs_tsdb_adapter_duckdb::{
+    duckdb_open_in_memory, duckdb_run_sql, register_tsdb_chunk, DuckDbRegisterOptions,
 };
 
 /// Run the `oxirs tsdb duckdb` subcommand.

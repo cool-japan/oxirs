@@ -191,7 +191,9 @@ impl ValidationPerformanceOptimizer {
 
     /// Calculate optimal parallelism level
     fn calculate_optimal_parallelism(&self, total_work: usize) -> usize {
-        let available_cores = num_cpus::get();
+        let available_cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
         let work_per_core = total_work / available_cores.max(1);
 
         if work_per_core < 10 {

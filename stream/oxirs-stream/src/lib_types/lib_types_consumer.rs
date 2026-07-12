@@ -30,16 +30,14 @@ pub struct ConsumerStats {
 
 /// Backend-agnostic consumer wrapper (crate-private)
 pub(crate) enum BackendConsumer {
-    #[cfg(feature = "kafka")]
-    Kafka(Box<backend::kafka::KafkaConsumer>),
+    // Kafka/Pulsar variants removed: those backends were quarantined into the
+    // publish=false oxirs-stream-adapter-{rdkafka,pulsar} crates (Pure Rust Policy v2).
     #[cfg(feature = "nats")]
     Nats(Box<backend::nats::NatsConsumer>),
     #[cfg(feature = "redis")]
     Redis(Box<backend::redis::RedisConsumer>),
     #[cfg(feature = "kinesis")]
     Kinesis(Box<backend::kinesis::KinesisConsumer>),
-    #[cfg(feature = "pulsar")]
-    Pulsar(Box<backend::pulsar::PulsarConsumer>),
     #[cfg(feature = "rabbitmq")]
     RabbitMQ(Box<backend::rabbitmq::RabbitMQConsumer>),
     Memory(Box<MemoryConsumer>),
@@ -152,16 +150,12 @@ impl StreamConsumer {
 
         let stats = Arc::new(RwLock::new(ConsumerStats {
             backend_type: match backend_consumer {
-                #[cfg(feature = "kafka")]
-                BackendConsumer::Kafka(_) => "kafka".to_string(),
                 #[cfg(feature = "nats")]
                 BackendConsumer::Nats(_) => "nats".to_string(),
                 #[cfg(feature = "redis")]
                 BackendConsumer::Redis(_) => "redis".to_string(),
                 #[cfg(feature = "kinesis")]
                 BackendConsumer::Kinesis(_) => "kinesis".to_string(),
-                #[cfg(feature = "pulsar")]
-                BackendConsumer::Pulsar(_) => "pulsar".to_string(),
                 #[cfg(feature = "rabbitmq")]
                 BackendConsumer::RabbitMQ(_) => "rabbitmq".to_string(),
                 BackendConsumer::Memory(_) => "memory".to_string(),
@@ -189,24 +183,13 @@ impl StreamConsumer {
 
     async fn build_backend_consumer(config: &StreamConfig) -> Result<BackendConsumer> {
         match &config.backend {
-            #[cfg(feature = "kafka")]
-            StreamBackendType::Kafka {
-                brokers,
-                security_protocol,
-                sasl_config,
-            } => {
-                let stream_config = Self::make_stream_config(
-                    config,
-                    crate::StreamBackendType::Kafka {
-                        brokers: brokers.clone(),
-                        security_protocol: security_protocol.clone(),
-                        sasl_config: sasl_config.clone(),
-                    },
-                );
-                let mut consumer = backend::kafka::KafkaConsumer::new(stream_config)?;
-                consumer.connect().await?;
-                Ok(BackendConsumer::Kafka(Box::new(consumer)))
-            }
+            // Kafka backend quarantined into the publish=false `oxirs-stream-adapter-rdkafka`
+            // crate (Pure Rust Policy v2): build `KafkaBackend` there via the `StreamBackend` trait.
+            StreamBackendType::Kafka { .. } => Err(anyhow!(
+                "Kafka backend moved to the publish=false `oxirs-stream-adapter-rdkafka` crate \
+                 (COOLJAPAN Pure Rust Policy v2). Construct `oxirs_stream_adapter_rdkafka::KafkaBackend` \
+                 and drive it via the `oxirs_stream::backend::StreamBackend` trait."
+            )),
             #[cfg(feature = "nats")]
             StreamBackendType::Nats {
                 url,
@@ -261,22 +244,13 @@ impl StreamConsumer {
                 consumer.connect().await?;
                 Ok(BackendConsumer::Kinesis(Box::new(consumer)))
             }
-            #[cfg(feature = "pulsar")]
-            StreamBackendType::Pulsar {
-                service_url,
-                auth_config,
-            } => {
-                let stream_config = Self::make_stream_config(
-                    config,
-                    crate::StreamBackendType::Pulsar {
-                        service_url: service_url.clone(),
-                        auth_config: auth_config.clone(),
-                    },
-                );
-                let mut consumer = backend::pulsar::PulsarConsumer::new(stream_config)?;
-                consumer.connect().await?;
-                Ok(BackendConsumer::Pulsar(Box::new(consumer)))
-            }
+            // Pulsar backend quarantined into the publish=false `oxirs-stream-adapter-pulsar`
+            // crate (Pure Rust Policy v2): construct PulsarProducer/PulsarConsumer there directly.
+            StreamBackendType::Pulsar { .. } => Err(anyhow!(
+                "Pulsar backend moved to the publish=false `oxirs-stream-adapter-pulsar` crate \
+                 (COOLJAPAN Pure Rust Policy v2). Construct \
+                 `oxirs_stream_adapter_pulsar::PulsarProducer` / `PulsarConsumer` directly."
+            )),
             #[cfg(feature = "rabbitmq")]
             StreamBackendType::RabbitMQ {
                 url,
@@ -373,16 +347,12 @@ impl StreamConsumer {
 
     async fn consume_single_event(&mut self) -> Result<Option<StreamEvent>> {
         match &mut self.backend_consumer {
-            #[cfg(feature = "kafka")]
-            BackendConsumer::Kafka(consumer) => consumer.consume().await,
             #[cfg(feature = "nats")]
             BackendConsumer::Nats(consumer) => consumer.consume().await,
             #[cfg(feature = "redis")]
             BackendConsumer::Redis(consumer) => consumer.consume().await,
             #[cfg(feature = "kinesis")]
             BackendConsumer::Kinesis(consumer) => consumer.consume().await,
-            #[cfg(feature = "pulsar")]
-            BackendConsumer::Pulsar(consumer) => consumer.consume().await,
             #[cfg(feature = "rabbitmq")]
             BackendConsumer::RabbitMQ(consumer) => consumer.consume().await,
             BackendConsumer::Memory(consumer) => consumer.consume().await,
@@ -497,10 +467,6 @@ impl StreamConsumer {
                 consumer.reset();
                 Ok(())
             }
-            #[cfg(feature = "kafka")]
-            BackendConsumer::Kafka(_) => {
-                Err(anyhow!("Reset position not supported for Kafka backend"))
-            }
             #[cfg(feature = "nats")]
             BackendConsumer::Nats(_) => {
                 Err(anyhow!("Reset position not supported for NATS backend"))
@@ -512,10 +478,6 @@ impl StreamConsumer {
             #[cfg(feature = "kinesis")]
             BackendConsumer::Kinesis(_) => {
                 Err(anyhow!("Reset position not supported for Kinesis backend"))
-            }
-            #[cfg(feature = "pulsar")]
-            BackendConsumer::Pulsar(_) => {
-                Err(anyhow!("Reset position not supported for Pulsar backend"))
             }
             #[cfg(feature = "rabbitmq")]
             BackendConsumer::RabbitMQ(_) => {

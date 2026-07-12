@@ -72,7 +72,7 @@ impl PerformanceMetrics {
     /// Calculate statistics
     fn calculate_stats(&self) -> PerformanceStats {
         let mut sorted_latencies = self.latencies.clone();
-        sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_latencies.sort_by(|a, b| a.partial_cmp(b).expect("values are comparable floats"));
 
         let mean_latency = if !self.latencies.is_empty() {
             self.latencies.iter().sum::<f64>() / self.latencies.len() as f64

@@ -3,14 +3,15 @@
 //! Provides a thin geometry layer that composes one
 //! [`ReplicationGroup`](crate::replication::ReplicationGroup) per region with:
 //!
-//! 1. [`routing`] — write-routing policy that picks a *home region* for each
-//!    incoming write based on subject prefix / tenant id rules with a
-//!    deterministic fallback.
-//! 2. [`health_probe`] — heartbeat tracker with timeout-based unreachable
-//!    detection, exposing a [`RegionStatus`] map that the routing layer can
-//!    consult to skip dead regions.
-//! 3. [`replication`] — async cross-region fanout queue with last-writer-wins
-//!    conflict resolution keyed on `(timestamp_ms, region_id)`.
+//! 1. [`routing`](crate::multi_region::routing) — write-routing policy that
+//!    picks a *home region* for each incoming write based on subject prefix /
+//!    tenant id rules with a deterministic fallback.
+//! 2. [`health_probe`](crate::multi_region::health_probe) — heartbeat tracker
+//!    with timeout-based unreachable detection, exposing a [`RegionStatus`]
+//!    map that the routing layer can consult to skip dead regions.
+//! 3. [`replication`](crate::multi_region::replication) — async cross-region
+//!    fanout queue with last-writer-wins conflict resolution keyed on
+//!    `(timestamp_ms, region_id)`.
 //!
 //! ## Architecture
 //!

@@ -535,7 +535,9 @@ impl Default for ResourceLimits {
             max_memory_mb: 2048, // 2GB
             max_cpu_percent: 80.0,
             max_disk_mb: 1024, // 1GB
-            max_threads: num_cpus::get(),
+            max_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             max_training_time_secs: 1800, // 30 minutes
         }
     }

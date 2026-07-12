@@ -10,6 +10,7 @@
 //! - Negated property set: !(iri1 | iri2)
 //! - Parenthesized: (path)
 
+use crate::query::terms_equal;
 use crate::store::OxiRSStore;
 use std::collections::HashSet;
 
@@ -55,8 +56,9 @@ impl PropertyPath {
             PropertyPath::Iri(iri) => {
                 // Match ?s <iri> ?o where ?s = subject
                 store
-                    .all_triples()
-                    .filter(|t| t.subject == subject && t.predicate == *iri)
+                    .triples_with_subject(subject)
+                    .into_iter()
+                    .filter(|t| terms_equal(&t.predicate, iri))
                     .map(|t| t.object.clone())
                     .collect()
             }
@@ -64,8 +66,9 @@ impl PropertyPath {
             PropertyPath::Inverse(inner) => {
                 // Inverse: treat subject as object, find matching subjects
                 store
-                    .all_triples()
-                    .filter(|t| t.object == subject && inner.matches_predicate(&t.predicate))
+                    .triples_with_object(subject)
+                    .into_iter()
+                    .filter(|t| inner.matches_predicate(&t.predicate))
                     .map(|t| t.subject.clone())
                     .collect()
             }
@@ -175,8 +178,13 @@ impl PropertyPath {
             PropertyPath::NegatedSet(excluded_iris) => {
                 // Any predicate NOT in the excluded set
                 store
-                    .all_triples()
-                    .filter(|t| t.subject == subject && !excluded_iris.contains(&t.predicate))
+                    .triples_with_subject(subject)
+                    .into_iter()
+                    .filter(|t| {
+                        !excluded_iris
+                            .iter()
+                            .any(|iri| terms_equal(iri, &t.predicate))
+                    })
                     .map(|t| t.object.clone())
                     .collect()
             }
@@ -186,7 +194,7 @@ impl PropertyPath {
     /// Check if this path is a simple predicate match (used in inverse evaluation).
     fn matches_predicate(&self, predicate: &str) -> bool {
         match self {
-            PropertyPath::Iri(iri) => iri == predicate,
+            PropertyPath::Iri(iri) => terms_equal(iri, predicate),
             PropertyPath::Alternative(l, r) => {
                 l.matches_predicate(predicate) || r.matches_predicate(predicate)
             }
@@ -301,10 +309,15 @@ fn split_path_quantifier(s: &str) -> (&str, &str) {
     }
 }
 
-/// Parse a primary path element: `<iri>` or `(path)`
+/// The `a` keyword of SPARQL/Turtle: shorthand for `rdf:type`.
+const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+/// Parse a primary path element: `<iri>`, `(path)` or the `a` keyword
 fn parse_path_primary(s: &str) -> Option<PropertyPath> {
     let s = s.trim();
-    if s.starts_with('<') && s.ends_with('>') {
+    if s == "a" {
+        Some(PropertyPath::Iri(RDF_TYPE.to_string()))
+    } else if s.starts_with('<') && s.ends_with('>') {
         Some(PropertyPath::Iri(s[1..s.len() - 1].to_string()))
     } else if s.starts_with('(') && s.ends_with(')') {
         parse_path_expr(&s[1..s.len() - 1])

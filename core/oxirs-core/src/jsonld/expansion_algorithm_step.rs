@@ -2,7 +2,7 @@
 //!
 //! This module provides helper functions for specific expansion steps
 //! as described by the W3C JSON-LD API specification:
-//! https://www.w3.org/TR/json-ld-api/#expansion-algorithms
+//! <https://www.w3.org/TR/json-ld-api/#expansion-algorithms>
 //!
 //! The main state-machine logic remains in `expansion_algorithm.rs`.
 //! The per-element helpers (`on_literal_value`, `expand_value`) that

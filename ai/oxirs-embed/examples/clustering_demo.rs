@@ -306,7 +306,7 @@ async fn main() -> Result<()> {
 
     println!("  Silhouette Scores (higher is better):");
     let mut sorted_algorithms = algorithms.clone();
-    sorted_algorithms.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    sorted_algorithms.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("values are comparable floats"));
 
     for (rank, (name, score)) in sorted_algorithms.iter().enumerate() {
         let bar_length = (score * 50.0).max(0.0) as usize;
@@ -419,7 +419,7 @@ async fn main() -> Result<()> {
             })
             .collect();
 
-        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("values are comparable floats"));
 
         println!("  Cluster {}:", cluster_id);
         for (entity, dist) in distances.iter().take(5) {

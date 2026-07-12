@@ -46,17 +46,17 @@
 
 use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
+use once_cell::sync::Lazy;
 use scirs2_core::metrics::{Counter, Timer};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
 // Global metrics for benchmarking
-lazy_static::lazy_static! {
-    static ref BENCHMARK_RUNS: Counter = Counter::new("benchmark_runs".to_string());
-    static ref BENCHMARK_FAILURES: Counter = Counter::new("benchmark_failures".to_string());
-    static ref BENCHMARK_TIME: Timer = Timer::new("benchmark_total_time".to_string());
-}
+static BENCHMARK_RUNS: Lazy<Counter> = Lazy::new(|| Counter::new("benchmark_runs".to_string()));
+static BENCHMARK_FAILURES: Lazy<Counter> =
+    Lazy::new(|| Counter::new("benchmark_failures".to_string()));
+static BENCHMARK_TIME: Lazy<Timer> = Lazy::new(|| Timer::new("benchmark_total_time".to_string()));
 
 /// Benchmark category
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

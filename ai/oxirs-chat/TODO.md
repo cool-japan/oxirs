@@ -1,6 +1,6 @@
 # OxiRS Chat - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready (Experimental)
 
@@ -57,7 +57,7 @@
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ NL-to-SPARQL, RAG system, multi-LLM providers, webhooks, plugin system
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Additional LLM providers (Cohere, Groq, Mistral)
 - ✅ Enhanced context management (context window with sliding compression)
 - ✅ Advanced analytics dashboards
@@ -95,17 +95,22 @@
   - **Risk:** drift; mitigation: example-as-test.
 - [x] Model marketplace integration — HF Hub + Ollama + local GGUF registry (completed 2026-05-02)
 
+### v0.3.2 - Current Release (July 12, 2026)
+- [x] Rich entity extraction — `nl2sparql::context_aware::extract_entities_rich()` returns typed, span-and-confidence-scored `ExtractedEntity` values (rule-based NL entity recognition)
+- [x] Rustdoc intra-doc link fixes across `rich_content`, `sso::session`
+- ✅ 1247 tests passing
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Chat v0.2.3 - AI-powered conversational RDF interface*
+*OxiRS Chat v0.3.2 - AI-powered conversational RDF interface*
 
 ## Proposed follow-ups
 
-- [ ] Web chat UI components — OVERSIZED: requires a new frontend subcrate. Defer until UI strategy is decided (Tauri? Yew? Leptos? web-only?).
+- [x] Web chat UI components — implemented: Tauri 2.x desktop app (desktop/oxirs-tauri/, chat.html), superseding the earlier OVERSIZED/deferred assessment below (completed 2026-05-02).
 - [x] Visual query builder UI — implemented: SVG canvas with drag-and-drop triple patterns, filter nodes, SPARQL generation/validation, example loader. desktop/ui/query_builder.html + desktop/oxirs-tauri/src/query_builder.rs (completed 2026-05-02).
 - [x] Enterprise SSO — OIDC + SAML-SP implemented in `src/sso/` (oidc.rs, saml_sp.rs, session.rs + SsoManagerConfig refactor).
 - [x] Long-term support guarantees — RFC published at `docs/policies/lts.md`. (completed 2026-05-17 via RFC-001)

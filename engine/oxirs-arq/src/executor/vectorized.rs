@@ -9,13 +9,13 @@ use scirs2_core::error::CoreError;
 use scirs2_core::memory::BufferPool;
 use scirs2_core::memory_efficient::ChunkedArray;
 // Native SciRS2 APIs (beta.4+)
+use scirs2_core::array; // Beta.3 array macro convenience
 use scirs2_core::metrics::{Counter, Histogram, Timer};
-use scirs2_core::profiling::Profiler;
-use scirs2_core::simd::SimdArray;
 use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1, ArrayView2, Axis};
-use scirs2_core::parallel_ops::{ParallelIterator, IntoParallelIterator};
-use scirs2_core::random::{Rng, Random, seeded_rng, ThreadLocalRngPool, ScientificSliceRandom};
-use scirs2_core::array;  // Beta.3 array macro convenience
+use scirs2_core::parallel_ops::{IntoParallelIterator, ParallelIterator};
+use scirs2_core::profiling::Profiler;
+use scirs2_core::random::{seeded_rng, Random, Rng, ScientificSliceRandom, ThreadLocalRngPool};
+use scirs2_core::simd::SimdArray;
 use scirs2_core::simd::SimdOps;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -42,7 +42,9 @@ impl Default for VectorizedConfig {
     fn default() -> Self {
         Self {
             batch_size: 4096,
-            num_threads: num_cpus::get(),
+            num_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             memory_limit: 1 << 30, // 1GB
             adaptive_chunking: true,
             simd_level: SimdLevel::Aggressive,
@@ -151,8 +153,12 @@ impl ColumnarData {
         }
 
         let id = self.dictionary.len() as u64;
-        Arc::get_mut(&mut self.dictionary).expect("Arc should have single owner during mutation").insert(id, term.clone());
-        Arc::get_mut(&mut self.reverse_dict).expect("Arc should have single owner during mutation").insert(term.clone(), id);
+        Arc::get_mut(&mut self.dictionary)
+            .expect("Arc should have single owner during mutation")
+            .insert(id, term.clone());
+        Arc::get_mut(&mut self.reverse_dict)
+            .expect("Arc should have single owner during mutation")
+            .insert(term.clone(), id);
         id
     }
 
@@ -171,7 +177,11 @@ impl ColumnarData {
     }
 
     /// Vectorized join using SIMD hash operations
-    pub fn vectorized_join(&self, other: &ColumnarData, join_column: JoinColumn) -> Result<ColumnarData> {
+    pub fn vectorized_join(
+        &self,
+        other: &ColumnarData,
+        join_column: JoinColumn,
+    ) -> Result<ColumnarData> {
         let mut result = ColumnarData::new(self.row_count.max(other.row_count));
 
         // Get join columns for vectorized comparison
@@ -187,7 +197,9 @@ impl ColumnarData {
 
             // Vectorized search in right column
             let matches = auto_vectorize(&right_col.view(), |chunk| -> Vec<usize> {
-                chunk.iter().enumerate()
+                chunk
+                    .iter()
+                    .enumerate()
                     .filter_map(|(j, &val)| if val == left_val { Some(j) } else { None })
                     .collect()
             })?;
@@ -256,7 +268,11 @@ impl VectorizedExecutor {
     }
 
     /// Execute algebra expression using vectorized operations
-    pub fn execute_vectorized(&mut self, algebra: &Algebra, data: &ColumnarData) -> Result<Solution> {
+    pub fn execute_vectorized(
+        &mut self,
+        algebra: &Algebra,
+        data: &ColumnarData,
+    ) -> Result<Solution> {
         self.profiler.start("vectorized_execution");
         let start_time = Instant::now();
 
@@ -283,7 +299,11 @@ impl VectorizedExecutor {
     }
 
     /// Execute Basic Graph Pattern using vectorized operations
-    fn execute_vectorized_bgp(&mut self, patterns: &[TriplePattern], data: &ColumnarData) -> Result<Solution> {
+    fn execute_vectorized_bgp(
+        &mut self,
+        patterns: &[TriplePattern],
+        data: &ColumnarData,
+    ) -> Result<Solution> {
         if patterns.is_empty() {
             return Ok(Solution::new());
         }
@@ -307,14 +327,20 @@ impl VectorizedExecutor {
     }
 
     /// Apply vectorized filter for a triple pattern
-    fn apply_vectorized_pattern_filter(&self, pattern: &TriplePattern, data: &ColumnarData) -> Result<ColumnarData> {
+    fn apply_vectorized_pattern_filter(
+        &self,
+        pattern: &TriplePattern,
+        data: &ColumnarData,
+    ) -> Result<ColumnarData> {
         let mut filtered = ColumnarData::new(data.row_count);
 
         // Create SIMD masks for each component
         let subject_mask = if let Term::Variable(_) = &pattern.subject {
             SimdArray::ones(data.row_count) // All match for variables
         } else {
-            let target_id = data.reverse_dict.get(&pattern.subject)
+            let target_id = data
+                .reverse_dict
+                .get(&pattern.subject)
                 .ok_or_else(|| anyhow::anyhow!("Subject not found in dictionary"))?;
             self.create_equality_mask(&data.subjects, *target_id)?
         };
@@ -322,7 +348,9 @@ impl VectorizedExecutor {
         let predicate_mask = if let Term::Variable(_) = &pattern.predicate {
             SimdArray::ones(data.row_count)
         } else {
-            let target_id = data.reverse_dict.get(&pattern.predicate)
+            let target_id = data
+                .reverse_dict
+                .get(&pattern.predicate)
                 .ok_or_else(|| anyhow::anyhow!("Predicate not found in dictionary"))?;
             self.create_equality_mask(&data.predicates, *target_id)?
         };
@@ -330,7 +358,9 @@ impl VectorizedExecutor {
         let object_mask = if let Term::Variable(_) = &pattern.object {
             SimdArray::ones(data.row_count)
         } else {
-            let target_id = data.reverse_dict.get(&pattern.object)
+            let target_id = data
+                .reverse_dict
+                .get(&pattern.object)
                 .ok_or_else(|| anyhow::anyhow!("Object not found in dictionary"))?;
             self.create_equality_mask(&data.objects, *target_id)?
         };
@@ -345,7 +375,11 @@ impl VectorizedExecutor {
     }
 
     /// Create SIMD equality mask
-    fn create_equality_mask(&self, column: &SimdArray<u64>, target: u64) -> Result<SimdArray<bool>> {
+    fn create_equality_mask(
+        &self,
+        column: &SimdArray<u64>,
+        target: u64,
+    ) -> Result<SimdArray<bool>> {
         let mut mask = SimdArray::zeros(column.len());
 
         auto_vectorize(&column.view(), |chunk| {
@@ -367,9 +401,13 @@ impl VectorizedExecutor {
 
         for &mask in masks.iter().skip(1) {
             auto_vectorize(&result.view(), |chunk| {
-                chunk.iter().zip(mask.iter()).enumerate().for_each(|(i, (&a, &b))| {
-                    result[i] = a && b;
-                });
+                chunk
+                    .iter()
+                    .zip(mask.iter())
+                    .enumerate()
+                    .for_each(|(i, (&a, &b))| {
+                        result[i] = a && b;
+                    });
             })?;
         }
 
@@ -377,7 +415,12 @@ impl VectorizedExecutor {
     }
 
     /// Apply SIMD mask to filter data
-    fn apply_simd_mask(&self, mask: &SimdArray<bool>, source: &ColumnarData, target: &mut ColumnarData) -> Result<()> {
+    fn apply_simd_mask(
+        &self,
+        mask: &SimdArray<bool>,
+        source: &ColumnarData,
+        target: &mut ColumnarData,
+    ) -> Result<()> {
         for i in 0..source.row_count {
             if mask[i] {
                 target.add_triple(
@@ -391,7 +434,12 @@ impl VectorizedExecutor {
     }
 
     /// Execute vectorized join operation
-    fn execute_vectorized_join(&mut self, left: &Algebra, right: &Algebra, data: &ColumnarData) -> Result<Solution> {
+    fn execute_vectorized_join(
+        &mut self,
+        left: &Algebra,
+        right: &Algebra,
+        data: &ColumnarData,
+    ) -> Result<Solution> {
         // This is a simplified implementation - in practice, we'd recursively process left and right
         let left_data = self.extract_bgp_data(left, data)?;
         let right_data = self.extract_bgp_data(right, data)?;
@@ -403,7 +451,11 @@ impl VectorizedExecutor {
     }
 
     /// Vectorized hash join implementation
-    fn vectorized_hash_join(&self, left: &ColumnarData, right: &ColumnarData) -> Result<ColumnarData> {
+    fn vectorized_hash_join(
+        &self,
+        left: &ColumnarData,
+        right: &ColumnarData,
+    ) -> Result<ColumnarData> {
         let mut result = ColumnarData::new(left.row_count * right.row_count);
 
         // Build hash table for left side using SIMD operations
@@ -446,7 +498,12 @@ impl VectorizedExecutor {
     }
 
     /// Execute vectorized filter operation
-    fn execute_vectorized_filter(&mut self, pattern: &Algebra, _condition: &crate::algebra::Expression, data: &ColumnarData) -> Result<Solution> {
+    fn execute_vectorized_filter(
+        &mut self,
+        pattern: &Algebra,
+        _condition: &crate::algebra::Expression,
+        data: &ColumnarData,
+    ) -> Result<Solution> {
         // Execute the pattern first, then apply filter
         let pattern_result = self.execute_vectorized(pattern, data)?;
 
@@ -455,7 +512,12 @@ impl VectorizedExecutor {
     }
 
     /// Execute vectorized union operation
-    fn execute_vectorized_union(&mut self, left: &Algebra, right: &Algebra, data: &ColumnarData) -> Result<Solution> {
+    fn execute_vectorized_union(
+        &mut self,
+        left: &Algebra,
+        right: &Algebra,
+        data: &ColumnarData,
+    ) -> Result<Solution> {
         let left_result = self.execute_vectorized(left, data)?;
         let right_result = self.execute_vectorized(right, data)?;
 
@@ -513,7 +575,11 @@ impl VectorizedExecutor {
     }
 
     /// Scalar fallback for unsupported operations
-    fn execute_scalar_fallback(&self, _algebra: &Algebra, _data: &ColumnarData) -> Result<Solution> {
+    fn execute_scalar_fallback(
+        &self,
+        _algebra: &Algebra,
+        _data: &ColumnarData,
+    ) -> Result<Solution> {
         // Fallback to traditional execution
         Ok(Solution::new())
     }
@@ -541,11 +607,18 @@ impl VectorizedExecutor {
 
     /// Get current execution statistics
     pub fn get_stats(&self) -> VectorizedStats {
-        self.stats.lock().expect("lock should not be poisoned").clone()
+        self.stats
+            .lock()
+            .expect("lock should not be poisoned")
+            .clone()
     }
 
     /// Batch processing with adaptive chunking
-    pub fn process_large_dataset(&mut self, data: &ColumnarData, algebra: &Algebra) -> Result<Solution> {
+    pub fn process_large_dataset(
+        &mut self,
+        data: &ColumnarData,
+        algebra: &Algebra,
+    ) -> Result<Solution> {
         if !self.config.adaptive_chunking || data.row_count <= self.config.batch_size {
             return self.execute_vectorized(algebra, data);
         }
@@ -586,7 +659,11 @@ impl VectorizedExecutor {
     }
 
     /// Parallel vectorized execution across multiple threads
-    pub fn execute_parallel_vectorized(&mut self, algebra: &Algebra, data: &ColumnarData) -> Result<Solution> {
+    pub fn execute_parallel_vectorized(
+        &mut self,
+        algebra: &Algebra,
+        data: &ColumnarData,
+    ) -> Result<Solution> {
         if data.row_count <= self.config.batch_size {
             return self.execute_vectorized(algebra, data);
         }
@@ -602,7 +679,8 @@ impl VectorizedExecutor {
 
         // Execute chunks in parallel using SciRS2 parallel operations
         let results: Result<Vec<Solution>> = par_scope(|s| {
-            chunks.into_iter()
+            chunks
+                .into_iter()
                 .map(|(start, end)| {
                     s.spawn(move |_| {
                         let chunk_data = self.extract_chunk(data, start, end)?;

@@ -10,6 +10,7 @@ description = "OxiRS desktop application — chat UI, visual SPARQL query builde
 keywords = ["tauri", "desktop", "sparql", "chat", "rdf"]
 categories = ["gui", "web-programming"]
 rust-version.workspace = true
+publish = false
 
 [[bin]]
 name = "oxirs-tauri"

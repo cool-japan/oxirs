@@ -5,8 +5,8 @@
 //! - Visvalingam-Whyatt simplification ([`simplify_geometry_vw`])
 //! - Coordinate precision snapping ([`snap_to_precision`])
 //! - Automatic geometry repair ([`repair_geometry`])
-//! - Helper functions: [`repair_linestring`], [`repair_polygon`],
-//!   [`remove_consecutive_duplicates`], [`close_ring`]
+//! - Helper functions: `repair_linestring`, `repair_polygon`,
+//!   `remove_consecutive_duplicates`, `close_ring`
 
 use crate::error::{GeoSparqlError, Result};
 use crate::geometry::Geometry;

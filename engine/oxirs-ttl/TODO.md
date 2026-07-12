@@ -1,6 +1,6 @@
 # OxiRS TTL - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
@@ -26,7 +26,7 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
 - **Graph Utilities** - Merging, diff, transformation, and statistics
 - **Format Conversion** - Universal converter between all RDF formats
 - **Pattern Matching** - SPARQL-like in-memory queries without full engine
-- **1726 tests passing** with zero warnings
+- **1779 tests passing** with zero warnings
 
 ### Key Capabilities
 
@@ -56,7 +56,7 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
 - ✅ RDF 1.2 support, streaming, async I/O, parallel processing
 - ✅ 1726 tests passing
 
-### v0.2.3 - Current Release (March 16, 2026)
+### v0.2.3 - Released (March 16, 2026)
 - ✅ Additional N3 built-in predicates
 - ✅ Enhanced error recovery strategies
 - ✅ Performance optimizations for edge cases
@@ -66,7 +66,7 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
 - ✅ Additional serialization optimizations
 - ✅ Extended format conversion options
 
-### v0.3.0 - Planned (Q2 2026)
+### v0.3.0 - Released (Q2 2026)
 - [x] Full W3C compliance certification (completed 2026-04-30)
   - **Goal:** Pass every test in the W3C RDF 1.1 / 1.2 conformance suite for Turtle, N-Triples, N-Quads, and TriG that the parser/serializer does not yet pass; document any constructs that remain unsupported as typed errors (no silent passes). N3 is best-effort (no W3C conformance suite).
   - **Design:** Vendor W3C RDF test corpus under `tests/fixtures/w3c-rdf-tests/` (pinned commit) covering Turtle, N-Triples, TriG, N-Quads (positive/negative parser tests + eval). Driver `tests/w3c_compliance.rs` reads per-format manifest, dispatches by `mf:Test` type. Cluster failures by category and close in `src/parser/{turtle,nquads,trig,ntriples}.rs` and `src/serializer/`. RDF 1.2 quoted-triple coverage: TriG-star and N-Quads-star round-trip (oxirs-star handles SPARQL-star).
@@ -77,10 +77,13 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
 - [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
+### v0.3.2 - Current Release (July 12, 2026)
+- [x] Maintenance release: no functional/API changes. Workspace-wide dependency modernization (`lazy_static` → `once_cell::sync::Lazy`) and rustdoc intra-doc link fixes
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TTL v0.2.3 - Streaming RDF parser and serializer*
+*OxiRS TTL v0.3.2 - Streaming RDF parser and serializer*

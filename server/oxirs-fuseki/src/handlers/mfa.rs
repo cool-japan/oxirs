@@ -582,10 +582,10 @@ fn generate_totp_secret() -> String {
 fn generate_totp_uri(config: &TotpConfig) -> String {
     format!(
         "otpauth://totp/{}:{}?secret={}&issuer={}&algorithm={}&digits={}&period={}",
-        urlencoding::encode(&config.issuer),
-        urlencoding::encode(&config.account_name),
+        oxirs_core::encoding::percent_encode(&config.issuer),
+        oxirs_core::encoding::percent_encode(&config.account_name),
         config.secret,
-        urlencoding::encode(&config.issuer),
+        oxirs_core::encoding::percent_encode(&config.issuer),
         config.algorithm,
         config.digits,
         config.period

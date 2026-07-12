@@ -1,15 +1,15 @@
 # OxiRS Cluster - TODO
 
-*Version: 0.3.1 | Last Updated: June 6, 2026*
+*Version: 0.3.2 | Last Updated: July 12, 2026*
 
 ## Status: Production Ready
 
 **oxirs-cluster** provides distributed RDF storage with Raft consensus, advanced fault tolerance, ML optimization, multi-tenant isolation, and cloud-native deployment capabilities.
 
 ### Quality Metrics
-- **Test Status**: 1489 tests passing (100% success rate)
+- **Test Status**: 1831 tests passing (100% success rate)
 - **Code Quality**: Zero warnings, zero TODO comments
-- **Code Size**: 47,828 lines (88 Rust files)
+- **Code Size**: ~76,000 lines (219 Rust files under `src/`)
 - **Documentation**: Comprehensive guides (67KB total)
 
 ### Features
@@ -152,6 +152,12 @@
 ### v1.0.0 - LTS Release (Q2 2026)
 - [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 - [x] Comprehensive certification (completed 2026-05-01)
+  - `src/certification/{mod,consistency,partition,raft,sla}.rs` — `CertificationSuite` runs
+    deterministic, in-memory (std::sync::mpsc, no tokio) simulations: `consistency` checks
+    read-your-writes/linearizability probes/convergence; `partition` checks island formation,
+    quorum loss/recovery, split-brain prevention; `raft` checks leader uniqueness, log
+    monotonicity, safety invariants; `sla` checks read/write p99 latency bounds and throughput
+    floor. Documented in README.md's Features list.
 - [x] Enterprise support (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Performance benchmarks publication (completed 2026-04-29)
 
@@ -168,9 +174,12 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Cluster v0.3.1 - Distributed RDF storage with multi-tenant isolation*
+*OxiRS Cluster v0.3.2 - Distributed RDF storage with multi-tenant isolation*
 
 ## Proposed follow-ups
 
-- 1000-node phase B: log-replication topology + witness nodes.
-- 1000-node phase C: real multi-process E2E test suite.
+Both items below were completed in the v0.3.0 cycle (see the checked entries above) and are
+kept here only as a pointer to their implementation:
+
+- [x] 1000-node phase B: log-replication topology + witness nodes — `src/log_replication_topology.rs`, `src/witness_node.rs`
+- [x] 1000-node phase C: real multi-process E2E test suite — `src/tcp_cluster/`, `tests/tcp_cluster_test.rs`

@@ -46,9 +46,9 @@ fn demo_basic_resampling() {
     // Create 1Hz data for 5 minutes
     let base_time = Utc::now()
         .with_second(0)
-        .unwrap()
+        .expect("invariant: value is valid")
         .with_nanosecond(0)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     let data: Vec<DataPoint> = (0..300)
         .map(|i| DataPoint {
@@ -63,7 +63,7 @@ fn demo_basic_resampling() {
     // Resample to 1-minute buckets
     let result = Resampler::new(ResampleBucket::Minute(1), Aggregation::Avg)
         .resample(&data)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     println!("Resampled to 1-minute averages:");
     println!("  Output: {} buckets", result.len());
@@ -87,7 +87,7 @@ fn demo_basic_resampling() {
     for (name, bucket) in buckets {
         let result = Resampler::new(bucket, Aggregation::Avg)
             .resample(&data)
-            .unwrap();
+            .expect("invariant: value is valid");
         let reduction = data.len() as f64 / result.len().max(1) as f64;
         println!(
             "  {}: {} buckets ({:.1}:1 reduction)",
@@ -105,9 +105,9 @@ fn demo_aggregation_types() {
 
     let base_time = Utc::now()
         .with_second(0)
-        .unwrap()
+        .expect("invariant: value is valid")
         .with_nanosecond(0)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     // Create data with clear patterns for each minute
     let data: Vec<DataPoint> = (0..180)
@@ -151,7 +151,7 @@ fn demo_aggregation_types() {
     for (name, agg) in aggregations {
         let result = Resampler::new(ResampleBucket::Minute(1), agg)
             .resample(&data)
-            .unwrap();
+            .expect("invariant: value is valid");
 
         println!(
             "  {:>8} | {:>10.1} | {:>10.1} | {:>10.1}",
@@ -170,9 +170,9 @@ fn demo_gap_filling() {
 
     let base_time = Utc::now()
         .with_second(0)
-        .unwrap()
+        .expect("invariant: value is valid")
         .with_nanosecond(0)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     // Create data with gaps
     let data: Vec<DataPoint> = vec![
@@ -223,7 +223,7 @@ fn demo_gap_filling() {
         let result = Resampler::new(ResampleBucket::Second(10), Aggregation::Avg)
             .with_fill(method)
             .resample(&data)
-            .unwrap();
+            .expect("invariant: value is valid");
 
         print!("{}: ", name);
         let values: Vec<String> = result.iter().map(|p| format!("{:.0}", p.value)).collect();
@@ -245,11 +245,11 @@ fn demo_multi_level_downsampling() {
     // Simulate 1 hour of raw data at 1Hz
     let base_time = Utc::now()
         .with_minute(0)
-        .unwrap()
+        .expect("invariant: value is valid")
         .with_second(0)
-        .unwrap()
+        .expect("invariant: value is valid")
         .with_nanosecond(0)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     let raw_data: Vec<DataPoint> = (0..3600)
         .map(|i| {
@@ -272,7 +272,7 @@ fn demo_multi_level_downsampling() {
     // Level 1: 1-minute averages
     let level1 = Resampler::new(ResampleBucket::Minute(1), Aggregation::Avg)
         .resample(&raw_data)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     println!(
         "Level 1 (1-minute): {} points ({:.1}:1 reduction)",
@@ -283,7 +283,7 @@ fn demo_multi_level_downsampling() {
     // Level 2: 5-minute averages
     let level2 = Resampler::new(ResampleBucket::Minute(5), Aggregation::Avg)
         .resample(&raw_data)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     println!(
         "Level 2 (5-minute): {} points ({:.1}:1 reduction)",
@@ -294,7 +294,7 @@ fn demo_multi_level_downsampling() {
     // Level 3: 15-minute averages
     let level3 = Resampler::new(ResampleBucket::Minute(15), Aggregation::Avg)
         .resample(&raw_data)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     println!(
         "Level 3 (15-minute): {} points ({:.1}:1 reduction)",
@@ -305,7 +305,7 @@ fn demo_multi_level_downsampling() {
     // Level 4: Hourly average
     let level4 = Resampler::new(ResampleBucket::Hour(1), Aggregation::Avg)
         .resample(&raw_data)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     println!(
         "Level 4 (1-hour): {} point ({:.1}:1 reduction)",
@@ -353,13 +353,13 @@ fn demo_iot_data_pipeline() {
 
     let base_time = Utc::now()
         .with_hour(8)
-        .unwrap()
+        .expect("invariant: value is valid")
         .with_minute(0)
-        .unwrap()
+        .expect("invariant: value is valid")
         .with_second(0)
-        .unwrap()
+        .expect("invariant: value is valid")
         .with_nanosecond(0)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     // Simulate 8-hour shift of machine temperature data
     let shift_duration = 8 * 3600; // 8 hours in seconds
@@ -386,15 +386,15 @@ fn demo_iot_data_pipeline() {
     // Generate hourly report
     let hourly = Resampler::new(ResampleBucket::Hour(1), Aggregation::Avg)
         .resample(&raw_data)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     let hourly_min = Resampler::new(ResampleBucket::Hour(1), Aggregation::Min)
         .resample(&raw_data)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     let hourly_max = Resampler::new(ResampleBucket::Hour(1), Aggregation::Max)
         .resample(&raw_data)
-        .unwrap();
+        .expect("invariant: value is valid");
 
     println!();
     println!("Hourly Temperature Report:");

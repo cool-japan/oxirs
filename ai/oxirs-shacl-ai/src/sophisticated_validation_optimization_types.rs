@@ -89,7 +89,9 @@ impl Default for SophisticatedOptimizationConfig {
             max_optimization_iterations: 1000,
             convergence_threshold: 0.001,
             enable_parallel_optimization: true,
-            optimization_threads: num_cpus::get(),
+            optimization_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
             enable_optimization_caching: true,
             cache_size_limit: 10000,
             optimization_timeout: Duration::from_secs(300),

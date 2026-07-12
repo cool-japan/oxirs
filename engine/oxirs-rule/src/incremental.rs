@@ -46,15 +46,16 @@
 
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
+use once_cell::sync::Lazy;
 use scirs2_core::metrics::Counter;
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{debug, info, trace};
 
 // Global metrics for memory tracking
-lazy_static::lazy_static! {
-    static ref INCREMENTAL_SUBSTITUTION_CLONES: Counter = Counter::new("incremental_substitution_clones".to_string());
-    static ref INCREMENTAL_RULE_CLONES: Counter = Counter::new("incremental_rule_clones".to_string());
-}
+static INCREMENTAL_SUBSTITUTION_CLONES: Lazy<Counter> =
+    Lazy::new(|| Counter::new("incremental_substitution_clones".to_string()));
+static INCREMENTAL_RULE_CLONES: Lazy<Counter> =
+    Lazy::new(|| Counter::new("incremental_rule_clones".to_string()));
 
 /// Fact identifier for dependency tracking
 type FactId = usize;
