@@ -1,6 +1,6 @@
 # OxiRS Development Roadmap
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.3.3 | Last Updated: July 12, 2026*
 
 ## Current Status: v0.3.2 - Released (July 12, 2026)
 

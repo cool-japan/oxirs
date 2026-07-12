@@ -1,6 +1,6 @@
 //! Modbus TCP/RTU protocol support for OxiRS
 //!
-//! **Status**: ✅ Production Ready (v0.3.2)
+//! **Status**: ✅ Production Ready (v0.3.3)
 //!
 //! This crate provides Modbus protocol implementations for industrial IoT
 //! data ingestion into RDF knowledge graphs.
