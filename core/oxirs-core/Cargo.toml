@@ -140,6 +140,10 @@ blas = []
 rdf-12 = []
 rdf-star = []
 sparql-12 = []
+# Experimental cognitive-computing research modules (consciousness/molecular/quantum).
+# Off by default: ~12.8k lines with no consumers in the default build, so default
+# builds stay lean. Opt in explicitly (also enabled by --all-features).
+experimental-cognitive = []
 # Columnar features temporarily disabled due to dependency conflicts
 # datafusion = []
 # arrow = []

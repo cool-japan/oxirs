@@ -286,6 +286,7 @@ pub mod config_types_core;
 pub mod config_types_network;
 pub mod config_types_storage;
 pub mod config_validation;
+#[cfg(feature = "experimental-cognitive")]
 pub mod consciousness; // Consciousness-inspired computing for intuitive query optimization
 pub mod crypto_provider; // Installs the Pure Rust rustls CryptoProvider as the process default (binaries + tests)
 pub mod distributed;
@@ -298,12 +299,14 @@ pub mod interning;
 pub mod io;
 pub mod jsonld; // Re-enabled after fixing StringInterner method calls
 pub mod model;
+#[cfg(feature = "experimental-cognitive")]
 pub mod molecular;
 pub mod optimization;
 pub mod oxigraph_compat;
 pub mod parser;
 pub mod perf_sla; // Performance SLA harness: SloTarget, BenchmarkResult, assert_meets_slo
 pub mod production;
+#[cfg(feature = "experimental-cognitive")]
 pub mod quantum;
 pub mod query;
 pub mod rdf_store;

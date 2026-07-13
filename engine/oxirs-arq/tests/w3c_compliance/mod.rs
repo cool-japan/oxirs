@@ -10,7 +10,7 @@
 use anyhow::{anyhow, Result};
 use oxirs_arq::{Binding, Dataset, Iri, Literal, Solution, Term, Triple, TriplePattern, Variable};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -95,8 +95,7 @@ impl TestSuiteRunner {
     /// Run all tests in a manifest file
     pub fn run_manifest(&mut self, manifest_path: impl AsRef<Path>) -> Result<&TestResults> {
         let manifest_content = fs::read_to_string(manifest_path)?;
-        let manifest: Vec<TestManifest> = serde_json::from_str(&manifest_content)
-            .map_err(|e| anyhow!("Failed to parse manifest: {}", e))?;
+        let manifest = parse_manifest(&manifest_content)?;
 
         for test in manifest {
             self.run_test(&test)?;
@@ -1221,6 +1220,272 @@ fn term_matches(pattern: &Term, concrete: &Term) -> bool {
     }
 }
 
+// ---------------------------------------------------------------------------
+// W3C test-manifest (Turtle) parsing — issue #65
+//
+// W3C SPARQL test manifests are Turtle documents (`manifest.ttl`), *not* JSON.
+// `parse_manifest` parses the Turtle and walks the `mf:entries` RDF collection,
+// materialising each entry into a `TestManifest`. The previous implementation
+// fed the Turtle bytes to `serde_json::from_str`, which can never succeed on a
+// `.ttl` file (see `run_manifest`).
+// ---------------------------------------------------------------------------
+
+const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const RDF_FIRST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first";
+const RDF_REST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest";
+const RDF_NIL: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil";
+const RDFS_COMMENT: &str = "http://www.w3.org/2000/01/rdf-schema#comment";
+const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+const MF_ENTRIES: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries";
+const MF_NAME: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name";
+const MF_ACTION: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action";
+const MF_RESULT: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result";
+const MF_REQUIRES: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#requires";
+const QT_QUERY: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-query#query";
+const QT_DATA: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-query#data";
+const QT_GRAPH_DATA: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-query#graphData";
+const QT_GRAPH: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-query#graph";
+const DAWGT_APPROVAL: &str = "http://www.w3.org/2001/sw/DataAccess/tests/test-dawg#approval";
+
+/// Base IRI for resolving the manifest's relative references (`<>`, `<agg01.rq>`, …).
+///
+/// A concrete base is required: the RDF parser validates IRIs, and the empty
+/// relative reference `<>` (the manifest node) is not a valid absolute IRI on
+/// its own. Relative file references are reduced to their basename before being
+/// stored, so this exact value never leaks into a `TestManifest` path field.
+const MANIFEST_BASE_IRI: &str = "http://oxirs.example/w3c-manifest/";
+
+/// Parse a W3C SPARQL test manifest (Turtle) into its list of [`TestManifest`]s.
+///
+/// Walks the `mf:entries` RDF collection and reads each entry's `rdf:type`,
+/// `mf:name`, `rdfs:comment`, `mf:action` (either a direct query IRI for
+/// negative-syntax tests or a `[ qt:query … ; qt:data … ]` blank node),
+/// `mf:result`, and approval metadata.
+fn parse_manifest(content: &str) -> Result<Vec<TestManifest>> {
+    use oxirs_ttl::turtle::TurtleParser;
+
+    let parser = TurtleParser::new().with_base_iri(MANIFEST_BASE_IRI.to_string());
+    let core_triples = parser
+        .parse_document(content)
+        .map_err(|e| anyhow!("Failed to parse Turtle manifest: {}", e))?;
+
+    // Materialise as arq terms so subjects/objects — including the blank nodes
+    // used by RDF lists and `mf:action [ … ]` — compare uniformly.
+    let triples: Vec<(Term, Term, Term)> = core_triples
+        .into_iter()
+        .map(|t| {
+            (
+                Term::from(t.subject().clone()),
+                Term::from(t.predicate().clone()),
+                Term::from(t.object().clone()),
+            )
+        })
+        .collect();
+
+    let mut manifests = Vec::new();
+    // A manifest normally has a single `mf:entries` list; tolerate more than one.
+    for list_head in manifest_objects(&triples, MF_ENTRIES) {
+        for entry in collect_rdf_list(&triples, &list_head) {
+            if let Some(manifest) = build_test_manifest(&triples, &entry) {
+                manifests.push(manifest);
+            }
+        }
+    }
+
+    Ok(manifests)
+}
+
+/// Build a single [`TestManifest`] from an entry IRI. Returns `None` for
+/// entries that carry no `mf:action` (i.e. are not runnable tests).
+fn build_test_manifest(triples: &[(Term, Term, Term)], entry: &Term) -> Option<TestManifest> {
+    let action_obj = first_object(triples, entry, MF_ACTION)?;
+    let action = build_test_action(triples, action_obj);
+
+    let test_type = objects(triples, entry, RDF_TYPE)
+        .into_iter()
+        .filter_map(iri_string)
+        .collect();
+    let name = first_object(triples, entry, MF_NAME)
+        .and_then(literal_string)
+        .unwrap_or_default();
+    let comment = first_object(triples, entry, RDFS_COMMENT).and_then(literal_string);
+    let result = first_object(triples, entry, MF_RESULT)
+        .and_then(iri_string)
+        .map(|iri| TestResult::ResultFile(basename(&iri)));
+    let requires = objects(triples, entry, MF_REQUIRES)
+        .into_iter()
+        .filter_map(iri_string)
+        .collect();
+    let approval = first_object(triples, entry, DAWGT_APPROVAL)
+        .and_then(iri_string)
+        .unwrap_or_default();
+
+    Some(TestManifest {
+        id: term_identifier(entry),
+        test_type,
+        name,
+        comment,
+        action,
+        result,
+        requires,
+        approval,
+    })
+}
+
+/// Build a [`TestAction`] from the object of an entry's `mf:action`.
+fn build_test_action(triples: &[(Term, Term, Term)], action: &Term) -> TestAction {
+    if let Term::Iri(iri) = action {
+        // Negative-syntax tests point `mf:action` directly at the query file.
+        return TestAction {
+            query: basename(iri.as_str()),
+            data: None,
+            graph_data: None,
+        };
+    }
+
+    // Evaluation tests use a blank node: [ qt:query <q> ; qt:data <d> ].
+    let query = first_object(triples, action, QT_QUERY)
+        .and_then(iri_string)
+        .map(|iri| basename(&iri))
+        .unwrap_or_default();
+    let data = first_object(triples, action, QT_DATA)
+        .and_then(iri_string)
+        .map(|iri| basename(&iri));
+    let graph_data = build_graph_data(triples, action);
+
+    TestAction {
+        query,
+        data,
+        graph_data,
+    }
+}
+
+/// Collect the `qt:graphData` named-graph inputs of an action, if any.
+fn build_graph_data(triples: &[(Term, Term, Term)], action: &Term) -> Option<Vec<GraphData>> {
+    let graphs: Vec<GraphData> = objects(triples, action, QT_GRAPH_DATA)
+        .into_iter()
+        .map(|obj| match obj {
+            // `qt:graphData <file.ttl>` — the data IRI doubles as the graph name.
+            Term::Iri(iri) => GraphData {
+                graph: iri.as_str().to_string(),
+                data: basename(iri.as_str()),
+            },
+            // `qt:graphData [ qt:graph <file.ttl> ; rdfs:label "graph-iri" ]`.
+            _ => {
+                let file = first_object(triples, obj, QT_GRAPH)
+                    .and_then(iri_string)
+                    .unwrap_or_default();
+                let graph = first_object(triples, obj, RDFS_LABEL)
+                    .and_then(literal_string)
+                    .unwrap_or_else(|| file.clone());
+                GraphData {
+                    graph,
+                    data: basename(&file),
+                }
+            }
+        })
+        .collect();
+
+    if graphs.is_empty() {
+        None
+    } else {
+        Some(graphs)
+    }
+}
+
+/// All objects of triples with the given predicate IRI, regardless of subject.
+fn manifest_objects(triples: &[(Term, Term, Term)], predicate: &str) -> Vec<Term> {
+    triples
+        .iter()
+        .filter(|(_, p, _)| iri_eq(p, predicate))
+        .map(|(_, _, o)| o.clone())
+        .collect()
+}
+
+/// Objects of all triples matching `(subject, predicate, ?)`.
+fn objects<'a>(
+    triples: &'a [(Term, Term, Term)],
+    subject: &Term,
+    predicate: &str,
+) -> Vec<&'a Term> {
+    triples
+        .iter()
+        .filter(|(s, p, _)| s == subject && iri_eq(p, predicate))
+        .map(|(_, _, o)| o)
+        .collect()
+}
+
+/// First object of a triple matching `(subject, predicate, ?)`.
+fn first_object<'a>(
+    triples: &'a [(Term, Term, Term)],
+    subject: &Term,
+    predicate: &str,
+) -> Option<&'a Term> {
+    triples
+        .iter()
+        .find(|(s, p, _)| s == subject && iri_eq(p, predicate))
+        .map(|(_, _, o)| o)
+}
+
+/// Walk an RDF collection (`rdf:first`/`rdf:rest`) from its head to `rdf:nil`.
+fn collect_rdf_list(triples: &[(Term, Term, Term)], head: &Term) -> Vec<Term> {
+    let mut items = Vec::new();
+    let mut current = head.clone();
+    let mut visited: HashSet<String> = HashSet::new();
+
+    while !iri_eq(&current, RDF_NIL) {
+        // Guard against cyclic or malformed lists.
+        if !visited.insert(term_identifier(&current)) {
+            break;
+        }
+        match first_object(triples, &current, RDF_FIRST) {
+            Some(item) => items.push(item.clone()),
+            None => break,
+        }
+        match first_object(triples, &current, RDF_REST) {
+            Some(rest) => current = rest.clone(),
+            None => break,
+        }
+    }
+
+    items
+}
+
+/// True if `term` is the IRI `iri`.
+fn iri_eq(term: &Term, iri: &str) -> bool {
+    matches!(term, Term::Iri(node) if node.as_str() == iri)
+}
+
+/// The IRI string of a term, if it is an IRI.
+fn iri_string(term: &Term) -> Option<String> {
+    match term {
+        Term::Iri(node) => Some(node.as_str().to_string()),
+        _ => None,
+    }
+}
+
+/// The lexical value of a term, if it is a literal.
+fn literal_string(term: &Term) -> Option<String> {
+    match term {
+        Term::Literal(lit) => Some(lit.value.clone()),
+        _ => None,
+    }
+}
+
+/// A stable identifier string for a term (IRI value, or `_:id` for blank nodes).
+fn term_identifier(term: &Term) -> String {
+    match term {
+        Term::Iri(node) => node.as_str().to_string(),
+        Term::BlankNode(id) => format!("_:{id}"),
+        other => other.to_string(),
+    }
+}
+
+/// Final path segment of an IRI/path (everything after the last `/`).
+fn basename(iri: &str) -> String {
+    iri.rsplit('/').next().unwrap_or(iri).to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1444,5 +1709,61 @@ mod tests {
         let nt = "<http://example.org/s> <http://example.org/p> <http://example.org/o> .\n";
         let triples = runner.parse_ntriples_graph(nt).expect("parse ntriples");
         assert_eq!(triples.len(), 1, "Expected 1 triple");
+    }
+
+    /// Regression for issue #65: W3C manifests are Turtle, not JSON. The old
+    /// `run_manifest` called `serde_json::from_str` on the `.ttl` bytes, which
+    /// can never succeed. This exercises the Turtle path on a real manifest.
+    #[test]
+    fn test_issue_65_manifest_parses_as_turtle() {
+        // A real manifest shipped in the repo (28 tests in its mf:entries list).
+        let manifest = include_str!("data/aggregates/manifest.ttl");
+
+        let entries = parse_manifest(manifest).expect("aggregates manifest should parse as Turtle");
+        assert_eq!(
+            entries.len(),
+            28,
+            "aggregates manifest declares 28 tests in its mf:entries list"
+        );
+
+        // An evaluation test: mf:action [ qt:query <agg01.rq> ; qt:data <agg01.ttl> ].
+        let count1 = entries
+            .iter()
+            .find(|m| m.name == "COUNT 1")
+            .expect("entry 'COUNT 1' (:agg01) should be extracted");
+        assert_eq!(count1.action.query, "agg01.rq");
+        assert_eq!(count1.action.data.as_deref(), Some("agg01.ttl"));
+        assert!(
+            matches!(&count1.result, Some(TestResult::ResultFile(f)) if f == "agg01.srx"),
+            "COUNT 1 result should be agg01.srx, got {:?}",
+            count1.result
+        );
+        assert!(
+            count1.id.ends_with("#agg01"),
+            "entry id should be the resolved IRI ending in #agg01, got {}",
+            count1.id
+        );
+        assert!(
+            count1
+                .test_type
+                .iter()
+                .any(|t| t.ends_with("#QueryEvaluationTest")),
+            "COUNT 1 should be typed as an mf:QueryEvaluationTest, got {:?}",
+            count1.test_type
+        );
+
+        // A negative-syntax test points mf:action straight at the .rq file.
+        let count8 = entries
+            .iter()
+            .find(|m| m.name == "COUNT 8")
+            .expect("entry 'COUNT 8' (:agg08) should be extracted");
+        assert_eq!(count8.action.query, "agg08.rq");
+        assert_eq!(count8.action.data, None);
+
+        // Document the original bug: the same bytes are NOT valid JSON.
+        assert!(
+            serde_json::from_str::<Vec<TestManifest>>(manifest).is_err(),
+            "the Turtle manifest must not parse as JSON (the original issue #65 bug)"
+        );
     }
 }
