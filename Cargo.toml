@@ -267,12 +267,12 @@ futures = "0.3"
 
 # SciRS2 dependencies (Scientific Computing Library) - crates.io
 # Note: scirs2 meta crate removed - we only use specific sub-crates as needed
-scirs2-core = { version = "0.6.0", features = ["random"] }
-scirs2-linalg = "0.6.0"
-scirs2-stats = "0.6.0"
-scirs2-neural = "0.6.0"
-scirs2-graph = "0.6.0"
-scirs2-integrate = "0.6.0"
+scirs2-core = { version = "0.6.1", features = ["random"] }
+scirs2-linalg = "0.6.1"
+scirs2-stats = "0.6.1"
+scirs2-neural = "0.6.1"
+scirs2-graph = "0.6.1"
+scirs2-integrate = "0.6.1"
 # array! macro is now in scirs2-core, scirs2-autograd not needed
 
 # Proc-macro utilities (used by oxirs-core api_surface module)
