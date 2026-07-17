@@ -3,9 +3,10 @@
 //! Comprehensive backup and restore functionality for OxiRS databases
 //! with support for compression, incremental backups, and verification.
 
+use super::compression::{self, CompressionFormat};
 use super::{ToolResult, ToolStats};
 use std::fs::{self, File};
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -257,7 +258,12 @@ fn backup_uncompressed(files: &[PathBuf], source_root: &Path, target: &Path) -> 
     Ok(())
 }
 
-/// Backup with compression (simple tar-like format)
+/// Backup with compression: a simple tar-like framing (path length + path +
+/// size + content per file) written through the crate's single gzip
+/// implementation. This is the one and only gzip path in the crate — the
+/// framing bytes are streamed into `compression::open_writer(.., Gzip)` so the
+/// archive is a genuine gzip stream, and restore reads it back through the
+/// matching decompressor.
 fn backup_compressed(files: &[PathBuf], source_root: &Path, target: &Path) -> ToolResult<()> {
     let target_file = if target.extension().is_some() {
         target.to_path_buf()
@@ -265,8 +271,7 @@ fn backup_compressed(files: &[PathBuf], source_root: &Path, target: &Path) -> To
         target.with_extension("tar")
     };
 
-    let file = File::create(&target_file)?;
-    let mut writer = BufWriter::new(file);
+    let mut writer = compression::open_writer(&target_file, CompressionFormat::Gzip)?;
 
     for file_path in files {
         // Calculate relative path
@@ -313,10 +318,14 @@ fn restore_uncompressed(source: &Path, target: &Path) -> ToolResult<()> {
     Ok(())
 }
 
-/// Restore from compressed backup
+/// Restore from compressed backup.
+///
+/// The archive is read back through the crate's single gzip implementation:
+/// `compression::open_reader_sniffed` inflates it when the gzip magic is
+/// present (so the file name need not carry `.gz`) and passes a non-gzip
+/// archive through unchanged. Corrupt gzip surfaces an explicit error.
 fn restore_compressed(source: &Path, target: &Path) -> ToolResult<()> {
-    let file = File::open(source)?;
-    let mut reader = BufReader::new(file);
+    let mut reader = BufReader::new(compression::open_reader_sniffed(source)?);
 
     loop {
         // Read path length
@@ -472,4 +481,136 @@ fn write_backup_metadata(
     writeln!(file, "Incremental: {}", metadata.incremental)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unique_dir(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "oxirs_tdbbackup_test_{label}_{}_{}",
+            std::process::id(),
+            n
+        ))
+    }
+
+    /// The consolidated compressed backup path must produce a genuine gzip
+    /// stream and restore it losslessly (backup + restore round-trip), reusing
+    /// the crate's single gzip implementation for both directions.
+    #[test]
+    fn test_compressed_backup_restore_round_trip_gzip() {
+        let src = unique_dir("src");
+        let restore_dir = unique_dir("restore");
+        let archive = unique_dir("archive").with_extension("gz");
+
+        std::fs::create_dir_all(&src).expect("create src");
+        std::fs::create_dir_all(src.join("sub")).expect("create subdir");
+        std::fs::write(
+            src.join("a.ttl"),
+            b"@prefix ex: <http://example.org/> .\nex:a ex:b ex:c .\n",
+        )
+        .expect("write a.ttl");
+        std::fs::write(
+            src.join("sub/b.nt"),
+            b"<http://example.org/s> <http://example.org/p> <http://example.org/o> .\n",
+        )
+        .expect("write sub/b.nt");
+
+        let files = collect_files(&src).expect("collect files");
+        assert_eq!(files.len(), 2, "both source files must be collected");
+
+        backup_compressed(&files, &src, &archive).expect("compressed backup");
+
+        // The archive must be a real gzip stream, proving the single gzip
+        // implementation actually compressed the framing.
+        let raw = std::fs::read(&archive).expect("read archive");
+        assert!(raw.len() >= 2, "archive too small");
+        assert_eq!(
+            &raw[..2],
+            &[0x1f, 0x8b],
+            "compressed backup must be a real gzip stream"
+        );
+
+        restore_compressed(&archive, &restore_dir).expect("compressed restore");
+
+        // Every file must round-trip byte-for-byte.
+        let restored_a = std::fs::read(restore_dir.join("a.ttl")).expect("read restored a.ttl");
+        let restored_b =
+            std::fs::read(restore_dir.join("sub/b.nt")).expect("read restored sub/b.nt");
+        assert_eq!(
+            restored_a,
+            std::fs::read(src.join("a.ttl")).expect("orig a.ttl"),
+            "a.ttl must round-trip through gzip backup+restore"
+        );
+        assert_eq!(
+            restored_b,
+            std::fs::read(src.join("sub/b.nt")).expect("orig sub/b.nt"),
+            "sub/b.nt must round-trip through gzip backup+restore"
+        );
+
+        std::fs::remove_dir_all(&src).ok();
+        std::fs::remove_dir_all(&restore_dir).ok();
+        let _ = std::fs::remove_file(&archive);
+    }
+
+    /// A non-gzip archive (e.g. produced before consolidation, or by a tool
+    /// that wrote the framing uncompressed) must still restore: the sniffing
+    /// reader passes a non-gzip stream through unchanged.
+    #[test]
+    fn test_restore_passes_through_non_gzip_archive() {
+        let src = unique_dir("plainsrc");
+        let restore_dir = unique_dir("plainrestore");
+        let archive = unique_dir("plainarchive").with_extension("tar");
+
+        std::fs::create_dir_all(&src).expect("create src");
+        std::fs::write(
+            src.join("only.nt"),
+            b"<http://ex/s> <http://ex/p> <http://ex/o> .\n",
+        )
+        .expect("write only.nt");
+
+        let files = collect_files(&src).expect("collect files");
+
+        // Hand-write the tar-like framing WITHOUT compression to emulate a
+        // legacy archive, then confirm the sniffing restore still reads it.
+        {
+            let mut out = File::create(&archive).expect("create plain archive");
+            for file_path in &files {
+                let rel = file_path.strip_prefix(&src).expect("rel path");
+                let content = std::fs::read(file_path).expect("read source file");
+                let path_str = rel.to_string_lossy();
+                let path_bytes = path_str.as_bytes();
+                out.write_all(&(path_bytes.len() as u32).to_le_bytes())
+                    .expect("write path len");
+                out.write_all(path_bytes).expect("write path");
+                out.write_all(&(content.len() as u64).to_le_bytes())
+                    .expect("write size");
+                out.write_all(&content).expect("write content");
+            }
+            out.flush().expect("flush plain archive");
+        }
+
+        // The plain archive must NOT start with the gzip magic.
+        let raw = std::fs::read(&archive).expect("read plain archive");
+        assert_ne!(
+            &raw[..2],
+            &[0x1f, 0x8b],
+            "control archive must be uncompressed"
+        );
+
+        restore_compressed(&archive, &restore_dir).expect("restore of plain archive");
+        let restored = std::fs::read(restore_dir.join("only.nt")).expect("read restored only.nt");
+        assert_eq!(
+            restored,
+            std::fs::read(src.join("only.nt")).expect("orig only.nt")
+        );
+
+        std::fs::remove_dir_all(&src).ok();
+        std::fs::remove_dir_all(&restore_dir).ok();
+        let _ = std::fs::remove_file(&archive);
+    }
 }

@@ -985,29 +985,33 @@ pub fn format_json_report(profile: &DatasetProfile) -> Result<String, String> {
 
 /// Load an RDF file into the profiler's `(subject, predicate, object)` string
 /// representation using the real `oxirs-ttl` parser (format auto-detected from
-/// the file extension). Terms are rendered in an N-Triples-like form so the
-/// literal/datatype/blank-node heuristics used throughout this module apply.
+/// the file extension: Turtle, N-Triples, N-Quads, or TriG). Named-graph
+/// membership is flattened away — structural profiling is triple-oriented.
+/// Terms are rendered in an N-Triples-like form so the literal/datatype/
+/// blank-node heuristics used throughout this module apply.
 ///
-/// A missing file, or a parse failure, is surfaced as an explicit error — the
-/// profiler never falls back to synthetic or empty data.
+/// A missing file, an undetectable format, or a parse failure is surfaced as an
+/// explicit error — the profiler never falls back to synthetic or empty data.
 pub fn load_triples_from_file(path: &Path) -> Result<Vec<(String, String, String)>, String> {
     if !path.exists() {
         return Err(format!("input file not found: {}", path.display()));
     }
 
-    let triples = oxirs_ttl::convenience::parse_rdf_file(path)
+    // The quads parser covers all four line/graph formats; for triple-only
+    // formats the graph name is simply the default graph.
+    let quads = oxirs_ttl::convenience::parse_rdf_file_quads(path)
         .map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
 
-    Ok(triples.iter().map(triple_to_tuple).collect())
+    Ok(quads.iter().map(quad_to_tuple).collect())
 }
 
-/// Convert an `oxirs-core` [`Triple`](oxirs_core::model::Triple) into the
-/// profiler's string-tuple representation.
-fn triple_to_tuple(triple: &oxirs_core::model::Triple) -> (String, String, String) {
+/// Convert an `oxirs-core` [`Quad`](oxirs_core::model::Quad) into the profiler's
+/// string-tuple representation (the graph name is dropped).
+fn quad_to_tuple(quad: &oxirs_core::model::Quad) -> (String, String, String) {
     (
-        subject_to_string(triple.subject()),
-        predicate_to_string(triple.predicate()),
-        object_to_string(triple.object()),
+        subject_to_string(quad.subject()),
+        predicate_to_string(quad.predicate()),
+        object_to_string(quad.object()),
     )
 }
 

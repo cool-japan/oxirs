@@ -920,7 +920,7 @@ pub enum Commands {
     /// data-quality checks. Operates on a real file — a missing input is an
     /// explicit error, never synthetic data.
     Inspect {
-        /// RDF file to inspect (.ttl, .nt, .nq, .trig, .rdf; format auto-detected)
+        /// RDF file to inspect (.ttl, .nt, .nq, .trig; format auto-detected)
         file: PathBuf,
         /// Report output format (text, json)
         #[arg(short, long, default_value = "text")]

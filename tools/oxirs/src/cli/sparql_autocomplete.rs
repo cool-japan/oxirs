@@ -213,6 +213,11 @@ pub struct SparqlAutocompleteProvider {
     custom_prefixes: HashMap<String, String>,
     /// Recently used variables
     recent_variables: Vec<String>,
+    /// Class/property URIs discovered from the active dataset schema.
+    ///
+    /// Populated by the interactive REPL from `schema_autocomplete` so that Tab
+    /// completion also suggests real vocabulary terms from the loaded data.
+    schema_terms: Vec<String>,
 }
 
 impl SparqlAutocompleteProvider {
@@ -221,7 +226,15 @@ impl SparqlAutocompleteProvider {
         Self {
             custom_prefixes: HashMap::new(),
             recent_variables: Vec::new(),
+            schema_terms: Vec::new(),
         }
+    }
+
+    /// Replace the schema-derived completion terms (class and property URIs).
+    ///
+    /// Called by the REPL after schema discovery and on every dataset switch.
+    pub fn set_schema_terms(&mut self, terms: Vec<String>) {
+        self.schema_terms = terms;
     }
 
     /// Add a custom prefix
@@ -318,6 +331,25 @@ impl SparqlAutocompleteProvider {
                         completion_type: CompletionType::Value,
                     });
                 }
+            }
+        }
+
+        // Schema-derived vocabulary (classes/properties discovered from the
+        // active dataset). Capped so a large schema does not flood the list.
+        if !self.schema_terms.is_empty() {
+            let word_lower = word.to_lowercase();
+            for term in self
+                .schema_terms
+                .iter()
+                .filter(|term| word_lower.is_empty() || term.to_lowercase().contains(&word_lower))
+                .take(25)
+            {
+                completions.push(CompletionItem {
+                    replacement: term.clone(),
+                    display: term.clone(),
+                    description: Some("Schema term".to_string()),
+                    completion_type: CompletionType::Value,
+                });
             }
         }
 

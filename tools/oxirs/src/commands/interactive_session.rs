@@ -2,9 +2,11 @@
 //!
 //! Implements the main interactive SPARQL shell execution loop.
 
+use crate::cli::ascii_diagram::DiagramTriple;
 use crate::cli::formatters::{
     create_formatter, Binding, QueryResults as FormatterQueryResults, RdfTerm,
 };
+use crate::cli::repl_commands::{dispatch_colon_command, ColonOutcome, ReplState};
 use crate::cli::syntax_highlighting::{highlight_sparql, HighlightConfig};
 use crate::cli::CliResult;
 use crate::commands::interactive_types::{QuerySession, SparqlHelper};
@@ -15,6 +17,7 @@ use rustyline::history::DefaultHistory;
 use rustyline::Editor;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use strsim; // Fuzzy string matching
 
@@ -412,15 +415,12 @@ fn object_to_rdf_term(object: &oxirs_core::model::Object) -> RdfTerm {
     }
 }
 
-/// Format and display query results
-fn format_and_display_results(
-    results: &OxirsQueryResults,
-    output_format: &str,
-) -> Result<(), String> {
-    use std::io;
-
-    // Convert real OxirsQueryResults to formatter QueryResults
-    let formatter_results = match results.results() {
+/// Convert real `OxirsQueryResults` into the formatter's `QueryResults`.
+///
+/// Shared by the on-screen display path and the REPL's "last result" capture
+/// so that `:export` sees exactly what was rendered.
+fn to_formatter_results(results: &OxirsQueryResults) -> FormatterQueryResults {
+    match results.results() {
         CoreQueryResults::Bindings(bindings) => {
             let variables = results.variables();
 
@@ -473,7 +473,36 @@ fn format_and_display_results(
                     .collect(),
             }
         }
-    };
+    }
+}
+
+/// Extract diagram triples from a CONSTRUCT/DESCRIBE result, if applicable.
+///
+/// Returns `None` for SELECT/ASK results (nothing graph-shaped to draw).
+fn to_diagram_triples(results: &OxirsQueryResults) -> Option<Vec<DiagramTriple>> {
+    match results.results() {
+        CoreQueryResults::Graph(quads) => Some(
+            quads
+                .iter()
+                .map(|quad| DiagramTriple {
+                    subject: quad.subject().to_string(),
+                    predicate: quad.predicate().to_string(),
+                    object: quad.object().to_string(),
+                })
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
+/// Format and display query results
+fn format_and_display_results(
+    results: &OxirsQueryResults,
+    output_format: &str,
+) -> Result<(), String> {
+    use std::io;
+
+    let formatter_results = to_formatter_results(results);
 
     // Use the comprehensive formatter
     if let Some(formatter) = create_formatter(output_format) {
@@ -486,6 +515,16 @@ fn format_and_display_results(
     }
 
     Ok(())
+}
+
+/// Re-discover schema vocabulary for the active dataset and register it with
+/// the readline completer, keeping schema-aware Tab completion in sync with the
+/// current dataset.
+fn refresh_schema_completion(state: &ReplState, rl: &mut Editor<SparqlHelper, DefaultHistory>) {
+    let terms = state.schema_terms();
+    if let Some(helper) = rl.helper_mut() {
+        helper.autocomplete_provider.set_schema_terms(terms);
+    }
 }
 
 /// Execute interactive mode
@@ -508,15 +547,18 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
         dataset_dir
     };
 
-    // Open the RDF store
-    let store = if dataset_path.is_dir() {
-        RdfStore::open(&dataset_path)
-            .map_err(|e| crate::cli::CliError::from(format!("Failed to open dataset: {e}")))?
-    } else {
+    // Open the RDF store. Shared behind an Arc<RwLock> so schema-aware
+    // completion and multi-dataset switching (`:dataset use`) can operate on the
+    // same active store.
+    if !dataset_path.is_dir() {
         return Err(crate::cli::CliError::from(format!(
             "Dataset not found: {dataset_name}"
         )));
-    };
+    }
+    let dataset_location = dataset_path.to_string_lossy().to_string();
+    let store = Arc::new(RwLock::new(RdfStore::open(&dataset_path).map_err(|e| {
+        crate::cli::CliError::from(format!("Failed to open dataset: {e}"))
+    })?));
 
     let mut rl = Editor::<SparqlHelper, DefaultHistory>::new()
         .map_err(|e| crate::cli::CliError::from(format!("Failed to create editor: {}", e)))?;
@@ -534,6 +576,12 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
     let sessions_dir = history_dir.join("sessions");
     let _ = std::fs::create_dir_all(&sessions_dir);
     let mut current_session = QuerySession::new("default".to_string(), dataset_name.clone());
+
+    // Wire up REPL extension state (bookmarks, multi-dataset manager, fuzzy
+    // history, schema completion, last-result slots).
+    let mut state = ReplState::new(store, dataset_name.clone(), dataset_location, &history_dir)?;
+    // Register schema-derived vocabulary into the readline completer.
+    refresh_schema_completion(&state, &mut rl);
 
     // Print welcome message
     println!("╔═══════════════════════════════════════════════════════════╗");
@@ -574,6 +622,15 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
     println!("Templates:");
     println!("  .template [name]  Show query templates");
     println!();
+    println!("REPL Extensions (: prefix):");
+    println!("  :bookmark ...     Save/list/run/rm query bookmarks");
+    println!("  :export <fmt> <p> Export the last result (csv|json|html|xlsx)");
+    println!("  :diagram [style]  ASCII diagram of the last graph or a sample");
+    println!("  :dataset ...      Add/use/list multiple datasets");
+    println!("  :visual           Build a query interactively");
+    println!("  :hsearch <term>   Fuzzy-search query history");
+    println!("  :help             Show extension command help");
+    println!();
     println!("Type your SPARQL query and press Enter");
     println!("Multi-line queries supported - query continues until all braces are balanced");
     println!("Queries are executed immediately and results displayed in table format");
@@ -606,6 +663,33 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                     accumulated_query.push('\n');
                 }
                 accumulated_query.push_str(&line);
+
+                // REPL extension commands (`:` prefix), only at the start of input.
+                if !in_multiline && line.trim().starts_with(':') {
+                    let trimmed = line.trim();
+                    match dispatch_colon_command(&mut state, &current_session.queries, trimmed) {
+                        ColonOutcome::Inject(query) => {
+                            // Run the produced query as if the user had typed it;
+                            // fall through to the completion/execution path below.
+                            accumulated_query = query;
+                        }
+                        ColonOutcome::StoreChanged => {
+                            refresh_schema_completion(&state, &mut rl);
+                            accumulated_query.clear();
+                            continue;
+                        }
+                        ColonOutcome::Handled => {
+                            accumulated_query.clear();
+                            continue;
+                        }
+                        ColonOutcome::Unknown => {
+                            eprintln!("Unknown command: {}", trimmed);
+                            println!("Type .help or :help for available commands");
+                            accumulated_query.clear();
+                            continue;
+                        }
+                    }
+                }
 
                 // Check if this is a meta-command (only at start of input)
                 if !in_multiline && line.trim().starts_with('.') {
@@ -794,7 +878,7 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
 
                                     // Execute the query
                                     let start_time = Instant::now();
-                                    match store.query(&query) {
+                                    match state.query(&query) {
                                         Ok(results) => {
                                             let elapsed = start_time.elapsed();
                                             println!(
@@ -811,6 +895,11 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                                             } else {
                                                 println!();
                                             }
+
+                                            // Capture for :export / :diagram.
+                                            state.last_graph = to_diagram_triples(&results);
+                                            state.last_result =
+                                                Some(to_formatter_results(&results));
                                         }
                                         Err(e) => {
                                             let elapsed = start_time.elapsed();
@@ -954,7 +1043,7 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
 
                                             // Execute the query
                                             let start = Instant::now();
-                                            match store.query(query) {
+                                            match state.query(query) {
                                                 Ok(results) => {
                                                     let elapsed = start.elapsed();
                                                     println!(
@@ -1235,7 +1324,7 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                         }
 
                         // Execute the query
-                        match store.query(&query) {
+                        match state.query(&query) {
                             Ok(results) => {
                                 let elapsed = start_time.elapsed();
 
@@ -1253,6 +1342,10 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                                 } else {
                                     println!();
                                 }
+
+                                // Capture the last result for :export / :diagram.
+                                state.last_graph = to_diagram_triples(&results);
+                                state.last_result = Some(to_formatter_results(&results));
                             }
                             Err(e) => {
                                 let elapsed = start_time.elapsed();
@@ -1342,6 +1435,7 @@ fn print_help() {
     println!("  .template         List available query templates");
     println!("  .template <name>  Show specific template (select, construct, etc.)");
     println!();
+    crate::cli::repl_commands::print_extension_help();
     println!("  Sessions are stored in: ~/.local/share/oxirs/sessions/");
     println!("  Each session contains query history and metadata.");
     println!();

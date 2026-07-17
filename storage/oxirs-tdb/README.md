@@ -1,10 +1,10 @@
 # OxiRS TDB - High-Performance RDF Storage Engine
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status**: v0.3.2 - Released 2026-07-12 (2106 tests passing)
+**Status**: v0.4.0 - Release preparation 2026-07-17 (2125 tests passing)
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -18,6 +18,38 @@ A high-performance, ACID-compliant RDF storage engine with multi-version concurr
 - **B+ Tree Indexing**: Six standard RDF indices (SPO, POS, OSP, SOP, PSO, OPS)
 - **Advanced Page Management**: LRU buffer pools with efficient memory management
 - **Crash Recovery**: ARIES-style write-ahead logging with analysis/redo/undo phases
+
+### Durability & Crash Recovery (v0.4.0)
+
+`TdbStore` mutations are now durable through an integrated write-ahead log
+(`TdbConfig.enable_wal`, **default `true`**):
+
+- **WAL-ordered writes**: every mutating op is logged Begin/Update/Commit before
+  it is acknowledged, and `sync()` flushes in a strict order — WAL flush → page
+  flush → superblock → WAL truncate — so a crash never leaves a committed record
+  behind an already-truncated log.
+- **Recovery replay on open**: `TdbStore::open` replays committed WAL operations
+  recorded since the last checkpoint (`recover_from_wal`) before serving any read,
+  and advances past any id a crashed session left in the WAL so replayed and
+  freshly-issued dictionary ids never collide. A checkpoint records its LSN in the
+  superblock; replay is idempotent, so re-applying already-persisted operations is
+  safe. A crash test (`test_crash_without_sync_replays_committed_writes`) proves
+  that committed-but-unsynced writes survive a reopen.
+- **`StoreParams` honored end to end**: open a store with an explicit
+  `StoreParams` via `TdbStore::open_with_params`, which threads the parameters
+  into the engine `TdbConfig` (`TdbConfig::from_store_params`) — buffer pool size,
+  bloom-filter fpr/size, query-cache size, statistics sample rate, slow-query /
+  query-timeout monitors, spatial-index bounds, quad-index and WAL toggles. A
+  `page_size` that differs from the compile-time page size is rejected loudly, and
+  `store_params.json` is persisted so a reopen restores the same parameters.
+- **Sorted bulk build**: `insert_triples_bulk` / `insert_quads_bulk` intern and
+  encode a whole batch, validate it up front (a literal subject or a quad while
+  quad indexes are disabled fails loudly *before* any mutation), build each index
+  in sorted key order, and issue a single WAL batch + one sync per batch.
+- **Opt-in direct I/O**: set `StoreParams.enable_direct_io` to bypass the OS page
+  cache — Linux `O_DIRECT`, macOS `F_NOCACHE` via `fcntl` (failing loud if the
+  syscall errors). The default (`false`) path is plain `std::fs`, keeping the
+  default build 100% Pure Rust with no `unsafe` fcntl on the hot path.
 
 ### Distributed Transactions & Fault Tolerance
 - **Two-Phase & Three-Phase Commit**: `TwoPhaseParticipant`/`ThreePhaseParticipant` can be constructed via `with_transaction_manager()` so PREPARE/COMMIT/ABORT drive a real WAL-backed `Transaction`, not just protocol bookkeeping
@@ -70,7 +102,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-tdb = "0.3.2"
+oxirs-tdb = "0.4.0"
 ```
 
 ### Basic Usage

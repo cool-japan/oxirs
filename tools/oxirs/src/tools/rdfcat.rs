@@ -2,12 +2,12 @@
 //!
 //! Concatenates multiple RDF files and optionally converts format.
 
-use super::{utils, ToolResult};
+use super::{compression, utils, ToolResult};
 use crate::export::{ExportFormat, Exporter};
 use oxirs_core::format::{FormatHandler, JsonLdProfileSet, RdfFormat as CoreRdfFormat};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::io::{self, Cursor, Read, Write};
+use std::path::{Path, PathBuf};
 
 /// Supported input format detection patterns
 const TURTLE_PATTERNS: &[&str] = &["@prefix", "@base", "a ", " a ", ":"];
@@ -15,58 +15,54 @@ const NTRIPLES_PATTERNS: &[&str] = &["<", "> <", "> \"", "> .", "_:"];
 const RDFXML_PATTERNS: &[&str] = &["<?xml", "<rdf:", "xmlns"];
 const JSONLD_PATTERNS: &[&str] = &["@context", "@id", "@type", "@graph"];
 
-/// Detect RDF format from file content
-fn detect_format(file_path: &PathBuf) -> Result<ExportFormat, Box<dyn std::error::Error>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-
-    // Read first few lines to detect format
-    let mut sample_lines = Vec::new();
-    for (i, line_result) in reader.lines().enumerate() {
-        if i >= 10 {
-            break;
-        } // Only check first 10 lines
-        let line = line_result?;
-        sample_lines.push(line.to_lowercase());
-    }
-
-    let content = sample_lines.join(" ");
+/// Detect RDF format from a decompressed content sample (first 10 lines).
+///
+/// Operating on the already-decompressed content means `.gz` inputs are
+/// classified from their real inner content, not the gzip wrapper.
+fn detect_format_from_content(content: &str, file_path: &Path) -> ExportFormat {
+    // Only the first 10 lines are needed to classify the format.
+    let sample = content
+        .lines()
+        .take(10)
+        .map(|line| line.to_lowercase())
+        .collect::<Vec<_>>()
+        .join(" ");
 
     // Check for JSON-LD first (most specific)
     if JSONLD_PATTERNS
         .iter()
-        .any(|pattern| content.contains(pattern))
+        .any(|pattern| sample.contains(pattern))
     {
-        return Ok(ExportFormat::JsonLd);
+        return ExportFormat::JsonLd;
     }
 
     // Check for RDF/XML
     if RDFXML_PATTERNS
         .iter()
-        .any(|pattern| content.contains(pattern))
+        .any(|pattern| sample.contains(pattern))
     {
-        return Ok(ExportFormat::RdfXml);
+        return ExportFormat::RdfXml;
     }
 
     // Check for Turtle
     if TURTLE_PATTERNS
         .iter()
-        .any(|pattern| content.contains(pattern))
+        .any(|pattern| sample.contains(pattern))
     {
-        return Ok(ExportFormat::Turtle);
+        return ExportFormat::Turtle;
     }
 
     // Check for N-Triples (most generic, check last)
     if NTRIPLES_PATTERNS
         .iter()
-        .any(|pattern| content.contains(pattern))
+        .any(|pattern| sample.contains(pattern))
     {
-        return Ok(ExportFormat::NTriples);
+        return ExportFormat::NTriples;
     }
 
     // Default to Turtle if unable to detect
     eprintln!("Warning: Unable to detect format for {file_path:?}, assuming Turtle");
-    Ok(ExportFormat::Turtle)
+    ExportFormat::Turtle
 }
 
 /// Parse format string to ExportFormat
@@ -114,13 +110,20 @@ fn export_format_to_core(format: ExportFormat) -> CoreRdfFormat {
 /// handlers (Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD). Every
 /// triple returned here comes from the file's actual content — no
 /// placeholder/synthesized triples are ever emitted.
-fn read_rdf_file(file_path: &PathBuf) -> Result<Vec<RdfTriple>, Box<dyn std::error::Error>> {
-    let format = detect_format(file_path)?;
+fn read_rdf_file(file_path: &Path) -> Result<Vec<RdfTriple>, Box<dyn std::error::Error>> {
+    // Transparent decompression: `.gz` inputs are inflated on the fly via the
+    // crate's single compression module; plain files pass through unchanged.
+    // Corrupt gzip surfaces an explicit error. Decompress once, then reuse the
+    // same bytes for both format detection and real parsing.
+    let mut reader = compression::open_reader(file_path)?;
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
+
+    let format = detect_format_from_content(&String::from_utf8_lossy(&bytes), file_path);
     let core_format = export_format_to_core(format);
 
-    let file = File::open(file_path)?;
     let handler = FormatHandler::new(core_format);
-    let parsed = handler.parse_triples(file).map_err(|e| {
+    let parsed = handler.parse_triples(Cursor::new(bytes)).map_err(|e| {
         format!(
             "Failed to parse '{}' as {:?}: {e}",
             file_path.display(),
@@ -319,6 +322,37 @@ mod tests {
                 "must not emit the old fabricated placeholder predicate"
             );
         }
+        assert!(triples.iter().any(|t| t.subject.contains("alice")));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Transparent `.gz` handling: a gzipped Turtle file must be inflated on
+    /// the fly and its real triples parsed, exactly as an uncompressed file.
+    #[test]
+    fn test_read_rdf_file_transparent_gzip() {
+        use std::io::Write;
+
+        let path = unique_temp_path("gz_turtle", "ttl.gz");
+        {
+            let mut writer = compression::open_writer(&path, compression::CompressionFormat::Gzip)
+                .expect("open gzip writer");
+            writer
+                .write_all(
+                    b"@prefix ex: <http://example.org/> .\n\
+                      ex:alice ex:knows ex:bob .\n\
+                      ex:bob ex:knows ex:carol .\n",
+                )
+                .expect("write turtle payload");
+            writer.flush().expect("flush gzip writer");
+        }
+
+        let triples = read_rdf_file(&path).expect("gzipped turtle should parse transparently");
+        assert_eq!(
+            triples.len(),
+            2,
+            "gzipped turtle must be decompressed and its real triples parsed"
+        );
         assert!(triples.iter().any(|t| t.subject.contains("alice")));
 
         let _ = std::fs::remove_file(&path);

@@ -1,12 +1,12 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: v0.3.2 — in development on branch `0.3.2`, last verified 2026-07-12
+**Status**: v0.4.0 — release preparation on branch `0.4.0`, last verified 2026-07-17
 
-**Tests**: 1799 passed, 0 failed (`cargo nextest run -p oxirs --all-features`)
+**Tests**: 1268 passed, 0 failed (`cargo nextest run -p oxirs`)
 
 ⚡ **Production-Ready**: APIs are stable and tested. Ready for production use with comprehensive documentation.
 
@@ -16,11 +16,14 @@
 
 This crate is an end-user CLI application, not a published library: `Cargo.toml` sets `publish = false` so it can depend on `publish = false` quarantine adapter crates (for optional GPU/CUDA, GEOS, DuckDB, and Kafka/Pulsar integrations) without putting C FFI on the published Pure-Rust dependency surface. It ships as a release binary built from source rather than via `cargo install oxirs` from crates.io — see [Installation](#installation).
 
-## What's New in v0.3.2 (2026-07-11)
+## What's New in v0.4.0 (2026-07-17)
 
-- **Pure-Rust Policy v2**: six previously in-tree C-FFI integrations (NVIDIA GPU monitoring, GEOS, DuckDB, Kafka, Pulsar) were extracted into separate `publish = false` adapter crates. This CLI's optional `tsdb-duckdb` feature now depends on the `oxirs-tsdb-adapter-duckdb` bridge crate instead of an in-tree DuckDB integration
-- **SHACL improvements reach `oxirs shacl`**: `sh:class` and implicit-class targets now honor `rdfs:subClassOf` closure instead of exact-type matching only
-- **Dependency refresh**: SciRS2 0.6.0, oxiarc-* 0.3.5, oxicrypto/oxitls 0.2.0
+- **New subcommands**: `lint` (RDF/Turtle issue scanner), `merge` (set-union with blank-node renaming, conflict detection, optional provenance), `jena-parity` (OxiRS-vs-Apache-Jena feature-parity report), `monitor` (poll a **remote** SPARQL endpoint for latency/uptime/P95 — distinct from `performance monitor`, which samples the local process), `detect-format` (RDF format detection by extension/content/magic bytes with a confidence score), and `inspect` (consolidated data profiler: counts, namespaces, top predicates/classes, connectivity, object-type distribution, data-quality checks)
+- **Command extensions**: `serve --dry-run` (validate config + report the bind address without opening a socket), `schema-gen --advanced` (subclass-hierarchy / domain-range / cardinality inference emitting OWL/RDFS), `history export-csv` and `history similar` (query-similarity ranking), and `profile … --flamegraph <svg>` (SVG flamegraph output)
+- **Honesty fix**: `generate --schema <file>` now actually parses the supplied SHACL/RDFS/OWL schema and generates conforming data, instead of emitting hardcoded `example.org` sample data regardless of the schema. Over two dozen dead/simulated/duplicate command modules (fake transaction simulators, simulated SHACL validation, simulated query/benchmark runners) were removed so every subcommand runs against real data
+- **Transparent `.gz` I/O**: `import`, `riot`, and `rdfcat` inflate gzipped inputs on the fly (format detected from the inner name, so `data.ttl.gz` parses as Turtle), `riot` gzip-compresses `--output *.gz`, and `tdbbackup` writes a genuine gzip archive restored by magic-byte sniffing — all through a single `oxiarc-deflate`-backed gzip path
+- **Interactive REPL**: new meta-commands `:bookmark`, `:export`, `:diagram`, `:dataset`, `:visual`, `:hsearch`, plus schema-aware completion
+- **SHACL improvements reach `oxirs shacl`** (from 0.3.2): `sh:class` and implicit-class targets honor `rdfs:subClassOf` closure instead of exact-type matching only
 
 See the [workspace CHANGELOG](../../CHANGELOG.md) for the complete list of engine-level changes shipping in this release.
 
@@ -173,6 +176,13 @@ oxirs infer data.ttl --profile rdfs --output inferred.ttl
 
 # Generate a SHACL/ShEx/OWL schema from existing data
 oxirs schema-gen data.ttl --schema-type shacl --output schema.ttl --stats
+
+# Advanced inferencer: subclass-hierarchy / domain-range / cardinality (emits OWL/RDFS)
+oxirs schema-gen data.ttl --schema-type owl --advanced --output schema.ttl
+
+# Lint an RDF/Turtle document for common issues (empty/undeclared prefixes,
+# duplicate triples, over-long literals, deprecated predicates)
+oxirs lint data.ttl --max-literal-length 200 --strict
 ```
 
 ### Query Operations
@@ -251,6 +261,10 @@ oxirs history search "SELECT"
 oxirs history stats
 oxirs history analytics --dataset mydata
 oxirs history clear
+
+# Export history to CSV, or find past queries similar to a given one
+oxirs history export-csv --output history.csv
+oxirs history similar "SELECT * WHERE { ?s ?p ?o }" --top 5
 ```
 
 ### Server & Configuration
@@ -259,6 +273,12 @@ oxirs history clear
 # Start SPARQL server (config file or dataset directory), optionally with GraphQL
 oxirs serve mydata/oxirs.toml --port 3030
 oxirs serve mydata --host 0.0.0.0 --port 8080 --graphql
+
+# Validate the config and report the bind address without opening any socket
+oxirs serve mydata/oxirs.toml --port 3030 --dry-run
+
+# Monitor a REMOTE SPARQL endpoint's latency, uptime, and P95 over HTTP
+oxirs monitor http://localhost:3030/ds/sparql --count 10 --interval 30 --threshold 5000
 
 # Generate / validate / inspect a configuration file
 oxirs config init --output oxirs.toml
@@ -281,6 +301,22 @@ oxirs rdf-copy data.rdf data.ttl --source-format rdfxml --target-format turtle
 
 # Compare two RDF datasets/files
 oxirs rdf-diff old.ttl new.ttl --format text
+
+# Merge multiple RDF files (set-union with blank-node renaming; optional provenance)
+oxirs merge a.ttl b.ttl --output merged.ttl --format turtle --provenance
+
+# Detect the serialization format of a file (extension + content + magic bytes)
+oxirs detect-format data.unknown
+
+# Inspect an RDF file: counts, namespaces, top predicates/classes, connectivity,
+# object-type distribution, and data-quality checks
+oxirs inspect data.ttl --top 20 --format text
+
+# Report OxiRS vs. Apache Jena feature-parity summary
+oxirs jena-parity --format text
+
+# gzipped inputs are inflated transparently (format detected from the inner name)
+oxirs riot data.ttl.gz --output ntriples --out data.nt.gz --count
 ```
 
 ### Storage (TDB) Tools
@@ -422,6 +458,7 @@ oxirs performance advisor --help
 
 # SPARQL query profiler with latency statistics
 oxirs profile run --dataset mydata --query query.sparql --file --iterations 10
+oxirs profile run --dataset mydata --query query.sparql --file --flamegraph profile.svg
 
 # RDF graph analytics (pagerank, community, betweenness, closeness, degree, paths, stats)
 oxirs graph-analytics mydata --operation pagerank --top 20

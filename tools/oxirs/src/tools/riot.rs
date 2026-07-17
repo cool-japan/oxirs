@@ -8,11 +8,12 @@
 //! Every parsed quad comes from real content; `--validate` counts one real
 //! parse error per malformed statement rather than silently skipping it.
 
+use super::compression::{self, CompressionFormat};
 use super::{utils, ToolResult, ToolStats};
 use oxirs_core::format::serializer::simple::serialize_quads_to_string;
 use oxirs_core::format::{JsonLdProfileSet, RdfFormat as CoreRdfFormat, RdfParser};
 use oxirs_core::model::Quad;
-use std::io::Cursor;
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 
 /// Run riot command - RDF parsing and serialization
@@ -66,10 +67,12 @@ pub async fn run(
         // Check file readability
         utils::check_file_readable(input_file)?;
 
-        // Detect input format
-        let input_format = syntax
-            .clone()
-            .unwrap_or_else(|| utils::detect_rdf_format(input_file));
+        // Detect input format. For transparent `.gz` handling the compression
+        // suffix is stripped first so `data.ttl.gz` is detected from its inner
+        // `.ttl` name rather than the `.gz` wrapper.
+        let input_format = syntax.clone().unwrap_or_else(|| {
+            utils::detect_rdf_format(&compression::strip_compression_suffix(input_file))
+        });
         println!("  Input format: {input_format}");
 
         if !utils::is_supported_input_format(&input_format) {
@@ -130,9 +133,10 @@ pub async fn run(
         println!("\nCount Results:");
         println!("  Total triples/quads: {total_triples}");
     } else {
-        // Write output
+        // Write output, transparently gzip-compressing when `--output` ends in
+        // `.gz`.
         if !all_output.is_empty() {
-            utils::write_output(&all_output, output_file.as_deref())?;
+            write_rdf_output(&all_output, output_file.as_deref())?;
 
             if let Some(ref output_path) = output_file {
                 println!("Output written to: {}", output_path.display());
@@ -162,8 +166,8 @@ fn process_rdf_file(
     validate_only: bool,
     count_only: bool,
 ) -> ToolResult<ProcessResult> {
-    // Read file content
-    let content = utils::read_input(file_path)?;
+    // Read file content, transparently decompressing `.gz` inputs.
+    let content = read_rdf_source(file_path)?;
 
     // Parse RDF content via the real oxirs-core format parser
     let (quads, errors) = parse_rdf_content(&content, input_format, base_uri)?;
@@ -248,6 +252,43 @@ fn serialize_rdf_content(quads: &[Quad], format: &str) -> ToolResult<String> {
         .map_err(|e| format!("Failed to serialize as '{format}': {e}").into())
 }
 
+/// Read an RDF source file, transparently decompressing a gzipped (`.gz`)
+/// input via the crate's single compression module. Plain files (and stdin
+/// `-`) fall back to `utils::read_input`. Corrupt gzip surfaces an explicit
+/// error rather than fabricated content.
+fn read_rdf_source(path: &Path) -> ToolResult<String> {
+    if CompressionFormat::from_path(path) == CompressionFormat::Gzip {
+        let mut reader = compression::open_reader(path)?;
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes)?;
+        return String::from_utf8(bytes)
+            .map_err(|e| format!("decompressed input is not valid UTF-8: {e}").into());
+    }
+    utils::read_input(path)
+}
+
+/// Write serialized RDF output, transparently gzip-compressing when the output
+/// path ends in `.gz`. All other destinations (including stdout `-`) go through
+/// `utils::write_output` unchanged.
+fn write_rdf_output(content: &str, output_file: Option<&Path>) -> ToolResult<()> {
+    if let Some(path) = output_file {
+        if path.to_str() != Some("-")
+            && CompressionFormat::from_path(path) == CompressionFormat::Gzip
+        {
+            if let Some(parent) = path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)?;
+                }
+            }
+            let mut writer = compression::open_writer(path, CompressionFormat::Gzip)?;
+            writer.write_all(content.as_bytes())?;
+            writer.flush()?;
+            return Ok(());
+        }
+    }
+    utils::write_output(content, output_file)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,5 +355,62 @@ mod tests {
     fn test_unsupported_format_errors() {
         assert!(parse_rdf_content("", "bogus-format", None).is_err());
         assert!(serialize_rdf_content(&[], "bogus-format").is_err());
+    }
+
+    /// Transparent `.gz` handling end to end: read a gzipped Turtle input,
+    /// detect its format from the inner `.ttl` name, and write a gzipped
+    /// N-Triples output that is a real gzip stream and reparses to the same
+    /// triples.
+    #[test]
+    fn test_riot_transparent_gzip_round_trip() {
+        use std::env::temp_dir;
+
+        let unique = format!("{}_{}", std::process::id(), line!());
+        let dir = temp_dir().join(format!("oxirs_riot_gz_{unique}"));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        let turtle = "@prefix ex: <http://example.org/> .\n\
+             ex:alice ex:knows ex:bob .\n\
+             ex:bob ex:knows ex:carol .\n";
+        let in_path = dir.join("data.ttl.gz");
+        {
+            let mut w =
+                compression::open_writer(&in_path, CompressionFormat::Gzip).expect("gz writer");
+            w.write_all(turtle.as_bytes()).expect("write turtle");
+            w.flush().expect("flush gz writer");
+        }
+
+        // Format detection must see the inner `.ttl` name through `.gz`.
+        let fmt = utils::detect_rdf_format(&compression::strip_compression_suffix(&in_path));
+        assert_eq!(fmt, "turtle");
+
+        // Transparent read + parse of the gzipped input.
+        let content = read_rdf_source(&in_path).expect("read gz turtle");
+        let (quads, errors) = parse_rdf_content(&content, &fmt, None).expect("parse");
+        assert_eq!(errors, 0);
+        assert_eq!(quads.len(), 2);
+
+        // Serialize to N-Triples and write a gzipped output through the same
+        // single compression module.
+        let serialized = serialize_rdf_content(&quads, "ntriples").expect("serialize");
+        let out_path = dir.join("out.nt.gz");
+        write_rdf_output(&serialized, Some(&out_path)).expect("write gz output");
+
+        // The output file must be a real gzip stream (magic 0x1f 0x8b).
+        let raw = std::fs::read(&out_path).expect("read raw output");
+        assert!(raw.len() >= 2, "gzip output too small");
+        assert_eq!(
+            &raw[..2],
+            &[0x1f, 0x8b],
+            "riot .gz output must be a real gzip stream"
+        );
+
+        // Read the gzipped output back and reparse: round-trip must be lossless.
+        let back = read_rdf_source(&out_path).expect("read gz output");
+        let (reparsed, reerr) = parse_rdf_content(&back, "ntriples", None).expect("reparse");
+        assert_eq!(reerr, 0);
+        assert_eq!(reparsed.len(), 2);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

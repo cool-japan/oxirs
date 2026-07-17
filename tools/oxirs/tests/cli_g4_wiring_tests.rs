@@ -147,10 +147,13 @@ async fn test_schemagen_advanced_infers_owl() {
         result.err()
     );
     assert!(schema.contains("owl:Class"), "schema: {schema}");
+    // The sample types instances as foaf:Person, so that is the inferred class.
     assert!(
-        schema.contains("http://example.org/Person"),
+        schema.contains("http://xmlns.com/foaf/0.1/Person"),
         "schema: {schema}"
     );
+    // Advanced inferencer emits domain/range that plain SHACL generation omits.
+    assert!(schema.contains("rdfs:domain"), "schema: {schema}");
 }
 
 #[tokio::test]

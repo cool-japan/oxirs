@@ -195,6 +195,14 @@ SPARQL query execution never returns HTTP 200 with a silently-empty result on fa
 - A query that parses but fails during **execution** (unsupported construct, store error, federation failure, etc.) returns HTTP 500 with an error message.
 - `SELECT`, `ASK`, `CONSTRUCT`, and `DESCRIBE` all execute through the real oxirs-arq engine (`handlers/sparql/arq_exec.rs`) via a single parse-once dispatch — including `GRAPH`/`FROM`/`FROM NAMED` named-graph scoping, `SERVICE` HTTP federation, and aggregate/`HAVING` projections. There is no legacy "demo" fallback path left in the SELECT/ASK/CONSTRUCT/DESCRIBE handlers that could return 200 OK with an empty body on an unrecognized or unsupported query.
 
+Status-code guarantees, made precise (v0.4.0):
+
+- **Parse / validation errors are 400, not 500 or 200.** A malformed aggregate call inside `HAVING` — a wrong-arity aggregate such as `SUM()` or `COUNT(?a, ?b)` — is caught at parse time and returns HTTP 400, rather than parsing cleanly and failing deep in execution. The same wrong-arity check applies to aggregate projections in the `SELECT` list.
+- **A genuinely undefined function fails the whole query loudly.** An unknown function inside a `FILTER` or `HAVING` raises a typed `UnknownFunctionError` that surfaces as a 5xx, instead of being swallowed per row and silently shrinking the result set (a 200 with dropped rows).
+- **No 200 with wrong or fabricated data in the result body.** The SPARQL Results JSON term serializer (`arq_exec::term_to_json`) is exhaustive over the arq term type: an RDF-star quoted triple serializes as `{"type":"triple","value":{"subject":…,"predicate":…,"object":…}}` (recursing per position), and a property-path term — which can never be a legitimate solution binding — is a 500 fail-loud error rather than a fabricated `Debug`-string literal.
+
+`DESCRIBE` semantics: the response is a **symmetric** Concise Bounded Description of each described node — both its outgoing arcs (`node ?p ?o`) and its incoming/object-side arcs (`?s ?p node`), recursing through blank nodes in both directions with a visited-set so cycles terminate. `DESCRIBE` honors `FROM` / `FROM NAMED` dataset scoping (with no `FROM`, it reads the default graph only); auto-unioning every named graph for an unscoped `DESCRIBE` is a deliberate non-goal.
+
 ## Advanced Features
 
 ### Multi-Dataset Hosting

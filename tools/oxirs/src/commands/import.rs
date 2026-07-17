@@ -12,7 +12,7 @@ use oxirs_core::model::{GraphName, NamedNode, Quad};
 use oxirs_core::rdf_store::RdfStore;
 use oxirs_tdb::TdbStore;
 use std::fs;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -96,8 +96,12 @@ pub async fn run(
     ctx.info(&format!("Source file: {}", file.display()));
     ctx.info(&format!("Backend: {dataset_type}"));
 
-    // Detect format if not specified
-    let detected_format = format.unwrap_or_else(|| detect_format(&file));
+    // Detect format if not specified. For transparent `.gz` handling the
+    // compression suffix is stripped first, so `data.ttl.gz` is detected as
+    // Turtle from its inner name rather than defaulting on the `.gz` wrapper.
+    let detected_format = format.unwrap_or_else(|| {
+        detect_format(&crate::tools::compression::strip_compression_suffix(&file))
+    });
     ctx.info(&format!("Format: {detected_format}"));
 
     if let Some(g) = &graph {
@@ -193,7 +197,10 @@ pub async fn run(
                 dataset_path.display()
             )
         })?;
-        let file_handle = fs::File::open(&file)?;
+        // Transparent decompression: `.gz` inputs are inflated on the fly via
+        // the crate's single gzip implementation; plain files pass through
+        // unchanged. Corrupt gzip surfaces an explicit error here.
+        let file_handle = crate::tools::compression::open_reader(&file)?;
 
         let result = parse_and_import_tdb2(
             &mut store,
@@ -222,7 +229,8 @@ pub async fn run(
         } else {
             return Err(error_helpers::dataset_not_found_error(&dataset));
         };
-        let file_handle = fs::File::open(&file)?;
+        // Transparent decompression (see the tdb2 branch above).
+        let file_handle = crate::tools::compression::open_reader(&file)?;
 
         let result = parse_and_import(
             &mut store,
@@ -483,14 +491,15 @@ fn flush_pending_chunk_tdb2(
 /// backend so the parsing, target-graph rewriting, resume-skip, and
 /// chunk-size behavior are identical regardless of which store ultimately
 /// receives the data.
-fn parse_and_import_with_sink<F>(
-    file: fs::File,
+fn parse_and_import_with_sink<R, F>(
+    input: R,
     format: &str,
     graph: Option<&str>,
     start_count: usize,
     mut sink: F,
 ) -> Result<(usize, usize), Box<dyn std::error::Error>>
 where
+    R: Read + Send + 'static,
     F: FnMut(Vec<Quad>, usize) -> Result<(), Box<dyn std::error::Error>>,
 {
     // Step 1: Determine RDF format from string
@@ -523,7 +532,7 @@ where
     };
 
     // Step 3: Parse RDF file
-    let reader = BufReader::new(file);
+    let reader = BufReader::new(input);
     let parser = RdfParser::new(rdf_format);
 
     let mut total_parsed = 0; // Total triples parsed (including skipped ones)
@@ -584,9 +593,9 @@ where
 
 /// Parse RDF content and import into an in-memory `RdfStore`.
 #[allow(clippy::too_many_arguments)]
-fn parse_and_import(
+fn parse_and_import<R: Read + Send + 'static>(
     store: &mut RdfStore,
-    file: fs::File,
+    input: R,
     format: &str,
     graph: Option<&str>,
     enable_checkpointing: bool,
@@ -597,7 +606,7 @@ fn parse_and_import(
     start_count: usize,
 ) -> Result<(usize, usize), Box<dyn std::error::Error>> {
     parse_and_import_with_sink(
-        file,
+        input,
         format,
         graph,
         start_count,
@@ -622,9 +631,9 @@ fn parse_and_import(
 /// keeping RAM use bounded to one `CHUNK_SIZE`-sized batch at a time
 /// regardless of total dataset size.
 #[allow(clippy::too_many_arguments)]
-fn parse_and_import_tdb2(
+fn parse_and_import_tdb2<R: Read + Send + 'static>(
     store: &mut TdbStore,
-    file: fs::File,
+    input: R,
     format: &str,
     graph: Option<&str>,
     enable_checkpointing: bool,
@@ -635,7 +644,7 @@ fn parse_and_import_tdb2(
     start_count: usize,
 ) -> Result<(usize, usize), Box<dyn std::error::Error>> {
     parse_and_import_with_sink(
-        file,
+        input,
         format,
         graph,
         start_count,
@@ -708,6 +717,68 @@ mod tests {
             store.len().expect("store len"),
             25,
             "all 25 quads should have been bulk-inserted into the store"
+        );
+
+        std::fs::remove_dir_all(&dataset_dir).ok();
+        std::fs::remove_dir_all(&src_dir).ok();
+    }
+
+    /// Transparent `.gz` handling: a gzipped Turtle file must be inflated on
+    /// the fly, its format detected from the inner `.ttl` name, and every real
+    /// triple imported — exactly as if the file were uncompressed.
+    #[test]
+    fn test_import_transparent_gzip_turtle_round_trip() {
+        use crate::tools::compression::{self, CompressionFormat};
+        use std::io::Write;
+
+        let unique = std::process::id() as u64 * 1_000_003 + line!() as u64;
+        let dataset_dir = std::env::temp_dir().join(format!("oxirs-import-gz-test-{unique}"));
+        let src_dir = std::env::temp_dir().join(format!("oxirs-import-gz-src-{unique}"));
+        std::fs::create_dir_all(&dataset_dir).expect("create temp dataset dir");
+        std::fs::create_dir_all(&src_dir).expect("create temp source dir");
+
+        let turtle = "@prefix ex: <http://example.org/> .\n\
+             ex:alice ex:knows ex:bob .\n\
+             ex:bob ex:knows ex:carol .\n";
+        let gz_path = src_dir.join("data.ttl.gz");
+        {
+            let mut writer = compression::open_writer(&gz_path, CompressionFormat::Gzip)
+                .expect("open gzip writer");
+            writer
+                .write_all(turtle.as_bytes())
+                .expect("write turtle payload");
+            writer.flush().expect("flush gzip writer");
+        }
+
+        // Format detection must see the inner `.ttl` name through the `.gz`
+        // wrapper, not default because of the `.gz` extension.
+        let detected = detect_format(&compression::strip_compression_suffix(&gz_path));
+        assert_eq!(detected, "turtle");
+
+        let mut store = RdfStore::open(&dataset_dir).expect("open store");
+        let checkpoint_manager = CheckpointManager::new().expect("create checkpoint manager");
+        let reader = compression::open_reader(&gz_path).expect("open gzip reader");
+
+        let (parsed, errors) = parse_and_import(
+            &mut store,
+            reader,
+            &detected,
+            None,
+            false,
+            &checkpoint_manager,
+            "test-dataset",
+            &gz_path,
+            0,
+            0,
+        )
+        .expect("parse_and_import should succeed on gzipped turtle");
+
+        assert_eq!(parsed, 2);
+        assert_eq!(errors, 0);
+        assert_eq!(
+            store.len().expect("store len"),
+            2,
+            "gzipped turtle triples must be imported transparently"
         );
 
         std::fs::remove_dir_all(&dataset_dir).ok();

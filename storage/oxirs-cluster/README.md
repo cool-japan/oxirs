@@ -13,6 +13,7 @@ A high-performance, distributed RDF storage system using Raft consensus for hori
 ## Features
 
 - **Raft Consensus**: Strong consistency with automated leader election and log replication
+- **Byzantine Fault Tolerance (opt-in)**: a closed-loop PBFT path behind the `bft` feature and `NodeConfig.use_bft` (v0.4.0) — commits are idempotent (extra commits past quorum never re-execute), a committed `RdfCommand` is applied to the real storage backend and returns a real `RdfResponse`, and `process_request` completes on a genuine 2f+1 quorum via a `(client_id, timestamp)`-keyed commit callback (configurable timeout). Requesting `use_bft` on a build compiled without the `bft` feature fails loud rather than silently downgrading
 - **Horizontal Scaling**: Linear performance scaling to 1000+ nodes
 - **High Availability**: 99.9% uptime with automatic failover
 - **Distributed RDF Storage**: Efficient partitioning and indexing of RDF triples
