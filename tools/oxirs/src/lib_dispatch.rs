@@ -68,9 +68,36 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             port,
             host,
             graphql,
-        } => crate::commands::serve::run(config, port, host, graphql)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            dry_run,
+        } => {
+            if dry_run {
+                use crate::commands::serve_command::{ServeCommand, ServeConfig, ServeOutcome};
+
+                let serve_config = ServeConfig::new()
+                    .with_host(&host)
+                    .with_port(port)
+                    .with_config_file(&config.to_string_lossy());
+                println!("Server configuration (dry-run — no sockets opened):");
+                println!("{}", serve_config.summary());
+
+                match ServeCommand::new().dry_run(&serve_config) {
+                    ServeOutcome::Started { bind_addr } => {
+                        println!("Configuration valid. Server would bind to: {bind_addr}");
+                        Ok(())
+                    }
+                    ServeOutcome::ConfigError(msg) => {
+                        Err(format!("Invalid server configuration: {msg}").into())
+                    }
+                    ServeOutcome::AlreadyRunning => {
+                        Err("A server instance is already running on this address".into())
+                    }
+                }
+            } else {
+                crate::commands::serve::run(config, port, host, graphql)
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+            }
+        }
         Commands::Import {
             dataset,
             file,
@@ -999,5 +1026,259 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             .await
             .map_err(|e| e.into()),
         },
+
+        Commands::Lint {
+            file,
+            format,
+            max_literal_length,
+            strict,
+        } => run_lint(file, format, max_literal_length, strict),
+
+        Commands::Merge {
+            inputs,
+            output,
+            mode,
+            format,
+            dry_run,
+            provenance,
+        } => run_merge(inputs, output, mode, format, dry_run, provenance),
+
+        Commands::JenaParity { format } => run_jena_parity(&format),
+
+        Commands::Monitor {
+            endpoint,
+            interval,
+            count,
+            timeout,
+            threshold,
+        } => {
+            crate::commands::monitor_command::run(endpoint, interval, count, timeout, threshold)
+                .await
+        }
+
+        Commands::DetectFormat { file, output } => {
+            crate::tools::format_detection::detect_format_command(file, ctx.verbose, output)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        }
     }
+}
+
+/// Lint a Turtle/RDF file and print a rule-based report.
+///
+/// With `strict`, the command exits with an error status when any
+/// error-severity issue is found so it can gate CI pipelines.
+fn run_lint(
+    file: std::path::PathBuf,
+    format: String,
+    max_literal_length: usize,
+    strict: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::commands::lint_command::{LintCommand, LintConfig, LintSeverity};
+
+    let fmt = format.to_lowercase();
+    if fmt != "turtle" && fmt != "ttl" {
+        return Err(format!(
+            "lint: unsupported format '{format}' (only turtle is currently supported)"
+        )
+        .into());
+    }
+
+    if !file.exists() {
+        return Err(format!("lint: file not found: {}", file.display()).into());
+    }
+
+    let content = std::fs::read_to_string(&file)
+        .map_err(|e| format!("lint: cannot read {}: {e}", file.display()))?;
+
+    let config = LintConfig {
+        max_literal_length,
+        ..LintConfig::default()
+    };
+
+    let result = LintCommand::lint_ttl(&content, &file.to_string_lossy(), &config);
+
+    if result.issues.is_empty() {
+        println!("{}: no issues found", file.display());
+    } else {
+        for issue in &result.issues {
+            let severity = match issue.severity {
+                LintSeverity::Error => "error",
+                LintSeverity::Warning => "warning",
+                LintSeverity::Info => "info",
+            };
+            match issue.line {
+                Some(line) => {
+                    println!("{}:{line}: {severity}: {}", file.display(), issue.message)
+                }
+                None => println!("{}: {severity}: {}", file.display(), issue.message),
+            }
+        }
+    }
+
+    println!("{}", LintCommand::summary(std::slice::from_ref(&result)));
+
+    let error_count = LintCommand::error_count(std::slice::from_ref(&result));
+    if strict && error_count > 0 {
+        return Err(format!("lint: {error_count} error-severity issue(s) found").into());
+    }
+
+    Ok(())
+}
+
+/// Merge multiple RDF files into one, printing statistics and conflicts and
+/// writing (or printing) the merged output.
+fn run_merge(
+    inputs: Vec<std::path::PathBuf>,
+    output: Option<std::path::PathBuf>,
+    mode: String,
+    format: String,
+    dry_run: bool,
+    provenance: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::commands::merge_command::{MergeArgs, MergeCommand, MergeMode, OutputFormat};
+
+    let merge_mode = match mode.to_lowercase().as_str() {
+        "set-union" | "setunion" | "union" => MergeMode::SetUnion,
+        "with-provenance" | "provenance" => MergeMode::WithProvenance,
+        other => {
+            return Err(format!(
+                "merge: unknown mode '{other}' (expected 'set-union' or 'with-provenance')"
+            )
+            .into())
+        }
+    };
+
+    let output_format = match format.to_lowercase().as_str() {
+        "turtle" | "ttl" => OutputFormat::Turtle,
+        "ntriples" | "nt" => OutputFormat::NTriples,
+        "nquads" | "nq" => OutputFormat::NQuads,
+        "rdfxml" | "rdf" | "xml" => OutputFormat::RdfXml,
+        other => return Err(format!(
+            "merge: unknown output format '{other}' (expected turtle, ntriples, nquads, or rdfxml)"
+        )
+        .into()),
+    };
+
+    let sources: Vec<String> = inputs
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let output_str = output.as_ref().map(|p| p.to_string_lossy().into_owned());
+
+    let args = MergeArgs {
+        sources,
+        output: output_str.clone(),
+        output_format,
+        mode: merge_mode,
+        dry_run,
+        track_provenance: provenance,
+    };
+
+    let result = MergeCommand::new()
+        .execute(&args)
+        .map_err(|e| format!("merge: {e}"))?;
+
+    println!("Merge summary:");
+    println!("  Total triples     : {}", result.stats.total_triples);
+    println!("  Duplicates removed: {}", result.stats.duplicates_removed);
+    println!("  Conflicts found   : {}", result.stats.conflicts_found);
+    println!(
+        "  Blank nodes renamed: {}",
+        result.stats.total_blank_nodes_renamed
+    );
+    for src in &result.stats.source_stats {
+        println!(
+            "    - {} : {} triple(s), {} blank node(s) renamed",
+            src.source, src.triple_count, src.blank_nodes_renamed
+        );
+    }
+
+    if !result.conflicts.is_empty() {
+        println!("Conflicts (same subject+predicate, differing objects):");
+        for conflict in &result.conflicts {
+            println!(
+                "  {} {} -> {}",
+                conflict.subject,
+                conflict.predicate,
+                conflict.objects.join(", ")
+            );
+        }
+    }
+
+    if result.dry_run {
+        println!("Dry run: no output written.");
+        return Ok(());
+    }
+
+    match (output_str, result.output_text) {
+        (Some(path), Some(text)) => {
+            std::fs::write(&path, text)
+                .map_err(|e| format!("merge: cannot write output {path}: {e}"))?;
+            println!("Merged output written to: {path}");
+        }
+        (None, Some(text)) => {
+            println!("{text}");
+        }
+        (_, None) => {
+            return Err("merge: no output produced".into());
+        }
+    }
+
+    Ok(())
+}
+
+/// Print the OxiRS vs. Apache Jena parity summary in the requested format.
+fn run_jena_parity(format: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::commands::jena_parity::JenaParityChecker;
+
+    let checker = JenaParityChecker::full_comparison();
+    let summary = checker.summary();
+
+    match format.to_lowercase().as_str() {
+        "text" => {
+            println!("OxiRS vs. Apache Jena — Feature Parity Summary");
+            println!("{:-<60}", "");
+            println!("Total features tracked      : {}", summary.total_features);
+            println!("Jena features (full parity) : {}", summary.implemented);
+            println!("Jena features (partial)     : {}", summary.partial);
+            println!("Jena features missing       : {}", summary.not_implemented);
+            println!("Beyond-Jena extensions      : {}", summary.beyond_jena);
+            println!(
+                "Jena features total         : {}",
+                summary.jena_features_total
+            );
+            println!(
+                "Jena parity (full)          : {:.1}%",
+                summary.jena_parity_percentage()
+            );
+            println!(
+                "Weighted coverage           : {:.1}%",
+                checker.weighted_coverage_percentage()
+            );
+        }
+        "markdown" | "md" => {
+            print!("{}", checker.generate_report());
+        }
+        "json" => {
+            let json = serde_json::json!({
+                "total_features": summary.total_features,
+                "implemented": summary.implemented,
+                "partial": summary.partial,
+                "not_implemented": summary.not_implemented,
+                "beyond_jena": summary.beyond_jena,
+                "jena_features_total": summary.jena_features_total,
+                "jena_parity_percentage": summary.jena_parity_percentage(),
+                "weighted_coverage_percentage": checker.weighted_coverage_percentage(),
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        other => {
+            return Err(format!(
+                "jena-parity: unknown format '{other}' (expected text, markdown, or json)"
+            )
+            .into())
+        }
+    }
+
+    Ok(())
 }

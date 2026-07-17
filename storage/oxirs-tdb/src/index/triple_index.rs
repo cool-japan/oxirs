@@ -143,6 +143,47 @@ impl TripleIndexes {
         Ok(is_new)
     }
 
+    /// Bulk-insert triples with per-index sorted, sequential leaf appends (F6).
+    ///
+    /// Each of the three indexes is fed the whole batch pre-sorted **in its own
+    /// key order** — SPO by `(s, p, o)`, POS by `(p, o, s)`, OSP by `(o, s, p)`
+    /// (the key newtypes' derived `Ord` is exactly that ordering) — so the
+    /// underlying B+Tree receives monotonically non-decreasing keys and appends
+    /// to the right-most leaf instead of performing scattered random-order
+    /// splits. This is the sorted-build core behind
+    /// [`TdbStore::insert_triples_bulk`](crate::store::TdbStore::insert_triples_bulk).
+    ///
+    /// Returns the number of genuinely new triples: duplicates within the batch,
+    /// and triples already present in the tree, are not counted (the SPO index
+    /// carries the authoritative new/duplicate signal), so the caller can keep an
+    /// accurate triple count. The three indexes remain mutually consistent
+    /// because each receives the identical multiset and the B+Tree de-duplicates
+    /// keys.
+    pub fn insert_sorted(&mut self, triples: &[Triple]) -> Result<usize> {
+        let mut spo_keys: Vec<SpoKey> = triples.iter().map(|t| (*t).into()).collect();
+        spo_keys.sort_unstable();
+        let mut new_count = 0usize;
+        for key in spo_keys {
+            if self.spo.insert(key)? {
+                new_count += 1;
+            }
+        }
+
+        let mut pos_keys: Vec<PosKey> = triples.iter().map(|t| (*t).into()).collect();
+        pos_keys.sort_unstable();
+        for key in pos_keys {
+            self.pos.insert(key)?;
+        }
+
+        let mut osp_keys: Vec<OspKey> = triples.iter().map(|t| (*t).into()).collect();
+        osp_keys.sort_unstable();
+        for key in osp_keys {
+            self.osp.insert(key)?;
+        }
+
+        Ok(new_count)
+    }
+
     /// Check if a triple exists (uses SPO index)
     pub fn contains(&self, triple: &Triple) -> Result<bool> {
         self.spo.contains(&(*triple).into())

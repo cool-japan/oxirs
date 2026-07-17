@@ -75,6 +75,10 @@ pub enum Commands {
         /// Enable GraphQL endpoint
         #[arg(long)]
         graphql: bool,
+        /// Validate the server configuration and report the bind address
+        /// without opening any network sockets (does not start the server)
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Import RDF data
     Import {
@@ -827,6 +831,83 @@ pub enum Commands {
     Stream {
         #[command(subcommand)]
         action: StreamAction,
+    },
+
+    /// Lint an RDF/Turtle document for common issues (empty/undeclared prefixes,
+    /// duplicate triples, over-long literals, deprecated predicates)
+    Lint {
+        /// Turtle/RDF file to lint
+        file: PathBuf,
+        /// Input format hint (currently only turtle is linted)
+        #[arg(short, long, default_value = "turtle")]
+        format: String,
+        /// Maximum allowed string-literal length before warning
+        #[arg(long, default_value = "200")]
+        max_literal_length: usize,
+        /// Exit with an error status when any error-severity issue is found
+        #[arg(long)]
+        strict: bool,
+    },
+
+    /// Merge multiple RDF files into one (set-union with blank-node renaming,
+    /// conflict detection, and optional provenance tracking)
+    Merge {
+        /// Input RDF files (.ttl, .nt, .nq, .rdf/.xml)
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        /// Output file path (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Merge mode: set-union or with-provenance
+        #[arg(short, long, default_value = "set-union")]
+        mode: String,
+        /// Output format (turtle, ntriples, nquads, rdfxml)
+        #[arg(short, long, default_value = "turtle")]
+        format: String,
+        /// Compute and report the merge plan without writing output
+        #[arg(long)]
+        dry_run: bool,
+        /// Track which source each triple came from
+        #[arg(long)]
+        provenance: bool,
+    },
+
+    /// Report OxiRS vs. Apache Jena feature-parity summary (diagnostic)
+    JenaParity {
+        /// Output format: text (summary), markdown (full report), or json
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Monitor a REMOTE SPARQL endpoint's latency, uptime, and P95 by polling
+    /// it over HTTP (distinct from `oxirs performance monitor`, which samples
+    /// the LOCAL process/dataset)
+    Monitor {
+        /// Remote SPARQL endpoint URL, e.g. http://localhost:3030/ds/sparql
+        endpoint: String,
+        /// Seconds to wait between probes
+        #[arg(long, default_value = "30")]
+        interval: u64,
+        /// Number of probes to perform
+        #[arg(long, default_value = "10")]
+        count: usize,
+        /// Per-probe HTTP timeout in seconds
+        #[arg(long, default_value = "30")]
+        timeout: u64,
+        /// Latency threshold in milliseconds above which a probe is flagged slow
+        #[arg(long, default_value = "5000")]
+        threshold: u64,
+    },
+
+    /// Detect the RDF serialization format of a file (extension, content
+    /// analysis, and magic bytes) with a confidence score. Pass the global
+    /// `--verbose` flag for the detailed confidence/method report.
+    DetectFormat {
+        /// File whose RDF format should be detected
+        file: PathBuf,
+        /// Output format for the detailed report (table, json)
+        #[arg(short, long)]
+        output: Option<String>,
     },
 }
 

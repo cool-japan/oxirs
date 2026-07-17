@@ -21,10 +21,12 @@ use crate::store::store_types::{
     TransactionMetrics,
 };
 use crate::store::store_wal::StoreOp;
+use crate::store::StoreParams;
 use crate::transaction::wal::Lsn;
 use crate::transaction::{LockManager, TransactionManager, WriteAheadLog};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// High-level TDB triple store
 pub struct TdbStore {
@@ -83,6 +85,22 @@ impl TdbStore {
     /// Open or create a TDB store
     pub fn open<P: AsRef<Path>>(data_dir: P) -> Result<Self> {
         let config = TdbConfig::new(data_dir);
+        Self::open_with_config(config)
+    }
+
+    /// Open or create a TDB store honoring a full [`StoreParams`] preset.
+    ///
+    /// `path` is authoritative for the store location (it overrides any
+    /// `data_dir` recorded in `params`). The params are validated and converted
+    /// into the engine [`TdbConfig`] via [`TdbConfig::from_store_params`], which
+    /// threads every honored parameter (buffer-pool size, bloom sizing, query
+    /// cache size, statistics sampling, query-monitor thresholds, compression,
+    /// spatial fan-out, WAL, direct I/O) down to the subsystems. A `page_size`
+    /// other than the compile-time engine page size is rejected.
+    pub fn open_with_params<P: AsRef<Path>>(path: P, params: StoreParams) -> Result<Self> {
+        params.validate()?;
+        let mut config = TdbConfig::from_store_params(&params)?;
+        config.data_dir = path.as_ref().to_path_buf();
         Self::open_with_config(config)
     }
 
@@ -187,9 +205,13 @@ impl TdbStore {
         let lock_manager = Arc::new(LockManager::new());
         let txn_manager = Arc::new(TransactionManager::new(wal, lock_manager));
 
-        // Initialize optional components
+        // Initialize optional components. The bloom filter is sized from the
+        // configured per-index element count (StoreParams::bloom_filter_size_per_index).
         let bloom_filter = if config.enable_bloom_filters {
-            Some(BloomFilter::new(100000, config.bloom_filter_fpr))
+            Some(BloomFilter::new(
+                config.bloom_filter_size_per_index,
+                config.bloom_filter_fpr,
+            ))
         } else {
             None
         };
@@ -200,23 +222,30 @@ impl TdbStore {
             None
         };
 
-        // Initialize query cache
+        // Initialize query cache with the configured capacity.
         let query_cache_config = QueryCacheConfig {
             enabled: config.enable_query_cache,
+            max_entries: config.query_cache_size,
             ..Default::default()
         };
         let query_cache = QueryCache::new(query_cache_config);
 
-        // Initialize statistics collector
+        // Initialize statistics collector. A sample rate below 1.0 turns on
+        // sampling; a full rate collects every event.
         let stats_config = StatisticsConfig {
             enabled: config.enable_statistics,
+            sample_rate: config.statistics_sample_rate,
+            use_sampling: config.statistics_sample_rate < 1.0,
             ..Default::default()
         };
         let statistics = TripleStatistics::new(stats_config);
 
-        // Initialize query monitor
+        // Initialize query monitor with the configured slow-query threshold and
+        // query timeout.
         let monitor_config = QueryMonitorConfig {
             enabled: config.enable_query_monitoring,
+            slow_query_threshold: Duration::from_millis(config.slow_query_threshold_ms),
+            default_timeout: Duration::from_millis(config.query_timeout_ms),
             ..Default::default()
         };
         let query_monitor = QueryMonitor::new(monitor_config);
@@ -224,9 +253,11 @@ impl TdbStore {
         // Initialize diagnostic engine
         let diagnostic_engine = DiagnosticEngine::new();
 
-        // Initialize spatial index
+        // Initialize spatial index with the configured advisory node fan-out.
         let spatial_index = if config.enable_spatial_indexing {
-            Some(SpatialIndex::new())
+            Some(SpatialIndex::with_max_entries(
+                config.spatial_index_max_entries,
+            ))
         } else {
             None
         };
@@ -642,13 +673,23 @@ impl TdbStore {
         self.count() == 0
     }
 
-    /// Bulk insert triples (transactional: all-or-nothing).
+    /// Bulk insert triples with a sorted, sequential-leaf-append build (F6).
     ///
-    /// The whole batch is logged as a *single* WAL transaction (one
-    /// `Begin -> DataOp* -> Commit`, no per-element fsync) and then persisted by
-    /// a single checkpoint, so a bulk load survives a reopen even if the caller
-    /// drops the store without an explicit `sync()`, while keeping fsync cost
-    /// amortized across the batch.
+    /// The batch is loaded in four phases so the B+Trees grow by appending to
+    /// their right-most leaves instead of doing scattered random-order splits:
+    /// (1) all terms are interned up front, (2) each triple is encoded to a
+    /// [`NodeId`] tuple, (3) each of the SPO/POS/OSP indexes is sorted **in its
+    /// own key order**, and (4) inserted in that sorted order (see
+    /// [`TripleIndexes::insert_sorted`](crate::index::TripleIndexes::insert_sorted)).
+    /// Feeding the loader `Term`-string-sorted input would sort by lexical order,
+    /// not [`NodeId`] key order, so the trees would still see effectively random
+    /// keys — hence the per-index encode-then-sort here.
+    ///
+    /// Coordinating with F3, the whole batch is logged as a *single* WAL
+    /// transaction (one `Begin -> DataOp* -> Commit`, no per-element fsync) and
+    /// then persisted by a single checkpoint, so a bulk load survives a reopen
+    /// even if the caller drops the store without an explicit `sync()`, while
+    /// keeping fsync cost amortized across the batch.
     pub fn insert_triples_bulk(&mut self, triples: &[(Term, Term, Term)]) -> Result<()> {
         // Validate all triples first (subject must be IRI or blank node, not literal)
         for (subject, _predicate, _object) in triples {
@@ -656,24 +697,45 @@ impl TdbStore {
                 return Err(TdbError::Other("Subject cannot be a literal".to_string()));
             }
         }
-
-        // Apply each triple to the in-memory indexes without per-op WAL logging,
-        // collecting the genuinely-new inserts so the batch can be logged as one
-        // transaction below. `insert_triple_no_wal` mirrors `insert_triple`
-        // minus the WAL append.
-        let mut ops: Vec<StoreOp> = Vec::new();
-        for (subject, predicate, object) in triples {
-            if self.insert_triple_no_wal(subject, predicate, object)? {
-                ops.push(StoreOp::InsertTriple {
-                    subject: subject.clone(),
-                    predicate: predicate.clone(),
-                    object: object.clone(),
-                });
-            }
+        if triples.is_empty() {
+            return Ok(());
         }
 
+        // (1) intern every term, (2) encode to NodeId tuples.
+        let mut encoded: Vec<Triple> = Vec::with_capacity(triples.len());
+        for (subject, predicate, object) in triples {
+            let s_id = self.dictionary.encode(subject)?;
+            let p_id = self.dictionary.encode(predicate)?;
+            let o_id = self.dictionary.encode(object)?;
+            encoded.push(Triple::new(s_id, p_id, o_id));
+        }
+
+        // (3)+(4) per-index sorted, sequential-leaf-append bulk build. Returns
+        // the count of genuinely new triples (batch/tree duplicates excluded).
+        let new_count = self.indexes.insert_sorted(&encoded)?;
+
+        // Maintain the in-memory bloom filter (negative cache) for the batch.
+        if let Some(ref mut bloom) = self.bloom_filter {
+            for triple in &encoded {
+                bloom.insert(triple);
+            }
+        }
+        self.triple_count += new_count;
+
+        // The default graph changed, so cached triple-query results are stale.
+        self.query_cache.clear();
+
         // Log the whole batch as one WAL transaction (durable via the sync
-        // below; no per-element fsync).
+        // below; no per-element fsync). Every provided triple is logged; replay
+        // is idempotent, so re-applying one already present is a no-op.
+        let ops: Vec<StoreOp> = triples
+            .iter()
+            .map(|(subject, predicate, object)| StoreOp::InsertTriple {
+                subject: subject.clone(),
+                predicate: predicate.clone(),
+                object: object.clone(),
+            })
+            .collect();
         self.wal_log_batch(&ops)?;
 
         // Persist the batch durably (pages + catalog) so a bulk load survives a
@@ -681,30 +743,6 @@ impl TdbStore {
         self.sync()?;
 
         Ok(())
-    }
-
-    /// Insert a triple into the in-memory indexes (index + bloom + count) without
-    /// writing a WAL record. Used by the bulk path, which logs the whole batch
-    /// as one transaction. Returns whether the triple was genuinely new.
-    fn insert_triple_no_wal(
-        &mut self,
-        subject: &Term,
-        predicate: &Term,
-        object: &Term,
-    ) -> Result<bool> {
-        let s_id = self.dictionary.encode(subject)?;
-        let p_id = self.dictionary.encode(predicate)?;
-        let o_id = self.dictionary.encode(object)?;
-
-        let triple = Triple::new(s_id, p_id, o_id);
-        let is_new = self.indexes.insert(triple)?;
-        if let Some(ref mut bloom) = self.bloom_filter {
-            bloom.insert(&triple);
-        }
-        if is_new {
-            self.triple_count += 1;
-        }
-        Ok(is_new)
     }
 
     /// Query triples with optional pattern matching (None = wildcard)
@@ -906,9 +944,12 @@ impl TdbStore {
         // Create new empty dictionary
         self.dictionary = Dictionary::new(self.buffer_pool.clone());
 
-        // Reset bloom filter
+        // Reset bloom filter (sized from the configured per-index element count).
         if let Some(ref mut bloom) = self.bloom_filter {
-            *bloom = BloomFilter::new(100000, self.config.bloom_filter_fpr);
+            *bloom = BloomFilter::new(
+                self.config.bloom_filter_size_per_index,
+                self.config.bloom_filter_fpr,
+            );
         }
 
         // Reset prefix compressor

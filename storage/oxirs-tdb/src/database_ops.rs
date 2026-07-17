@@ -83,15 +83,20 @@ impl DatabaseOps {
         // Validate database name
         self.validate_database_name(name)?;
 
+        // Validate the caller-supplied parameters before persisting them.
+        params.validate()?;
+
         // Create database directory
         std::fs::create_dir_all(&db_path)?;
 
-        // Save store parameters
+        // Save store parameters so a later reopen (compact/repair, or any
+        // `open_database`) can restore exactly these settings.
         let params_file = db_path.join("store_params.json");
         params.save_to_file(&params_file)?;
 
-        // Initialize database
-        let _store = TdbStore::open(&db_path)?;
+        // Initialize the database with the supplied parameters (not defaults),
+        // so the created store actually honors them.
+        let _store = TdbStore::open_with_params(&db_path, params)?;
 
         // Create metadata
         let metadata = DatabaseMetadata {
@@ -111,6 +116,24 @@ impl DatabaseOps {
         log::info!("Created database '{}' at {:?}", name, db_path);
 
         Ok(metadata)
+    }
+
+    /// Open an existing database's store, restoring its persisted
+    /// [`StoreParams`] when present.
+    ///
+    /// A reopened store must keep the settings it was created with, so if a
+    /// `store_params.json` is present it is loaded (and validated) and the store
+    /// is opened with [`TdbStore::open_with_params`]; otherwise the store is
+    /// opened with engine defaults. A malformed params file fails loudly rather
+    /// than being silently ignored.
+    fn open_store(&self, db_path: &Path) -> Result<TdbStore> {
+        let params_file = db_path.join("store_params.json");
+        if params_file.exists() {
+            let params = StoreParams::load_from_file(&params_file)?;
+            TdbStore::open_with_params(db_path, params)
+        } else {
+            TdbStore::open(db_path)
+        }
     }
 
     /// Delete a database
@@ -188,8 +211,8 @@ impl DatabaseOps {
         let start_time = SystemTime::now();
         let size_before = self.calculate_database_size(&db_path)?;
 
-        // Open database and compact
-        let mut store = TdbStore::open(&db_path)?;
+        // Open database (restoring its persisted params) and compact.
+        let mut store = self.open_store(&db_path)?;
         store.compact()?;
 
         let size_after = self.calculate_database_size(&db_path)?;
@@ -241,8 +264,8 @@ impl DatabaseOps {
 
         let start_time = SystemTime::now();
 
-        // Open database and run diagnostics
-        let store = TdbStore::open(&db_path)?;
+        // Open database (restoring its persisted params) and run diagnostics.
+        let store = self.open_store(&db_path)?;
         let diagnostic_report = store.run_diagnostics(crate::diagnostics::DiagnosticLevel::Deep);
 
         // Count issues from diagnostic report
@@ -472,7 +495,7 @@ pub struct RepairReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::StorePresets;
+    use crate::store::{StoreParamsBuilder, StorePresets};
     use std::env;
 
     fn create_test_base_dir() -> PathBuf {
@@ -578,6 +601,28 @@ mod tests {
         };
 
         assert_eq!(stats.savings_percentage(), 40.0);
+    }
+
+    #[test]
+    fn test_reopen_preserves_store_params() {
+        let base_dir = create_test_base_dir();
+        let ops = DatabaseOps::new(&base_dir).unwrap();
+
+        // Create a database with a distinctly non-default buffer pool size.
+        let params = StoreParamsBuilder::new(base_dir.join("pdb"))
+            .buffer_pool_size(3333)
+            .build()
+            .unwrap();
+        ops.create_database("pdb", params).unwrap();
+
+        // Reopening the database restores the persisted params (the buffer pool
+        // size reaches the BufferPool), not engine defaults.
+        let db_path = base_dir.join("pdb");
+        let store = ops.open_store(&db_path).unwrap();
+        assert_eq!(store.buffer_pool.pool_size(), 3333);
+
+        drop(store);
+        std::fs::remove_dir_all(&base_dir).ok();
     }
 
     #[test]

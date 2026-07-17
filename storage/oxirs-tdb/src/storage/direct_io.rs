@@ -14,6 +14,32 @@
 //! - Backup and restore operations
 //! - Bulk import/export
 //! - Log file processing
+//!
+//! # Opt-in, unix-specific, default pure-std
+//!
+//! OS-level cache bypass is **opt-in** and only engaged when
+//! [`DirectIOConfig::enable_direct_io`] is `true` (the default is `false`). When
+//! enabled the platform-specific bypass is requested at [`DirectIOFile::open`]:
+//!
+//! - **Linux**: the file is opened with `O_DIRECT`
+//!   ([`OpenOptionsExt::custom_flags`](std::os::unix::fs::OpenOptionsExt)). All
+//!   subsequent I/O on the handle must be offset/length aligned to
+//!   [`DIRECT_IO_ALIGNMENT`] (the alignment guards in the direct read/write
+//!   paths enforce this); an unaligned access fails loudly rather than being
+//!   silently corrected.
+//! - **macOS**: the file is opened normally and `F_NOCACHE` is set via `fcntl`
+//!   (macOS has no `O_DIRECT`). `F_NOCACHE` bypasses the unified buffer cache
+//!   without imposing hard alignment on the OS side, though this module's own
+//!   alignment guards still apply on the direct path.
+//!
+//! The `libc` bindings used here are the crate's existing unix dependency
+//! (also used for `madvise`/`mlock`) — bindings only, no C toolchain — so the
+//! Pure-Rust default policy is preserved. On every non-unix target, and whenever
+//! `enable_direct_io` is `false`, the open path is plain `std::fs` with no
+//! platform flags. This bypass is deliberately scoped to `DirectIOFile`'s
+//! large-sequential-scan use cases and is **not** wired into the page store /
+//! `FileManager` (whose small random page I/O would violate the alignment
+//! requirement).
 
 use crate::error::{Result, TdbError};
 use crate::storage::page::PAGE_SIZE;
@@ -73,18 +99,51 @@ pub struct DirectIOFile {
 }
 
 impl DirectIOFile {
-    /// Open a file with direct I/O capabilities
+    /// Open a file with direct I/O capabilities.
+    ///
+    /// When [`DirectIOConfig::enable_direct_io`] is set, the OS page-cache
+    /// bypass is engaged in a platform-specific, unix-only way (Linux
+    /// `O_DIRECT`, macOS `F_NOCACHE`); see the [module docs](self). When it is
+    /// unset (the default) — or on any non-unix target — this is a plain
+    /// `std::fs` open with no platform flags, keeping the default path pure-std.
     pub fn open<P: AsRef<Path>>(path: P, config: DirectIOConfig) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
 
-        // Open file (direct I/O flags would be set here in production)
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false) // Don't truncate existing files
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false); // Don't truncate existing files
+
+        // Linux: request unbuffered I/O up front via O_DIRECT. Every access on
+        // the resulting handle must then be alignment-correct (enforced by the
+        // direct read/write guards below).
+        #[cfg(target_os = "linux")]
+        {
+            if config.enable_direct_io {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.custom_flags(libc::O_DIRECT);
+            }
+        }
+
+        let file = options
             .open(&path)
             .map_err(|e| TdbError::Other(format!("Failed to open file: {}", e)))?;
+
+        // macOS has no O_DIRECT; the equivalent is F_NOCACHE, set on the open
+        // descriptor via fcntl. Failing to set it is surfaced loudly rather than
+        // silently degrading to a cached handle.
+        #[cfg(target_os = "macos")]
+        {
+            if config.enable_direct_io {
+                use std::os::unix::io::AsRawFd;
+                let ret = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_NOCACHE, 1) };
+                if ret == -1 {
+                    return Err(TdbError::Other(format!(
+                        "Failed to set F_NOCACHE (direct I/O) on {}: {}",
+                        path.display(),
+                        std::io::Error::last_os_error()
+                    )));
+                }
+            }
+        }
 
         Ok(Self {
             path,
@@ -642,6 +701,54 @@ mod tests {
         let data = vec![1u8; 1000];
         file.write_direct(0, &data).unwrap();
         file.sync().unwrap();
+
+        std::fs::remove_file(path).ok();
+    }
+
+    /// Opt-in direct I/O smoke test (unix): opening with `enable_direct_io`
+    /// engages the platform bypass (Linux `O_DIRECT` / macOS `F_NOCACHE`) and the
+    /// direct path enforces offset alignment. The alignment guard rejects an
+    /// unaligned offset *before* issuing any syscall, so this assertion is
+    /// platform-independent even where the OS bypass has stricter (e.g. buffer
+    /// memory) requirements.
+    #[cfg(unix)]
+    #[test]
+    fn test_direct_io_opt_in_open_and_alignment() {
+        let path = temp_file_path("opt_in");
+        let mut config = DirectIOConfig::default();
+        config.enable_direct_io = true;
+        config.sequential_threshold = 2;
+
+        let file = match DirectIOFile::open(&path, config) {
+            Ok(f) => f,
+            // Some Linux filesystems (notably tmpfs, a common `TMPDIR`) reject
+            // O_DIRECT with EINVAL. That is an environment limitation, not a code
+            // defect, so the opt-in open is allowed to be unavailable there.
+            #[cfg(target_os = "linux")]
+            Err(_) => {
+                std::fs::remove_file(&path).ok();
+                return;
+            }
+            #[cfg(not(target_os = "linux"))]
+            Err(e) => panic!("direct I/O opt-in open failed: {e}"),
+        };
+
+        // Drive the sequential-access counter past the threshold so direct I/O
+        // activates. Read results are ignored: on a fresh/short file the reads
+        // simply hit EOF, and the activation flag is set regardless.
+        let mut buffer = vec![0u8; DIRECT_IO_ALIGNMENT];
+        for i in 0..3 {
+            let _ = file.read_direct((i * DIRECT_IO_ALIGNMENT) as u64, &mut buffer);
+        }
+        assert!(file.is_direct_io_active());
+
+        // With direct I/O active, an unaligned offset must be rejected by the
+        // alignment guard (a pure pre-syscall check).
+        let data = vec![7u8; DIRECT_IO_ALIGNMENT];
+        assert!(
+            file.write_direct(1, &data).is_err(),
+            "unaligned direct write must be rejected"
+        );
 
         std::fs::remove_file(path).ok();
     }

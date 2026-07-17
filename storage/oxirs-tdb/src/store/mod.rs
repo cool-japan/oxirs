@@ -6,7 +6,6 @@
 pub mod store_impl;
 #[allow(dead_code, unused_imports, unused_variables)]
 pub mod store_index;
-#[allow(dead_code, unused_imports, unused_variables)]
 pub mod store_params;
 pub mod store_quad;
 pub mod store_stream;

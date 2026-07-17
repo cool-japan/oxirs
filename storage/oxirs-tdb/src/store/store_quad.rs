@@ -20,7 +20,7 @@
 
 use crate::dictionary::{Dictionary, Term};
 use crate::error::{Result, TdbError};
-use crate::index::{Quad, QuadScan, Triple, TripleScan};
+use crate::index::{Quad, QuadIndexes, QuadScan, Triple, TripleScan};
 use crate::store::store_impl::TdbStore;
 use crate::store::store_stream::decode_triple_terms;
 use crate::store::store_wal::StoreOp;
@@ -244,6 +244,114 @@ impl TdbStore {
         // The default graph changed, so cached triple-query results are stale.
         self.query_cache.clear();
         Ok(is_new)
+    }
+
+    /// Bulk-insert quads `(graph, subject, predicate, object)` with a sorted,
+    /// sequential-leaf-append B+Tree build (F6, Phase A).
+    ///
+    /// Default-graph quads (`graph == None`) are routed to the SPO/POS/OSP triple
+    /// indexes; named-graph quads to the GSPO/GPOS/GOSP quad indexes. Each index
+    /// is fed its batch pre-sorted in its own key order (see
+    /// [`TripleIndexes::insert_sorted`](crate::index::TripleIndexes::insert_sorted)
+    /// and [`QuadIndexes::insert_sorted`](crate::index::QuadIndexes::insert_sorted)),
+    /// so the trees append to their right-most leaves instead of splitting in
+    /// random order.
+    ///
+    /// Coordinating with F3, the whole batch is one WAL transaction and one
+    /// checkpoint. Returns the number of genuinely new statements (default-graph
+    /// triples plus named-graph quads) actually added.
+    ///
+    /// Fails loudly *before any mutation* if a subject is a literal, or if any
+    /// named-graph quad is present while named-graph writes are disabled
+    /// ([`TdbError::Unsupported`]).
+    pub fn insert_quads_bulk(
+        &mut self,
+        quads: &[(Option<Term>, Term, Term, Term)],
+    ) -> Result<usize> {
+        // Validate the whole batch first so a malformed input never leaves a
+        // half-applied store.
+        let mut has_named = false;
+        for (graph, subject, _predicate, _object) in quads {
+            if matches!(subject, Term::Literal { .. }) {
+                return Err(TdbError::Other("Subject cannot be a literal".to_string()));
+            }
+            if graph.is_some() {
+                has_named = true;
+            }
+        }
+        if has_named && !self.quads_writable {
+            return Err(TdbError::Unsupported(
+                "named-graph writes are disabled (open with enable_quad_indexes = true)"
+                    .to_string(),
+            ));
+        }
+        if quads.is_empty() {
+            return Ok(0);
+        }
+
+        // (1)+(2) intern + encode, splitting default-graph triples from named
+        // quads and building the one-transaction WAL op list in input order.
+        let mut encoded_triples: Vec<Triple> = Vec::new();
+        let mut encoded_quads: Vec<Quad> = Vec::new();
+        let mut ops: Vec<StoreOp> = Vec::with_capacity(quads.len());
+        for (graph, subject, predicate, object) in quads {
+            let s_id = self.dictionary.encode(subject)?;
+            let p_id = self.dictionary.encode(predicate)?;
+            let o_id = self.dictionary.encode(object)?;
+            match graph {
+                None => {
+                    encoded_triples.push(Triple::new(s_id, p_id, o_id));
+                    ops.push(StoreOp::InsertTriple {
+                        subject: subject.clone(),
+                        predicate: predicate.clone(),
+                        object: object.clone(),
+                    });
+                }
+                Some(graph_term) => {
+                    let g_id = self.dictionary.encode(graph_term)?;
+                    encoded_quads.push(Quad::new(g_id, s_id, p_id, o_id));
+                    ops.push(StoreOp::InsertQuad {
+                        graph: graph_term.clone(),
+                        subject: subject.clone(),
+                        predicate: predicate.clone(),
+                        object: object.clone(),
+                    });
+                }
+            }
+        }
+
+        // (3)+(4) sorted bulk build for the default-graph triple indexes.
+        let mut new_count = self.indexes.insert_sorted(&encoded_triples)?;
+        if let Some(ref mut bloom) = self.bloom_filter {
+            for triple in &encoded_triples {
+                bloom.insert(triple);
+            }
+        }
+        self.triple_count += new_count;
+
+        // Sorted bulk build for the named-graph quad indexes (materialized on
+        // demand — only reachable when quads are writable, guarded above).
+        if !encoded_quads.is_empty() {
+            if self.quad_indexes.is_none() {
+                self.quad_indexes = Some(QuadIndexes::new(self.buffer_pool.clone()));
+                self.quads_writable = true;
+            }
+            let quad_indexes = self.quad_indexes.as_mut().ok_or_else(|| {
+                TdbError::Unsupported("quad indexes are not initialized".to_string())
+            })?;
+            let new_quads = quad_indexes.insert_sorted(&encoded_quads)?;
+            self.quad_count += new_quads;
+            new_count += new_quads;
+        }
+
+        // The default graph changed, so cached triple-query results are stale.
+        self.query_cache.clear();
+
+        // One WAL transaction + one durable checkpoint for the whole batch (F3).
+        self.wal_log_batch(&ops)?;
+        self.sync()?;
+
+        Ok(new_count)
     }
 
     /// Delete a quad `(graph, subject, predicate, object)`.

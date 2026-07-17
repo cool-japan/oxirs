@@ -354,8 +354,8 @@ oxicrypto-rand = "0.2.1"  # CSPRNG: random_bytes / random_nonce (OxiCrypto subcr
 oxicrypto-mac  = "0.2.1"  # HMAC-SHA256/384 (OxiCrypto subcrate)
 oxicrypto-hash = "0.2.1"  # SHA-256/384/512 incremental hashing (OxiCrypto subcrate)
 oxicrypto-kdf  = "0.2.1"  # PBKDF2-SHA256 (OxiCrypto subcrate)
-oxitls         = { version = "0.2.0", features = ["pure", "webpki-roots"] }  # Pure Rust TLS facade
-oxitls-rcgen   = "0.2.0"  # Pure Rust certificate generation for OxiTLS
+oxitls         = { version = "0.2.1", features = ["pure", "webpki-roots"] }  # Pure Rust TLS facade
+oxitls-rcgen   = "0.2.1"  # Pure Rust certificate generation for OxiTLS
 jsonwebtoken = { version = "10.4", features = ["rust_crypto"] }
 aes-gcm = "0.11"
 argon2 = "0.5"

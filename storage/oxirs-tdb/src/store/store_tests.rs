@@ -1408,3 +1408,248 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+/// F6 (sorted bulk build) equivalence tests and StoreParams-wiring tests.
+#[cfg(test)]
+mod bulk_and_params_tests {
+    use crate::compression::BloomFilter;
+    use crate::dictionary::Term;
+    use crate::store::{GraphTarget, QuadResult, StoreParams, StoreParamsBuilder, TdbStore};
+    use std::collections::HashSet;
+    use std::env;
+
+    /// Deterministic xorshift PRNG so the "randomized" equivalence data is
+    /// reproducible across runs without pulling in an rng dependency.
+    struct Xorshift(u64);
+    impl Xorshift {
+        fn new(seed: u64) -> Self {
+            Self(seed.max(1))
+        }
+        fn next_u64(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn below(&mut self, n: u64) -> u64 {
+            self.next_u64() % n
+        }
+    }
+
+    fn unique_dir(tag: &str) -> std::path::PathBuf {
+        let dir = env::temp_dir().join(format!("oxirs_tdb_{tag}_{}", uuid::Uuid::new_v4()));
+        std::fs::remove_dir_all(&dir).ok();
+        dir
+    }
+
+    fn iri(prefix: &str, n: u64) -> Term {
+        Term::iri(format!("http://example.org/{prefix}{n}"))
+    }
+
+    /// A randomized triple batch over a small term vocabulary, so there are
+    /// genuine key collisions and duplicates across S/P/O.
+    fn gen_triples(seed: u64, count: usize) -> Vec<(Term, Term, Term)> {
+        let mut rng = Xorshift::new(seed);
+        (0..count)
+            .map(|_| {
+                (
+                    iri("s", rng.below(30)),
+                    iri("p", rng.below(8)),
+                    iri("o", rng.below(40)),
+                )
+            })
+            .collect()
+    }
+
+    /// Sorted results of every bound-column pattern combination.
+    fn all_query_results(store: &TdbStore) -> Vec<Vec<(Term, Term, Term)>> {
+        let s = iri("s", 3);
+        let p = iri("p", 2);
+        let o = iri("o", 5);
+        let patterns: [(Option<&Term>, Option<&Term>, Option<&Term>); 8] = [
+            (None, None, None),
+            (Some(&s), None, None),
+            (None, Some(&p), None),
+            (None, None, Some(&o)),
+            (Some(&s), Some(&p), None),
+            (None, Some(&p), Some(&o)),
+            (Some(&s), None, Some(&o)),
+            (Some(&s), Some(&p), Some(&o)),
+        ];
+        patterns
+            .iter()
+            .map(|(s, p, o)| {
+                let mut r = store.query_triples(*s, *p, *o).expect("query");
+                r.sort();
+                r
+            })
+            .collect()
+    }
+
+    /// The sorted bulk build must return byte-identical query results to an
+    /// insert-order store over randomized triples, including after a reopen
+    /// round-trip through the superblock.
+    #[test]
+    fn bulk_build_matches_insert_order_triples() {
+        let triples = gen_triples(0x1234_5678, 300);
+
+        // Insert-order store (one triple at a time).
+        let dir_a = unique_dir("equiv_insert");
+        let mut store_a = TdbStore::open(&dir_a).expect("open a");
+        for (s, p, o) in &triples {
+            store_a.insert_triple(s, p, o).expect("insert");
+        }
+
+        // Sorted bulk-build store.
+        let dir_b = unique_dir("equiv_bulk");
+        let mut store_b = TdbStore::open(&dir_b).expect("open b");
+        store_b.insert_triples_bulk(&triples).expect("bulk");
+
+        assert_eq!(store_a.count(), store_b.count());
+        assert_eq!(all_query_results(&store_a), all_query_results(&store_b));
+
+        // Reopen the bulk store: the on-disk B+Trees round-trip identically.
+        drop(store_b);
+        let store_b2 = TdbStore::open(&dir_b).expect("reopen b");
+        assert_eq!(store_a.count(), store_b2.count());
+        assert_eq!(all_query_results(&store_a), all_query_results(&store_b2));
+
+        drop(store_a);
+        drop(store_b2);
+        std::fs::remove_dir_all(&dir_a).ok();
+        std::fs::remove_dir_all(&dir_b).ok();
+    }
+
+    fn quad_set(store: &TdbStore, target: GraphTarget<'_>) -> HashSet<QuadResult> {
+        store
+            .scan_quads(target, None, None, None)
+            .expect("scan")
+            .into_iter()
+            .collect()
+    }
+
+    /// The sorted bulk build for quads (mixed default + named graphs) must match
+    /// an insert-order store across every graph target, including after reopen.
+    #[test]
+    fn bulk_build_matches_insert_order_quads() {
+        let g1 = Term::iri("http://example.org/g1");
+        let g2 = Term::iri("http://example.org/g2");
+        let mut rng = Xorshift::new(0xDEAD_BEEF);
+        let mut quads: Vec<(Option<Term>, Term, Term, Term)> = Vec::new();
+        for _ in 0..250 {
+            let graph = match rng.below(3) {
+                0 => None,
+                1 => Some(g1.clone()),
+                _ => Some(g2.clone()),
+            };
+            quads.push((
+                graph,
+                iri("s", rng.below(20)),
+                iri("p", rng.below(6)),
+                iri("o", rng.below(25)),
+            ));
+        }
+
+        // Insert-order store.
+        let dir_c = unique_dir("equiv_q_insert");
+        let mut store_c = TdbStore::open(&dir_c).expect("open c");
+        for (g, s, p, o) in &quads {
+            store_c
+                .insert_quad(g.as_ref(), s, p, o)
+                .expect("insert quad");
+        }
+
+        // Sorted bulk-build store.
+        let dir_d = unique_dir("equiv_q_bulk");
+        let mut store_d = TdbStore::open(&dir_d).expect("open d");
+        let inserted = store_d.insert_quads_bulk(&quads).expect("bulk quads");
+
+        assert_eq!(store_c.dataset_len(), store_d.dataset_len());
+        // Fresh store: reported new statements equal the whole distinct dataset.
+        assert_eq!(inserted, store_d.dataset_len());
+
+        let targets = [
+            GraphTarget::AnyGraph,
+            GraphTarget::DefaultGraph,
+            GraphTarget::Named(&g1),
+            GraphTarget::Named(&g2),
+        ];
+        for target in targets {
+            assert_eq!(quad_set(&store_c, target), quad_set(&store_d, target));
+        }
+
+        // Reopen the bulk store and re-verify.
+        drop(store_d);
+        let store_d2 = TdbStore::open(&dir_d).expect("reopen d");
+        assert_eq!(store_c.dataset_len(), store_d2.dataset_len());
+        for target in targets {
+            assert_eq!(quad_set(&store_c, target), quad_set(&store_d2, target));
+        }
+
+        drop(store_c);
+        drop(store_d2);
+        std::fs::remove_dir_all(&dir_c).ok();
+        std::fs::remove_dir_all(&dir_d).ok();
+    }
+
+    /// Non-default StoreParams must actually reach the subsystems they configure
+    /// (buffer pool, bloom filter, query cache) — not be saved to JSON and then
+    /// ignored.
+    #[test]
+    fn params_are_honored_by_subsystems() {
+        let dir = unique_dir("params_honored");
+        let params = StoreParamsBuilder::new(&dir)
+            .buffer_pool_size(4242)
+            .with_bloom_filters(true, 0.02, 250_000)
+            .with_query_cache(true, 77)
+            .build()
+            .expect("build params");
+        let store = TdbStore::open_with_params(&dir, params).expect("open with params");
+
+        // buffer_pool_size reached the BufferPool.
+        assert_eq!(store.buffer_pool.pool_size(), 4242);
+
+        // bloom_filter_size_per_index + fpr reached the BloomFilter: the store's
+        // bloom bit-array size matches a filter freshly built from the same inputs.
+        let expected_bloom_size = BloomFilter::new(250_000, 0.02).stats().size;
+        assert_eq!(
+            store.stats().bloom_filter_stats.expect("bloom stats").size,
+            expected_bloom_size
+        );
+
+        // query_cache_size reached the QueryCache.
+        assert_eq!(store.query_cache.max_entries(), 77);
+
+        drop(store);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Invalid params are rejected loudly by `open_with_params` rather than
+    /// silently coerced.
+    #[test]
+    fn open_with_params_rejects_invalid() {
+        // A page size other than the compile-time engine page size is rejected
+        // (it passes StoreParams::validate but not the engine page-size guard).
+        let dir = unique_dir("params_bad_page");
+        let mut wrong_page = StoreParams::new(&dir);
+        wrong_page.page_size = 8192;
+        // `TdbStore` is not `Debug`, so match rather than `expect_err`.
+        let err = match TdbStore::open_with_params(&dir, wrong_page) {
+            Ok(_) => panic!("expected a bad page size to be rejected"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string().contains("page_size"),
+            "expected a page_size error, got: {err}"
+        );
+
+        // A semantically invalid parameter (bloom FPR out of range) is rejected.
+        let mut bad_fpr = StoreParams::new(&dir);
+        bad_fpr.bloom_filter_fpr = 2.0;
+        assert!(TdbStore::open_with_params(&dir, bad_fpr).is_err());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

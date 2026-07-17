@@ -451,9 +451,13 @@ impl CoreStore for TdbStoreAdapter {
         Ok(PreparedQuery::new(sparql.to_string()))
     }
 
-    /// Bulk insert: one write lock, one fsync for the whole batch (instead of a
-    /// per-quad fsync loop). All quads are converted up front so a malformed
-    /// quad fails loudly before any write happens.
+    /// Bulk insert: one write lock, one sorted B+Tree build, one WAL transaction
+    /// and one fsync for the whole batch (instead of a per-quad insert+fsync
+    /// loop). All quads are converted up front so a malformed quad fails loudly
+    /// before any write happens, then handed to the store's sorted bulk loader
+    /// ([`insert_quads_bulk`](oxirs_tdb::TdbStore::insert_quads_bulk)), which
+    /// interns, encodes, sorts per index, and performs the single durable
+    /// checkpoint internally.
     fn bulk_insert_quads(&self, quads: Vec<Quad>) -> Result<usize> {
         let mut converted = Vec::with_capacity(quads.len());
         for quad in &quads {
@@ -464,18 +468,7 @@ impl CoreStore for TdbStoreAdapter {
             converted.push((graph, subject, predicate, object));
         }
         let mut store = self.write()?;
-        let mut inserted = 0usize;
-        for (graph, subject, predicate, object) in &converted {
-            if store
-                .insert_quad(graph.as_ref(), subject, predicate, object)
-                .map_err(tdb_err)?
-            {
-                inserted += 1;
-            }
-        }
-        // Single durable sync for the whole batch, regardless of sync policy.
-        store.sync().map_err(tdb_err)?;
-        Ok(inserted)
+        store.insert_quads_bulk(&converted).map_err(tdb_err)
     }
 
     /// Streaming scan: pulls decoded quads one at a time from TDB's lazy

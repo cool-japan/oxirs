@@ -151,6 +151,39 @@ impl QuadIndexes {
         Ok(is_new)
     }
 
+    /// Bulk-insert quads with per-index sorted, sequential leaf appends (F6).
+    ///
+    /// Mirrors [`TripleIndexes::insert_sorted`](crate::index::TripleIndexes::insert_sorted):
+    /// each index is fed the whole batch pre-sorted in its own key order — GSPO
+    /// by `(g, s, p, o)`, GPOS by `(g, p, o, s)`, GOSP by `(g, o, s, p)` — so the
+    /// B+Trees see monotonically non-decreasing keys and append to the right-most
+    /// leaf. Returns the number of genuinely new quads (batch/tree duplicates
+    /// excluded; GSPO carries the authoritative new/duplicate signal).
+    pub fn insert_sorted(&mut self, quads: &[Quad]) -> Result<usize> {
+        let mut gspo_keys: Vec<GspoKey> = quads.iter().map(|q| q.to_gspo_key()).collect();
+        gspo_keys.sort_unstable();
+        let mut new_count = 0usize;
+        for key in gspo_keys {
+            if self.gspo.insert(key, EmptyValue)?.is_none() {
+                new_count += 1;
+            }
+        }
+
+        let mut gpos_keys: Vec<GposKey> = quads.iter().map(|q| q.to_gpos_key()).collect();
+        gpos_keys.sort_unstable();
+        for key in gpos_keys {
+            self.gpos.insert(key, EmptyValue)?;
+        }
+
+        let mut gosp_keys: Vec<GospKey> = quads.iter().map(|q| q.to_gosp_key()).collect();
+        gosp_keys.sort_unstable();
+        for key in gosp_keys {
+            self.gosp.insert(key, EmptyValue)?;
+        }
+
+        Ok(new_count)
+    }
+
     /// Delete a quad from all indexes
     pub fn delete(&mut self, quad: Quad) -> Result<bool> {
         let gspo_deleted = self.gspo.delete(&quad.to_gspo_key())?.is_some();
