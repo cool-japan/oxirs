@@ -629,7 +629,7 @@ impl Runtime {
                 get(prefix_list_handler).post(prefix_add_handler),
             )
             .route(
-                "/$/prefixes/:prefix",
+                "/$/prefixes/{prefix}",
                 get(prefix_get_handler)
                     .put(prefix_update_handler)
                     .delete(prefix_delete_handler),
@@ -639,10 +639,10 @@ impl Runtime {
             .route("/$/tasks", get(task_list_handler).post(task_create_handler))
             .route("/$/tasks/statistics", get(task_statistics_handler))
             .route(
-                "/$/tasks/:id",
+                "/$/tasks/{id}",
                 get(task_get_handler).delete(task_delete_handler),
             )
-            .route("/$/tasks/:id/cancel", post(task_cancel_handler));
+            .route("/$/tasks/{id}/cancel", post(task_cancel_handler));
         app = app
             .route("/$/logs", get(logs_get_handler).delete(logs_clear_handler))
             .route("/$/logs/statistics", get(logs_statistics_handler))
@@ -652,7 +652,7 @@ impl Runtime {
             );
         app = app
             .route("/$/stats", get(stats_server_handler))
-            .route("/$/stats/:dataset", get(stats_dataset_handler));
+            .route("/$/stats/{dataset}", get(stats_dataset_handler));
         app = app
             .route(
                 "/$/performance/stats",
@@ -697,7 +697,7 @@ impl Runtime {
                 get(handlers::production::list_backends).post(handlers::production::add_backend),
             )
             .route(
-                "/$/load-balancer/backends/:id",
+                "/$/load-balancer/backends/{id}",
                 axum::routing::delete(handlers::production::remove_backend),
             )
             .route(
@@ -720,7 +720,7 @@ impl Runtime {
         app = app
             .route("/$/cdn/config", get(handlers::production::cdn_config))
             .route(
-                "/static/*path",
+                "/static/{*path}",
                 get(handlers::production::serve_static_asset),
             );
         app = app
@@ -756,20 +756,20 @@ impl Runtime {
                 get(handlers::api_keys::list_api_keys).post(handlers::api_keys::create_api_key),
             )
             .route(
-                "/$/api-keys/:key_id",
+                "/$/api-keys/{key_id}",
                 get(handlers::api_keys::get_api_key)
                     .put(handlers::api_keys::update_api_key)
                     .delete(handlers::api_keys::revoke_api_key),
             )
             .route(
-                "/$/api-keys/:key_id/usage",
+                "/$/api-keys/{key_id}/usage",
                 get(handlers::api_keys::get_api_key_usage),
             );
         app = app.route("/update", post(handlers::sparql::update_handler));
         app = app
             .route("/$/datasets", get(handlers::admin::list_datasets))
             .route(
-                "/$/datasets/:name",
+                "/$/datasets/{name}",
                 get(handlers::admin::get_dataset)
                     .post(handlers::admin::create_dataset)
                     .delete(handlers::admin::delete_dataset),
@@ -790,9 +790,10 @@ impl Runtime {
         app = app
             .route("/$/ping", get(ping_handler))
             .route("/$/server", get(handlers::admin::server_info))
-            .route("/$/stats", get(handlers::admin::server_stats))
-            .route("/$/compact/:name", post(handlers::admin::compact_dataset))
-            .route("/$/backup/:name", post(handlers::admin::backup_dataset))
+            // AUDIT-LOCAL: duplicate of GET /$/stats registered at line ~588 (stats_server_handler);
+            // axum 0.8 panics on overlapping method routes.
+            .route("/$/compact/{name}", post(handlers::admin::compact_dataset))
+            .route("/$/backup/{name}", post(handlers::admin::backup_dataset))
             .route("/$/backups-list", get(handlers::list_backups))
             .route("/$/reload", post(handlers::reload_config));
         app = app
@@ -864,12 +865,12 @@ impl Runtime {
                 app = app
                     .route("/auth/mfa/enroll", post(handlers::enroll_mfa))
                     .route(
-                        "/auth/mfa/challenge/:type",
+                        "/auth/mfa/challenge/{type}",
                         post(handlers::create_mfa_challenge),
                     )
                     .route("/auth/mfa/verify", post(handlers::verify_mfa))
                     .route("/auth/mfa/status", get(handlers::get_mfa_status))
-                    .route("/auth/mfa/disable/:type", delete(handlers::disable_mfa))
+                    .route("/auth/mfa/disable/{type}", delete(handlers::disable_mfa))
                     .route(
                         "/auth/mfa/backup-codes",
                         post(handlers::regenerate_backup_codes),
@@ -883,39 +884,15 @@ impl Runtime {
         if state.metrics_service.is_some() {
             app = app.route("/metrics", get(handlers::production::metrics_handler));
         }
+        // AUDIT-LOCAL: /$/performance/{memory,concurrency,health} and the profiler trio
+        // are already registered unconditionally above (~line 592-623); axum 0.8 panics
+        // on overlapping method routes. Keep only the paths not registered earlier.
         app = app
             .route(
                 "/$/performance",
                 get(handlers::performance::get_performance_stats),
             )
-            .route(
-                "/$/performance/memory",
-                get(handlers::performance::get_memory_stats),
-            )
-            .route(
-                "/$/performance/concurrency",
-                get(handlers::performance::get_concurrency_stats),
-            )
-            .route("/$/performance/gc", post(handlers::performance::trigger_gc))
-            .route(
-                "/$/performance/health",
-                get(handlers::performance::beta2_health_check),
-            );
-        if state.performance_profiler.is_some() {
-            app = app
-                .route(
-                    "/$/profiler/report",
-                    get(handlers::performance::profiler_report_handler),
-                )
-                .route(
-                    "/$/profiler/query-stats",
-                    get(handlers::performance::profiler_query_stats_handler),
-                )
-                .route(
-                    "/$/profiler/reset",
-                    post(handlers::performance::profiler_reset_handler),
-                );
-        }
+            .route("/$/performance/gc", post(handlers::performance::trigger_gc));
         if state.query_optimizer.is_some() {
             app = app
                 .route(
@@ -958,16 +935,16 @@ impl Runtime {
                 get(handlers::ngsi_query_entities).post(handlers::ngsi_create_entity),
             )
             .route(
-                "/ngsi-ld/v1/entities/:id",
+                "/ngsi-ld/v1/entities/{id}",
                 get(handlers::ngsi_get_entity).delete(handlers::ngsi_delete_entity),
             )
             .route(
-                "/ngsi-ld/v1/entities/:id/attrs",
+                "/ngsi-ld/v1/entities/{id}/attrs",
                 post(handlers::ngsi_ld::append_entity_attrs_server)
                     .patch(handlers::ngsi_update_entity),
             )
             .route(
-                "/ngsi-ld/v1/entities/:id/attrs/:attrId",
+                "/ngsi-ld/v1/entities/{id}/attrs/{attrId}",
                 delete(handlers::ngsi_ld::delete_entity_attr_server),
             )
             .route(
@@ -975,7 +952,7 @@ impl Runtime {
                 get(handlers::ngsi_list_subscriptions).post(handlers::ngsi_create_subscription),
             )
             .route(
-                "/ngsi-ld/v1/subscriptions/:id",
+                "/ngsi-ld/v1/subscriptions/{id}",
                 get(handlers::ngsi_get_subscription)
                     .patch(handlers::ngsi_update_subscription)
                     .delete(handlers::ngsi_delete_subscription),
@@ -1001,7 +978,7 @@ impl Runtime {
                 get(handlers::ngsi_query_temporal).post(handlers::ngsi_create_temporal),
             )
             .route(
-                "/ngsi-ld/v1/temporal/entities/:id",
+                "/ngsi-ld/v1/temporal/entities/{id}",
                 get(handlers::ngsi_get_temporal).delete(handlers::ngsi_delete_temporal),
             );
         app = crate::rest_api_v2::register_routes(app);

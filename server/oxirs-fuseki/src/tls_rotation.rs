@@ -959,7 +959,7 @@ impl AcmeChallengeServer {
         let responses = self.responses.clone();
 
         let app = Router::new().route(
-            "/.well-known/acme-challenge/:token",
+            "/.well-known/acme-challenge/{token}",
             get(
                 move |axum::extract::Path(token): axum::extract::Path<String>| {
                     let responses = responses.clone();

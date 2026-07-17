@@ -872,14 +872,14 @@ pub fn register_routes(router: Router<Arc<AppState>>) -> Router<Arc<AppState>> {
         // Datasets
         .route("/api/v2/datasets", get(list_datasets).post(create_dataset))
         .route(
-            "/api/v2/datasets/:name",
+            "/api/v2/datasets/{name}",
             get(get_dataset).delete(delete_dataset),
         )
         // Queries
-        .route("/api/v2/datasets/:name/query", post(execute_query))
+        .route("/api/v2/datasets/{name}/query", post(execute_query))
         // Triples
         .route(
-            "/api/v2/datasets/:name/triples",
+            "/api/v2/datasets/{name}/triples",
             get(get_triples).post(insert_triple).delete(delete_triple),
         )
         // Statistics and health

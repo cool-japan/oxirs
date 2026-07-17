@@ -62,20 +62,20 @@ pub fn ids_router(state: Arc<IdsApiState>) -> Router {
         .route("/catalog", get(get_catalog))
         .route("/catalog/resources", get(list_resources))
         .route("/catalog/resources", post(add_resource))
-        .route("/catalog/resources/:id", get(get_resource))
-        .route("/catalog/resources/:id", delete(remove_resource))
+        .route("/catalog/resources/{id}", get(get_resource))
+        .route("/catalog/resources/{id}", delete(remove_resource))
         // Contract Management
         .route("/contracts", get(list_contracts))
         .route("/contracts", post(initiate_negotiation))
-        .route("/contracts/:id", get(get_contract))
-        .route("/contracts/:id/accept", post(accept_contract))
-        .route("/contracts/:id/reject", post(reject_contract))
-        .route("/contracts/:id/terminate", post(terminate_contract))
+        .route("/contracts/{id}", get(get_contract))
+        .route("/contracts/{id}/accept", post(accept_contract))
+        .route("/contracts/{id}/reject", post(reject_contract))
+        .route("/contracts/{id}/terminate", post(terminate_contract))
         // Transfer Management
         .route("/transfers", get(list_transfers))
         .route("/transfers", post(initiate_transfer))
-        .route("/transfers/:id", get(get_transfer))
-        .route("/transfers/:id/cancel", post(cancel_transfer))
+        .route("/transfers/{id}", get(get_transfer))
+        .route("/transfers/{id}/cancel", post(cancel_transfer))
         // Policy Evaluation
         .route("/policy/evaluate", post(evaluate_policy))
         // Broker Integration
