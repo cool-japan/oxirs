@@ -34,16 +34,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    // Use config file if provided, otherwise use CLI args
-    let (host, port) = if let Some(config_path) = args.config {
+    // Use config file if provided, otherwise use CLI args. When a config file is
+    // given, the FULL config (datasets, per-dataset `read_only`, security, …) is
+    // threaded into the builder so it reaches `AppState`; previously only host/port
+    // were extracted and the rest — including every `read_only` flag — was dropped.
+    let mut builder = Server::builder();
+    if let Some(config_path) = args.config {
         use oxirs_fuseki::config::ServerConfig;
         let config = ServerConfig::from_file(config_path)?;
-        (config.server.host, config.server.port)
+        builder = builder
+            .host(config.server.host.clone())
+            .port(config.server.port)
+            .config(config);
     } else {
-        (args.host, args.port)
-    };
-
-    let mut builder = Server::builder().port(port).host(host);
+        builder = builder.host(args.host).port(args.port);
+    }
 
     if let Some(dataset_path) = args.dataset {
         builder = builder.dataset_path(dataset_path.to_string_lossy());

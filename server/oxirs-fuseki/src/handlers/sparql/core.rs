@@ -495,9 +495,9 @@ pub async fn sparql_update(
 
             error!("SPARQL update execution failed: {}", e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                e.status_code(),
                 Json(serde_json::json!({
-                    "error": "update_execution_failed",
+                    "error": e.error_type(),
                     "message": e.to_string()
                 })),
             )
@@ -685,9 +685,20 @@ pub async fn execute_sparql_query(
 /// Execute SPARQL update with validation
 pub async fn execute_sparql_update(
     update: &str,
-    _context: QueryContext,
+    context: QueryContext,
     state: &Arc<AppState>,
 ) -> FusekiResult<UpdateResult> {
+    // Enforce read-only datasets before any parsing or mutation. A dataset
+    // configured with `read_only = true` must reject every SPARQL UPDATE with
+    // HTTP 403 and leave the data untouched — this is the write-protection that
+    // a public, query-only endpoint (e.g. sparql.wik.jp) depends on.
+    if state.is_dataset_read_only(&context.dataset) {
+        return Err(FusekiError::forbidden(format!(
+            "Dataset '{}' is read-only; SPARQL UPDATE is not permitted",
+            context.dataset
+        )));
+    }
+
     // Validate update
     validate_sparql_update(update)?;
 

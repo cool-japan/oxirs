@@ -1301,6 +1301,22 @@ pub struct AppState {
     pub rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
 }
 
+impl AppState {
+    /// Whether the named dataset is configured read-only (`datasets.<name>.read_only`).
+    ///
+    /// Returns `false` when the dataset is not present in the configuration
+    /// (an unconfigured/empty datasets map means "no write protection declared",
+    /// matching historical behaviour). SPARQL UPDATE handlers consult this to
+    /// reject writes with HTTP 403 on a read-only dataset.
+    pub fn is_dataset_read_only(&self, dataset: &str) -> bool {
+        self.config
+            .datasets
+            .get(dataset)
+            .map(|d| d.read_only)
+            .unwrap_or(false)
+    }
+}
+
 #[cfg(test)]
 mod rebac_and_config_tests {
     use super::*;

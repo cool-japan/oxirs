@@ -214,6 +214,7 @@ pub struct ServerBuilder {
     port: u16,
     host: String,
     dataset_path: Option<String>,
+    config: Option<config::ServerConfig>,
 }
 
 impl ServerBuilder {
@@ -222,6 +223,7 @@ impl ServerBuilder {
             port: 3030,
             host: "localhost".to_string(),
             dataset_path: None,
+            config: None,
         }
     }
 
@@ -240,6 +242,16 @@ impl ServerBuilder {
         self
     }
 
+    /// Supply the fully-loaded [`ServerConfig`] (datasets, `read_only` flags,
+    /// security, etc.). Without this, `build()` falls back to
+    /// `ServerConfig::default()` — an empty datasets map — which is what
+    /// silently dropped every `read_only` setting before: the loaded config
+    /// never reached `AppState`, so write-protection could not be enforced.
+    pub fn config(mut self, config: config::ServerConfig) -> Self {
+        self.config = Some(config);
+        self
+    }
+
     pub async fn build(self) -> Result<Server, Box<dyn std::error::Error>> {
         // Install the Pure Rust crypto provider as the process default before any
         // rustls-backed component runs (TLS termination, OAuth via reqwest, the
@@ -253,7 +265,11 @@ impl ServerBuilder {
             Store::new()?
         };
 
-        let config = config::ServerConfig::default();
+        // Use the fully-loaded config when one was supplied (so `datasets[..].read_only`
+        // reaches `AppState` and the update handlers can enforce it); otherwise fall
+        // back to defaults. Keep the socket address the builder resolved (CLI/host/port
+        // overrides win) rather than silently re-deriving it from the config.
+        let config = self.config.unwrap_or_else(config::ServerConfig::default);
 
         Ok(Server {
             addr,

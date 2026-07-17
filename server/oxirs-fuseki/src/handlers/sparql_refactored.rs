@@ -145,9 +145,9 @@ pub async fn update_handler(
         }))
         .into_response(),
         Err(e) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            e.status_code(),
             Json(serde_json::json!({
-                "error": "update_execution_failed",
+                "error": e.error_type(),
                 "message": e.to_string()
             })),
         )
