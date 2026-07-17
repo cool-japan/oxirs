@@ -157,6 +157,47 @@ async fn read_only_dataset_rejects_update_with_403_and_leaves_data_unchanged() {
 }
 
 #[tokio::test]
+async fn read_only_blocks_gsp_upload_and_patch_writes() {
+    use axum::routing::{post, put};
+
+    // A read-only public deployment must block every write surface, not just
+    // SPARQL UPDATE: the Graph Store Protocol, bulk upload and RDF Patch mutate
+    // the store too. These are the production `*_server` handlers wired by the
+    // real Runtime router.
+    let state = Arc::new(build_minimal_app_state(
+        Store::new().expect("store"),
+        config_with_default_read_only(true),
+    ));
+    let router = axum::Router::new()
+        .route("/data", put(oxirs_fuseki::handlers::handle_gsp_put_server))
+        .route("/data-post", post(oxirs_fuseki::handlers::handle_gsp_post_server))
+        .route("/upload", post(oxirs_fuseki::handlers::handle_upload_server))
+        .route("/patch", post(oxirs_fuseki::handlers::handle_patch_server))
+        .with_state(state);
+
+    let cases = [
+        ("PUT", "/data", "text/turtle", "<http://a> <http://b> <http://c> ."),
+        ("POST", "/data-post", "text/turtle", "<http://a> <http://b> <http://c> ."),
+        ("POST", "/upload", "text/turtle", "<http://a> <http://b> <http://c> ."),
+        ("POST", "/patch", "text/plain", "A <http://a> <http://b> <http://c> .\n"),
+    ];
+    for (method, path, ctype, body) in cases {
+        let req = Request::builder()
+            .method(method)
+            .uri(path)
+            .header("content-type", ctype)
+            .body(Body::from(body))
+            .expect("request");
+        let resp = router.clone().oneshot(req).await.expect("oneshot");
+        assert_eq!(
+            resp.status(),
+            StatusCode::FORBIDDEN,
+            "{method} {path} must be 403 on a read-only dataset"
+        );
+    }
+}
+
+#[tokio::test]
 async fn writable_dataset_allows_update() {
     let router = router_with_config(config_with_default_read_only(false));
 

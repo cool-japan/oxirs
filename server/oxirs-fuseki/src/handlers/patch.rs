@@ -730,6 +730,12 @@ pub async fn handle_patch_server(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    if state.is_dataset_read_only("default") {
+        return crate::error::FusekiError::forbidden(
+            "Dataset is read-only; RDF Patch is not permitted",
+        )
+        .into_response();
+    }
     match handle_patch(
         Query(params),
         State(Arc::new(state.store.clone())),
