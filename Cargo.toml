@@ -281,8 +281,8 @@ syn = { version = "2", features = ["full", "parsing"] }
 quote = "1"
 
 # OxiSQL - Pure Rust SQLite-compatible engine (replaces rusqlite per COOLJAPAN Policy)
-oxisql-core = "0.3.2"
-oxisql-sqlite-compat = "0.3.2"
+oxisql-core = "0.3.3"
+oxisql-sqlite-compat = "0.3.3"
 
 # OxiCode - modern binary serialization (replaces bincode per COOLJAPAN Policy)
 oxicode = { version = "0.2.4", features = ["serde", "derive"] }

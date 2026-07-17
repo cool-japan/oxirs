@@ -256,6 +256,72 @@ fn csv_escape_field(value: &str) -> String {
     }
 }
 
+/// Export entries from the *wired* query-history store
+/// ([`crate::commands::history`]) to CSV at `path`.
+///
+/// The wired store (`commands/history.rs`) owns the authoritative on-disk
+/// format (`query_history.json`); this reuses the same CSV escaping logic so
+/// there is a single implementation, rather than creating a second, incompatible
+/// store on the same filename. Columns follow the wired store's richer schema.
+pub fn export_wired_history_csv(
+    entries: &[crate::commands::history::HistoryEntry],
+    path: &Path,
+) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+        }
+    }
+    let file = fs::File::create(path)
+        .with_context(|| format!("Failed to create CSV file: {}", path.display()))?;
+    let mut writer = BufWriter::new(file);
+    writeln!(
+        writer,
+        "id,timestamp,dataset,success,execution_time_ms,result_count,error,query"
+    )
+    .with_context(|| "Failed to write CSV header")?;
+    for entry in entries {
+        let ts = entry.timestamp.to_rfc3339();
+        let exec = entry
+            .execution_time_ms
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        let rc = entry
+            .result_count
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        let error = entry.error.as_deref().unwrap_or("");
+        writeln!(
+            writer,
+            "{},{},{},{},{},{},{},{}",
+            entry.id,
+            ts,
+            csv_escape_field(&entry.dataset),
+            entry.success,
+            exec,
+            rc,
+            csv_escape_field(error),
+            csv_escape_field(&entry.query)
+        )
+        .with_context(|| format!("Failed to write CSV row for entry {}", entry.id))?;
+    }
+    writer
+        .flush()
+        .with_context(|| "Failed to flush CSV writer")?;
+    Ok(())
+}
+
+/// Load the wired query-history store from its default location and export all
+/// entries to `output` as CSV. Returns the number of entries exported.
+pub fn export_default_history_to_csv(output: &Path) -> Result<usize> {
+    use crate::commands::history::QueryHistory;
+    let mut history = QueryHistory::new(QueryHistory::default_history_file(), 1000);
+    history.load()?;
+    export_wired_history_csv(history.entries(), output)?;
+    Ok(history.entries().len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -604,5 +670,52 @@ mod tests {
     fn test_csv_escape_value_with_quote() {
         let escaped = csv_escape_field("say \"hi\"");
         assert!(escaped.contains("\"\""));
+    }
+
+    // --- wired-store CSV export ---
+
+    fn wired_entry(
+        id: usize,
+        dataset: &str,
+        query: &str,
+        success: bool,
+    ) -> crate::commands::history::HistoryEntry {
+        crate::commands::history::HistoryEntry {
+            id,
+            timestamp: Utc::now(),
+            dataset: dataset.to_string(),
+            query: query.to_string(),
+            execution_time_ms: Some(12.5),
+            result_count: Some(3),
+            success,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn test_export_wired_history_csv_header_and_rows() {
+        let entries = vec![
+            wired_entry(1, "ds1", "SELECT ?s WHERE { ?s ?p ?o }", true),
+            wired_entry(
+                2,
+                "ds2",
+                "SELECT ?x WHERE { VALUES ?x { <a>, <b> } }",
+                false,
+            ),
+        ];
+        let path = tmp_csv_path("wired_export");
+        export_wired_history_csv(&entries, &path).unwrap();
+        let content = fs::read_to_string(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert!(content.starts_with(
+            "id,timestamp,dataset,success,execution_time_ms,result_count,error,query"
+        ));
+        assert!(content.contains("ds1"));
+        assert!(content.contains("ds2"));
+        // The VALUES clause contains a comma → the query field must be quoted.
+        assert!(content.contains('"'));
+        // Two data rows + header.
+        assert_eq!(content.lines().count(), 3);
     }
 }

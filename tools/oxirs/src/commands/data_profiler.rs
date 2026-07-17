@@ -15,8 +15,10 @@
 //! - **Report generation**: Structured JSON/text profile reports
 
 use super::CommandResult;
+use crate::cli::CliError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 // ─────────────────────────────────────────────
@@ -75,6 +77,10 @@ pub struct DatasetProfile {
     pub quality_issues: Vec<QualityIssue>,
     /// Connectivity metrics (if computed).
     pub connectivity: Option<ConnectivityMetrics>,
+    /// Predicate-per-subject connectivity (if computed).
+    pub predicate_connectivity: Option<PredicateConnectivity>,
+    /// Object-position term-kind distribution (IRI / literal / blank node).
+    pub object_types: ObjectTypeDistribution,
     /// Vocabulary usage.
     pub vocabularies: Vec<VocabularyUsage>,
     /// Duration of profiling.
@@ -192,6 +198,34 @@ pub struct VocabularyUsage {
     pub terms_used: usize,
     /// List of specific terms used.
     pub used_terms: Vec<String>,
+}
+
+/// Predicate-centric connectivity statistics (ported from the former
+/// `inspect_command`): how many distinct predicates each subject carries.
+///
+/// Complements [`ConnectivityMetrics`] (which is triple-degree oriented) by
+/// summarising the schema breadth of individual subjects.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PredicateConnectivity {
+    /// Average number of distinct predicates per subject.
+    pub avg_predicates_per_subject: f64,
+    /// Maximum number of distinct predicates for a single subject.
+    pub max_predicates_per_subject: usize,
+    /// Subject with the most distinct predicates (if any).
+    pub most_connected_subject: Option<String>,
+}
+
+/// Object-position term-kind distribution (ported from the former
+/// `inspect_command`'s `ObjectTypeDistribution`): counts of IRI, literal, and
+/// blank-node objects across all triples.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ObjectTypeDistribution {
+    /// Number of triples whose object is an IRI.
+    pub iri_count: usize,
+    /// Number of triples whose object is a literal.
+    pub literal_count: usize,
+    /// Number of triples whose object is a blank node.
+    pub blank_node_count: usize,
 }
 
 // ─────────────────────────────────────────────
@@ -340,6 +374,16 @@ impl DataProfiler {
             None
         };
 
+        // Predicate-per-subject connectivity (ported from inspect_command)
+        let predicate_connectivity = if self.config.compute_connectivity {
+            Some(self.compute_predicate_connectivity(&effective_triples))
+        } else {
+            None
+        };
+
+        // Object-position term-kind distribution (ported from inspect_command)
+        let object_types = compute_object_types(&effective_triples);
+
         // Vocabulary detection
         let vocabularies = if self.config.vocabulary_detection {
             self.detect_vocabularies(&all_iris)
@@ -357,8 +401,44 @@ impl DataProfiler {
             language_tags,
             quality_issues,
             connectivity,
+            predicate_connectivity,
+            object_types,
             vocabularies,
             profiling_duration: start.elapsed(),
+        }
+    }
+
+    /// Compute predicate-per-subject connectivity (distinct predicates per
+    /// subject). Ported from the former `inspect_command::ConnectivityStats`.
+    fn compute_predicate_connectivity(
+        &self,
+        triples: &[&(String, String, String)],
+    ) -> PredicateConnectivity {
+        let mut subject_preds: HashMap<&str, HashSet<&str>> = HashMap::new();
+        for triple in triples {
+            subject_preds
+                .entry(triple.0.as_str())
+                .or_default()
+                .insert(triple.1.as_str());
+        }
+
+        let counts: Vec<usize> = subject_preds.values().map(|s| s.len()).collect();
+        let sum: usize = counts.iter().sum();
+        let avg_predicates_per_subject = if counts.is_empty() {
+            0.0
+        } else {
+            sum as f64 / counts.len() as f64
+        };
+        let max_predicates_per_subject = counts.iter().copied().max().unwrap_or(0);
+        let most_connected_subject = subject_preds
+            .iter()
+            .max_by_key(|(_, preds)| preds.len())
+            .map(|(subject, _)| subject.to_string());
+
+        PredicateConnectivity {
+            avg_predicates_per_subject,
+            max_predicates_per_subject,
+            most_connected_subject,
         }
     }
 
@@ -859,6 +939,38 @@ pub fn format_text_report(profile: &DatasetProfile) -> String {
         out.push('\n');
     }
 
+    // Predicate-per-subject connectivity
+    if let Some(pc) = &profile.predicate_connectivity {
+        out.push_str("── Predicate Connectivity ──\n");
+        out.push_str(&format!(
+            "  Avg predicates/subject: {:.2}\n",
+            pc.avg_predicates_per_subject
+        ));
+        out.push_str(&format!(
+            "  Max predicates/subject: {}\n",
+            pc.max_predicates_per_subject
+        ));
+        if let Some(subject) = &pc.most_connected_subject {
+            out.push_str(&format!("  Most connected subject: {}\n", subject));
+        }
+        out.push('\n');
+    }
+
+    // Object type distribution
+    out.push_str("── Object Type Distribution ──\n");
+    out.push_str(&format!(
+        "  IRI objects:        {}\n",
+        profile.object_types.iri_count
+    ));
+    out.push_str(&format!(
+        "  Literal objects:    {}\n",
+        profile.object_types.literal_count
+    ));
+    out.push_str(&format!(
+        "  Blank-node objects: {}\n\n",
+        profile.object_types.blank_node_count
+    ));
+
     out
 }
 
@@ -868,44 +980,132 @@ pub fn format_json_report(profile: &DatasetProfile) -> Result<String, String> {
 }
 
 // ─────────────────────────────────────────────
+// Triple loading
+// ─────────────────────────────────────────────
+
+/// Load an RDF file into the profiler's `(subject, predicate, object)` string
+/// representation using the real `oxirs-ttl` parser (format auto-detected from
+/// the file extension). Terms are rendered in an N-Triples-like form so the
+/// literal/datatype/blank-node heuristics used throughout this module apply.
+///
+/// A missing file, or a parse failure, is surfaced as an explicit error — the
+/// profiler never falls back to synthetic or empty data.
+pub fn load_triples_from_file(path: &Path) -> Result<Vec<(String, String, String)>, String> {
+    if !path.exists() {
+        return Err(format!("input file not found: {}", path.display()));
+    }
+
+    let triples = oxirs_ttl::convenience::parse_rdf_file(path)
+        .map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
+
+    Ok(triples.iter().map(triple_to_tuple).collect())
+}
+
+/// Convert an `oxirs-core` [`Triple`](oxirs_core::model::Triple) into the
+/// profiler's string-tuple representation.
+fn triple_to_tuple(triple: &oxirs_core::model::Triple) -> (String, String, String) {
+    (
+        subject_to_string(triple.subject()),
+        predicate_to_string(triple.predicate()),
+        object_to_string(triple.object()),
+    )
+}
+
+fn subject_to_string(subject: &oxirs_core::model::Subject) -> String {
+    use oxirs_core::model::Subject;
+    match subject {
+        Subject::NamedNode(n) => n.as_str().to_string(),
+        Subject::BlankNode(b) => format!("_:{}", b.id()),
+        Subject::Variable(v) => format!("?{v}"),
+        Subject::QuotedTriple(_) => "<<quoted-triple>>".to_string(),
+    }
+}
+
+fn predicate_to_string(predicate: &oxirs_core::model::Predicate) -> String {
+    use oxirs_core::model::Predicate;
+    match predicate {
+        Predicate::NamedNode(n) => n.as_str().to_string(),
+        Predicate::Variable(v) => format!("?{v}"),
+    }
+}
+
+fn object_to_string(object: &oxirs_core::model::Object) -> String {
+    use oxirs_core::model::Object;
+    const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+    match object {
+        Object::NamedNode(n) => n.as_str().to_string(),
+        Object::BlankNode(b) => format!("_:{}", b.id()),
+        Object::Literal(l) => {
+            let value = l.value();
+            if let Some(lang) = l.language() {
+                format!("\"{value}\"@{lang}")
+            } else {
+                let dt = l.datatype();
+                if dt.as_str() == XSD_STRING {
+                    format!("\"{value}\"")
+                } else {
+                    format!("\"{value}\"^^<{}>", dt.as_str())
+                }
+            }
+        }
+        Object::Variable(v) => format!("?{v}"),
+        Object::QuotedTriple(_) => "<<quoted-triple>>".to_string(),
+    }
+}
+
+// ─────────────────────────────────────────────
 // CLI entry point
 // ─────────────────────────────────────────────
 
-/// Run the data profiler command.
-pub async fn run(
-    dataset_path: String,
-    output_format: Option<String>,
-    top_n: Option<usize>,
+/// Run the `inspect` command: profile a real RDF file and print (or write) a
+/// structural + data-quality report.
+///
+/// This is the consolidated entry point for dataset statistics — it replaces
+/// the earlier simulated `stats`/`inspect` commands. A missing input file is an
+/// explicit error; no synthetic data is ever produced.
+pub async fn run_inspect(
+    file: std::path::PathBuf,
+    format: String,
+    output: Option<std::path::PathBuf>,
+    top_n: usize,
     no_connectivity: bool,
     no_quality: bool,
 ) -> CommandResult {
-    println!("Profiling dataset: {}", dataset_path);
+    if !file.exists() {
+        return Err(CliError::not_found(file.display().to_string())
+            .with_context("inspect: input RDF file does not exist")
+            .with_suggestion("Provide the path to an existing .ttl/.nt/.nq/.rdf file"));
+    }
+
+    let triples = load_triples_from_file(&file).map_err(CliError::from)?;
+    println!("Inspecting {} ({} triples)", file.display(), triples.len());
 
     let config = ProfilerConfig {
-        top_n: top_n.unwrap_or(20),
+        top_n,
         compute_connectivity: !no_connectivity,
         quality_checks: !no_quality,
         ..Default::default()
     };
 
     let profiler = DataProfiler::with_config(config);
-
-    // For now, use a placeholder dataset (actual integration would load from TDB)
-    let triples: Vec<(String, String, String)> = Vec::new();
-
     let profile = profiler.profile(&triples);
 
-    let format = output_format.as_deref().unwrap_or("text");
-    match format {
-        "json" => {
-            let json = format_json_report(&profile)
-                .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
-            println!("{}", json);
+    let rendered = match format.to_lowercase().as_str() {
+        "json" => format_json_report(&profile).map_err(CliError::from)?,
+        "text" => format_text_report(&profile),
+        other => {
+            return Err(CliError::invalid_format(format!(
+                "inspect: unsupported report format '{other}' (expected text or json)"
+            )));
         }
-        _ => {
-            let report = format_text_report(&profile);
-            println!("{}", report);
+    };
+
+    match output {
+        Some(out_path) => {
+            std::fs::write(&out_path, &rendered).map_err(CliError::io_error)?;
+            println!("Report written to: {}", out_path.display());
         }
+        None => println!("{rendered}"),
     }
 
     Ok(())
@@ -950,6 +1150,23 @@ fn top_n_entries(freq: &HashMap<String, usize>, n: usize, total: usize) -> Vec<F
 /// Check if a term looks like an IRI (not a blank node or literal).
 fn is_iri(term: &str) -> bool {
     !term.starts_with("_:") && !term.starts_with('"')
+}
+
+/// Count object-position term kinds (IRI / literal / blank node) across all
+/// triples. Ported from the former `inspect_command`.
+fn compute_object_types(triples: &[&(String, String, String)]) -> ObjectTypeDistribution {
+    let mut dist = ObjectTypeDistribution::default();
+    for triple in triples {
+        let obj = &triple.2;
+        if obj.starts_with('"') {
+            dist.literal_count += 1;
+        } else if obj.starts_with("_:") {
+            dist.blank_node_count += 1;
+        } else {
+            dist.iri_count += 1;
+        }
+    }
+    dist
 }
 
 /// Classify a term into IRI, blank node, or literal buckets.
@@ -1513,5 +1730,86 @@ mod tests {
     fn test_profiler_default() {
         let profiler = DataProfiler::default();
         assert_eq!(profiler.config.top_n, 20);
+    }
+
+    // ── Object type distribution (ported from inspect_command) ──
+
+    #[test]
+    fn test_object_type_distribution() {
+        let triples = make_test_triples();
+        let profiler = DataProfiler::new();
+        let profile = profiler.profile(&triples);
+        // Total object kinds must equal triple count.
+        let total = profile.object_types.iri_count
+            + profile.object_types.literal_count
+            + profile.object_types.blank_node_count;
+        assert_eq!(total, profile.basic_stats.triple_count);
+        assert!(profile.object_types.iri_count > 0);
+        assert!(profile.object_types.literal_count > 0);
+    }
+
+    // ── Predicate connectivity (ported from inspect_command) ──
+
+    #[test]
+    fn test_predicate_connectivity_computed() {
+        let triples = make_test_triples();
+        let profiler = DataProfiler::new();
+        let profile = profiler.profile(&triples);
+        let pc = profile
+            .predicate_connectivity
+            .as_ref()
+            .expect("predicate connectivity present");
+        assert!(pc.avg_predicates_per_subject > 0.0);
+        assert!(pc.max_predicates_per_subject >= 1);
+        assert!(pc.most_connected_subject.is_some());
+    }
+
+    #[test]
+    fn test_predicate_connectivity_disabled() {
+        let triples = make_test_triples();
+        let config = ProfilerConfig {
+            compute_connectivity: false,
+            ..Default::default()
+        };
+        let profiler = DataProfiler::with_config(config);
+        let profile = profiler.profile(&triples);
+        assert!(profile.predicate_connectivity.is_none());
+    }
+
+    // ── Real file loading (fail-loud on missing input) ──
+
+    #[test]
+    fn test_load_triples_missing_file_errors() {
+        let missing = std::env::temp_dir().join("oxirs_inspect_missing_9999.ttl");
+        let _ = std::fs::remove_file(&missing);
+        let err = load_triples_from_file(&missing).expect_err("missing file must error");
+        assert!(err.contains("not found"), "err = {err}");
+    }
+
+    #[test]
+    fn test_load_triples_from_real_turtle() {
+        let path =
+            std::env::temp_dir().join(format!("oxirs_inspect_load_{}.ttl", std::process::id()));
+        std::fs::write(
+            &path,
+            "@prefix ex: <http://example.org/> .\n\
+             @prefix foaf: <http://xmlns.com/foaf/0.1/> .\n\
+             ex:alice a foaf:Person ;\n\
+                 foaf:name \"Alice\" ;\n\
+                 foaf:knows ex:bob .\n",
+        )
+        .expect("write turtle");
+        let triples = load_triples_from_file(&path).expect("parse turtle");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(triples.len(), 3);
+        // Object kinds should be correctly rendered for the heuristics.
+        assert!(triples.iter().any(|(_, _, o)| o.starts_with('"')));
+        assert!(triples
+            .iter()
+            .any(|(_, _, o)| o == "http://xmlns.com/foaf/0.1/Person"));
+
+        let profile = DataProfiler::new().profile(&triples);
+        assert_eq!(profile.object_types.literal_count, 1);
+        assert_eq!(profile.object_types.iri_count, 2);
     }
 }

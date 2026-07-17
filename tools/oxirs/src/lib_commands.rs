@@ -559,7 +559,8 @@ pub enum Commands {
     SchemaGen {
         /// Input RDF data
         data: PathBuf,
-        /// Schema type (shacl, shex, owl)
+        /// Schema type (shacl, shex, owl). With `--advanced`, `owl`/`rdfs`
+        /// select the vocabulary flavour emitted by the inferencer.
         #[arg(long, default_value = "shacl")]
         schema_type: String,
         /// Output file
@@ -568,6 +569,10 @@ pub enum Commands {
         /// Include statistics
         #[arg(long)]
         stats: bool,
+        /// Use the advanced schema inferencer: subclass-hierarchy, domain/range,
+        /// and cardinality inference, emitting OWL/RDFS (instead of SHACL).
+        #[arg(long)]
+        advanced: bool,
     },
 
     /// SAMM Aspect Model tools (Java ESMF SDK compatible)
@@ -908,6 +913,30 @@ pub enum Commands {
         /// Output format for the detailed report (table, json)
         #[arg(short, long)]
         output: Option<String>,
+    },
+
+    /// Inspect an RDF file: triple/subject/predicate counts, namespaces,
+    /// top predicates/classes, connectivity, object-type distribution, and
+    /// data-quality checks. Operates on a real file — a missing input is an
+    /// explicit error, never synthetic data.
+    Inspect {
+        /// RDF file to inspect (.ttl, .nt, .nq, .trig, .rdf; format auto-detected)
+        file: PathBuf,
+        /// Report output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+        /// Write the report to a file instead of stdout
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Number of top-N items to report per category
+        #[arg(long, default_value = "20")]
+        top: usize,
+        /// Skip connectivity metrics (faster on large datasets)
+        #[arg(long)]
+        no_connectivity: bool,
+        /// Skip data-quality checks
+        #[arg(long)]
+        no_quality: bool,
     },
 }
 

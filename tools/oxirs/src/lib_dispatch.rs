@@ -611,7 +611,14 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             schema_type,
             output,
             stats,
-        } => crate::tools::schemagen::run(data, schema_type, output, stats).await,
+            advanced,
+        } => {
+            if advanced {
+                crate::commands::schema_inferencer::run(data, schema_type, output, stats).await
+            } else {
+                crate::tools::schemagen::run(data, schema_type, output, stats).await
+            }
+        }
         Commands::Aspect { action } => crate::commands::aspect::run(action)
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
@@ -753,6 +760,23 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             HistoryAction::Analytics { dataset } => {
                 crate::commands::history::commands::analytics_command(dataset)
                     .await
+                    .map_err(|e| e.into())
+            }
+            HistoryAction::ExportCsv { output } => {
+                match crate::commands::query_history::export_default_history_to_csv(&output) {
+                    Ok(count) => {
+                        println!(
+                            "Exported {count} history entr{} to {}",
+                            if count == 1 { "y" } else { "ies" },
+                            output.display()
+                        );
+                        Ok(())
+                    }
+                    Err(e) => Err(e.into()),
+                }
+            }
+            HistoryAction::Similar { query, top } => {
+                crate::commands::query_similarity::run_similarity_over_history(&query, top)
                     .map_err(|e| e.into())
             }
         },
@@ -940,12 +964,14 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 file,
                 iterations,
                 suggestions,
+                flamegraph,
             } => crate::commands::query_profiler::run_profile_command(
                 dataset,
                 query,
                 file,
                 iterations,
                 suggestions,
+                flamegraph,
             )
             .await
             .map_err(|e| e.into()),
@@ -1060,6 +1086,24 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             crate::tools::format_detection::detect_format_command(file, ctx.verbose, output)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
         }
+
+        Commands::Inspect {
+            file,
+            format,
+            output,
+            top,
+            no_connectivity,
+            no_quality,
+        } => crate::commands::data_profiler::run_inspect(
+            file,
+            format,
+            output,
+            top,
+            no_connectivity,
+            no_quality,
+        )
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
     }
 }
 
@@ -1153,10 +1197,12 @@ fn run_merge(
         "ntriples" | "nt" => OutputFormat::NTriples,
         "nquads" | "nq" => OutputFormat::NQuads,
         "rdfxml" | "rdf" | "xml" => OutputFormat::RdfXml,
-        other => return Err(format!(
+        other => {
+            return Err(format!(
             "merge: unknown output format '{other}' (expected turtle, ntriples, nquads, or rdfxml)"
         )
-        .into()),
+            .into())
+        }
     };
 
     let sources: Vec<String> = inputs

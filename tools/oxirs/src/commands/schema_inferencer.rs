@@ -472,6 +472,152 @@ impl Default for SchemaInferencer {
 }
 
 // ─────────────────────────────────────────────
+// Triple loading + CLI entry point
+// ─────────────────────────────────────────────
+
+/// Convert an `oxirs-core` [`Triple`](oxirs_core::model::Triple) into the
+/// inferencer's [`InferenceTriple`], preserving whether the object is a literal
+/// and (for literals) its datatype so datatype-range and datatype-vs-object
+/// property classification stay accurate.
+fn triple_to_inference(triple: &oxirs_core::model::Triple) -> InferenceTriple {
+    use oxirs_core::model::{Object, Predicate, Subject};
+
+    let subject = match triple.subject() {
+        Subject::NamedNode(n) => n.as_str().to_string(),
+        Subject::BlankNode(b) => format!("_:{}", b.id()),
+        Subject::Variable(v) => format!("?{v}"),
+        Subject::QuotedTriple(_) => "<<quoted-triple>>".to_string(),
+    };
+
+    let predicate = match triple.predicate() {
+        Predicate::NamedNode(n) => n.as_str().to_string(),
+        Predicate::Variable(v) => format!("?{v}"),
+    };
+
+    match triple.object() {
+        Object::NamedNode(n) => InferenceTriple::new(subject, predicate, n.as_str().to_string()),
+        Object::BlankNode(b) => InferenceTriple::new(subject, predicate, format!("_:{}", b.id())),
+        Object::Literal(l) => {
+            let base = InferenceTriple::new(subject, predicate, l.value().to_string());
+            if l.language().is_some() {
+                base.with_datatype("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+            } else {
+                base.with_datatype(l.datatype().as_str().to_string())
+            }
+        }
+        Object::Variable(v) => InferenceTriple::new(subject, predicate, format!("?{v}")),
+        Object::QuotedTriple(_) => {
+            InferenceTriple::new(subject, predicate, "<<quoted-triple>>".to_string())
+        }
+    }
+}
+
+/// Print an inferred-schema summary (class/property counts, cardinality).
+fn print_schema_stats(schema: &InferredSchema) {
+    println!("\n=== Schema Inference Statistics ===");
+    println!("Triples analyzed:    {}", schema.triple_count);
+    println!("Distinct subjects:   {}", schema.subject_count);
+    println!("Distinct predicates: {}", schema.predicate_count);
+    println!("Classes inferred:    {}", schema.classes.len());
+    println!("Properties inferred: {}", schema.properties.len());
+
+    if !schema.classes.is_empty() {
+        println!("\nClasses:");
+        for class in &schema.classes {
+            let short = class
+                .iri
+                .rsplit_once(['/', '#'])
+                .map(|(_, l)| l)
+                .unwrap_or(&class.iri);
+            println!(
+                "  {short}: {} instance(s), {} propertie(s), {} superclass(es)",
+                class.instance_count,
+                class.properties.len(),
+                class.superclasses.len()
+            );
+        }
+    }
+
+    if !schema.properties.is_empty() {
+        println!("\nProperties:");
+        for prop in &schema.properties {
+            let short = prop
+                .iri
+                .rsplit_once(['/', '#'])
+                .map(|(_, l)| l)
+                .unwrap_or(&prop.iri);
+            let kind = if prop.is_datatype_property {
+                "datatype"
+            } else {
+                "object"
+            };
+            println!(
+                "  {short} ({kind}): cardinality [{}, {}], {} use(s)",
+                prop.min_cardinality, prop.max_cardinality, prop.usage_count
+            );
+        }
+    }
+    println!();
+}
+
+/// Run the advanced schema inferencer (`oxirs schema-gen --advanced`).
+///
+/// Loads a real RDF file, infers class hierarchy, property domains/ranges, and
+/// cardinality constraints, then emits OWL (default) or RDFS Turtle. A missing
+/// input file is an explicit error — no synthetic schema is ever produced.
+///
+/// * `schema_type` selects the emitted vocabulary flavour: `rdfs` emits
+///   `rdfs:Class`/`rdf:Property`; anything else (default `owl`) emits OWL.
+pub async fn run(
+    data: std::path::PathBuf,
+    schema_type: String,
+    output: Option<std::path::PathBuf>,
+    stats: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if !data.exists() {
+        return Err(format!("Data file not found: {}", data.display()).into());
+    }
+
+    let core_triples = oxirs_ttl::convenience::parse_rdf_file(&data)
+        .map_err(|e| format!("Failed to parse data file '{}': {e}", data.display()))?;
+
+    let triples: Vec<InferenceTriple> = core_triples.iter().map(triple_to_inference).collect();
+
+    println!("Loaded {} triples from {}", triples.len(), data.display());
+
+    let use_owl = !matches!(schema_type.to_lowercase().as_str(), "rdfs");
+    let config = InferencerConfig {
+        use_owl,
+        ..Default::default()
+    };
+    let inferencer = SchemaInferencer::with_config(config);
+    let schema = inferencer.infer(&triples);
+
+    println!(
+        "Inferred {} class(es) and {} property(ies)",
+        schema.classes.len(),
+        schema.properties.len()
+    );
+
+    if stats {
+        print_schema_stats(&schema);
+    }
+
+    let turtle = inferencer.to_turtle(&schema);
+
+    match output {
+        Some(out_path) => {
+            std::fs::write(&out_path, &turtle)
+                .map_err(|e| format!("Cannot write output file '{}': {e}", out_path.display()))?;
+            println!("Schema written to: {}", out_path.display());
+        }
+        None => print!("{turtle}"),
+    }
+
+    Ok(())
+}
+
+// ─────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────
 
@@ -839,5 +985,49 @@ mod tests {
         for w in schema.properties.windows(2) {
             assert!(w[0].iri <= w[1].iri);
         }
+    }
+
+    // ═══ Advanced CLI run() tests ════════════════════════
+
+    #[tokio::test]
+    async fn test_run_missing_file_errors() {
+        let missing = std::env::temp_dir().join("oxirs_schema_inf_missing_9999.ttl");
+        let _ = std::fs::remove_file(&missing);
+        let res = run(missing, "owl".to_string(), None, false).await;
+        assert!(res.is_err(), "missing file must error");
+    }
+
+    #[tokio::test]
+    async fn test_run_infers_and_writes_owl() {
+        let turtle = "@prefix ex: <http://example.org/> .\n\
+             @prefix foaf: <http://xmlns.com/foaf/0.1/> .\n\
+             ex:alice a ex:Person ;\n\
+                 foaf:name \"Alice\" ;\n\
+                 foaf:knows ex:bob .\n\
+             ex:bob a ex:Person ;\n\
+                 foaf:name \"Bob\" .\n";
+        let in_path =
+            std::env::temp_dir().join(format!("oxirs_schema_inf_in_{}.ttl", std::process::id()));
+        let out_path =
+            std::env::temp_dir().join(format!("oxirs_schema_inf_out_{}.ttl", std::process::id()));
+        std::fs::write(&in_path, turtle).expect("write input");
+
+        let res = run(
+            in_path.clone(),
+            "owl".to_string(),
+            Some(out_path.clone()),
+            true,
+        )
+        .await;
+        let content = std::fs::read_to_string(&out_path).unwrap_or_default();
+        let _ = std::fs::remove_file(&in_path);
+        let _ = std::fs::remove_file(&out_path);
+
+        assert!(res.is_ok(), "run failed: {:?}", res.err());
+        assert!(content.contains("owl:Class"), "output: {content}");
+        assert!(
+            content.contains("http://example.org/Person"),
+            "output: {content}"
+        );
     }
 }

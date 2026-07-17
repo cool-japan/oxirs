@@ -151,7 +151,11 @@ pub mod stream;
 /// Query history store with analytics and CSV export
 pub mod query_history;
 
-/// RDF dataset profiler with statistical analysis and quality checks
+/// RDF dataset profiler with statistical analysis and quality checks.
+///
+/// Also the home of the consolidated `inspect` command (triple/subject/predicate
+/// counts, namespaces, connectivity, object-type distribution, quality checks) —
+/// the former `stats_command` and `inspect_command` modules were merged here.
 pub mod data_profiler;
 
 /// RDF schema inferencer (class/property discovery, domain/range, cardinality)
@@ -159,9 +163,6 @@ pub mod schema_inferencer;
 
 /// SPARQL query validator (syntax, structure, prefixes, variables)
 pub mod query_validator;
-
-/// RDF dataset statistics command (triple counts, unique URIs, predicate analysis)
-pub mod stats_command;
 
 /// Real-time SPARQL endpoint monitoring (latency, uptime, P95, health checks)
 pub mod monitor_command;
@@ -171,9 +172,6 @@ pub mod lint_command;
 
 /// RDF merge command (set-union, blank node renaming, conflict detection, provenance tracking)
 pub mod merge_command;
-
-/// RDF graph inspection command (triple count, predicates, subjects, namespaces, connectivity, object types)
-pub mod inspect_command;
 
 /// Server lifecycle management command (config validation + dry-run start)
 pub mod serve_command;
