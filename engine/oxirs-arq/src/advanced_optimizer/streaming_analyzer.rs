@@ -13,6 +13,7 @@ use std::sync::Arc;
 pub struct StreamingAnalyzer {
     config: StreamingConfig,
     current_memory_bytes: Arc<AtomicU64>,
+    spill_policies: Vec<SpillPolicy>,
 }
 
 /// Configuration for streaming execution
@@ -293,6 +294,7 @@ impl StreamingAnalyzer {
         Self {
             config,
             current_memory_bytes: Arc::new(AtomicU64::new(0)),
+            spill_policies: Vec::new(),
         }
     }
 
@@ -459,14 +461,13 @@ impl StreamingAnalyzer {
     }
 
     /// Add spill policy
-    pub fn add_spill_policy(&mut self, _policy: SpillPolicy) {
-        // Store policy for later use
+    pub fn add_spill_policy(&mut self, policy: SpillPolicy) {
+        self.spill_policies.push(policy);
     }
 
     /// Get active spill policies
     pub fn spill_policies(&self) -> &[SpillPolicy] {
-        // Return empty slice for now
-        &[]
+        &self.spill_policies
     }
 
     /// Get the count of optimizations applied
@@ -557,6 +558,32 @@ mod tests {
         let config = StreamingConfig::default();
         let analyzer = StreamingAnalyzer::new(config);
         assert_eq!(analyzer.memory_threshold(), 2048 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_add_spill_policy_is_retained() {
+        let config = StreamingConfig::default();
+        let mut analyzer = StreamingAnalyzer::new(config);
+        assert!(analyzer.spill_policies().is_empty());
+
+        analyzer.add_spill_policy(SpillPolicy {
+            policy_type: SpillType::LeastRecentlyUsed,
+            threshold: 0.75,
+            target_operators: vec!["scan-1".to_string()],
+            cost_factor: 1.5,
+        });
+        analyzer.add_spill_policy(SpillPolicy {
+            policy_type: SpillType::CostBased,
+            threshold: 0.9,
+            target_operators: vec!["sort-2".to_string()],
+            cost_factor: 2.0,
+        });
+
+        let policies = analyzer.spill_policies();
+        assert_eq!(policies.len(), 2);
+        assert_eq!(policies[0].policy_type, SpillType::LeastRecentlyUsed);
+        assert_eq!(policies[1].policy_type, SpillType::CostBased);
+        assert_eq!(policies[1].target_operators, vec!["sort-2".to_string()]);
     }
 
     #[test]

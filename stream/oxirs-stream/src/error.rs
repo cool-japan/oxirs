@@ -137,6 +137,12 @@ pub enum StreamError {
     #[error("Resource exhausted: {0}")]
     ResourceExhausted(String),
 
+    #[error("Security violation: {0}")]
+    SecurityViolation(String),
+
+    #[error("Insufficient resources: {0}")]
+    InsufficientResources(String),
+
     /// Per-stream SLA admission control rejected the event because the stream
     /// is over its admitted budget (rate, lag, or jitter envelope).
     #[error("SLA exceeded for stream '{stream_id}': {reason}")]

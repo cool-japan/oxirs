@@ -6,7 +6,7 @@ use crate::cli::logging::{DataLogger, PerfLogger};
 use crate::cli::validation::{dataset_validation, fs_validation, validate_rdf_format};
 use crate::cli::{progress::helpers, CliContext};
 use oxirs_core::format::{RdfFormat, RdfParser};
-use oxirs_core::model::{GraphName, NamedNode};
+use oxirs_core::model::{GraphName, NamedNode, Quad};
 use oxirs_core::rdf_store::RdfStore;
 use std::fs;
 use std::io::BufReader;
@@ -139,6 +139,17 @@ pub async fn import_batch(
 
     progress.finish_with_message("Batch import complete");
 
+    // Ensure everything is durable (fsync the append log / compact
+    // deletions) before reporting success.
+    {
+        let store_lock = store
+            .lock()
+            .map_err(|e| format!("Mutex poisoned while flushing store: {e}"))?;
+        store_lock
+            .flush()
+            .map_err(|e| format!("Failed to flush store: {e}"))?;
+    }
+
     let duration = start_time.elapsed();
 
     // Get final statistics (handle poisoned mutexes gracefully)
@@ -183,6 +194,39 @@ pub async fn import_batch(
     ));
 
     Ok(())
+}
+
+/// Bulk-insert every quad currently buffered in `pending` under a single
+/// mutex acquisition (one lock + one batched append/fsync on the persistent
+/// backend) instead of locking and inserting one quad at a time. Returns the
+/// number of quads in the flushed batch on success, or `(count, message)` on
+/// failure so the caller can still account for the attempted quads in its
+/// error tally.
+fn flush_batch_chunk(
+    store: &Arc<Mutex<RdfStore>>,
+    pending: &mut Vec<Quad>,
+) -> Result<usize, (usize, String)> {
+    if pending.is_empty() {
+        return Ok(0);
+    }
+
+    let batch = std::mem::replace(pending, Vec::with_capacity(pending.capacity()));
+    let batch_len = batch.len();
+
+    let mut store_lock = match store.lock() {
+        Ok(guard) => guard,
+        Err(e) => {
+            return Err((
+                batch_len,
+                format!("Mutex poisoned while accessing store: {e}"),
+            ))
+        }
+    };
+
+    match store_lock.bulk_insert_quads(batch) {
+        Ok(_) => Ok(batch_len),
+        Err(e) => Err((batch_len, format!("Failed to bulk-insert quads: {e}"))),
+    }
 }
 
 /// Process a single file in the batch
@@ -240,7 +284,12 @@ async fn process_single_file(
     let mut file_quad_count = 0;
     let mut file_error_count = 0;
 
-    // Parse and insert quads
+    // Accumulate quads into chunks and bulk-insert them under a single lock,
+    // instead of locking the (shared, cross-file) mutex once per quad.
+    const CHUNK_SIZE: usize = 10_000;
+    let mut pending: Vec<Quad> = Vec::with_capacity(CHUNK_SIZE);
+
+    // Parse and accumulate quads
     for quad_result in parser.for_reader(reader) {
         match quad_result {
             Ok(mut quad) => {
@@ -256,20 +305,18 @@ async fn process_single_file(
                     );
                 }
 
-                // Insert quad into store (with lock)
-                let mut store_lock = store
-                    .lock()
-                    .map_err(|e| format!("Mutex poisoned while accessing store: {e}"))?;
-                match store_lock.insert_quad(quad) {
-                    Ok(_) => {
-                        file_quad_count += 1;
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "Warning: Failed to insert quad from {}: {e}",
-                            file.display()
-                        );
-                        file_error_count += 1;
+                pending.push(quad);
+
+                if pending.len() >= CHUNK_SIZE {
+                    match flush_batch_chunk(&store, &mut pending) {
+                        Ok(n) => file_quad_count += n,
+                        Err((n, e)) => {
+                            eprintln!(
+                                "Warning: Failed to bulk-insert chunk from {}: {e}",
+                                file.display()
+                            );
+                            file_error_count += n;
+                        }
                     }
                 }
             }
@@ -277,6 +324,18 @@ async fn process_single_file(
                 eprintln!("Warning: Parse error in {}: {e}", file.display());
                 file_error_count += 1;
             }
+        }
+    }
+
+    // Flush the final, possibly partial, chunk.
+    match flush_batch_chunk(&store, &mut pending) {
+        Ok(n) => file_quad_count += n,
+        Err((n, e)) => {
+            eprintln!(
+                "Warning: Failed to bulk-insert final chunk from {}: {e}",
+                file.display()
+            );
+            file_error_count += n;
         }
     }
 

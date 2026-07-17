@@ -14,13 +14,18 @@ use crate::{
 };
 use axum::{
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{
+        header::{AUTHORIZATION, COOKIE},
+        HeaderMap,
+    },
     response::Json,
 };
 use chrono::{DateTime, Duration, Utc};
-use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
+use tokio::sync::RwLock;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
@@ -495,17 +500,26 @@ pub async fn validate_api_key_auth(
 // Helper Functions
 
 fn generate_api_key() -> String {
+    use scirs2_core::random::SecureRandom;
+
     const PREFIX: &str = "oxirs_";
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     const KEY_LENGTH: usize = 32;
 
-    let mut rng = Random::seed(42);
-    let key: String = (0..KEY_LENGTH)
-        .map(|_| {
-            let idx = rng.random_range(0..CHARSET.len());
-            CHARSET[idx] as char
-        })
-        .collect();
+    // Rejection sampling avoids modulo bias: CHARSET.len() == 62 does not
+    // evenly divide 256, so byte values in the trailing partial bucket are
+    // discarded and re-drawn rather than reduced via `% CHARSET.len()`.
+    let limit = (256 / CHARSET.len()) * CHARSET.len();
+    let mut secure = SecureRandom::new();
+    let mut key = String::with_capacity(KEY_LENGTH);
+    while key.len() < KEY_LENGTH {
+        let batch = secure.random_bytes(KEY_LENGTH - key.len());
+        for b in batch {
+            if (b as usize) < limit {
+                key.push(CHARSET[(b as usize) % CHARSET.len()] as char);
+            }
+        }
+    }
 
     format!("{PREFIX}{key}")
 }
@@ -602,19 +616,42 @@ fn has_admin_permission(user: &User) -> bool {
     user.permissions.contains(&Permission::GlobalAdmin) || user.roles.contains(&"admin".to_string())
 }
 
+/// Extract the real authenticated principal from the request.
+///
+/// Tries, in order: a `Bearer` JWT in the `Authorization` header, then a
+/// `session_id` cookie. Fails closed (returns an authentication error)
+/// rather than defaulting to any implicit identity when neither is present
+/// or valid — API key management must never be reachable anonymously.
 async fn extract_authenticated_user(
-    _headers: &HeaderMap,
-    _auth_service: &AuthService,
+    headers: &HeaderMap,
+    auth_service: &AuthService,
 ) -> FusekiResult<User> {
-    // Simplified extraction - in production would use proper auth middleware
-    Ok(User {
-        username: "admin".to_string(),
-        roles: vec!["admin".to_string()],
-        email: Some("admin@example.com".to_string()),
-        full_name: Some("Administrator".to_string()),
-        last_login: Some(Utc::now()),
-        permissions: vec![Permission::GlobalAdmin, Permission::SystemConfig],
-    })
+    if let Some(auth_header) = headers.get(AUTHORIZATION) {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if let Some(token) = auth_str.strip_prefix("Bearer ") {
+                if let Ok(validation) = auth_service.validate_jwt_token(token) {
+                    return Ok(validation.user);
+                }
+            }
+        }
+    }
+
+    if let Some(cookie_header) = headers.get(COOKIE) {
+        if let Ok(cookie_str) = cookie_header.to_str() {
+            for cookie in cookie_str.split(';') {
+                let cookie = cookie.trim();
+                if let Some(session_id) = cookie.strip_prefix("session_id=") {
+                    if let Some(user) = auth_service.validate_session(session_id).await? {
+                        return Ok(user);
+                    }
+                }
+            }
+        }
+    }
+
+    Err(FusekiError::authentication(
+        "Authentication required to manage API keys",
+    ))
 }
 
 // Conversion implementations
@@ -637,58 +674,172 @@ impl From<ApiKey> for ApiKeyInfo {
     }
 }
 
-// Mock API key service (would be a proper service in production)
+/// On-disk representation of the API key store (see [`ApiKeyService`]).
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct ApiKeyFile {
+    keys: Vec<ApiKey>,
+}
+
+/// Persistent API key service.
+///
+/// Keys created via `POST /$/api-keys` are written to a JSON file (default:
+/// `<data_dir>/api_keys.json`) so they survive process restarts and can
+/// authenticate subsequent requests via [`validate_api_key_auth`]. Every
+/// mutation (create/update/revoke) is flushed to disk with a temp-file +
+/// `fsync` + atomic `rename`, so a crash mid-write cannot corrupt the
+/// previously-valid file.
+///
+/// Usage counters (`last_used`/`usage_count`) are updated in memory only on
+/// the per-request hot path (see [`update_usage`](Self::update_usage)) to
+/// avoid an `fsync` on every authenticated request; they are best-effort and
+/// may reset to their last-flushed value across a crash, unlike identity and
+/// active/revoked state which are always durably persisted.
 pub struct ApiKeyService {
-    // In production, this would be backed by a database
+    path: std::path::PathBuf,
+    keys: RwLock<HashMap<String, ApiKey>>,
 }
 
 impl ApiKeyService {
-    pub async fn store_api_key(&self, _api_key: &ApiKey) -> FusekiResult<()> {
-        // Store in database
+    /// Open (or create) the API key store at `path`.
+    pub async fn open(path: impl Into<std::path::PathBuf>) -> FusekiResult<Self> {
+        let path = path.into();
+
+        let keys = if path.exists() {
+            let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
+                FusekiError::internal(format!("Failed to read API key store {path:?}: {e}"))
+            })?;
+            let file: ApiKeyFile = serde_json::from_str(&content).map_err(|e| {
+                FusekiError::internal(format!("Failed to parse API key store {path:?}: {e}"))
+            })?;
+            file.keys.into_iter().map(|k| (k.id.clone(), k)).collect()
+        } else {
+            if let Some(parent) = path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                        FusekiError::internal(format!(
+                            "Failed to create API key store directory {parent:?}: {e}"
+                        ))
+                    })?;
+                }
+            }
+            HashMap::new()
+        };
+
+        info!(
+            "API key service initialized at {:?} with {} existing key(s)",
+            path,
+            keys.len()
+        );
+
+        Ok(Self {
+            path,
+            keys: RwLock::new(keys),
+        })
+    }
+
+    /// Atomically persist the full key set to disk.
+    async fn flush(&self, keys: &HashMap<String, ApiKey>) -> FusekiResult<()> {
+        let file = ApiKeyFile {
+            keys: keys.values().cloned().collect(),
+        };
+        let content = serde_json::to_string_pretty(&file)
+            .map_err(|e| FusekiError::internal(format!("Failed to serialize API keys: {e}")))?;
+
+        let tmp_path = self.path.with_extension("json.tmp");
+        {
+            let mut tmp_file = tokio::fs::File::create(&tmp_path).await.map_err(|e| {
+                FusekiError::internal(format!("Failed to write API key store: {e}"))
+            })?;
+            tmp_file.write_all(content.as_bytes()).await.map_err(|e| {
+                FusekiError::internal(format!("Failed to write API key store: {e}"))
+            })?;
+            tmp_file.sync_all().await.map_err(|e| {
+                FusekiError::internal(format!("Failed to fsync API key store: {e}"))
+            })?;
+        }
+        tokio::fs::rename(&tmp_path, &self.path)
+            .await
+            .map_err(|e| FusekiError::internal(format!("Failed to finalize API key store: {e}")))?;
         Ok(())
     }
 
-    pub async fn get_api_key(&self, _key_id: &str) -> FusekiResult<Option<ApiKey>> {
-        // Retrieve from database
-        Ok(None)
+    pub async fn store_api_key(&self, api_key: &ApiKey) -> FusekiResult<()> {
+        let mut keys = self.keys.write().await;
+        keys.insert(api_key.id.clone(), api_key.clone());
+        self.flush(&keys).await
     }
 
-    pub async fn get_api_key_by_hash(&self, _key_hash: &str) -> FusekiResult<Option<ApiKey>> {
-        // Retrieve by hash from database
-        Ok(None)
+    pub async fn get_api_key(&self, key_id: &str) -> FusekiResult<Option<ApiKey>> {
+        let keys = self.keys.read().await;
+        Ok(keys.get(key_id).cloned())
+    }
+
+    pub async fn get_api_key_by_hash(&self, key_hash: &str) -> FusekiResult<Option<ApiKey>> {
+        let keys = self.keys.read().await;
+        Ok(keys.values().find(|k| k.key_hash == key_hash).cloned())
     }
 
     pub async fn list_api_keys(
         &self,
-        _owner: Option<&str>,
-        _active_only: bool,
-        _scope: Option<&ApiKeyScope>,
-        _limit: usize,
-        _offset: usize,
+        owner: Option<&str>,
+        active_only: bool,
+        scope: Option<&ApiKeyScope>,
+        limit: usize,
+        offset: usize,
     ) -> FusekiResult<Vec<ApiKey>> {
-        // List from database with filters
-        Ok(vec![])
+        let keys = self.keys.read().await;
+        let mut result: Vec<ApiKey> = keys
+            .values()
+            .filter(|k| owner.map(|o| k.owner == o).unwrap_or(true))
+            .filter(|k| !active_only || k.is_active)
+            .filter(|k| scope.map(|s| k.scopes.contains(s)).unwrap_or(true))
+            .cloned()
+            .collect();
+        result.sort_by_key(|b| std::cmp::Reverse(b.created_at));
+        Ok(result.into_iter().skip(offset).take(limit).collect())
     }
 
-    pub async fn update_api_key(&self, _api_key: &ApiKey) -> FusekiResult<()> {
-        // Update in database
+    pub async fn update_api_key(&self, api_key: &ApiKey) -> FusekiResult<()> {
+        let mut keys = self.keys.write().await;
+        if !keys.contains_key(&api_key.id) {
+            return Err(FusekiError::not_found("API key not found"));
+        }
+        keys.insert(api_key.id.clone(), api_key.clone());
+        self.flush(&keys).await
+    }
+
+    pub async fn revoke_api_key(&self, key_id: &str) -> FusekiResult<()> {
+        let mut keys = self.keys.write().await;
+        {
+            let key = keys
+                .get_mut(key_id)
+                .ok_or_else(|| FusekiError::not_found("API key not found"))?;
+            key.is_active = false;
+        }
+        self.flush(&keys).await
+    }
+
+    /// Record key usage. In-memory only (see struct docs) to keep the
+    /// per-request authentication hot path free of a synchronous `fsync`.
+    pub async fn update_usage(&self, api_key: &ApiKey) -> FusekiResult<()> {
+        let mut keys = self.keys.write().await;
+        if let Some(existing) = keys.get_mut(&api_key.id) {
+            existing.last_used = api_key.last_used;
+            existing.usage_count = api_key.usage_count;
+        }
         Ok(())
     }
 
-    pub async fn revoke_api_key(&self, _key_id: &str) -> FusekiResult<()> {
-        // Mark as inactive in database
-        Ok(())
-    }
-
-    pub async fn update_usage(&self, _api_key: &ApiKey) -> FusekiResult<()> {
-        // Update usage statistics
-        Ok(())
-    }
-
-    pub async fn get_usage_stats(&self, _key_id: &str) -> FusekiResult<ApiKeyUsageStats> {
-        // Calculate usage statistics
+    pub async fn get_usage_stats(&self, key_id: &str) -> FusekiResult<ApiKeyUsageStats> {
+        let keys = self.keys.read().await;
+        let key = keys
+            .get(key_id)
+            .ok_or_else(|| FusekiError::not_found("API key not found"))?;
+        // Only the running total is tracked today (no per-request timestamp
+        // log), so the windowed counters honestly report zero rather than
+        // fabricating a distribution. See struct docs for what is durable.
         Ok(ApiKeyUsageStats {
-            total_requests: 0,
+            total_requests: key.usage_count,
             requests_last_24h: 0,
             requests_last_7d: 0,
             requests_last_30d: 0,
@@ -698,19 +849,32 @@ impl ApiKeyService {
         })
     }
 
+    /// Check whether `key_id` is still within `rate_limit`.
+    ///
+    /// NOTE: sliding-window request counting is not implemented yet (would
+    /// require a per-key timestamp ring buffer); this always allows the
+    /// request. Tracked as a follow-up — do not rely on this for abuse
+    /// protection until implemented.
     pub async fn check_rate_limit(
         &self,
         _key_id: &str,
         _rate_limit: &RateLimit,
     ) -> FusekiResult<bool> {
-        // Check rate limiting
         Ok(true)
     }
 }
 
-async fn get_api_key_service(_state: &AppState) -> FusekiResult<ApiKeyService> {
-    // In production, extract from state
-    Ok(ApiKeyService {})
+/// Default location for the API key JSON store, relative to the process
+/// working directory (never an absolute path — see COOLJAPAN policy).
+pub fn default_api_key_store_path() -> std::path::PathBuf {
+    std::path::PathBuf::from("./data/api_keys.json")
+}
+
+async fn get_api_key_service(state: &AppState) -> FusekiResult<Arc<ApiKeyService>> {
+    state
+        .api_key_service
+        .clone()
+        .ok_or_else(|| FusekiError::service_unavailable("API key service not available"))
 }
 
 #[cfg(test)]
@@ -722,6 +886,133 @@ mod tests {
         let key = generate_api_key();
         assert!(key.starts_with("oxirs_"));
         assert_eq!(key.len(), 38); // "oxirs_" + 32 characters
+    }
+
+    #[test]
+    fn test_api_key_generation_is_not_deterministic() {
+        // Regression test: generate_api_key() previously used a fixed-seed
+        // RNG (Random::seed(42)), so every generated key was byte-for-byte
+        // identical. It must now use a cryptographically secure, unseeded
+        // source of randomness.
+        let a = generate_api_key();
+        let b = generate_api_key();
+        assert_ne!(a, b, "API keys must not be deterministic");
+    }
+
+    fn unique_temp_store_path(label: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "oxirs_fuseki_test_api_keys_{}_{}.json",
+            label,
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    #[tokio::test]
+    async fn test_api_key_service_persists_across_reopen() {
+        let path = unique_temp_store_path("persist");
+
+        let api_key = ApiKey {
+            id: "key-1".to_string(),
+            name: "test key".to_string(),
+            key_hash: "deadbeef".to_string(),
+            scopes: vec![ApiKeyScope::SparqlRead],
+            owner: "alice".to_string(),
+            created_at: Utc::now(),
+            expires_at: None,
+            last_used: None,
+            is_active: true,
+            usage_count: 0,
+            rate_limit: None,
+            allowed_ips: vec![],
+            description: None,
+        };
+
+        {
+            let service = ApiKeyService::open(&path)
+                .await
+                .expect("service should open a fresh store");
+            service
+                .store_api_key(&api_key)
+                .await
+                .expect("store should succeed");
+        }
+
+        // Reopen from disk: the created key must still be there and usable
+        // to authenticate, which is the whole point of persistence.
+        let reopened = ApiKeyService::open(&path)
+            .await
+            .expect("service should reopen the persisted store");
+        let found = reopened
+            .get_api_key_by_hash("deadbeef")
+            .await
+            .expect("lookup should succeed")
+            .expect("key created before reopen must still be present");
+        assert_eq!(found.id, "key-1");
+        assert!(found.is_active);
+
+        let _ = tokio::fs::remove_file(&path).await;
+    }
+
+    #[tokio::test]
+    async fn test_api_key_service_revoke_persists() {
+        let path = unique_temp_store_path("revoke");
+        let service = ApiKeyService::open(&path)
+            .await
+            .expect("service should open a fresh store");
+
+        let api_key = ApiKey {
+            id: "key-2".to_string(),
+            name: "revoke me".to_string(),
+            key_hash: "cafef00d".to_string(),
+            scopes: vec![ApiKeyScope::SparqlRead],
+            owner: "bob".to_string(),
+            created_at: Utc::now(),
+            expires_at: None,
+            last_used: None,
+            is_active: true,
+            usage_count: 0,
+            rate_limit: None,
+            allowed_ips: vec![],
+            description: None,
+        };
+        service
+            .store_api_key(&api_key)
+            .await
+            .expect("store should succeed");
+
+        service
+            .revoke_api_key("key-2")
+            .await
+            .expect("revoke should succeed");
+
+        // A brand-new service instance loading the same file must observe
+        // the revocation (i.e. it was actually flushed to disk).
+        let reopened = ApiKeyService::open(&path)
+            .await
+            .expect("service should reopen the persisted store");
+        let found = reopened
+            .get_api_key("key-2")
+            .await
+            .expect("lookup should succeed")
+            .expect("revoked key should still exist, just inactive");
+        assert!(!found.is_active);
+
+        let _ = tokio::fs::remove_file(&path).await;
+    }
+
+    #[tokio::test]
+    async fn test_extract_authenticated_user_fails_closed_without_credentials() {
+        let config = crate::config::SecurityConfig::default();
+        let auth_service = AuthService::new(config)
+            .await
+            .expect("auth service should construct with default config");
+
+        let headers = HeaderMap::new();
+        let result = extract_authenticated_user(&headers, &auth_service).await;
+        assert!(
+            result.is_err(),
+            "unauthenticated requests must be rejected, never default to an implicit identity"
+        );
     }
 
     #[test]

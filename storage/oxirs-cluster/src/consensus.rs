@@ -3,23 +3,47 @@
 //! High-level consensus protocol implementation for distributed agreement.
 //! Provides a simplified interface over the Raft implementation.
 
+use crate::network::{NetworkService, RpcMessage};
 use crate::raft::{OxirsNodeId, RaftNode, RdfCommand, RdfResponse};
 use anyhow::Result;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Instant;
 
 /// Consensus manager for distributed RDF operations
 pub struct ConsensusManager {
+    node_id: OxirsNodeId,
     raft_node: RaftNode,
     peers: BTreeSet<OxirsNodeId>,
+    /// Optional network transport used to probe peer liveness with real RPCs.
+    network: Option<Arc<NetworkService>>,
+    /// Known network addresses of peers, used for health probes.
+    peer_addresses: HashMap<OxirsNodeId, SocketAddr>,
 }
 
 impl ConsensusManager {
     /// Create a new consensus manager
     pub fn new(node_id: OxirsNodeId, peers: Vec<OxirsNodeId>) -> Self {
         Self {
+            node_id,
             raft_node: RaftNode::new(node_id),
             peers: peers.into_iter().collect(),
+            network: None,
+            peer_addresses: HashMap::new(),
         }
+    }
+
+    /// Attach a network transport so that peer health checks issue real RPCs.
+    pub fn with_network(mut self, network: Arc<NetworkService>) -> Self {
+        self.network = Some(network);
+        self
+    }
+
+    /// Register (or update) the network address of a peer so that health checks
+    /// can reach it.
+    pub fn register_peer_address(&mut self, node_id: OxirsNodeId, address: SocketAddr) {
+        self.peer_addresses.insert(node_id, address);
     }
 
     /// Initialize the consensus system
@@ -330,22 +354,14 @@ impl ConsensusManager {
         Ok(health_statuses)
     }
 
-    /// Check health of a single node
+    /// Check health of a single node by issuing a real heartbeat RPC and
+    /// measuring the round trip. A node is considered responsive only if it
+    /// answers with a valid heartbeat response within the transport timeout;
+    /// any connection failure, timeout, or unexpected reply marks it unhealthy.
     async fn check_single_node_health(&self, node_id: OxirsNodeId) -> NodeHealthStatus {
-        // Try to get metrics from the node
-        let start_time = std::time::Instant::now();
-
-        // In a real implementation, this would ping the actual node
-        // For now, we'll simulate based on raft metrics
-        #[cfg(feature = "raft")]
-        let is_responsive = if let Some(_metrics) = self.raft_node.get_metrics().await {
-            start_time.elapsed() < tokio::time::Duration::from_millis(1000)
-        } else {
-            false
-        };
-
-        #[cfg(not(feature = "raft"))]
-        let is_responsive = start_time.elapsed() < tokio::time::Duration::from_millis(100);
+        let start_time = Instant::now();
+        let is_responsive = self.probe_node_liveness(node_id).await;
+        let elapsed = start_time.elapsed();
 
         NodeHealthStatus {
             node_id,
@@ -355,7 +371,50 @@ impl ConsensusManager {
             } else {
                 None
             },
-            latency_ms: start_time.elapsed().as_millis() as u64,
+            latency_ms: elapsed.as_millis() as u64,
+        }
+    }
+
+    /// Issue a real heartbeat RPC to `node_id` and report whether it answered.
+    ///
+    /// Returns `false` (unhealthy) when no network transport is configured, when
+    /// the peer's address is unknown, or when the RPC fails/times out. This
+    /// never infers liveness from local timers — an unreachable peer is always
+    /// reported as unreachable.
+    async fn probe_node_liveness(&self, node_id: OxirsNodeId) -> bool {
+        let Some(network) = self.network.as_ref() else {
+            tracing::warn!(
+                "health check for node {node_id}: no network transport configured, \
+                 reporting unreachable"
+            );
+            return false;
+        };
+        let Some(&address) = self.peer_addresses.get(&node_id) else {
+            tracing::warn!(
+                "health check for node {node_id}: no known address, reporting unreachable"
+            );
+            return false;
+        };
+
+        let heartbeat = RpcMessage::Heartbeat {
+            term: self.current_term().await,
+            leader_id: self.node_id,
+        };
+
+        match network.send_rpc(node_id, address, heartbeat).await {
+            Ok(RpcMessage::HeartbeatResponse { .. }) => true,
+            Ok(other) => {
+                tracing::warn!(
+                    "health check for node {node_id}: unexpected reply {:?}, \
+                     reporting unreachable",
+                    other
+                );
+                false
+            }
+            Err(e) => {
+                tracing::debug!("health check for node {node_id} failed: {e}");
+                false
+            }
         }
     }
 
@@ -495,6 +554,58 @@ mod tests {
         assert_eq!(status.current_term, 0);
         assert_eq!(status.peer_count, 2);
         assert_eq!(status.triple_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_health_check_unhealthy_without_transport() {
+        // No network transport configured: every peer must be reported
+        // unreachable rather than fabricated as healthy from a local timer.
+        let manager = ConsensusManager::new(1, vec![2, 3]);
+        let statuses = manager
+            .check_peer_health()
+            .await
+            .expect("check_peer_health failed");
+
+        assert_eq!(statuses.len(), 2);
+        for status in statuses {
+            assert!(
+                !status.is_responsive,
+                "node {} must be unhealthy without a transport",
+                status.node_id
+            );
+            assert!(status.last_seen.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_health_check_unhealthy_on_unreachable_peer() {
+        use crate::network::NetworkConfig;
+        use std::sync::Arc;
+
+        // Bind then immediately drop a listener to obtain an address that will
+        // refuse connections, guaranteeing the health probe RPC fails.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind");
+        let dead_addr = listener.local_addr().expect("no local addr");
+        drop(listener);
+
+        let network = Arc::new(NetworkService::new(1, NetworkConfig::default()));
+        let mut manager = ConsensusManager::new(1, vec![2]).with_network(network);
+        manager.register_peer_address(2, dead_addr);
+
+        let statuses = manager
+            .check_peer_health()
+            .await
+            .expect("check_peer_health failed");
+
+        assert_eq!(statuses.len(), 1);
+        assert_eq!(statuses[0].node_id, 2);
+        assert!(
+            !statuses[0].is_responsive,
+            "an unreachable peer must be reported unhealthy, not healthy"
+        );
+        assert!(statuses[0].last_seen.is_none());
     }
 
     #[test]

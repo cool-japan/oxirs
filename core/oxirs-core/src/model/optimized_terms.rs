@@ -183,7 +183,7 @@ impl OptimizedTermEncoder {
         let mut interner = self
             .interner
             .write()
-            .expect("interner lock should not be poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let iri_hash = interner.intern(node.as_str());
         OxiEncodedTerm::NamedNode { iri: iri_hash }
     }
@@ -193,7 +193,7 @@ impl OptimizedTermEncoder {
         let mut interner = self
             .interner
             .write()
-            .expect("interner lock should not be poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let id_hash = interner.intern(node.as_str());
         OxiEncodedTerm::BlankNode { id: id_hash }
     }
@@ -231,7 +231,7 @@ impl OptimizedTermEncoder {
                 let mut interner = self
                     .interner
                     .write()
-                    .expect("interner lock should not be poisoned");
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 let value_hash = interner.intern(literal_str);
                 return OxiEncodedTerm::StringLiteral(value_hash);
             }
@@ -244,7 +244,7 @@ impl OptimizedTermEncoder {
         let mut interner = self
             .interner
             .write()
-            .expect("interner lock should not be poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let value_hash = interner.intern(literal_str);
 
         let datatype_hash = Some(interner.intern(datatype.as_str()));
@@ -262,7 +262,7 @@ impl OptimizedTermEncoder {
         let interner = self
             .interner
             .read()
-            .expect("interner lock should not be poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         match encoded {
             OxiEncodedTerm::DefaultGraph => Ok(DecodedTerm::DefaultGraph),
@@ -349,7 +349,7 @@ impl OptimizedTermEncoder {
     pub fn stats(&self) -> InternerStats {
         self.interner
             .read()
-            .expect("interner lock should not be poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .stats()
     }
 }
@@ -395,6 +395,33 @@ mod tests {
         let stats = interner.stats();
         assert_eq!(stats.total_strings, 2); // Only 2 unique strings
         assert_eq!(stats.deduplication_saves, 1); // 1 deduplication
+    }
+
+    #[test]
+    fn test_optimized_term_encoder_survives_lock_poisoning(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Regression test: a panic while holding the interner lock from
+        // another thread must not permanently disable this encoder -
+        // encode/decode/stats should recover via into_inner() rather than
+        // panicking on `.expect()`.
+        let encoder = std::sync::Arc::new(OptimizedTermEncoder::new());
+
+        let poisoning_encoder = encoder.clone();
+        let handle = std::thread::spawn(move || {
+            let _guard = poisoning_encoder.interner.write().unwrap();
+            panic!("intentionally poison the interner lock");
+        });
+        let _ = handle.join(); // the panic poisons the lock; ignore the JoinError
+
+        let node = NamedNode::new("http://example.org/after-poison")?;
+        let encoded = encoder.encode_named_node(&node);
+        match encoder.decode_term(&encoded)? {
+            DecodedTerm::NamedNode(iri) => assert_eq!(iri, "http://example.org/after-poison"),
+            other => panic!("Expected named node, got {other:?}"),
+        }
+        let stats = encoder.stats();
+        assert!(stats.total_strings >= 1);
+        Ok(())
     }
 
     #[test]

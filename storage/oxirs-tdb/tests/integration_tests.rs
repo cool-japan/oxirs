@@ -6,12 +6,32 @@ use oxirs_tdb::error::Result;
 use oxirs_tdb::{TdbConfig, TdbStore};
 use std::env;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Build a genuinely-unique temp directory path for the given prefix.
+///
+/// Nextest runs each test in its own process, so a process-local
+/// `AtomicU64` alone resets to the same values in every process and makes
+/// different tests collide on the *same* on-disk store directory — which
+/// then corrupts under concurrent access and leaks stale data across runs.
+/// Mixing in the process id and a high-resolution timestamp guarantees a
+/// distinct, freshly-empty directory per invocation and per run.
+fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
+    let seq = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let pid = std::process::id();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let dir = env::temp_dir().join(format!("{}_{}_{}_{}", prefix, pid, seq, nanos));
+    std::fs::remove_dir_all(&dir).ok();
+    dir
+}
+
 fn create_test_store() -> Result<(TdbStore, std::path::PathBuf)> {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let temp_dir = env::temp_dir().join(format!("oxirs_tdb_test_{}", id));
+    let temp_dir = unique_temp_dir("oxirs_tdb_test");
     std::fs::create_dir_all(&temp_dir)?;
     let store = TdbStore::open(&temp_dir)?;
     Ok((store, temp_dir))
@@ -113,8 +133,7 @@ fn test_bulk_insert_validation() -> Result<()> {
 
 #[test]
 fn test_configuration() -> Result<()> {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let temp_dir = env::temp_dir().join(format!("oxirs_tdb_config_{}", id));
+    let temp_dir = unique_temp_dir("oxirs_tdb_config");
     std::fs::create_dir_all(&temp_dir)?;
 
     // Create with custom config

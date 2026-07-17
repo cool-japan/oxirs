@@ -56,6 +56,13 @@ pub struct SchemaGenerationConfig {
     pub enable_introspection: bool,
     pub enable_mutations: bool,
     pub enable_subscriptions: bool,
+    /// Whether to expose the raw, unauthenticated SPARQL passthrough field
+    /// (`sparql(query: String!): String`) on the generated `Query` type.
+    /// Disabled by default: it bypasses all GraphQL-level depth/complexity
+    /// limits and lets any client run arbitrary SPARQL against the store.
+    /// See `GraphQLConfig::enable_sparql_field` in the crate root, which
+    /// this should generally be kept in sync with.
+    pub enable_sparql_field: bool,
 }
 
 impl Default for SchemaGenerationConfig {
@@ -70,6 +77,7 @@ impl Default for SchemaGenerationConfig {
             enable_introspection: true,
             enable_mutations: false,
             enable_subscriptions: false,
+            enable_sparql_field: false,
         }
     }
 }

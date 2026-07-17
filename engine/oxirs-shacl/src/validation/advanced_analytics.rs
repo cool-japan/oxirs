@@ -413,7 +413,7 @@ impl ValidationAnalytics {
         let period_hours = period_hours.unwrap_or(self.config.trend_window_hours);
         let period_start = now - (period_hours * 3600);
 
-        let history = self.history.read().expect("rwlock should not be poisoned");
+        let history = self.history.read().unwrap_or_else(|e| e.into_inner());
         let relevant_records: Vec<_> = history
             .iter()
             .filter(|r| r.timestamp >= period_start)
@@ -460,7 +460,7 @@ impl ValidationAnalytics {
         shapes_count: usize,
         complexity_factors: &[f64],
     ) -> Result<ValidationPrediction> {
-        let predictor = self.predictor.read().expect("rwlock should not be poisoned");
+        let predictor = self.predictor.read().unwrap_or_else(|e| e.into_inner());
 
         if predictor.training_data.len() < self.config.min_prediction_data {
             return Err(anyhow!("Insufficient training data for prediction"));
@@ -504,7 +504,7 @@ impl ValidationAnalytics {
     pub fn get_current_metrics(&self) -> Result<HashMap<String, f64>> {
         let mut metrics = HashMap::new();
 
-        let history = self.history.read().expect("rwlock should not be poisoned");
+        let history = self.history.read().unwrap_or_else(|e| e.into_inner());
         if let Some(latest) = history.back() {
             metrics.insert("latest_validation_time_ms".to_string(),
                           latest.validation_time.as_millis() as f64);
@@ -514,7 +514,7 @@ impl ValidationAnalytics {
                           latest.memory_used as f64 / 1024.0 / 1024.0);
         }
 
-        let shape_metrics = self.shape_metrics.read().expect("rwlock should not be poisoned");
+        let shape_metrics = self.shape_metrics.read().unwrap_or_else(|e| e.into_inner());
         metrics.insert("total_shapes_tracked".to_string(),
                       shape_metrics.len() as f64);
 
@@ -530,7 +530,7 @@ impl ValidationAnalytics {
 
     /// Update historical records
     fn update_history(&self, record: ValidationRecord) -> Result<()> {
-        let mut history = self.history.write().expect("rwlock should not be poisoned");
+        let mut history = self.history.write().unwrap_or_else(|e| e.into_inner());
         history.push_back(record);
 
         // Keep only recent records
@@ -543,7 +543,7 @@ impl ValidationAnalytics {
 
     /// Update shape-specific metrics
     fn update_shape_metrics(&self, shapes: &[Shape], record: &ValidationRecord) -> Result<()> {
-        let mut metrics = self.shape_metrics.write().expect("rwlock should not be poisoned");
+        let mut metrics = self.shape_metrics.write().unwrap_or_else(|e| e.into_inner());
 
         for shape in shapes {
             let shape_id = shape.id().to_string();
@@ -588,7 +588,7 @@ impl ValidationAnalytics {
 
     /// Update quality trends
     fn update_quality_trends(&self, record: &ValidationRecord) -> Result<()> {
-        let mut trends = self.quality_trends.write().expect("rwlock should not be poisoned");
+        let mut trends = self.quality_trends.write().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
 
         trends.conformance_trend.push_back((now, record.conformance_rate));
@@ -608,7 +608,7 @@ impl ValidationAnalytics {
 
     /// Update prediction model
     fn update_prediction_model(&self, record: &ValidationRecord) -> Result<()> {
-        let mut predictor = self.predictor.write().expect("rwlock should not be poisoned");
+        let mut predictor = self.predictor.write().unwrap_or_else(|e| e.into_inner());
 
         let features = vec![
             record.dataset_size as f64,
@@ -696,7 +696,7 @@ impl ValidationAnalytics {
     }
 
     fn generate_shape_analysis(&self, _records: &[ValidationRecord]) -> Result<Vec<ShapeAnalysis>> {
-        let shape_metrics = self.shape_metrics.read().expect("rwlock should not be poisoned");
+        let shape_metrics = self.shape_metrics.read().unwrap_or_else(|e| e.into_inner());
 
         Ok(shape_metrics.values().map(|metrics| {
             ShapeAnalysis {
@@ -1057,7 +1057,7 @@ mod tests {
 
         analytics.update_history(record).expect("recording should succeed");
 
-        let history = analytics.history.read().expect("rwlock should not be poisoned");
+        let history = analytics.history.read().unwrap_or_else(|e| e.into_inner());
         assert_eq!(history.len(), 1);
     }
 }

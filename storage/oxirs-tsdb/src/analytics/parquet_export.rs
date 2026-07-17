@@ -6,12 +6,18 @@
 //!
 //! ## Wire Format
 //!
+//! Note: this is **not** a real Apache Parquet file. It deliberately uses
+//! its own `"OXPQ"` magic bytes (rather than Parquet's real `"PAR1"`
+//! signature) so that Parquet-aware tooling (e.g. `pyarrow`, `parquet-cli`)
+//! does not mistake this simplified, incompatible encoding for a genuine
+//! Parquet file.
+//!
 //! ```text
-//! [MAGIC: 4 bytes "PAR1"]
+//! [MAGIC: 4 bytes "OXPQ"]
 //! [column chunk 0 ... N]
 //! [file footer]
 //! [footer_len: u32 LE]
-//! [MAGIC: 4 bytes "PAR1"]
+//! [MAGIC: 4 bytes "OXPQ"]
 //! ```
 //!
 //! Each column chunk:
@@ -36,7 +42,11 @@ use serde::{Deserialize, Serialize};
 // Constants
 // ──────────────────────────────────────────────────────────────────────────────
 
-const PARQUET_MAGIC: &[u8; 4] = b"PAR1";
+// Deliberately distinct from the real Apache Parquet magic (`b"PAR1"`):
+// this is a self-invented, structurally-simplified encoding that is *not*
+// wire-compatible with Parquet, so it must not claim the real signature
+// (see module-level doc comment).
+const PARQUET_MAGIC: &[u8; 4] = b"OXPQ";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // ParquetCompression

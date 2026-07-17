@@ -91,6 +91,31 @@ pub enum Commands {
         /// Resume from previous checkpoint if interrupted
         #[arg(long)]
         resume: bool,
+        /// Maximum input file size in bytes (0 = unlimited)
+        #[arg(long, default_value_t = 10 * 1024 * 1024 * 1024)]
+        max_file_size: u64,
+        /// Storage backend: "memory" (in-RAM N-Quads log, default) or
+        /// "tdb2" (on-disk oxirs-tdb store; keeps RAM use bounded for large
+        /// bulk loads)
+        #[arg(long, alias = "backend", default_value = "memory")]
+        dataset_type: String,
+    },
+    /// Batch import multiple RDF files into a dataset in parallel
+    Batch {
+        /// Target dataset (alphanumeric, _, - only; no dots or extensions)
+        dataset: String,
+        /// Input file paths
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        /// Input format (turtle, ntriples, rdfxml, jsonld) - auto-detected per file if omitted
+        #[arg(short, long)]
+        format: Option<String>,
+        /// Named graph URI
+        #[arg(short, long)]
+        graph: Option<String>,
+        /// Number of files to process concurrently
+        #[arg(short, long, default_value = "4")]
+        parallel: usize,
     },
     /// Export RDF data
     Export {
@@ -803,4 +828,86 @@ pub enum Commands {
         #[command(subcommand)]
         action: StreamAction,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `Cli`'s derived clap parser recurses through an unusually large
+    /// `Commands` enum (50+ variants, several with nested subcommand enums
+    /// of their own); in an unoptimized (debug/test) build this can exceed
+    /// the default 2-8 MiB thread stack. Run parsing on a thread with a
+    /// generous stack instead of fighting the default test-harness stack.
+    fn parse_cli_with_large_stack(args: &'static [&'static str]) -> Cli {
+        std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(move || Cli::parse_from(args))
+            .expect("failed to spawn CLI-parsing thread")
+            .join()
+            .expect("CLI-parsing thread panicked")
+    }
+
+    /// Regression test: the fully-implemented parallel `batch` import
+    /// command must be reachable from the CLI (previously there was no
+    /// `Commands::Batch` variant at all, so `oxirs batch ...` could not be
+    /// parsed despite `commands::batch::import_batch` being fully wired).
+    #[test]
+    fn test_batch_command_is_reachable_from_cli() {
+        let cli = parse_cli_with_large_stack(&[
+            "oxirs",
+            "batch",
+            "mydataset",
+            "a.ttl",
+            "b.ttl",
+            "--parallel",
+            "2",
+        ]);
+        match cli.command {
+            Commands::Batch {
+                dataset,
+                files,
+                parallel,
+                ..
+            } => {
+                assert_eq!(dataset, "mydataset");
+                assert_eq!(files.len(), 2);
+                assert_eq!(parallel, 2);
+            }
+            _ => panic!("expected Commands::Batch, got a different variant"),
+        }
+    }
+
+    /// Regression test: `oxirs import` must accept a configurable
+    /// `--max-file-size` (0 = unlimited) instead of a hardcoded 1 GiB cap
+    /// with no CLI override.
+    #[test]
+    fn test_import_max_file_size_flag_is_configurable() {
+        let cli = parse_cli_with_large_stack(&[
+            "oxirs",
+            "import",
+            "mydataset",
+            "data.ttl",
+            "--max-file-size",
+            "0",
+        ]);
+        match cli.command {
+            Commands::Import { max_file_size, .. } => {
+                assert_eq!(max_file_size, 0, "0 must be accepted to mean unlimited");
+            }
+            _ => panic!("expected Commands::Import, got a different variant"),
+        }
+
+        // Default must be raised well above the old hardcoded 1 GiB cap.
+        let cli = parse_cli_with_large_stack(&["oxirs", "import", "mydataset", "data.ttl"]);
+        match cli.command {
+            Commands::Import { max_file_size, .. } => {
+                assert!(
+                    max_file_size > 1_073_741_824,
+                    "default max_file_size should exceed the old 1 GiB hard cap"
+                );
+            }
+            _ => panic!("expected Commands::Import, got a different variant"),
+        }
+    }
 }

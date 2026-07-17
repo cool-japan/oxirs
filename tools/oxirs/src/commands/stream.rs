@@ -473,13 +473,13 @@ pub async fn run_stream_command(
     // Build stream config
     let stream_config = StreamConfig::from_args(chunk_size, &format, max_rows, no_progress)?;
 
-    // Load dataset and execute query
+    // Load dataset and execute the query for real via the store's SPARQL engine
     let dataset_path = std::path::PathBuf::from(&dataset);
     let data_file = dataset_path.join("data.nq");
 
     // Create result rows from actual dataset
     let (variables, rows) = if data_file.exists() {
-        load_and_execute_query(&data_file, &sparql_query)?
+        load_and_execute_query(&dataset_path, &sparql_query)?
     } else {
         // No data file - return empty result with query variables
         let vars = extract_select_variables(&sparql_query);
@@ -524,41 +524,64 @@ pub async fn run_stream_command(
     Ok(())
 }
 
-/// Load dataset and execute SPARQL query, returning variables and rows
+/// Open the dataset and execute the SPARQL `query` through the real
+/// `oxirs_core` query engine, returning the projected variables and the
+/// resulting bindings. Unlike a raw file dump, this honors SELECT
+/// projections, FILTER/WHERE patterns, ASK, and CONSTRUCT/DESCRIBE.
 fn load_and_execute_query(
-    data_file: &std::path::Path,
-    _query: &str,
+    dataset_path: &std::path::Path,
+    query: &str,
 ) -> Result<(Vec<String>, Vec<BindingRow>)> {
-    // In production this would use oxirs-arq to execute the query.
-    // For now, read the N-Quads file and return subject/predicate/object rows.
-    use std::io::{BufRead, BufReader};
+    use oxirs_core::rdf_store::{QueryResults as CoreQueryResults, RdfStore};
 
-    let file =
-        std::fs::File::open(data_file).map_err(|e| anyhow!("Failed to open data file: {}", e))?;
-    let reader = BufReader::new(file);
+    let store = RdfStore::open(dataset_path)
+        .map_err(|e| anyhow!("Failed to open dataset '{}': {}", dataset_path.display(), e))?;
 
-    let variables = vec!["s".to_string(), "p".to_string(), "o".to_string()];
-    let mut rows = Vec::new();
+    let results = store
+        .query(query)
+        .map_err(|e| anyhow!("Query execution failed: {}", e))?;
 
-    for line in reader.lines() {
-        let line = line.map_err(|e| anyhow!("IO error reading data: {}", e))?;
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
+    match results.results() {
+        CoreQueryResults::Bindings(bindings) => {
+            let variables = results.variables().to_vec();
+            let rows = bindings
+                .iter()
+                .map(|binding| {
+                    let mut map = HashMap::new();
+                    for var in &variables {
+                        if let Some(term) = binding.get(var) {
+                            map.insert(var.clone(), term.to_string());
+                        }
+                    }
+                    BindingRow::new(map)
+                })
+                .collect();
+            Ok((variables, rows))
         }
-
-        // Parse N-Quads line: <s> <p> <o> [<g>] .
-        let parts: Vec<&str> = trimmed.splitn(5, ' ').collect();
-        if parts.len() >= 3 {
-            let mut bindings = HashMap::new();
-            bindings.insert("s".to_string(), parts[0].to_string());
-            bindings.insert("p".to_string(), parts[1].to_string());
-            bindings.insert("o".to_string(), parts[2].to_string());
-            rows.push(BindingRow::new(bindings));
+        CoreQueryResults::Boolean(value) => {
+            let mut map = HashMap::new();
+            map.insert("result".to_string(), value.to_string());
+            Ok((vec!["result".to_string()], vec![BindingRow::new(map)]))
+        }
+        CoreQueryResults::Graph(quads) => {
+            let variables = vec![
+                "subject".to_string(),
+                "predicate".to_string(),
+                "object".to_string(),
+            ];
+            let rows = quads
+                .iter()
+                .map(|quad| {
+                    let mut map = HashMap::new();
+                    map.insert("subject".to_string(), quad.subject().to_string());
+                    map.insert("predicate".to_string(), quad.predicate().to_string());
+                    map.insert("object".to_string(), quad.object().to_string());
+                    BindingRow::new(map)
+                })
+                .collect();
+            Ok((variables, rows))
         }
     }
-
-    Ok((variables, rows))
 }
 
 /// Extract variable names from a SELECT query
@@ -913,5 +936,41 @@ mod tests {
         m.insert("foo".to_string(), "bar".to_string());
         let row = BindingRow::new(m.clone());
         assert_eq!(row.bindings, m);
+    }
+
+    /// Regression test: `oxirs stream query` must actually execute the given
+    /// SPARQL query against the store instead of dumping every raw triple
+    /// regardless of the WHERE clause / FILTER.
+    #[test]
+    fn test_load_and_execute_query_honors_the_query() {
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs-stream-query-test-{}",
+            std::process::id().wrapping_add(line!())
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dataset dir");
+
+        std::fs::write(
+            dir.join("data.nq"),
+            "<http://ex.org/s1> <http://ex.org/p> \"hello\" .\n\
+             <http://ex.org/s2> <http://ex.org/p> \"world\" .\n",
+        )
+        .expect("write data.nq");
+
+        // A query that filters to a single matching subject must return
+        // exactly that binding, proving the query is executed rather than
+        // ignored in favor of a raw triple dump.
+        let (variables, rows) =
+            load_and_execute_query(&dir, "SELECT ?s WHERE { ?s <http://ex.org/p> \"hello\" }")
+                .expect("query should execute successfully");
+
+        assert_eq!(variables, vec!["s".to_string()]);
+        assert_eq!(
+            rows.len(),
+            1,
+            "query should filter out the non-matching triple"
+        );
+        assert_eq!(rows[0].get("s"), Some("<http://ex.org/s1>"));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

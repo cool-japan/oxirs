@@ -61,12 +61,14 @@ rmp-serde.workspace = true
 ciborium.workspace = true
 tokio-stream = { workspace = true, features = ["sync"] }
 futures-util.workspace = true
+sysinfo.workspace = true
 # rand, rand_distr, and ndarray provided by scirs2-core
 
 [dev-dependencies]
 criterion.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 k8s-openapi.workspace = true
+wiremock.workspace = true
 
 [features]
 default = ["caching", "redis-cache"]

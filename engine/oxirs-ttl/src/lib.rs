@@ -141,6 +141,7 @@ pub mod lexer;
 pub mod parser;
 pub mod patch;
 pub mod profiling;
+mod statement_boundary;
 pub mod streaming;
 pub mod toolkit;
 pub mod writer;

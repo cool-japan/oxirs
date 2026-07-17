@@ -10,6 +10,7 @@ use super::filter::{evaluate_filters, extract_filter_expressions, FilterExpressi
 use super::modifiers::OrderBy;
 use super::parser::extract_select_variables;
 use super::patterns::{PatternGroup, SimpleTriplePattern, UnionGroup};
+use super::query_locator::{locate_where_brace, locate_where_group};
 use crate::model::*;
 use crate::rdf_store::{OxirsQueryResults, StorageBackend, VariableBinding};
 use crate::Result;
@@ -19,8 +20,12 @@ impl<'a> QueryExecutor<'a> {
     pub(super) fn execute_select_query(&self, sparql: &str) -> Result<OxirsQueryResults> {
         // Basic pattern matching for simple SELECT queries
         // Pattern: SELECT ?var WHERE { ?s ?p ?o } LIMIT n OFFSET m
+        //
+        // The `WHERE` keyword is optional per SPARQL 1.1
+        // (`WhereClause ::= 'WHERE'? GroupGraphPattern`); locate the graph
+        // pattern group whether or not it is spelled.
 
-        if sparql.contains("WHERE") {
+        if locate_where_brace(sparql).is_some() {
             // Check for DISTINCT modifier
             let has_distinct = sparql.to_uppercase().contains("SELECT DISTINCT");
 
@@ -869,80 +874,69 @@ impl<'a> QueryExecutor<'a> {
     pub(super) fn extract_pattern_groups(&self, sparql: &str) -> Result<Vec<PatternGroup>> {
         let mut groups = Vec::new();
 
-        if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
-            let where_clause = &sparql[where_start + 5..];
+        // Locate the graph pattern group, honoring the optional `WHERE` keyword
+        // (`WhereClause ::= 'WHERE'? GroupGraphPattern`).
+        if let Some((where_open, where_close)) = locate_where_group(sparql) {
+            let pattern_text = &sparql[where_open + 1..where_close];
 
-            if let Some(start_brace) = where_clause.find('{') {
-                if let Some(end_brace) = self.find_matching_brace(where_clause, start_brace) {
-                    let pattern_text = &where_clause[start_brace + 1..end_brace];
+            let sparql_upper = pattern_text.to_uppercase();
+            if sparql_upper.contains("OPTIONAL") {
+                let mut pos = 0;
+                let mut required_patterns = Vec::new();
 
-                    let sparql_upper = pattern_text.to_uppercase();
-                    if sparql_upper.contains("OPTIONAL") {
-                        let mut pos = 0;
-                        let mut required_patterns = Vec::new();
+                while pos < pattern_text.len() {
+                    if let Some(opt_pos) = pattern_text[pos..].to_uppercase().find("OPTIONAL") {
+                        let abs_pos = pos + opt_pos;
 
-                        while pos < pattern_text.len() {
-                            if let Some(opt_pos) =
-                                pattern_text[pos..].to_uppercase().find("OPTIONAL")
+                        let before_optional = &pattern_text[pos..abs_pos];
+                        if let Some(req_pattern) = self.parse_simple_pattern(before_optional) {
+                            required_patterns.push(req_pattern);
+                        }
+
+                        let after_optional = &pattern_text[abs_pos + 8..];
+                        if let Some(opt_brace) = after_optional.find('{') {
+                            if let Some(opt_end) =
+                                self.find_matching_brace(after_optional, opt_brace)
                             {
-                                let abs_pos = pos + opt_pos;
+                                let optional_content = &after_optional[opt_brace + 1..opt_end];
 
-                                let before_optional = &pattern_text[pos..abs_pos];
-                                if let Some(req_pattern) =
-                                    self.parse_simple_pattern(before_optional)
+                                if let Some(opt_pattern) =
+                                    self.parse_simple_pattern(optional_content)
                                 {
-                                    required_patterns.push(req_pattern);
+                                    groups.push(PatternGroup {
+                                        patterns: vec![opt_pattern],
+                                        optional: true,
+                                    });
                                 }
 
-                                let after_optional = &pattern_text[abs_pos + 8..];
-                                if let Some(opt_brace) = after_optional.find('{') {
-                                    if let Some(opt_end) =
-                                        self.find_matching_brace(after_optional, opt_brace)
-                                    {
-                                        let optional_content =
-                                            &after_optional[opt_brace + 1..opt_end];
-
-                                        if let Some(opt_pattern) =
-                                            self.parse_simple_pattern(optional_content)
-                                        {
-                                            groups.push(PatternGroup {
-                                                patterns: vec![opt_pattern],
-                                                optional: true,
-                                            });
-                                        }
-
-                                        pos = abs_pos + 8 + opt_end + 1;
-                                    } else {
-                                        break;
-                                    }
-                                } else {
-                                    break;
-                                }
+                                pos = abs_pos + 8 + opt_end + 1;
                             } else {
-                                if let Some(req_pattern) =
-                                    self.parse_simple_pattern(&pattern_text[pos..])
-                                {
-                                    required_patterns.push(req_pattern);
-                                }
                                 break;
                             }
-                        }
-
-                        if !required_patterns.is_empty() {
-                            groups.push(PatternGroup {
-                                patterns: required_patterns,
-                                optional: false,
-                            });
+                        } else {
+                            break;
                         }
                     } else {
-                        let patterns = self.extract_triple_patterns(sparql)?;
-                        if !patterns.is_empty() {
-                            groups.push(PatternGroup {
-                                patterns,
-                                optional: false,
-                            });
+                        if let Some(req_pattern) = self.parse_simple_pattern(&pattern_text[pos..]) {
+                            required_patterns.push(req_pattern);
                         }
+                        break;
                     }
+                }
+
+                if !required_patterns.is_empty() {
+                    groups.push(PatternGroup {
+                        patterns: required_patterns,
+                        optional: false,
+                    });
+                }
+            } else {
+                let patterns = self.extract_triple_patterns(sparql)?;
+                if !patterns.is_empty() {
+                    groups.push(PatternGroup {
+                        patterns,
+                        optional: false,
+                    });
                 }
             }
         }
@@ -1004,44 +998,39 @@ impl<'a> QueryExecutor<'a> {
             return Ok(None);
         }
 
-        if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
-            let where_clause = &sparql[where_start + 5..];
+        // Locate the graph pattern group, honoring the optional `WHERE` keyword.
+        if let Some((where_open, where_close)) = locate_where_group(sparql) {
+            let pattern_text = &sparql[where_open + 1..where_close];
 
-            if let Some(start_brace) = where_clause.find('{') {
-                if let Some(end_brace) = self.find_matching_brace(where_clause, start_brace) {
-                    let pattern_text = &where_clause[start_brace + 1..end_brace];
+            let mut branches = Vec::new();
+            let mut current_pos = 0;
+            let pattern_upper = pattern_text.to_uppercase();
 
-                    let mut branches = Vec::new();
-                    let mut current_pos = 0;
-                    let pattern_upper = pattern_text.to_uppercase();
+            let mut union_positions = Vec::new();
+            let mut search_pos = 0;
+            while let Some(pos) = pattern_upper[search_pos..].find("UNION") {
+                let abs_pos = search_pos + pos;
+                union_positions.push(abs_pos);
+                search_pos = abs_pos + 5;
+            }
 
-                    let mut union_positions = Vec::new();
-                    let mut search_pos = 0;
-                    while let Some(pos) = pattern_upper[search_pos..].find("UNION") {
-                        let abs_pos = search_pos + pos;
-                        union_positions.push(abs_pos);
-                        search_pos = abs_pos + 5;
-                    }
-
-                    for &union_pos in &union_positions {
-                        let branch_text = &pattern_text[current_pos..union_pos];
-                        if let Some(branch_groups) = self.parse_union_branch(branch_text)? {
-                            branches.push(branch_groups);
-                        }
-                        current_pos = union_pos + 5;
-                    }
-
-                    if current_pos < pattern_text.len() {
-                        let branch_text = &pattern_text[current_pos..];
-                        if let Some(branch_groups) = self.parse_union_branch(branch_text)? {
-                            branches.push(branch_groups);
-                        }
-                    }
-
-                    if !branches.is_empty() {
-                        return Ok(Some(UnionGroup { branches }));
-                    }
+            for &union_pos in &union_positions {
+                let branch_text = &pattern_text[current_pos..union_pos];
+                if let Some(branch_groups) = self.parse_union_branch(branch_text)? {
+                    branches.push(branch_groups);
                 }
+                current_pos = union_pos + 5;
+            }
+
+            if current_pos < pattern_text.len() {
+                let branch_text = &pattern_text[current_pos..];
+                if let Some(branch_groups) = self.parse_union_branch(branch_text)? {
+                    branches.push(branch_groups);
+                }
+            }
+
+            if !branches.is_empty() {
+                return Ok(Some(UnionGroup { branches }));
             }
         }
 
@@ -1073,38 +1062,35 @@ impl<'a> QueryExecutor<'a> {
     pub(super) fn extract_triple_patterns(&self, sparql: &str) -> Result<Vec<SimpleTriplePattern>> {
         let mut patterns = Vec::new();
 
-        if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
-            let where_clause = &sparql[where_start + 5..];
+        // Locate the graph pattern group, honoring the optional `WHERE` keyword.
+        // For CONSTRUCT queries, `locate_where_group` yields the pattern group
+        // (the group that follows the template) rather than the template itself.
+        if let Some((where_open, where_close)) = locate_where_group(sparql) {
+            let pattern_text = &sparql[where_open + 1..where_close];
+            let tokens: Vec<&str> = pattern_text.split_whitespace().collect();
 
-            if let Some(start_brace) = where_clause.find('{') {
-                if let Some(end_brace) = where_clause.find('}') {
-                    let pattern_text = &where_clause[start_brace + 1..end_brace];
-                    let tokens: Vec<&str> = pattern_text.split_whitespace().collect();
+            if tokens.len() >= 3 {
+                let subject = if tokens[0] == "." {
+                    None
+                } else {
+                    Some(tokens[0].to_string())
+                };
+                let predicate = if tokens[1] == "." {
+                    None
+                } else {
+                    Some(tokens[1].to_string())
+                };
+                let object = if tokens[2] == "." {
+                    None
+                } else {
+                    Some(tokens[2].to_string())
+                };
 
-                    if tokens.len() >= 3 {
-                        let subject = if tokens[0] == "." {
-                            None
-                        } else {
-                            Some(tokens[0].to_string())
-                        };
-                        let predicate = if tokens[1] == "." {
-                            None
-                        } else {
-                            Some(tokens[1].to_string())
-                        };
-                        let object = if tokens[2] == "." {
-                            None
-                        } else {
-                            Some(tokens[2].to_string())
-                        };
-
-                        patterns.push(SimpleTriplePattern {
-                            subject,
-                            predicate,
-                            object,
-                        });
-                    }
-                }
+                patterns.push(SimpleTriplePattern {
+                    subject,
+                    predicate,
+                    object,
+                });
             }
         }
 

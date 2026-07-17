@@ -90,86 +90,79 @@ pub fn parse_simple_pattern(text: &str) -> Option<SimpleTriplePattern> {
     None
 }
 
-/// Extract pattern groups (required and optional) from WHERE clause
+/// Extract pattern groups (required and optional) from the graph pattern.
+///
+/// The `WHERE` keyword is optional per SPARQL 1.1
+/// (`WhereClause ::= 'WHERE'? GroupGraphPattern`); the group is located whether
+/// or not the keyword is spelled.
 pub fn extract_pattern_groups(sparql: &str) -> Result<Vec<PatternGroup>> {
     let mut groups = Vec::new();
 
-    if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
-        let where_clause = &sparql[where_start + 5..];
+    if let Some((where_open, where_close)) = super::query_locator::locate_where_group(sparql) {
+        let pattern_text = &sparql[where_open + 1..where_close];
 
-        // Find the main WHERE block
-        if let Some(start_brace) = where_clause.find('{') {
-            if let Some(end_brace) = find_matching_brace(where_clause, start_brace) {
-                let pattern_text = &where_clause[start_brace + 1..end_brace];
+        // Check for OPTIONAL blocks
+        let sparql_upper = pattern_text.to_uppercase();
+        if sparql_upper.contains("OPTIONAL") {
+            // Parse with OPTIONAL support
+            let mut pos = 0;
+            let mut required_patterns = Vec::new();
 
-                // Check for OPTIONAL blocks
-                let sparql_upper = pattern_text.to_uppercase();
-                if sparql_upper.contains("OPTIONAL") {
-                    // Parse with OPTIONAL support
-                    let mut pos = 0;
-                    let mut required_patterns = Vec::new();
+            while pos < pattern_text.len() {
+                // Look for OPTIONAL keyword
+                if let Some(opt_pos) = pattern_text[pos..].to_uppercase().find("OPTIONAL") {
+                    let abs_pos = pos + opt_pos;
 
-                    while pos < pattern_text.len() {
-                        // Look for OPTIONAL keyword
-                        if let Some(opt_pos) = pattern_text[pos..].to_uppercase().find("OPTIONAL") {
-                            let abs_pos = pos + opt_pos;
+                    // Add any required patterns before OPTIONAL
+                    let before_optional = &pattern_text[pos..abs_pos];
+                    if let Some(req_pattern) = parse_simple_pattern(before_optional) {
+                        required_patterns.push(req_pattern);
+                    }
 
-                            // Add any required patterns before OPTIONAL
-                            let before_optional = &pattern_text[pos..abs_pos];
-                            if let Some(req_pattern) = parse_simple_pattern(before_optional) {
-                                required_patterns.push(req_pattern);
+                    // Find OPTIONAL block
+                    let after_optional = &pattern_text[abs_pos + 8..];
+                    if let Some(opt_brace) = after_optional.find('{') {
+                        if let Some(opt_end) = find_matching_brace(after_optional, opt_brace) {
+                            let optional_content = &after_optional[opt_brace + 1..opt_end];
+
+                            // Parse optional patterns
+                            if let Some(opt_pattern) = parse_simple_pattern(optional_content) {
+                                groups.push(PatternGroup {
+                                    patterns: vec![opt_pattern],
+                                    optional: true,
+                                });
                             }
 
-                            // Find OPTIONAL block
-                            let after_optional = &pattern_text[abs_pos + 8..];
-                            if let Some(opt_brace) = after_optional.find('{') {
-                                if let Some(opt_end) =
-                                    find_matching_brace(after_optional, opt_brace)
-                                {
-                                    let optional_content = &after_optional[opt_brace + 1..opt_end];
-
-                                    // Parse optional patterns
-                                    if let Some(opt_pattern) =
-                                        parse_simple_pattern(optional_content)
-                                    {
-                                        groups.push(PatternGroup {
-                                            patterns: vec![opt_pattern],
-                                            optional: true,
-                                        });
-                                    }
-
-                                    pos = abs_pos + 8 + opt_end + 1;
-                                } else {
-                                    break;
-                                }
-                            } else {
-                                break;
-                            }
+                            pos = abs_pos + 8 + opt_end + 1;
                         } else {
-                            // No more OPTIONAL, add remaining as required
-                            if let Some(req_pattern) = parse_simple_pattern(&pattern_text[pos..]) {
-                                required_patterns.push(req_pattern);
-                            }
                             break;
                         }
-                    }
-
-                    // Add required patterns group
-                    if !required_patterns.is_empty() {
-                        groups.push(PatternGroup {
-                            patterns: required_patterns,
-                            optional: false,
-                        });
+                    } else {
+                        break;
                     }
                 } else {
-                    // No OPTIONAL - all patterns are required
-                    if let Some(pattern) = parse_simple_pattern(pattern_text) {
-                        groups.push(PatternGroup {
-                            patterns: vec![pattern],
-                            optional: false,
-                        });
+                    // No more OPTIONAL, add remaining as required
+                    if let Some(req_pattern) = parse_simple_pattern(&pattern_text[pos..]) {
+                        required_patterns.push(req_pattern);
                     }
+                    break;
                 }
+            }
+
+            // Add required patterns group
+            if !required_patterns.is_empty() {
+                groups.push(PatternGroup {
+                    patterns: required_patterns,
+                    optional: false,
+                });
+            }
+        } else {
+            // No OPTIONAL - all patterns are required
+            if let Some(pattern) = parse_simple_pattern(pattern_text) {
+                groups.push(PatternGroup {
+                    patterns: vec![pattern],
+                    optional: false,
+                });
             }
         }
     }
@@ -272,48 +265,42 @@ pub fn extract_union_groups(sparql: &str) -> Result<Option<UnionGroup>> {
         return Ok(None);
     }
 
-    if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
-        let where_clause = &sparql[where_start + 5..];
+    if let Some((where_open, where_close)) = super::query_locator::locate_where_group(sparql) {
+        let content = &sparql[where_open + 1..where_close];
 
-        if let Some(start_brace) = where_clause.find('{') {
-            if let Some(end_brace) = find_matching_brace(where_clause, start_brace) {
-                let content = &where_clause[start_brace + 1..end_brace];
+        // Split by UNION keyword
+        let mut branches = Vec::new();
+        let mut current_branch = String::new();
 
-                // Split by UNION keyword
-                let mut branches = Vec::new();
-                let mut current_branch = String::new();
+        let mut pos = 0;
+        while pos < content.len() {
+            if let Some(union_pos) = content[pos..].to_uppercase().find(" UNION ") {
+                let abs_pos = pos + union_pos;
+                current_branch.push_str(&content[pos..abs_pos]);
 
-                let mut pos = 0;
-                while pos < content.len() {
-                    if let Some(union_pos) = content[pos..].to_uppercase().find(" UNION ") {
-                        let abs_pos = pos + union_pos;
-                        current_branch.push_str(&content[pos..abs_pos]);
-
-                        // Parse the branch we accumulated
-                        if let Some(branch) = parse_union_branch(&current_branch)? {
-                            branches.push(branch);
-                        }
-
-                        current_branch.clear();
-                        pos = abs_pos + 7; // Skip " UNION "
-                    } else {
-                        // Last branch
-                        current_branch.push_str(&content[pos..]);
-                        break;
-                    }
+                // Parse the branch we accumulated
+                if let Some(branch) = parse_union_branch(&current_branch)? {
+                    branches.push(branch);
                 }
 
-                // Parse final branch
-                if !current_branch.trim().is_empty() {
-                    if let Some(branch) = parse_union_branch(&current_branch)? {
-                        branches.push(branch);
-                    }
-                }
-
-                if !branches.is_empty() {
-                    return Ok(Some(UnionGroup { branches }));
-                }
+                current_branch.clear();
+                pos = abs_pos + 7; // Skip " UNION "
+            } else {
+                // Last branch
+                current_branch.push_str(&content[pos..]);
+                break;
             }
+        }
+
+        // Parse final branch
+        if !current_branch.trim().is_empty() {
+            if let Some(branch) = parse_union_branch(&current_branch)? {
+                branches.push(branch);
+            }
+        }
+
+        if !branches.is_empty() {
+            return Ok(Some(UnionGroup { branches }));
         }
     }
 

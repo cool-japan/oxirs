@@ -25,7 +25,23 @@ impl Default for BulkInsertConfig {
             defer_index_updates: true,
             memory_threshold: 256 * 1024 * 1024, // 256MB
             parallel_processing: true,
-            worker_threads: std::cmp::min(8, 4), // Use 4 as default thread count
+            worker_threads: std::thread::available_parallelism()
+                .map(|n| n.get().min(8))
+                .unwrap_or(4),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_worker_threads_is_cpu_based_and_bounded() {
+        let config = BulkInsertConfig::default();
+        // Must be non-zero (so `.chunks(worker_threads)`-style callers never
+        // panic) and capped at 8 regardless of how many cores are available.
+        assert!(config.worker_threads >= 1);
+        assert!(config.worker_threads <= 8);
     }
 }

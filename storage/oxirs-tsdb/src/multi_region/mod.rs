@@ -1,5 +1,22 @@
 //! Active-active multi-region deployment for `oxirs-tsdb`.
 //!
+//! # Scope: single-process simulation, not a networked deployment
+//!
+//! **This module is an in-process simulation / test harness**, not a
+//! networked multi-region deployment. All "regions" below are logical
+//! partitions inside one process's memory; [`replication::CrossRegionReplicator::drain_pending`]
+//! *simulates* shipping a write to a peer region by re-applying the same
+//! [`RegionWriteRecord`](replication::RegionWriteRecord) against that
+//! region's in-process view instead of sending it over any network/RPC
+//! transport. There is currently no wire protocol, no cross-process/cross-host
+//! communication, and no failure modes from a real network (partitions,
+//! partial delivery, retries) -- only the routing, health-tracking and
+//! last-writer-wins conflict-resolution *logic* that a real deployment would
+//! need are implemented and tested here. Treat the region names
+//! (`us-east-1`, `eu-west-1`, `ap-south`) in the diagram below as
+//! illustrative labels for logical partitions, not evidence of an actual
+//! geo-distributed rollout.
+//!
 //! Provides a thin geometry layer that composes one
 //! [`ReplicationGroup`](crate::replication::ReplicationGroup) per region with:
 //!

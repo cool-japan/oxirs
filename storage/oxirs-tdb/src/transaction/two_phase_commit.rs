@@ -27,10 +27,16 @@
 //!
 //! ```rust,no_run
 //! use oxirs_tdb::transaction::two_phase_commit::{TwoPhaseCoordinator, Participant};
+//! use oxirs_tdb::consensus::transport::LoopbackSimulationTransport;
 //!
 //! # async fn example() -> anyhow::Result<()> {
-//! // Coordinator initiates distributed transaction
-//! let mut coordinator = TwoPhaseCoordinator::new("txn-001".to_string());
+//! // Coordinator initiates distributed transaction. A real multi-node
+//! // deployment must supply a transport backed by real network I/O;
+//! // LoopbackSimulationTransport is only for single-process tests/local dev.
+//! let mut coordinator = TwoPhaseCoordinator::with_transport(
+//!     "txn-001".to_string(),
+//!     LoopbackSimulationTransport::arc(),
+//! );
 //! coordinator.add_participant(Participant {
 //!     node_id: "node1".to_string(),
 //!     endpoint: "http://node1:8080".to_string(),
@@ -42,6 +48,7 @@
 //! # }
 //! ```
 
+use crate::consensus::transport::NetworkTransport;
 use crate::error::{Result, TdbError};
 use crate::transaction::txn_context::{Transaction, TransactionManager};
 use anyhow::Context;
@@ -126,6 +133,12 @@ pub struct TwoPhaseCoordinator {
     commit_timeout: Duration,
     /// Statistics
     stats: Arc<Mutex<TpcCoordinatorStats>>,
+    /// Real (or explicitly-simulated) network transport used to reach
+    /// participants. `None` means no transport has been configured, in
+    /// which case `commit()` fails loudly with
+    /// `TdbError::DistributedTransportNotConfigured` instead of fabricating
+    /// participant acknowledgements.
+    transport: Option<Arc<dyn NetworkTransport>>,
 }
 
 /// Two-Phase Commit Coordinator Statistics
@@ -150,7 +163,15 @@ pub struct TpcCoordinatorStats {
 }
 
 impl TwoPhaseCoordinator {
-    /// Create a new Two-Phase Commit coordinator
+    /// Create a new Two-Phase Commit coordinator with no transport configured.
+    ///
+    /// **Note:** `commit()` on a coordinator built this way always fails with
+    /// [`TdbError::DistributedTransportNotConfigured`] — there is no way to
+    /// honestly reach participants without a transport. Use
+    /// [`TwoPhaseCoordinator::with_transport`] (with a real network-backed
+    /// transport, or
+    /// [`crate::consensus::transport::LoopbackSimulationTransport`] for
+    /// single-node tests) to actually run the protocol.
     pub fn new(txn_id: String) -> Self {
         Self {
             txn_id,
@@ -160,7 +181,17 @@ impl TwoPhaseCoordinator {
             prepare_timeout: Duration::from_secs(30),
             commit_timeout: Duration::from_secs(60),
             stats: Arc::new(Mutex::new(TpcCoordinatorStats::default())),
+            transport: None,
         }
+    }
+
+    /// Create a new Two-Phase Commit coordinator backed by a real (or
+    /// explicitly-simulated) [`NetworkTransport`]. This is the constructor
+    /// production code should use.
+    pub fn with_transport(txn_id: String, transport: Arc<dyn NetworkTransport>) -> Self {
+        let mut coordinator = Self::new(txn_id);
+        coordinator.transport = Some(transport);
+        coordinator
     }
 
     /// Add a participant to the distributed transaction
@@ -195,6 +226,13 @@ impl TwoPhaseCoordinator {
     /// - `Ok(false)` if transaction aborted
     /// - `Err(_)` if protocol failed
     pub async fn commit(&mut self) -> Result<bool> {
+        if self.transport.is_none() {
+            return Err(TdbError::DistributedTransportNotConfigured {
+                node_id: self.txn_id.clone(),
+                protocol: "TwoPhaseCommit".to_string(),
+            });
+        }
+
         {
             let mut stats = self.stats.lock();
             stats.total_transactions += 1;
@@ -286,13 +324,24 @@ impl TwoPhaseCoordinator {
         Ok(votes)
     }
 
-    /// Request prepare vote from a participant (simulated)
-    async fn request_prepare_vote(&self, _node_id: &str) -> Result<Vote> {
-        // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For v0.1.0: Simulated network allows testing of 2PC protocol locally.
-        // The complete 2PC state machine and coordinator logic are fully implemented.
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        Ok(Vote::Yes)
+    /// Request prepare vote from a participant over the configured
+    /// `NetworkTransport`.
+    async fn request_prepare_vote(&self, node_id: &str) -> Result<Vote> {
+        let transport =
+            self.transport
+                .as_ref()
+                .ok_or_else(|| TdbError::DistributedTransportNotConfigured {
+                    node_id: self.txn_id.clone(),
+                    protocol: "TwoPhaseCommit".to_string(),
+                })?;
+
+        let payload = oxicode::serde::encode_to_vec(&self.txn_id, oxicode::config::standard())
+            .map_err(|e| TdbError::Serialization(e.to_string()))?;
+        let response = transport.request_prepare_vote(node_id, &payload).await?;
+
+        oxicode::serde::decode_from_slice(&response, oxicode::config::standard())
+            .map(|(vote, _)| vote)
+            .map_err(|e| TdbError::Deserialization(e.to_string()))
     }
 
     /// Phase 2: Commit Phase
@@ -326,12 +375,19 @@ impl TwoPhaseCoordinator {
         Ok(())
     }
 
-    /// Send COMMIT message to a participant (simulated)
-    async fn send_commit_message(&self, _node_id: &str) -> Result<()> {
-        // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For v0.1.0: Simulated for local testing. Protocol logic is production-ready.
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        Ok(())
+    /// Send COMMIT message to a participant over the configured
+    /// `NetworkTransport`.
+    async fn send_commit_message(&self, node_id: &str) -> Result<()> {
+        let transport =
+            self.transport
+                .as_ref()
+                .ok_or_else(|| TdbError::DistributedTransportNotConfigured {
+                    node_id: self.txn_id.clone(),
+                    protocol: "TwoPhaseCommit".to_string(),
+                })?;
+        let payload = oxicode::serde::encode_to_vec(&self.txn_id, oxicode::config::standard())
+            .map_err(|e| TdbError::Serialization(e.to_string()))?;
+        transport.send_commit(node_id, &payload).await
     }
 
     /// Abort Phase
@@ -359,12 +415,19 @@ impl TwoPhaseCoordinator {
         Ok(())
     }
 
-    /// Send ABORT message to a participant (simulated)
-    async fn send_abort_message(&self, _node_id: &str) -> Result<()> {
-        // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For v0.1.0: Simulated for local testing. Protocol logic is production-ready.
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        Ok(())
+    /// Send ABORT message to a participant over the configured
+    /// `NetworkTransport`.
+    async fn send_abort_message(&self, node_id: &str) -> Result<()> {
+        let transport =
+            self.transport
+                .as_ref()
+                .ok_or_else(|| TdbError::DistributedTransportNotConfigured {
+                    node_id: self.txn_id.clone(),
+                    protocol: "TwoPhaseCommit".to_string(),
+                })?;
+        let payload = oxicode::serde::encode_to_vec(&self.txn_id, oxicode::config::standard())
+            .map_err(|e| TdbError::Serialization(e.to_string()))?;
+        transport.send_abort(node_id, &payload).await
     }
 
     /// Get current transaction state
@@ -610,7 +673,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_2pc_successful_commit() {
-        let mut coordinator = TwoPhaseCoordinator::new("txn-003".to_string());
+        let mut coordinator = TwoPhaseCoordinator::with_transport(
+            "txn-003".to_string(),
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator.add_participant(Participant {
             node_id: "node1".to_string(),
@@ -633,7 +699,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_2pc_coordinator_stats() {
-        let mut coordinator = TwoPhaseCoordinator::new("txn-004".to_string());
+        let mut coordinator = TwoPhaseCoordinator::with_transport(
+            "txn-004".to_string(),
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator.add_participant(Participant {
             node_id: "node1".to_string(),
@@ -720,6 +789,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_2pc_commit_without_transport_fails_loudly() {
+        // Regression test: a coordinator with no NetworkTransport configured
+        // must never report a fake commit success.
+        let mut coordinator = TwoPhaseCoordinator::new("txn-no-transport".to_string());
+        coordinator.add_participant(Participant {
+            node_id: "node1".to_string(),
+            endpoint: "http://node1:8080".to_string(),
+        });
+
+        let err = coordinator.commit().await.unwrap_err();
+        assert!(matches!(
+            err,
+            TdbError::DistributedTransportNotConfigured { .. }
+        ));
+        // No fabricated state transition should have happened either.
+        assert_eq!(coordinator.state(), TpcState::Init);
+    }
+
+    #[tokio::test]
     async fn test_2pc_timeout_configuration() {
         let mut coordinator = TwoPhaseCoordinator::new("txn-005".to_string());
 
@@ -762,7 +850,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_2pc_get_votes() {
-        let mut coordinator = TwoPhaseCoordinator::new("txn-006".to_string());
+        let mut coordinator = TwoPhaseCoordinator::with_transport(
+            "txn-006".to_string(),
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator.add_participant(Participant {
             node_id: "node1".to_string(),

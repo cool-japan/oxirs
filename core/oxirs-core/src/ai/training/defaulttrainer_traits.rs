@@ -250,6 +250,7 @@ impl Trainer for DefaultTrainer {
     async fn resume_training(
         &mut self,
         checkpoint_path: &str,
+        model: Arc<dyn KnowledgeGraphEmbedding>,
         _training_data: &[Triple],
         _validation_data: &[Triple],
     ) -> Result<TrainingMetrics> {
@@ -301,10 +302,63 @@ impl Trainer for DefaultTrainer {
             checkpoint.epoch + 1,
             self.config.max_epochs.saturating_sub(checkpoint.epoch + 1)
         );
-        tracing::warn!(
-            "Checkpoint loaded successfully, but model parameter restoration is not yet implemented. \
-             To fully resume training, implement model state serialization/deserialization."
-        );
+
+        // Restore the actual model parameters. Without this, "resuming"
+        // would silently restart optimization from randomly-initialized
+        // weights while reporting the prior run's metrics/LR schedule as
+        // if training had truly continued - fail loudly instead of
+        // fabricating a successful resume.
+        match &checkpoint.model_state {
+            Some(state_bytes) => {
+                let mut model_mut = model;
+                let model_ref = Arc::get_mut(&mut model_mut).ok_or_else(|| {
+                    anyhow!(
+                        "Cannot restore model parameters from checkpoint {}: the model \
+                         handle has other outstanding references. Pass an exclusively-owned \
+                         model into resume_training() (clone/drop other references first).",
+                        checkpoint_path
+                    )
+                })?;
+
+                let temp_path = std::env::temp_dir().join(format!(
+                    "oxirs-resume-checkpoint-{}-{}.bin",
+                    std::process::id(),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_nanos())
+                        .unwrap_or(0)
+                ));
+                std::fs::write(&temp_path, state_bytes).map_err(|e| {
+                    anyhow!(
+                        "Failed to stage checkpoint model state for restoration: {}",
+                        e
+                    )
+                })?;
+                let load_result = model_ref.load(temp_path.to_string_lossy().as_ref()).await;
+                let _ = std::fs::remove_file(&temp_path);
+                load_result.map_err(|e| {
+                    anyhow!(
+                        "Failed to restore model parameters from checkpoint {}: {}",
+                        checkpoint_path,
+                        e
+                    )
+                })?;
+                tracing::info!(
+                    "Restored model parameters from checkpoint model_state ({} bytes)",
+                    state_bytes.len()
+                );
+            }
+            None => {
+                return Err(anyhow!(
+                    "Checkpoint {} has no `model_state`; cannot resume training without the \
+                     model's parameters. Save checkpoints with `model_state` populated (e.g. \
+                     serialize the model via KnowledgeGraphEmbedding::save into the checkpoint) \
+                     to support resume_training().",
+                    checkpoint_path
+                ));
+            }
+        }
+
         Ok(metrics)
     }
     async fn evaluate(
@@ -315,5 +369,166 @@ impl Trainer for DefaultTrainer {
     ) -> Result<HashMap<String, f32>> {
         let computed_metrics = self.compute_metrics(test_data, model.as_ref()).await?;
         Ok(computed_metrics)
+    }
+}
+
+#[cfg(test)]
+mod resume_training_tests {
+    use super::*;
+    use crate::ai::embeddings::simple::SimplE;
+    use crate::ai::embeddings::EmbeddingConfig;
+    use crate::ai::training::types::CheckpointData;
+    use crate::model::{Literal, NamedNode};
+
+    fn unique_temp_path(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "oxirs-core-resume-training-test-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0),
+            name
+        ))
+    }
+
+    fn sample_triples() -> Vec<Triple> {
+        vec![Triple::new(
+            NamedNode::new("http://example.org/alice").expect("valid IRI"),
+            NamedNode::new("http://example.org/knows").expect("valid IRI"),
+            Literal::new("bob"),
+        )]
+    }
+
+    fn empty_checkpoint(model_state: Option<Vec<u8>>) -> CheckpointData {
+        CheckpointData {
+            epoch: 0,
+            current_lr: 0.001,
+            best_val_score: 0.0,
+            best_epoch: 0,
+            train_loss_history: Vec::new(),
+            val_loss_history: Vec::new(),
+            train_accuracy_history: Vec::new(),
+            val_accuracy_history: Vec::new(),
+            lr_history: Vec::new(),
+            epoch_times_ms: Vec::new(),
+            total_time_ms: 0,
+            model_state,
+            optimizer_state: None,
+            additional_metrics: HashMap::new(),
+            config: TrainingConfig::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_resume_training_restores_model_state() {
+        // Train a small model, save its state into a checkpoint's
+        // `model_state`, mutate the in-memory model so it no longer
+        // matches, then verify resume_training() restores it.
+        let triples = sample_triples();
+        let mut model = SimplE::new(EmbeddingConfig {
+            embedding_dim: 4,
+            ..Default::default()
+        });
+        model
+            .train(&triples, &crate::ai::embeddings::TrainingConfig::default())
+            .await
+            .expect("initial training succeeds");
+
+        let saved_model_path = unique_temp_path("model.json");
+        model
+            .save(saved_model_path.to_str().expect("valid utf8 path"))
+            .await
+            .expect("save succeeds");
+        let model_state = std::fs::read(&saved_model_path).expect("read back saved model bytes");
+        let _ = std::fs::remove_file(&saved_model_path);
+
+        let checkpoint = empty_checkpoint(Some(model_state));
+        let checkpoint_json = serde_json::to_string(&checkpoint).expect("checkpoint serializes");
+        let checkpoint_path = unique_temp_path("checkpoint.json");
+        std::fs::write(&checkpoint_path, checkpoint_json).expect("write checkpoint");
+
+        // Fresh, untrained model instance standing in for "resuming into".
+        let fresh_model: Arc<dyn KnowledgeGraphEmbedding> =
+            Arc::new(SimplE::new(EmbeddingConfig {
+                embedding_dim: 4,
+                ..Default::default()
+            }));
+
+        let mut trainer = DefaultTrainer::new(TrainingConfig::default());
+        let result = trainer
+            .resume_training(
+                checkpoint_path.to_str().expect("valid utf8 path"),
+                fresh_model,
+                &triples,
+                &triples,
+            )
+            .await;
+
+        let _ = std::fs::remove_file(&checkpoint_path);
+        result.expect("resume_training should restore model parameters and succeed");
+    }
+
+    #[tokio::test]
+    async fn test_resume_training_fails_loudly_without_model_state() {
+        // A checkpoint with no serialized model_state must not silently
+        // "succeed" - resume_training() must fail rather than fabricate
+        // a resumed-training result with un-restored parameters.
+        let checkpoint = empty_checkpoint(None);
+        assert!(checkpoint.model_state.is_none());
+        let checkpoint_json = serde_json::to_string(&checkpoint).expect("checkpoint serializes");
+        let checkpoint_path = unique_temp_path("checkpoint_no_state.json");
+        std::fs::write(&checkpoint_path, checkpoint_json).expect("write checkpoint");
+
+        let model: Arc<dyn KnowledgeGraphEmbedding> =
+            Arc::new(SimplE::new(EmbeddingConfig::default()));
+        let mut trainer = DefaultTrainer::new(TrainingConfig::default());
+        let triples = sample_triples();
+        let result = trainer
+            .resume_training(
+                checkpoint_path.to_str().expect("valid utf8 path"),
+                model,
+                &triples,
+                &triples,
+            )
+            .await;
+
+        let _ = std::fs::remove_file(&checkpoint_path);
+        assert!(
+            result.is_err(),
+            "resume_training must fail when the checkpoint has no model_state"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_resume_training_fails_on_shared_model_reference() {
+        // A non-exclusively-owned model handle cannot have its
+        // parameters overwritten in place; resume_training() must
+        // surface that as an error instead of quietly skipping restore.
+        let model: Arc<dyn KnowledgeGraphEmbedding> =
+            Arc::new(SimplE::new(EmbeddingConfig::default()));
+        let _extra_reference = model.clone(); // keep a second Arc reference
+
+        let checkpoint = empty_checkpoint(Some(vec![1, 2, 3]));
+        let checkpoint_json = serde_json::to_string(&checkpoint).expect("checkpoint serializes");
+        let checkpoint_path = unique_temp_path("checkpoint_shared.json");
+        std::fs::write(&checkpoint_path, checkpoint_json).expect("write checkpoint");
+
+        let mut trainer = DefaultTrainer::new(TrainingConfig::default());
+        let triples = sample_triples();
+        let result = trainer
+            .resume_training(
+                checkpoint_path.to_str().expect("valid utf8 path"),
+                model,
+                &triples,
+                &triples,
+            )
+            .await;
+
+        let _ = std::fs::remove_file(&checkpoint_path);
+        assert!(
+            result.is_err(),
+            "resume_training must fail when the model handle is not exclusively owned"
+        );
     }
 }

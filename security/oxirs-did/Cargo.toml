@@ -24,7 +24,10 @@ scirs2-core.workspace = true
 
 # Cryptography
 ed25519-dalek.workspace = true
-curve25519-dalek = { workspace = true, optional = true }
+# curve25519-dalek is a mandatory dependency: it backs the real X25519 key
+# agreement (key_agreement.rs) and the Ristretto255 Pedersen/Schnorr
+# proof-of-knowledge used by the ZKP selective-disclosure path. Pure Rust.
+curve25519-dalek.workspace = true
 # NOTE (cargo-upgrade sweep, 2026-07-02): PINNED to sha2 0.10 + hmac 0.12 (digest
 # 0.10 generation). sha2 0.11 / hmac 0.13 implement the digest 0.11 traits, but this
 # crate's bls12_381_plus 0.8.18 (via elliptic-curve 0.13.8's ExpandMsgXmd in
@@ -98,8 +101,14 @@ signed-graphs = []
 key-management = []
 bbs-plus = []
 zkp = []
-# zkp-ristretto: harden Pedersen commitments with curve25519-dalek Ristretto255
-zkp-ristretto = ["dep:curve25519-dalek"]
+# zkp-ristretto: compiles the standalone `zkp::pedersen::ristretto` helper module.
+# curve25519-dalek is now a mandatory dependency (the default Pedersen/Schnorr
+# path is Ristretto255-backed regardless of this flag), so this is just a marker.
+zkp-ristretto = []
+# insecure-mock-kms: opt-in gate for the deterministic, NON-SECURE in-memory KMS
+# backends (InsecureMockAwsKms/Gcp/Azure). They derive signing keys from the
+# public key_id and MUST NOT be used in production. Enabled only for tests/dev.
+insecure-mock-kms = []
 
 [package.metadata.docs.rs]
 all-features = true

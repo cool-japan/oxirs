@@ -34,7 +34,7 @@
 //! ```
 
 use crate::error::{TextPosition, TurtleParseError, TurtleResult, TurtleSyntaxError};
-use crate::turtle::TurtleParser;
+use crate::turtle::{TurtleParser, TurtleParsingContext};
 use oxirs_core::model::Triple;
 use std::collections::HashMap;
 
@@ -68,6 +68,10 @@ pub struct ParseCheckpoint {
     pub pending_data: Vec<u8>,
     /// State at checkpoint
     pub state: ParseState,
+    /// Blank node counter at checkpoint (see `IncrementalParser::blank_node_counter`)
+    pub blank_node_counter: usize,
+    /// Explicitly-seen blank node labels at checkpoint
+    pub explicit_blank_labels: std::collections::HashSet<String>,
 }
 
 impl ParseCheckpoint {
@@ -80,6 +84,8 @@ impl ParseCheckpoint {
             base_iri: None,
             pending_data: Vec::new(),
             state: ParseState::Ready,
+            blank_node_counter: 0,
+            explicit_blank_labels: std::collections::HashSet::new(),
         }
     }
 }
@@ -113,6 +119,17 @@ pub struct IncrementalParser {
     eof: bool,
     /// Errors collected in lenient mode
     errors: Vec<TurtleParseError>,
+    /// Blank node counter carried across `parse_available()` calls.
+    ///
+    /// Without this, each call would create a brand-new [`TurtleParsingContext`]
+    /// starting its counter at zero, so an anonymous blank node (`[...]`) in one
+    /// chunk and another in a later chunk would both mint `_:genid-b0` and get
+    /// silently unified once the returned triples are merged by the caller.
+    blank_node_counter: usize,
+    /// Blank node labels explicitly written by the user, carried across calls so
+    /// that generated IDs (see `blank_node_counter`) never collide with them
+    /// either, no matter which chunk the explicit label appeared in.
+    explicit_blank_labels: std::collections::HashSet<String>,
 }
 
 impl IncrementalParser {
@@ -128,6 +145,8 @@ impl IncrementalParser {
             lenient: false,
             eof: false,
             errors: Vec::new(),
+            blank_node_counter: 0,
+            explicit_blank_labels: std::collections::HashSet::new(),
         }
     }
 
@@ -295,79 +314,15 @@ impl IncrementalParser {
         Ok(triples)
     }
 
-    /// Find the boundary between complete and incomplete statements
+    /// Find the boundary between complete and incomplete statements.
+    ///
+    /// Delegates to the shared [`crate::statement_boundary`] scanner so this
+    /// crate maintains a single (tested) implementation of the string/long-
+    /// string tracking used to recognize a top-level statement terminator.
     fn find_statement_boundary(&self, content: &str) -> (String, String) {
-        let mut last_complete = 0;
-        let mut in_string = false;
-        let mut in_long_string = false;
-        let mut string_quote = '\0';
-        let mut chars = content.char_indices().peekable();
-
-        while let Some((i, ch)) = chars.next() {
-            // Handle string literals
-            if !in_string && !in_long_string && (ch == '"' || ch == '\'') {
-                // Check for long string
-                let mut count = 1;
-                while let Some(&(_, next_ch)) = chars.peek() {
-                    if next_ch == ch && count < 3 {
-                        chars.next();
-                        count += 1;
-                    } else {
-                        break;
-                    }
-                }
-
-                if count == 3 {
-                    in_long_string = true;
-                } else {
-                    in_string = count == 1;
-                }
-                string_quote = ch;
-            } else if in_long_string && ch == string_quote {
-                // Check for end of long string
-                let mut count = 1;
-                while let Some(&(_, next_ch)) = chars.peek() {
-                    if next_ch == string_quote && count < 3 {
-                        chars.next();
-                        count += 1;
-                    } else {
-                        break;
-                    }
-                }
-                if count >= 3 {
-                    in_long_string = false;
-                }
-            } else if in_string && ch == string_quote {
-                in_string = false;
-            } else if in_string && ch == '\\' {
-                // Skip escaped character
-                chars.next();
-            } else if !in_string && !in_long_string {
-                // Look for statement end
-                if ch == '.' || ch == '}' {
-                    // Include trailing whitespace after statement terminator
-                    let mut end_pos = i + ch.len_utf8();
-                    while let Some(&(next_i, next_ch)) = chars.peek() {
-                        if next_ch == ' ' || next_ch == '\t' || next_ch == '\n' || next_ch == '\r' {
-                            chars.next();
-                            end_pos = next_i + next_ch.len_utf8();
-                        } else {
-                            break;
-                        }
-                    }
-                    last_complete = end_pos;
-                }
-            }
-        }
-
-        if last_complete == 0 {
-            (String::new(), content.to_string())
-        } else {
-            (
-                content[..last_complete].to_string(),
-                content[last_complete..].to_string(),
-            )
-        }
+        let (parseable, remaining) =
+            crate::statement_boundary::find_last_statement_boundary(content);
+        (parseable.to_string(), remaining.to_string())
     }
 
     /// Parse content string
@@ -414,8 +369,25 @@ impl IncrementalParser {
             parser.base_iri = Some(base.clone());
         }
 
+        // Build a parsing context seeded with the blank-node state accumulated
+        // across all previous `parse_available()` calls, so that anonymous blank
+        // nodes generated while parsing this chunk cannot collide with ones
+        // generated for an earlier chunk (see `blank_node_counter`).
+        let mut context = TurtleParsingContext::new();
+        context.prefixes = parser.prefixes.clone();
+        context.base_iri = parser.base_iri.clone();
+        context.blank_node_counter = self.blank_node_counter;
+        context.explicit_blank_labels = self.explicit_blank_labels.clone();
+
         // Parse
-        match parser.parse_document(content) {
+        let result = parser.parse_document_with_context(content, &mut context);
+
+        // Persist blank-node state regardless of success/failure so that partial
+        // progress (e.g. lenient-mode recovery) still avoids future collisions.
+        self.blank_node_counter = context.blank_node_counter;
+        self.explicit_blank_labels = context.explicit_blank_labels;
+
+        match result {
             Ok(triples) => Ok(triples),
             Err(e) => {
                 if self.lenient {
@@ -439,6 +411,8 @@ impl IncrementalParser {
             base_iri: self.base_iri.clone(),
             pending_data: self.buffer.clone(),
             state: self.state,
+            blank_node_counter: self.blank_node_counter,
+            explicit_blank_labels: self.explicit_blank_labels.clone(),
         }
     }
 
@@ -452,6 +426,8 @@ impl IncrementalParser {
         self.state = checkpoint.state;
         self.eof = checkpoint.state == ParseState::Complete;
         self.errors.clear();
+        self.blank_node_counter = checkpoint.blank_node_counter;
+        self.explicit_blank_labels = checkpoint.explicit_blank_labels;
     }
 
     /// Reset parser to initial state
@@ -464,6 +440,8 @@ impl IncrementalParser {
         self.triples_parsed = 0;
         self.eof = false;
         self.errors.clear();
+        self.blank_node_counter = 0;
+        self.explicit_blank_labels.clear();
     }
 
     /// Get pending data size
@@ -686,6 +664,52 @@ mod tests {
         assert_eq!(parser.triples_parsed(), 0);
         assert_eq!(parser.bytes_processed(), 0);
         assert!(!parser.is_complete());
+    }
+
+    #[test]
+    fn test_blank_node_counter_persists_across_chunks() {
+        // Regression test: two chunks, each introducing an anonymous blank node
+        // property list, must not reuse the same generated blank node ID — that
+        // would silently unify two logically-distinct blank nodes once the
+        // triples returned by successive `parse_available()` calls are merged.
+        let mut parser = IncrementalParser::new();
+
+        parser
+            .push_data(b"@prefix ex: <http://example.org/> .\n")
+            .expect("push data should succeed");
+        parser
+            .push_data(b"ex:s1 ex:p [ ex:q \"1\" ] .\n")
+            .expect("push data should succeed");
+
+        let first_triples = parser.parse_available().expect("parsing should succeed");
+        assert_eq!(first_triples.len(), 2);
+        let first_blank = first_triples
+            .iter()
+            .find_map(|t| match t.subject() {
+                oxirs_core::model::Subject::BlankNode(b) => Some(b.clone()),
+                _ => None,
+            })
+            .expect("first chunk should contain a blank node subject");
+
+        parser
+            .push_data(b"ex:s2 ex:p [ ex:q \"2\" ] .\n")
+            .expect("push data should succeed");
+        parser.push_eof();
+
+        let second_triples = parser.parse_available().expect("parsing should succeed");
+        assert_eq!(second_triples.len(), 2);
+        let second_blank = second_triples
+            .iter()
+            .find_map(|t| match t.subject() {
+                oxirs_core::model::Subject::BlankNode(b) => Some(b.clone()),
+                _ => None,
+            })
+            .expect("second chunk should contain a blank node subject");
+
+        assert_ne!(
+            first_blank, second_blank,
+            "blank nodes generated in different chunks must not collide"
+        );
     }
 
     #[test]

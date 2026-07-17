@@ -19,6 +19,10 @@ pub mod export;
 /// Data import/export commands
 pub mod import;
 
+/// Term-conversion bridge between `oxirs-core` and `oxirs-tdb` term types,
+/// plus tdb2-dataset auto-detection, shared by `import`/`query`/`export`.
+pub mod tdb_convert;
+
 /// Batch operations for high-performance processing
 pub mod batch;
 

@@ -2,17 +2,20 @@
 
 use crate::compression::{BloomFilter, PrefixCompressor};
 use crate::diagnostics::{DiagnosticContext, DiagnosticEngine, DiagnosticLevel, DiagnosticReport};
-use crate::dictionary::{Dictionary, Term};
+use crate::dictionary::{Dictionary, NodeId, Term};
 use crate::error::{Result, TdbError};
 use crate::index::spatial::{
     Geometry, SpatialIndex, SpatialQuery, SpatialQueryResult, SpatialStats,
 };
-use crate::index::{Triple, TripleIndexes};
+use crate::index::{QuadIndexes, Triple, TripleIndexes};
 use crate::query_cache::{QueryCache, QueryCacheConfig};
 use crate::query_monitor::{QueryMonitor, QueryMonitorConfig};
 use crate::statistics::{StatisticsConfig, TripleStatistics};
 use crate::storage::buffer_pool::BufferPool;
 use crate::storage::file_manager::FileManager;
+use crate::storage::superblock::{
+    Superblock, SUPERBLOCK_FORMAT_VERSION, SUPERBLOCK_MAGIC, SUPERBLOCK_PAGE_ID,
+};
 use crate::store::store_types::{
     IndexMetrics, QueryResultWithStats, StorageMetrics, TdbConfig, TdbEnhancedStats, TdbStats,
     TransactionMetrics,
@@ -27,12 +30,30 @@ pub struct TdbStore {
     pub(crate) config: TdbConfig,
     /// Dictionary for term encoding
     pub(crate) dictionary: Dictionary,
-    /// Triple indexes (SPO, POS, OSP)
+    /// Triple indexes (SPO, POS, OSP) for the default (unnamed) graph.
     pub(crate) indexes: TripleIndexes,
+    /// Quad indexes (GSPO, GPOS, GOSP) for named graphs.
+    ///
+    /// `None` when named-graph support is disabled and the store has no
+    /// previously-persisted quad data (see [`TdbConfig::enable_quad_indexes`]).
+    pub(crate) quad_indexes: Option<QuadIndexes>,
+    /// Whether *new* named-graph writes are permitted. Reads of previously
+    /// persisted quad data remain available even when writes are disabled, so
+    /// reopening a quad store read-only never loses or hides data.
+    pub(crate) quads_writable: bool,
+    /// Number of named-graph quads currently stored (default-graph triples are
+    /// counted by [`Self::triple_count`]).
+    pub(crate) quad_count: usize,
     /// Transaction manager
     pub(crate) txn_manager: Arc<TransactionManager>,
     /// Buffer pool (for stats collection)
     pub(crate) buffer_pool: Arc<BufferPool>,
+    /// File manager, used to persist the on-disk superblock (page 0) directly,
+    /// outside the cached page space managed by the buffer pool.
+    pub(crate) file_manager: Arc<FileManager>,
+    /// Whether [`TdbStore::sync`] runs on `Drop` (best-effort durability).
+    /// Disabled in tests that simulate a crash before an explicit sync.
+    pub(crate) sync_on_drop: bool,
     /// Bloom filter for existence checks (optional)
     pub(crate) bloom_filter: Option<BloomFilter>,
     /// Prefix compressor (optional)
@@ -66,13 +87,89 @@ impl TdbStore {
         // Initialize file manager and buffer pool
         let data_file = config.data_dir.join("data.tdb");
         let file_manager = Arc::new(FileManager::open(&data_file, false)?);
-        let buffer_pool = Arc::new(BufferPool::new(config.buffer_pool_size, file_manager));
 
-        // Initialize dictionary
-        let dictionary = Dictionary::new(buffer_pool.clone());
+        // Read the on-disk catalog (page 0) BEFORE the buffer pool touches the
+        // file. `Ok(None)` means a brand-new, empty data file (fresh store);
+        // `Err` means the file exists but is not a compatible superblock.
+        let existing_superblock = Superblock::read(&file_manager)?;
 
-        // Initialize triple indexes
-        let indexes = TripleIndexes::new(buffer_pool.clone());
+        let buffer_pool = Arc::new(BufferPool::new(
+            config.buffer_pool_size,
+            file_manager.clone(),
+        ));
+
+        // Whether new named-graph writes are permitted for this handle.
+        let quads_writable = config.enable_quad_indexes;
+
+        // Reconstruct (or initialize) the dictionary + triple indexes + quad
+        // indexes and the triple/quad counts from the catalog.
+        let (dictionary, indexes, quad_indexes, triple_count, quad_count) =
+            match existing_superblock {
+                Some(sb) => {
+                    // Restore the persisted free-page list head so freed pages are
+                    // reused across restarts.
+                    file_manager.set_free_list_head(sb.free_list_head());
+
+                    let dictionary = Dictionary::from_roots(
+                        buffer_pool.clone(),
+                        sb.node_to_id_root(),
+                        sb.id_to_term_root(),
+                        NodeId::new(sb.next_node_id),
+                    );
+                    let indexes = TripleIndexes::from_roots(
+                        buffer_pool.clone(),
+                        sb.spo_root(),
+                        sb.pos_root(),
+                        sb.osp_root(),
+                    );
+
+                    // Reconstruct the quad indexes when named-graph support is
+                    // enabled OR when the store already holds persisted quad data
+                    // (so disabling the flag on reopen never orphans/loses quads).
+                    let has_persisted_quads = sb.gspo_root().is_some()
+                        || sb.gpos_root().is_some()
+                        || sb.gosp_root().is_some();
+                    let quad_indexes = if config.enable_quad_indexes || has_persisted_quads {
+                        Some(QuadIndexes::from_roots(
+                            buffer_pool.clone(),
+                            sb.gspo_root(),
+                            sb.gpos_root(),
+                            sb.gosp_root(),
+                        ))
+                    } else {
+                        None
+                    };
+
+                    (
+                        dictionary,
+                        indexes,
+                        quad_indexes,
+                        sb.triple_count as usize,
+                        sb.quad_count as usize,
+                    )
+                }
+                None => {
+                    // Fresh store: reserve page 0 for the superblock so no B+Tree
+                    // page ever collides with it, then persist an empty catalog.
+                    let page0 = file_manager.allocate_page()?;
+                    if page0 != SUPERBLOCK_PAGE_ID {
+                        return Err(TdbError::Other(format!(
+                        "Failed to reserve superblock page: expected page {SUPERBLOCK_PAGE_ID}, \
+                         got {page0}"
+                    )));
+                    }
+                    Superblock::new_empty(NodeId::FIRST.as_u64()).write(&file_manager)?;
+
+                    let dictionary = Dictionary::new(buffer_pool.clone());
+                    let indexes = TripleIndexes::new(buffer_pool.clone());
+                    let quad_indexes = if config.enable_quad_indexes {
+                        Some(QuadIndexes::new(buffer_pool.clone()))
+                    } else {
+                        None
+                    };
+                    (dictionary, indexes, quad_indexes, 0usize, 0usize)
+                }
+            };
 
         // Initialize transaction management
         let wal = Arc::new(WriteAheadLog::new(&config.data_dir)?);
@@ -123,21 +220,115 @@ impl TdbStore {
             None
         };
 
-        Ok(Self {
+        let mut store = Self {
             config,
             dictionary,
             indexes,
+            quad_indexes,
+            quads_writable,
+            quad_count,
             txn_manager,
             buffer_pool,
+            file_manager,
+            sync_on_drop: true,
             bloom_filter,
             prefix_compressor,
-            triple_count: 0,
+            triple_count,
             query_cache,
             statistics,
             query_monitor,
             diagnostic_engine,
             spatial_index,
-        })
+        };
+
+        // The bloom filter is an in-memory acceleration structure that is not
+        // persisted; rebuild it from the (now reconstructed) indexes so that
+        // `contains()` — which trusts the bloom filter as a negative cache —
+        // does not incorrectly report reopened triples as absent. For a fresh
+        // store the index scan is empty and this is a no-op.
+        store.rebuild_bloom_filter()?;
+
+        Ok(store)
+    }
+
+    /// Repopulate the (non-persisted) bloom filter from the current indexes.
+    ///
+    /// Called on open so a reopened store's `contains()` fast-path is correct.
+    /// O(n) in the number of triples; a persisted bloom filter would avoid the
+    /// scan and is a possible future optimization.
+    fn rebuild_bloom_filter(&mut self) -> Result<()> {
+        if self.bloom_filter.is_none() {
+            return Ok(());
+        }
+        let all = self.indexes.query_pattern(None, None, None)?;
+        if let Some(ref mut bloom) = self.bloom_filter {
+            for triple in &all {
+                bloom.insert(triple);
+            }
+        }
+        Ok(())
+    }
+
+    /// Flush all pending state to disk durably.
+    ///
+    /// This first flushes every dirty page in the buffer pool (each fsynced by
+    /// the file manager), then snapshots the live catalog — the SPO/POS/OSP and
+    /// dictionary B+Tree root pages, the next dictionary id, the triple count,
+    /// and the free-page-list head — into the on-disk superblock (page 0) and
+    /// fsyncs it. After `sync()` returns, reopening the store reconstructs
+    /// exactly this state.
+    ///
+    /// Ordering matters: the B+Tree pages are made durable *before* the
+    /// superblock is written, so the superblock never references pages that are
+    /// not yet on disk.
+    pub fn sync(&self) -> Result<()> {
+        // 1. Persist all dirty B+Tree/dictionary pages durably.
+        self.buffer_pool.flush_all()?;
+
+        // 2. Snapshot the live catalog into the superblock and fsync it.
+        //    Quad roots come from the live quad indexes when present; when quad
+        //    support is disabled they are recorded as empty (a disabled store
+        //    has no live quad data — see `open_with_config`, which reconstructs
+        //    the indexes whenever persisted quad roots exist).
+        let (gspo_root, gpos_root, gosp_root) = match &self.quad_indexes {
+            Some(qi) => (qi.gspo_root(), qi.gpos_root(), qi.gosp_root()),
+            None => (None, None, None),
+        };
+        let superblock = Superblock {
+            magic: SUPERBLOCK_MAGIC,
+            format_version: SUPERBLOCK_FORMAT_VERSION,
+            spo_root: Superblock::option_to_slot(self.indexes.spo_root()),
+            pos_root: Superblock::option_to_slot(self.indexes.pos_root()),
+            osp_root: Superblock::option_to_slot(self.indexes.osp_root()),
+            node_to_id_root: Superblock::option_to_slot(self.dictionary.node_to_id_root()),
+            id_to_term_root: Superblock::option_to_slot(self.dictionary.id_to_term_root()),
+            next_node_id: self.dictionary.next_id().as_u64(),
+            triple_count: self.triple_count as u64,
+            free_list_head: Superblock::option_to_slot(self.file_manager.free_list_head()),
+            gspo_root: Superblock::option_to_slot(gspo_root),
+            gpos_root: Superblock::option_to_slot(gpos_root),
+            gosp_root: Superblock::option_to_slot(gosp_root),
+            quad_count: self.quad_count as u64,
+        };
+        superblock.write(&self.file_manager)?;
+        Ok(())
+    }
+
+    /// Intern a term into the dictionary without inserting any triple.
+    ///
+    /// Used by the bulk loader to warm the dictionary up front; unlike the old
+    /// pre-population path it never fabricates `(term, term, term)` triples.
+    pub fn encode_term(&self, term: &Term) -> Result<NodeId> {
+        self.dictionary.encode(term)
+    }
+
+    /// Control whether [`TdbStore::sync`] runs automatically on `Drop`.
+    ///
+    /// Enabled by default. Disabling it lets tests simulate a process crash
+    /// (a drop with no explicit `sync()`), after which only previously-synced
+    /// data survives a reopen.
+    pub fn set_sync_on_drop(&mut self, enabled: bool) {
+        self.sync_on_drop = enabled;
     }
 
     /// Insert a triple
@@ -153,8 +344,9 @@ impl TdbStore {
 
         let triple = Triple::new(s_id, p_id, o_id);
 
-        // Add to indexes
-        self.indexes.insert(triple)?;
+        // Add to indexes. `is_new` is false when the triple already existed, so
+        // the count is not double-incremented for duplicate inserts.
+        let is_new = self.indexes.insert(triple)?;
 
         // Update bloom filter
         if let Some(ref mut bloom) = self.bloom_filter {
@@ -168,8 +360,10 @@ impl TdbStore {
         self.query_cache
             .invalidate_pattern(Some(subject), Some(predicate), Some(object));
 
-        // Update count
-        self.triple_count += 1;
+        // Update count only for genuinely new triples.
+        if is_new {
+            self.triple_count += 1;
+        }
 
         Ok(())
     }
@@ -348,16 +542,18 @@ impl TdbStore {
 
         let triple = Triple::new(s_id, p_id, o_id);
 
-        // Add to indexes
-        self.indexes.insert(triple)?;
+        // Add to indexes (see `insert` for the `is_new` rationale).
+        let is_new = self.indexes.insert(triple)?;
 
         // Update bloom filter
         if let Some(ref mut bloom) = self.bloom_filter {
             bloom.insert(&triple);
         }
 
-        // Update count
-        self.triple_count += 1;
+        // Update count only for genuinely new triples.
+        if is_new {
+            self.triple_count += 1;
+        }
 
         Ok(())
     }
@@ -385,6 +581,10 @@ impl TdbStore {
         for (subject, predicate, object) in triples {
             self.insert_triple(subject, predicate, object)?;
         }
+
+        // Persist the batch durably (pages + catalog) so a bulk load survives a
+        // reopen even if the caller drops the store without an explicit sync.
+        self.sync()?;
 
         Ok(())
     }
@@ -577,6 +777,13 @@ impl TdbStore {
     pub fn clear(&mut self) -> Result<()> {
         // Create new empty indexes (reusing the same buffer pool)
         self.indexes = TripleIndexes::new(self.buffer_pool.clone());
+
+        // Reset the quad indexes too (if present) so named-graph data is
+        // cleared alongside the default graph.
+        if self.quad_indexes.is_some() {
+            self.quad_indexes = Some(QuadIndexes::new(self.buffer_pool.clone()));
+        }
+        self.quad_count = 0;
 
         // Create new empty dictionary
         self.dictionary = Dictionary::new(self.buffer_pool.clone());
@@ -906,6 +1113,20 @@ impl TdbStore {
             Err(TdbError::Other(
                 "Spatial indexing is not enabled".to_string(),
             ))
+        }
+    }
+}
+
+impl Drop for TdbStore {
+    /// Best-effort durability on drop: unless disabled via
+    /// [`TdbStore::set_sync_on_drop`], flush all pages and the superblock so a
+    /// gracefully-dropped store is always persisted. Errors are logged (a Drop
+    /// cannot return them) rather than silently ignored.
+    fn drop(&mut self) {
+        if self.sync_on_drop {
+            if let Err(e) = self.sync() {
+                log::error!("oxirs-tdb: TdbStore failed to sync on drop: {e}");
+            }
         }
     }
 }

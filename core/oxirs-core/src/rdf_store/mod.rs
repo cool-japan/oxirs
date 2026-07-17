@@ -302,6 +302,8 @@
 //! - [`crate::query`] - SPARQL query execution
 
 pub mod concrete;
+pub(crate) mod dictionary;
+pub mod persistence;
 pub mod storage;
 pub mod types;
 
@@ -309,6 +311,7 @@ pub mod types;
 pub mod async_store;
 
 pub use concrete::*;
+pub use persistence::{PersistentState, SyncPolicy};
 pub use storage::*;
 pub use types::*;
 
@@ -486,23 +489,96 @@ pub trait Store: Send + Sync {
             })
             .collect())
     }
+
+    /// Insert a batch of quads in a single call, returning the number of quads
+    /// that were **newly** inserted (duplicates already present are not
+    /// counted, matching the `bool` contract of [`insert_quad`](Store::insert_quad)).
+    ///
+    /// The default implementation simply loops [`insert_quad`](Store::insert_quad),
+    /// so every existing backend keeps working unchanged. Durable backends
+    /// should override this to take a **single** write lock and perform a
+    /// **single** append + one `fsync` for the whole batch (see the
+    /// [`RdfStore`] override), turning a per-quad-fsync loop into one durable
+    /// write. This is the seam servers/CLIs use for single-fsync bulk loads.
+    fn bulk_insert_quads(&self, quads: Vec<Quad>) -> Result<usize> {
+        let mut inserted = 0usize;
+        for quad in quads {
+            if self.insert_quad(quad)? {
+                inserted += 1;
+            }
+        }
+        Ok(inserted)
+    }
+
+    /// Stream every quad matching the pattern to `f`, one at a time, without the
+    /// caller ever materializing the whole matching set as a `Vec<Quad>`.
+    ///
+    /// This is the streaming counterpart of [`find_quads`](Store::find_quads):
+    /// downstream consumers (e.g. streaming a graph to an HTTP response body)
+    /// use it to serialize results incrementally instead of collecting the
+    /// entire graph into memory first.
+    ///
+    /// The callback form is used (rather than an iterator-returning method) so
+    /// the trait stays object-safe (`dyn Store`). The default implementation
+    /// collects [`find_quads`](Store::find_quads) then iterates; backends
+    /// should override to iterate their index directly and avoid the
+    /// intermediate `Vec` (see the [`RdfStore`] override).
+    fn for_each_quad(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+        graph_name: Option<&GraphName>,
+        f: &mut dyn FnMut(Quad),
+    ) -> Result<()> {
+        for quad in self.find_quads(subject, predicate, object, graph_name)? {
+            f(quad);
+        }
+        Ok(())
+    }
 }
 
 /// Prepared SPARQL query
+///
+/// A prepared query retains the query text together with a shared handle to the
+/// store backend it was prepared against, so [`exec`](PreparedQuery::exec) runs
+/// the real query executor. Construct via [`Store::prepare_query`]; a
+/// backend-less query built through [`PreparedQuery::new`] fails loudly on
+/// `exec` rather than silently returning an empty result.
 pub struct PreparedQuery {
-    #[allow(dead_code)]
     sparql: String,
+    backend: Option<StorageBackend>,
 }
 
 impl PreparedQuery {
+    /// Create a prepared query with no bound backend. Executing it returns an
+    /// error; prefer [`PreparedQuery::with_backend`] / [`Store::prepare_query`].
     pub fn new(sparql: String) -> Self {
-        Self { sparql }
+        Self {
+            sparql,
+            backend: None,
+        }
     }
 
-    /// Execute the prepared query
+    /// Create a prepared query bound to a store backend for execution.
+    pub fn with_backend(sparql: String, backend: StorageBackend) -> Self {
+        Self {
+            sparql,
+            backend: Some(backend),
+        }
+    }
+
+    /// Execute the prepared query against its bound backend.
     pub fn exec(&self) -> Result<QueryResultsIterator> {
-        // Simplified implementation - in reality this would parse and execute SPARQL
-        Ok(QueryResultsIterator::empty())
+        let backend = self.backend.as_ref().ok_or_else(|| {
+            OxirsError::Query(
+                "PreparedQuery has no bound store backend; construct it via Store::prepare_query"
+                    .to_string(),
+            )
+        })?;
+        let executor = crate::sparql::QueryExecutor::new(backend);
+        let results = executor.execute(&self.sparql)?;
+        Ok(QueryResultsIterator::from_results(&results))
     }
 }
 
@@ -516,6 +592,23 @@ impl QueryResultsIterator {
     pub fn empty() -> Self {
         Self {
             results: Vec::new(),
+            index: 0,
+        }
+    }
+
+    /// Build an iterator over the SELECT-style variable bindings of a query
+    /// result. ASK/CONSTRUCT results carry no variable rows and yield an empty
+    /// iterator (this type only models solution mappings).
+    pub fn from_results(results: &OxirsQueryResults) -> Self {
+        let rows = match results.results() {
+            QueryResults::Bindings(bindings) => bindings
+                .iter()
+                .map(|binding| SolutionMapping::from_bindings(binding.bindings.clone()))
+                .collect(),
+            QueryResults::Boolean(_) | QueryResults::Graph(_) => Vec::new(),
+        };
+        Self {
+            results: rows,
             index: 0,
         }
     }
@@ -548,6 +641,11 @@ impl SolutionMapping {
         }
     }
 
+    /// Build a solution mapping from a variable-name -> term map.
+    pub fn from_bindings(bindings: std::collections::HashMap<String, Term>) -> Self {
+        Self { bindings }
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Term)> {
         self.bindings.iter()
     }
@@ -577,71 +675,52 @@ impl RdfStore {
     /// Create a new persistent store at the given path
     ///
     /// Loads existing data from disk if present, otherwise creates a new store.
+    /// Uses the default sync policy ([`SyncPolicy::EveryN`]`(1000)`).
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+        Self::open_with_sync_policy(path, SyncPolicy::default())
+    }
+
+    /// Create a persistent store with an explicit durability [`SyncPolicy`].
+    ///
+    /// Existing data is loaded from `data.nq`; a torn trailing line from a crash
+    /// mid-append is recovered, and `File::open` failures on an existing file are
+    /// propagated (never silently yielding an empty store).
+    pub fn open_with_sync_policy<P: AsRef<Path>>(path: P, sync_policy: SyncPolicy) -> Result<Self> {
         let path_buf = path.as_ref().to_path_buf();
         let data_file = path_buf.join("data.nq");
 
-        let storage = if data_file.exists() {
-            // Load existing data from disk
-            Self::load_from_disk(&data_file)?
+        let (storage, load_had_errors) = if data_file.exists() {
+            persistence::load_from_disk(&data_file)?
         } else {
-            MemoryStorage::new()
+            (MemoryStorage::new(), false)
         };
 
+        let state = PersistentState::open(path_buf, sync_policy, load_had_errors)?;
+
         Ok(RdfStore {
-            backend: StorageBackend::Persistent(Arc::new(RwLock::new(storage)), path_buf),
+            backend: StorageBackend::Persistent(Arc::new(RwLock::new(storage)), Arc::new(state)),
         })
     }
 
-    /// Load data from disk (N-Quads format)
-    fn load_from_disk(data_file: &Path) -> Result<MemoryStorage> {
-        use crate::format::{RdfFormat, RdfParser};
-        use std::io::BufReader;
-
-        let mut storage = MemoryStorage::new();
-
-        if let Ok(file) = std::fs::File::open(data_file) {
-            let reader = BufReader::new(file);
-            let parser = RdfParser::new(RdfFormat::NQuads);
-
-            for quad in parser.for_reader(reader).flatten() {
-                storage.insert_quad(quad);
-            }
-        }
-
-        Ok(storage)
+    /// Serialize a single quad to one N-Quads line (no trailing newline).
+    fn quad_to_nquads_line(quad: &Quad) -> Result<String> {
+        Serializer::new(RdfFormat::NQuads).serialize_quad_to_nquads(quad)
     }
 
-    /// Save data to disk (N-Quads format)
-    fn save_to_disk(&self) -> Result<()> {
-        if let StorageBackend::Persistent(storage, path) = &self.backend {
-            use std::io::Write;
-
-            let data_file = path.join("data.nq");
-
-            // Ensure directory exists
-            if let Some(parent) = data_file.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| OxirsError::Store(format!("Failed to create directory: {e}")))?;
-            }
-
-            let storage_guard = storage
+    /// Flush pending writes and make prior deletions durable.
+    ///
+    /// For the persistent backend this compacts the data file if there are
+    /// uncompacted deletions (delete/clear/drop-graph), otherwise it flushes and
+    /// `fsync`s the append log. It is a no-op for purely in-memory backends.
+    /// Call this at server shutdown and at the end of a CLI batch to guarantee
+    /// durability; [`Drop`] also flushes on a best-effort basis.
+    pub fn flush(&self) -> Result<()> {
+        if let StorageBackend::Persistent(storage, state) = &self.backend {
+            let guard = storage
                 .read()
                 .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
-
-            // Create file
-            let mut file = std::fs::File::create(&data_file)
-                .map_err(|e| OxirsError::Store(format!("Failed to create data file: {e}")))?;
-
-            // Write each quad as N-Quads line
-            let serializer = Serializer::new(RdfFormat::NQuads);
-            for quad in &storage_guard.quads {
-                let line = serializer.serialize_quad_to_nquads(quad)?;
-                writeln!(file, "{}", line)
-                    .map_err(|e| OxirsError::Store(format!("Failed to write quad: {e}")))?;
-            }
+            state.flush(&guard)?;
         }
-
         Ok(())
     }
 
@@ -669,36 +748,63 @@ impl RdfStore {
                     .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
                 Ok(storage.insert_quad(quad))
             }
-            StorageBackend::Persistent(storage, _) => {
-                let mut storage = storage
-                    .write()
-                    .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
-                let result = storage.insert_quad(quad);
-                drop(storage); // Release lock before saving
-
-                // Save to disk after insertion
-                if result {
-                    self.save_to_disk()?;
+            StorageBackend::Persistent(storage, state) => {
+                // Append-only persistence: mutate memory, then append ONE line
+                // (no full-file rewrite). O(1) amortized per insert.
+                let is_new = {
+                    let mut storage = storage.write().map_err(|e| {
+                        OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                    })?;
+                    storage.insert_quad(quad.clone())
+                };
+                if is_new {
+                    let line = Self::quad_to_nquads_line(&quad)?;
+                    state.append_line(&line)?;
                 }
-                Ok(result)
+                Ok(is_new)
             }
         }
     }
 
-    /// Bulk insert quads for maximum performance
+    /// Bulk insert quads for maximum performance.
+    ///
+    /// Takes a single write lock, inserts every quad, then persists all newly
+    /// added quads with a single append + one `fsync` (persistent backend).
+    /// Returns one entry per input quad: `1` if the quad was newly inserted,
+    /// `0` if it was already present (this backend has no per-quad row id).
     pub fn bulk_insert_quads(&mut self, quads: Vec<Quad>) -> Result<Vec<u64>> {
         match &self.backend {
             StorageBackend::UltraMemory(index, _arena) => {
                 let ids = index.bulk_insert_quads(&quads);
                 Ok(ids)
             }
-            _ => {
-                // Fallback to individual inserts for legacy backend
-                let mut ids = Vec::new();
+            StorageBackend::Memory(storage) => {
+                let mut guard = storage
+                    .write()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
+                let mut ids = Vec::with_capacity(quads.len());
                 for quad in quads {
-                    self.insert_quad(quad)?;
-                    ids.push(0); // Dummy ID for legacy mode
+                    ids.push(u64::from(guard.insert_quad(quad)));
                 }
+                Ok(ids)
+            }
+            StorageBackend::Persistent(storage, state) => {
+                let mut ids = Vec::with_capacity(quads.len());
+                let mut lines = Vec::new();
+                {
+                    let mut guard = storage.write().map_err(|e| {
+                        OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                    })?;
+                    for quad in quads {
+                        let is_new = guard.insert_quad(quad.clone());
+                        if is_new {
+                            lines.push(Self::quad_to_nquads_line(&quad)?);
+                        }
+                        ids.push(u64::from(is_new));
+                    }
+                }
+                // One append + one fsync for the whole batch.
+                state.append_lines(&lines)?;
                 Ok(ids)
             }
         }
@@ -728,11 +834,25 @@ impl RdfStore {
     pub fn remove_quad(&mut self, quad: &Quad) -> Result<bool> {
         match &self.backend {
             StorageBackend::UltraMemory(index, _arena) => Ok(index.remove_quad(quad)),
-            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+            StorageBackend::Memory(storage) => {
                 let mut storage = storage
                     .write()
                     .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
                 Ok(storage.remove_quad(quad))
+            }
+            StorageBackend::Persistent(storage, state) => {
+                // An append log cannot express a deletion; mutate memory and
+                // mark dirty so flush()/Drop compacts the file (durable delete).
+                let removed = {
+                    let mut storage = storage.write().map_err(|e| {
+                        OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                    })?;
+                    storage.remove_quad(quad)
+                };
+                if removed {
+                    state.mark_dirty();
+                }
+                Ok(removed)
             }
         }
     }
@@ -864,11 +984,23 @@ impl RdfStore {
                 index.clear();
                 Ok(())
             }
-            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+            StorageBackend::Memory(storage) => {
                 let mut storage = storage
                     .write()
                     .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
                 *storage = MemoryStorage::new();
+                Ok(())
+            }
+            StorageBackend::Persistent(storage, state) => {
+                {
+                    let mut storage = storage.write().map_err(|e| {
+                        OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                    })?;
+                    *storage = MemoryStorage::new();
+                }
+                // The append log still holds the cleared quads; mark dirty so
+                // flush()/Drop compacts to an empty file (durable clear).
+                state.mark_dirty();
                 Ok(())
             }
         }
@@ -1076,18 +1208,18 @@ impl RdfStore {
             .next_back()
             .and_then(|filename| filename.rsplit('.').next());
 
-        // Fetch data from URL using reqwest
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| OxirsError::Store(format!("Failed to create runtime: {e}")))?;
-
-        let (content, content_type) = runtime.block_on(async {
-            let response = reqwest::get(url)
+        // Fetch data from URL using reqwest. Reuse an ambient tokio runtime when
+        // one is already running (calling this from inside an async handler must
+        // not spin up a nested runtime, which would panic).
+        let url_owned = url.to_string();
+        let fetch = async move {
+            let response = reqwest::get(&url_owned)
                 .await
-                .map_err(|e| OxirsError::Store(format!("Failed to fetch URL {url}: {e}")))?;
+                .map_err(|e| OxirsError::Store(format!("Failed to fetch URL {url_owned}: {e}")))?;
 
             if !response.status().is_success() {
                 return Err(OxirsError::Store(format!(
-                    "HTTP error {} when fetching {url}",
+                    "HTTP error {} when fetching {url_owned}",
                     response.status()
                 )));
             }
@@ -1106,7 +1238,16 @@ impl RdfStore {
                 .map_err(|e| OxirsError::Store(format!("Failed to read response body: {e}")))?;
 
             Ok::<_, OxirsError>((text, content_type))
-        })?;
+        };
+
+        let (content, content_type) = match tokio::runtime::Handle::try_current() {
+            Ok(handle) => tokio::task::block_in_place(|| handle.block_on(fetch)),
+            Err(_) => {
+                let runtime = tokio::runtime::Runtime::new()
+                    .map_err(|e| OxirsError::Store(format!("Failed to create runtime: {e}")))?;
+                runtime.block_on(fetch)
+            }
+        }?;
 
         // Detect RDF format from content type or file extension
         let format = Self::detect_format_from_url(&content_type, extension, &content)?;
@@ -1231,7 +1372,23 @@ impl RdfStore {
 
 impl Default for RdfStore {
     fn default() -> Self {
-        RdfStore::new().expect("RdfStore::new() should not fail")
+        // Construct the in-memory backend directly (infallible) rather than
+        // unwrapping the fallible constructor (no-unwrap policy).
+        RdfStore {
+            backend: StorageBackend::Memory(Arc::new(RwLock::new(MemoryStorage::new()))),
+        }
+    }
+}
+
+impl Drop for RdfStore {
+    fn drop(&mut self) {
+        // Best-effort durability on graceful shutdown: flush the append buffer
+        // and compact any pending deletions. Errors are logged, not propagated.
+        if let StorageBackend::Persistent(..) = &self.backend {
+            if let Err(e) = self.flush() {
+                tracing::error!("RdfStore flush on drop failed: {e}");
+            }
+        }
     }
 }
 
@@ -1261,18 +1418,20 @@ impl Store for RdfStore {
                 })?;
                 storage.insert_quad(quad)
             }
-            StorageBackend::Persistent(storage, _) => {
-                let mut storage = storage.write().map_err(|e| {
-                    crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
-                })?;
-                let result = storage.insert_quad(quad);
-                drop(storage); // Release lock before saving
-
-                // Save to disk after insertion
-                if result {
-                    self.save_to_disk()?;
+            StorageBackend::Persistent(storage, state) => {
+                // Append-only persistence via the shared writer (interior
+                // mutability), so the &self trait path is durable too.
+                let is_new = {
+                    let mut storage = storage.write().map_err(|e| {
+                        crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                    })?;
+                    storage.insert_quad(quad.clone())
+                };
+                if is_new {
+                    let line = Self::quad_to_nquads_line(&quad)?;
+                    state.append_line(&line)?;
                 }
-                result
+                is_new
             }
         };
 
@@ -1282,11 +1441,23 @@ impl Store for RdfStore {
     fn remove_quad(&self, quad: &Quad) -> Result<bool> {
         match &self.backend {
             StorageBackend::UltraMemory(index, _arena) => Ok(index.remove_quad(quad)),
-            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+            StorageBackend::Memory(storage) => {
                 let mut storage = storage.write().map_err(|e| {
                     crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
                 })?;
                 Ok(storage.remove_quad(quad))
+            }
+            StorageBackend::Persistent(storage, state) => {
+                let removed = {
+                    let mut storage = storage.write().map_err(|e| {
+                        crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                    })?;
+                    storage.remove_quad(quad)
+                };
+                if removed {
+                    state.mark_dirty();
+                }
+                Ok(removed)
             }
         }
     }
@@ -1318,6 +1489,210 @@ impl Store for RdfStore {
     }
 
     fn prepare_query(&self, sparql: &str) -> Result<PreparedQuery> {
-        Ok(PreparedQuery::new(sparql.to_string()))
+        // Bind a shared handle to this store's backend so exec() runs the real
+        // query executor rather than returning an empty result.
+        Ok(PreparedQuery::with_backend(
+            sparql.to_string(),
+            self.backend.clone(),
+        ))
+    }
+
+    /// Bulk-insert override: one write lock for the whole batch and, for the
+    /// durable backend, one append + exactly one `fsync` for the batch (via
+    /// [`PersistentState::append_lines`]) instead of a per-quad fsync loop.
+    /// Uses interior mutability so it works through the `&self` trait path.
+    /// Returns the number of newly-inserted quads.
+    fn bulk_insert_quads(&self, quads: Vec<Quad>) -> Result<usize> {
+        match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                // UltraMemory's index has no dedup, so mirror the per-quad
+                // novelty check used by `insert_quad` to count only new quads.
+                let mut inserted = 0usize;
+                for quad in quads {
+                    let existing = index.find_quads(
+                        Some(quad.subject()),
+                        Some(quad.predicate()),
+                        Some(quad.object()),
+                        Some(quad.graph_name()),
+                    );
+                    if existing.is_empty() {
+                        let _id = index.insert_quad(&quad);
+                        inserted += 1;
+                    }
+                }
+                Ok(inserted)
+            }
+            StorageBackend::Memory(storage) => {
+                let mut guard = storage.write().map_err(|e| {
+                    crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                })?;
+                let mut inserted = 0usize;
+                for quad in quads {
+                    if guard.insert_quad(quad) {
+                        inserted += 1;
+                    }
+                }
+                Ok(inserted)
+            }
+            StorageBackend::Persistent(storage, state) => {
+                let mut lines = Vec::new();
+                {
+                    let mut guard = storage.write().map_err(|e| {
+                        crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                    })?;
+                    for quad in quads {
+                        if guard.insert_quad(quad.clone()) {
+                            lines.push(Self::quad_to_nquads_line(&quad)?);
+                        }
+                    }
+                }
+                let inserted = lines.len();
+                // One append + one fsync for the whole batch.
+                state.append_lines(&lines)?;
+                Ok(inserted)
+            }
+        }
+    }
+
+    /// Streaming scan override: visit each matching quad without building a
+    /// result `Vec`. For the in-memory / persistent backends the read lock is
+    /// held for the duration of the scan and each quad is handed to `f` in
+    /// deterministic `Quad` order; the callback must not re-enter the store for
+    /// a write (that would deadlock on the same lock).
+    fn for_each_quad(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+        graph_name: Option<&GraphName>,
+        f: &mut dyn FnMut(Quad),
+    ) -> Result<()> {
+        match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                // UltraIndex exposes no streaming API; fall back to its pattern
+                // lookup and iterate (still one quad clone alive at a time here).
+                for quad in index.find_quads(subject, predicate, object, graph_name) {
+                    f(quad);
+                }
+                Ok(())
+            }
+            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+                let guard = storage.read().map_err(|e| {
+                    crate::OxirsError::Store(format!("Failed to acquire read lock: {e}"))
+                })?;
+                guard.for_each_quad(subject, predicate, object, graph_name, f);
+                Ok(())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod bulk_and_scan_tests {
+    use super::*;
+    use crate::model::{GraphName, Literal, NamedNode, Object, Quad};
+
+    fn quad(s: &str, o: &str, g: GraphName) -> Quad {
+        Quad::new(
+            NamedNode::new(s).expect("subject IRI"),
+            NamedNode::new("http://example.org/p").expect("predicate IRI"),
+            Literal::new_simple_literal(o),
+            g,
+        )
+    }
+
+    fn unique_dir(tag: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("oxirs_bulk_scan_{tag}_{nanos}"));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    /// The trait-level `bulk_insert_quads` on the durable `RdfStore` inserts
+    /// every distinct quad, counts only newly-inserted quads, and persists the
+    /// whole batch into a single durable data file (one line per quad) that
+    /// reloads to the same set — validating the single-append batch path.
+    #[test]
+    fn rdfstore_trait_bulk_insert_persists_all_in_one_file() {
+        let dir = unique_dir("persist");
+        {
+            let store = RdfStore::open(&dir).expect("open persistent store");
+            let quads = vec![
+                quad("http://example.org/a", "1", GraphName::DefaultGraph),
+                quad("http://example.org/b", "2", GraphName::DefaultGraph),
+                quad(
+                    "http://example.org/c",
+                    "3",
+                    GraphName::NamedNode(
+                        NamedNode::new("http://example.org/g").expect("graph IRI"),
+                    ),
+                ),
+                // duplicate of the first — must not be counted or double-written
+                quad("http://example.org/a", "1", GraphName::DefaultGraph),
+            ];
+            let inserted =
+                Store::bulk_insert_quads(&store, quads).expect("bulk insert through trait");
+            assert_eq!(inserted, 3, "only three distinct quads are new");
+            store.flush().expect("flush");
+
+            // Exactly three N-Quads lines were written to the single data file.
+            let data = std::fs::read_to_string(dir.join("data.nq")).expect("read data.nq");
+            let lines = data.lines().filter(|l| !l.trim().is_empty()).count();
+            assert_eq!(lines, 3, "one durable line per newly-inserted quad");
+        }
+
+        // Reopening from disk must observe exactly the three persisted quads.
+        let reopened = RdfStore::open(&dir).expect("reopen persistent store");
+        assert_eq!(reopened.len().expect("len"), 3);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `for_each_quad` visits exactly the quads matching the pattern (and no
+    /// others), in the same order as `find_quads`, across backends.
+    #[test]
+    fn for_each_quad_visits_exactly_matching_quads() {
+        let store = RdfStore::new().expect("in-memory store");
+        let g = GraphName::NamedNode(NamedNode::new("http://example.org/g").expect("graph IRI"));
+        Store::bulk_insert_quads(
+            &store,
+            vec![
+                quad("http://example.org/a", "1", GraphName::DefaultGraph),
+                quad("http://example.org/b", "2", GraphName::DefaultGraph),
+                quad("http://example.org/c", "3", g.clone()),
+            ],
+        )
+        .expect("seed");
+
+        // Unbound pattern visits every quad, and matches find_quads ordering.
+        let mut visited: Vec<Quad> = Vec::new();
+        Store::for_each_quad(&store, None, None, None, None, &mut |q| visited.push(q))
+            .expect("scan all");
+        let via_find = store.find_quads(None, None, None, None).expect("find all");
+        assert_eq!(
+            visited, via_find,
+            "scan must match find_quads order/content"
+        );
+        assert_eq!(visited.len(), 3);
+
+        // Graph-bound pattern visits only the named-graph quad.
+        let mut named: Vec<Quad> = Vec::new();
+        Store::for_each_quad(&store, None, None, None, Some(&g), &mut |q| named.push(q))
+            .expect("scan named");
+        assert_eq!(named.len(), 1);
+        assert_eq!(named[0].graph_name(), &g);
+
+        // Object-bound pattern visits only the matching quad.
+        let obj = Object::Literal(Literal::new_simple_literal("2"));
+        let mut by_obj: Vec<Quad> = Vec::new();
+        Store::for_each_quad(&store, None, None, Some(&obj), None, &mut |q| {
+            by_obj.push(q)
+        })
+        .expect("scan by object");
+        assert_eq!(by_obj.len(), 1);
+        assert_eq!(by_obj[0].object(), &obj);
     }
 }

@@ -72,6 +72,10 @@ async-trait.workspace = true
 hmac.workspace = true
 sha2.workspace = true
 
+# JWT / SAML signature verification for Enterprise SSO (Pure Rust)
+rsa.workspace = true    # RS256 (RSASSA-PKCS1-v1_5) + X.509/SPKI key loading
+p256.workspace = true   # ES256 (ECDSA over P-256)
+
 # Session persistence and state management
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 oxiarc-zstd.workspace = true

@@ -1,11 +1,11 @@
 //! Triple index implementation using B+Tree
 
-use super::triple::{EmptyValue, OspKey, PosKey, SpoKey, Triple};
+use super::triple::{prefix_bounds, EmptyValue, OspKey, PosKey, SpoKey, Triple};
+use crate::btree::iterator::BTreeIterator;
 use crate::btree::BTree;
 use crate::dictionary::NodeId;
 use crate::error::Result;
-use crate::storage::BufferPool;
-use oxicode::Decode;
+use crate::storage::{BufferPool, PageId};
 use std::sync::Arc;
 
 /// Triple index for one specific ordering
@@ -27,10 +27,30 @@ where
         }
     }
 
-    /// Insert a triple into the index
-    pub fn insert(&mut self, key: K) -> Result<()> {
-        self.btree.insert(key, EmptyValue)?;
-        Ok(())
+    /// Reconstruct a triple index from a persisted root page.
+    ///
+    /// `root` is `None` for an empty (never-written) index and `Some(page)` to
+    /// rebuild the on-disk B+Tree via [`BTree::from_root`].
+    pub fn from_root(buffer_pool: Arc<BufferPool>, root: Option<PageId>) -> Self {
+        let btree = match root {
+            Some(page) => BTree::from_root(buffer_pool, page),
+            None => BTree::new(buffer_pool),
+        };
+        TripleIndex { btree }
+    }
+
+    /// Current root page of the underlying B+Tree (for superblock persistence).
+    pub fn root_page(&self) -> Option<PageId> {
+        self.btree.root_page()
+    }
+
+    /// Insert a triple into the index.
+    ///
+    /// Returns `true` if the key was newly inserted and `false` if it already
+    /// existed (the underlying B+Tree overwrites duplicate keys), so callers
+    /// can maintain an accurate triple count.
+    pub fn insert(&mut self, key: K) -> Result<bool> {
+        Ok(self.btree.insert(key, EmptyValue)?.is_none())
     }
 
     /// Check if a triple exists in the index
@@ -83,12 +103,44 @@ impl TripleIndexes {
         }
     }
 
-    /// Insert a triple into all three indexes
-    pub fn insert(&mut self, triple: Triple) -> Result<()> {
-        self.spo.insert(triple.into())?;
+    /// Reconstruct all three indexes from persisted root pages (on reopen).
+    pub fn from_roots(
+        buffer_pool: Arc<BufferPool>,
+        spo_root: Option<PageId>,
+        pos_root: Option<PageId>,
+        osp_root: Option<PageId>,
+    ) -> Self {
+        TripleIndexes {
+            spo: TripleIndex::from_root(buffer_pool.clone(), spo_root),
+            pos: TripleIndex::from_root(buffer_pool.clone(), pos_root),
+            osp: TripleIndex::from_root(buffer_pool, osp_root),
+        }
+    }
+
+    /// Current root page of the SPO index (for superblock persistence).
+    pub fn spo_root(&self) -> Option<PageId> {
+        self.spo.root_page()
+    }
+
+    /// Current root page of the POS index (for superblock persistence).
+    pub fn pos_root(&self) -> Option<PageId> {
+        self.pos.root_page()
+    }
+
+    /// Current root page of the OSP index (for superblock persistence).
+    pub fn osp_root(&self) -> Option<PageId> {
+        self.osp.root_page()
+    }
+
+    /// Insert a triple into all three indexes.
+    ///
+    /// Returns `true` if the triple was newly added and `false` if it was
+    /// already present, so the store can keep an accurate triple count.
+    pub fn insert(&mut self, triple: Triple) -> Result<bool> {
+        let is_new = self.spo.insert(triple.into())?;
         self.pos.insert(triple.into())?;
         self.osp.insert(triple.into())?;
-        Ok(())
+        Ok(is_new)
     }
 
     /// Check if a triple exists (uses SPO index)
@@ -211,6 +263,59 @@ impl TripleIndexes {
         }
     }
 
+    /// Open a lazy, streaming scan over the triples matching `(s, p, o)`.
+    ///
+    /// Unlike [`TripleIndexes::query_pattern`], which materializes the whole
+    /// result into a `Vec`, this selects the optimal index, bounds the scan to
+    /// the pattern's leading prefix, and returns a [`TripleScan`] that yields
+    /// one [`Triple`] at a time (decoding at most one B+Tree leaf page into
+    /// memory at a time). This is the node-level primitive behind the store's
+    /// streaming query iterator (F5).
+    pub fn scan(
+        &self,
+        s: Option<NodeId>,
+        p: Option<NodeId>,
+        o: Option<NodeId>,
+    ) -> Result<TripleScan> {
+        // Index selection mirrors `query_pattern`: choose the index whose
+        // leading key components cover the bound pattern components, so the
+        // range scan is as tight as possible.
+        let inner = if s.is_some() && p.is_none() && o.is_some() {
+            // (s, _, o): OSP gives the (o, s) prefix.
+            let (start, end) = prefix_bounds([o, s, p]);
+            TripleScanInner::Osp(self.osp.btree.range_scan(
+                start.map(|k| OspKey(k[0], k[1], k[2])),
+                end.map(|k| OspKey(k[0], k[1], k[2])),
+            )?)
+        } else if s.is_some() {
+            // (s, p, o) / (s, p, _) / (s, _, _): SPO.
+            let (start, end) = prefix_bounds([s, p, o]);
+            TripleScanInner::Spo(self.spo.btree.range_scan(
+                start.map(|k| SpoKey(k[0], k[1], k[2])),
+                end.map(|k| SpoKey(k[0], k[1], k[2])),
+            )?)
+        } else if p.is_some() {
+            // (_, p, o) / (_, p, _): POS.
+            let (start, end) = prefix_bounds([p, o, s]);
+            TripleScanInner::Pos(self.pos.btree.range_scan(
+                start.map(|k| PosKey(k[0], k[1], k[2])),
+                end.map(|k| PosKey(k[0], k[1], k[2])),
+            )?)
+        } else if o.is_some() {
+            // (_, _, o): OSP.
+            let (start, end) = prefix_bounds([o, s, p]);
+            TripleScanInner::Osp(self.osp.btree.range_scan(
+                start.map(|k| OspKey(k[0], k[1], k[2])),
+                end.map(|k| OspKey(k[0], k[1], k[2])),
+            )?)
+        } else {
+            // (_, _, _): full scan via SPO.
+            TripleScanInner::Spo(self.spo.btree.range_scan(None, None)?)
+        };
+
+        Ok(TripleScan { inner, s, p, o })
+    }
+
     /// Get SPO index for queries
     pub fn spo(&self) -> &SpoIndex {
         &self.spo
@@ -239,6 +344,75 @@ impl TripleIndexes {
     /// Get mutable OSP index
     pub fn osp_mut(&mut self) -> &mut OspIndex {
         &mut self.osp
+    }
+}
+
+/// The selected index iterator backing a [`TripleScan`].
+///
+/// Each variant reconstructs a [`Triple`] from that index's key ordering.
+enum TripleScanInner {
+    /// SPO-ordered key stream: key is `(s, p, o)`.
+    Spo(BTreeIterator<SpoKey, EmptyValue>),
+    /// POS-ordered key stream: key is `(p, o, s)`.
+    Pos(BTreeIterator<PosKey, EmptyValue>),
+    /// OSP-ordered key stream: key is `(o, s, p)`.
+    Osp(BTreeIterator<OspKey, EmptyValue>),
+}
+
+/// A lazy, streaming iterator over triples matching a pattern.
+///
+/// Created by [`TripleIndexes::scan`]. It streams keys out of the selected
+/// B+Tree one leaf page at a time (never materializing the full result set),
+/// reconstructs each [`Triple`] from the index ordering, and applies a residual
+/// filter for any pattern component not covered by the bounded prefix.
+pub struct TripleScan {
+    inner: TripleScanInner,
+    s: Option<NodeId>,
+    p: Option<NodeId>,
+    o: Option<NodeId>,
+}
+
+impl TripleScan {
+    /// Residual filter for pattern components not covered by the scan prefix.
+    fn matches(&self, triple: &Triple) -> bool {
+        self.s.map_or(true, |s| triple.subject == s)
+            && self.p.map_or(true, |p| triple.predicate == p)
+            && self.o.map_or(true, |o| triple.object == o)
+    }
+}
+
+impl Iterator for TripleScan {
+    type Item = Result<Triple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let next = match &mut self.inner {
+                TripleScanInner::Spo(it) => it
+                    .next()
+                    .map(|r| r.map(|(k, _)| Triple::new(k.0, k.1, k.2))),
+                TripleScanInner::Pos(it) => {
+                    // PosKey is (p, o, s) -> Triple (s, p, o).
+                    it.next()
+                        .map(|r| r.map(|(k, _)| Triple::new(k.2, k.0, k.1)))
+                }
+                TripleScanInner::Osp(it) => {
+                    // OspKey is (o, s, p) -> Triple (s, p, o).
+                    it.next()
+                        .map(|r| r.map(|(k, _)| Triple::new(k.1, k.2, k.0)))
+                }
+            };
+
+            match next {
+                None => return None,
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(triple)) => {
+                    if self.matches(&triple) {
+                        return Some(Ok(triple));
+                    }
+                    // Otherwise keep scanning (residual filter rejected it).
+                }
+            }
+        }
     }
 }
 
@@ -339,6 +513,50 @@ mod tests {
         assert!(!indexes.spo().contains(&triple.into())?);
         assert!(!indexes.pos().contains(&triple.into())?);
         assert!(!indexes.osp().contains(&triple.into())?);
+
+        Ok(())
+    }
+
+    /// The streaming `scan` must yield exactly the same set as the materialized
+    /// `query_pattern` for every bound-column combination.
+    #[test]
+    fn test_scan_matches_query_pattern() -> Result<()> {
+        let (_temp_dir, mut indexes) = create_test_indexes();
+
+        let triples = [
+            Triple::new(NodeId::new(1), NodeId::new(2), NodeId::new(3)),
+            Triple::new(NodeId::new(1), NodeId::new(2), NodeId::new(4)),
+            Triple::new(NodeId::new(1), NodeId::new(5), NodeId::new(3)),
+            Triple::new(NodeId::new(2), NodeId::new(2), NodeId::new(3)),
+            Triple::new(NodeId::new(2), NodeId::new(5), NodeId::new(9)),
+        ];
+        for t in &triples {
+            indexes.insert(*t)?;
+        }
+
+        let s1 = Some(NodeId::new(1));
+        let p2 = Some(NodeId::new(2));
+        let o3 = Some(NodeId::new(3));
+        let patterns = [
+            (None, None, None),
+            (s1, None, None),
+            (None, p2, None),
+            (None, None, o3),
+            (s1, p2, None),
+            (None, p2, o3),
+            (s1, None, o3),
+            (s1, p2, o3),
+        ];
+
+        for (s, p, o) in patterns {
+            let mut expected = indexes.query_pattern(s, p, o)?;
+            expected.sort_by_key(|t| (t.subject, t.predicate, t.object));
+
+            let mut streamed: Vec<Triple> = indexes.scan(s, p, o)?.collect::<Result<_>>()?;
+            streamed.sort_by_key(|t| (t.subject, t.predicate, t.object));
+
+            assert_eq!(streamed, expected, "mismatch for pattern {s:?} {p:?} {o:?}");
+        }
 
         Ok(())
     }

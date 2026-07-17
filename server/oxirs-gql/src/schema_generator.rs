@@ -342,23 +342,30 @@ impl SchemaGenerator {
             );
         }
 
-        // Add SPARQL query field
-        query_type = query_type.with_field(
-            "sparql".to_string(),
-            FieldType::new(
+        // The raw SPARQL passthrough field bypasses all GraphQL-level
+        // depth/complexity limits and lets any client run arbitrary SPARQL
+        // against the store, so it is opt-in only (see
+        // `SchemaGenerationConfig::enable_sparql_field`).
+        if self.config.enable_sparql_field {
+            query_type = query_type.with_field(
                 "sparql".to_string(),
-                GraphQLType::Scalar(BuiltinScalars::string()),
-            )
-            .with_description("Execute a raw SPARQL query".to_string())
-            .with_argument(
-                "query".to_string(),
-                ArgumentType::new(
-                    "query".to_string(),
-                    GraphQLType::NonNull(Box::new(GraphQLType::Scalar(BuiltinScalars::string()))),
+                FieldType::new(
+                    "sparql".to_string(),
+                    GraphQLType::Scalar(BuiltinScalars::string()),
                 )
-                .with_description("The SPARQL query to execute".to_string()),
-            ),
-        );
+                .with_description("Execute a raw SPARQL query".to_string())
+                .with_argument(
+                    "query".to_string(),
+                    ArgumentType::new(
+                        "query".to_string(),
+                        GraphQLType::NonNull(Box::new(GraphQLType::Scalar(
+                            BuiltinScalars::string(),
+                        ))),
+                    )
+                    .with_description("The SPARQL query to execute".to_string()),
+                ),
+            );
+        }
 
         Ok(query_type)
     }
@@ -636,5 +643,61 @@ impl SchemaGenerator {
 impl Default for SchemaGenerator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema_types::RdfVocabulary;
+
+    fn empty_vocabulary() -> RdfVocabulary {
+        RdfVocabulary {
+            classes: std::collections::HashMap::new(),
+            properties: std::collections::HashMap::new(),
+            namespaces: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Regression test: the generated `sparql` field bypasses all
+    /// GraphQL-level depth/complexity limits and lets any client run
+    /// arbitrary SPARQL, so it must not appear in the generated schema
+    /// unless explicitly opted into.
+    #[test]
+    fn test_sparql_field_disabled_by_default() {
+        let generator = SchemaGenerator::new().with_vocabulary(empty_vocabulary());
+        let schema = generator
+            .generate_schema()
+            .expect("schema generation should succeed");
+
+        let Some(GraphQLType::Object(query_type)) = schema.get_type("Query") else {
+            panic!("expected a Query object type");
+        };
+        assert!(
+            !query_type.fields.contains_key("sparql"),
+            "the sparql field must not be present unless explicitly enabled"
+        );
+    }
+
+    #[test]
+    fn test_sparql_field_present_when_explicitly_enabled() {
+        let config = SchemaGenerationConfig {
+            enable_sparql_field: true,
+            ..Default::default()
+        };
+        let generator = SchemaGenerator::new()
+            .with_config(config)
+            .with_vocabulary(empty_vocabulary());
+        let schema = generator
+            .generate_schema()
+            .expect("schema generation should succeed");
+
+        let Some(GraphQLType::Object(query_type)) = schema.get_type("Query") else {
+            panic!("expected a Query object type");
+        };
+        assert!(
+            query_type.fields.contains_key("sparql"),
+            "the sparql field must be present once explicitly enabled"
+        );
     }
 }

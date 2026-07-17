@@ -16,10 +16,19 @@
 //!
 //! ```rust,ignore
 //! use oxirs_tdb::distributed::integration::{DistributedTdbStore, DistributedConfig};
+//! use oxirs_tdb::consensus::transport::LoopbackSimulationTransport;
 //!
-//! // Create distributed store
+//! // Create distributed store. A real multi-node deployment must supply a
+//! // transport backed by real network I/O; LoopbackSimulationTransport is
+//! // only for single-process tests/local development, and `new()` (no
+//! // transport) will make every commit fail loudly instead of fabricating
+//! // success.
 //! let config = DistributedConfig::default();
-//! let mut store = DistributedTdbStore::new("node1".to_string(), config);
+//! let mut store = DistributedTdbStore::with_transport(
+//!     "node1".to_string(),
+//!     config,
+//!     LoopbackSimulationTransport::arc(),
+//! );
 //!
 //! // Register nodes
 //! store.register_node("node1", "http://node1:8080").await?;
@@ -31,6 +40,7 @@
 //! store.commit_distributed_transaction(&txn_id).await?;
 //! ```
 
+use crate::consensus::transport::NetworkTransport;
 use crate::distributed::coordinator::{CommitProtocol, CoordinatorConfig, TransactionCoordinator};
 use crate::distributed::deadlock::{DeadlockDetectorConfig, DistributedDeadlockDetector};
 use crate::distributed::replication::{ReplicationConfig, ReplicationManager};
@@ -127,7 +137,18 @@ pub struct DistributedStoreStats {
 }
 
 impl DistributedTdbStore {
-    /// Create a new Distributed TDB Store
+    /// Create a new Distributed TDB Store with no network transport
+    /// configured.
+    ///
+    /// **Note:** because no [`NetworkTransport`] is supplied, the underlying
+    /// [`TransactionCoordinator`] and [`ReplicationManager`] cannot honestly
+    /// reach any other node: `commit_distributed_transaction()` will fail
+    /// with [`TdbError::DistributedTransportNotConfigured`] for every
+    /// protocol rather than fabricating success. Use
+    /// [`DistributedTdbStore::with_transport`] (with a real network-backed
+    /// transport, or
+    /// [`crate::consensus::transport::LoopbackSimulationTransport`] for
+    /// single-node tests) to actually drive distributed commits.
     pub fn new(node_id: String, config: DistributedConfig) -> Self {
         let coordinator = Arc::new(Mutex::new(TransactionCoordinator::new(
             node_id.clone(),
@@ -147,6 +168,52 @@ impl DistributedTdbStore {
             Some(Arc::new(Mutex::new(ReplicationManager::new(
                 node_id.clone(),
                 config.replication_config.clone(),
+            ))))
+        } else {
+            None
+        };
+
+        Self {
+            node_id,
+            config,
+            coordinator,
+            deadlock_detector,
+            replication_manager,
+            active_transactions: Arc::new(RwLock::new(HashMap::new())),
+            stats: Arc::new(Mutex::new(DistributedStoreStats::default())),
+        }
+    }
+
+    /// Create a new Distributed TDB Store backed by a real (or
+    /// explicitly-simulated) [`NetworkTransport`], shared by both the
+    /// transaction coordinator and the replication manager. This is the
+    /// constructor production code should use to actually drive distributed
+    /// commits and replication.
+    pub fn with_transport(
+        node_id: String,
+        config: DistributedConfig,
+        transport: Arc<dyn NetworkTransport>,
+    ) -> Self {
+        let coordinator = Arc::new(Mutex::new(TransactionCoordinator::with_transport(
+            node_id.clone(),
+            config.coordinator_config.clone(),
+            transport.clone(),
+        )));
+
+        let deadlock_detector = if config.enable_deadlock_detection {
+            Some(Arc::new(Mutex::new(DistributedDeadlockDetector::new(
+                format!("{}-deadlock-detector", node_id),
+                config.deadlock_config.clone(),
+            ))))
+        } else {
+            None
+        };
+
+        let replication_manager = if config.enable_replication {
+            Some(Arc::new(Mutex::new(ReplicationManager::with_transport(
+                node_id.clone(),
+                config.replication_config.clone(),
+                transport,
             ))))
         } else {
             None
@@ -561,11 +628,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_commit_triggers_replication() {
+        use crate::consensus::transport::LoopbackSimulationTransport;
+
         let config = DistributedConfig {
             enable_deadlock_detection: false,
             ..Default::default()
         };
-        let mut store = DistributedTdbStore::new("node1".to_string(), config);
+        let mut store = DistributedTdbStore::with_transport(
+            "node1".to_string(),
+            config,
+            LoopbackSimulationTransport::arc(),
+        );
         store
             .register_node("node2", "http://node2:8080")
             .await
@@ -577,6 +650,32 @@ mod tests {
 
         let stats = store.stats();
         assert_eq!(stats.replications_performed, 1);
+    }
+
+    /// Regression test: a `DistributedTdbStore` built via the transport-less
+    /// `new()` constructor must fail loudly on commit instead of fabricating
+    /// success, since there is no way to honestly reach any participant.
+    #[tokio::test]
+    async fn test_commit_without_transport_fails_loudly() {
+        let config = DistributedConfig {
+            enable_deadlock_detection: false,
+            ..Default::default()
+        };
+        let mut store = DistributedTdbStore::new("node1".to_string(), config);
+        store
+            .register_node("node2", "http://node2:8080")
+            .await
+            .unwrap();
+
+        let txn_id = store.begin_distributed_transaction().await.unwrap();
+        let err = store
+            .commit_distributed_transaction(&txn_id)
+            .await
+            .expect_err("commit without a configured transport must fail, not fabricate success");
+        assert!(
+            matches!(err, TdbError::DistributedTransportNotConfigured { .. }),
+            "expected DistributedTransportNotConfigured, got {err:?}"
+        );
     }
 
     #[tokio::test]

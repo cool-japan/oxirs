@@ -4,20 +4,26 @@
 //! Enables hot-swappable processing plugins and edge-cloud hybrid architectures.
 
 use crate::error::{StreamError, StreamResult};
-use crate::{EventMetadata, StreamEvent};
-use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
+use crate::StreamEvent;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
-use wasmparser::{Validator, WasmFeatures};
+// Note: wasmparser's `WasmFeatures` is aliased to avoid colliding with this
+// module's own `WasmFeatures` (the runtime-config type used throughout this
+// file), which has an unrelated, simpler shape.
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use wasmparser::{Validator, WasmFeatures as WasmParserFeatures};
 // SECURITY WARNING: RSA crate (v0.9.10) has CVE-2023-49092 - Timing attack vulnerability
 // No patch available as of 2026-02-09. Consider migrating to constant-time alternatives.
 // Current usage: WASM module signature verification (non-critical timing path)
 // TODO: Evaluate migration to RustCrypto's newer RSA implementation when available
-use rsa::{RsaPublicKey, pkcs1v15::VerifyingKey as RsaVerifyingKey, signature::Verifier as RsaVerifier};
+// Gated behind `wasm-rsa` (opt-in, RUSTSEC-2023-0071) per the `rsa` dependency
+// declaration in Cargo.toml.
+#[cfg(feature = "wasm-rsa")]
+use rsa::{
+    pkcs1v15::VerifyingKey as RsaVerifyingKey, signature::Verifier as RsaVerifier, RsaPublicKey,
+};
 
 /// WebAssembly edge processor for distributed streaming
 pub struct WasmEdgeProcessor {
@@ -43,18 +49,10 @@ pub struct WasmRuntime {
 /// WebAssembly engine types
 #[derive(Debug, Clone)]
 pub enum WasmEngine {
-    Wasmtime {
-        config: WasmtimeConfig,
-    },
-    Wasmer {
-        compiler: WasmerCompiler,
-    },
-    Wasm3 {
-        stack_size: usize,
-    },
-    Browser {
-        worker_pool_size: usize,
-    },
+    Wasmtime { config: WasmtimeConfig },
+    Wasmer { compiler: WasmerCompiler },
+    Wasm3 { stack_size: usize },
+    Browser { worker_pool_size: usize },
 }
 
 /// Wasmtime-specific configuration
@@ -287,7 +285,7 @@ pub struct SecurityPolicy {
 }
 
 /// Sandbox security levels
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SandboxLevel {
     None,
     Basic,
@@ -355,11 +353,11 @@ pub struct EdgeLocation {
 /// Compute tier for edge deployment
 #[derive(Debug, Clone)]
 pub enum ComputeTier {
-    Device,      // IoT devices, smartphones
-    Edge,        // Edge servers, 5G edge
-    Regional,    // Regional data centers
-    Cloud,       // Central cloud
-    Hybrid,      // Distributed across tiers
+    Device,   // IoT devices, smartphones
+    Edge,     // Edge servers, 5G edge
+    Regional, // Regional data centers
+    Cloud,    // Central cloud
+    Hybrid,   // Distributed across tiers
 }
 
 /// Current network conditions
@@ -644,7 +642,8 @@ impl WasmEdgeProcessor {
         self.verify_module_security(&module).await?;
 
         // Check resource requirements
-        self.check_resource_requirements(&module.resource_requirements).await?;
+        self.check_resource_requirements(&module.resource_requirements)
+            .await?;
 
         // Validate module bytecode
         self.validate_module_bytecode(&module.bytecode).await?;
@@ -680,11 +679,9 @@ impl WasmEdgeProcessor {
         let event_bytes = self.serialize_event(&event)?;
 
         // Execute WASM function (simulated)
-        let result_bytes = self.execute_wasm_function(
-            &module.bytecode,
-            function_name,
-            &event_bytes,
-        ).await?;
+        let result_bytes = self
+            .execute_wasm_function(&module.bytecode, function_name, &event_bytes)
+            .await?;
 
         // Deserialize results
         let result_events = self.deserialize_events(&result_bytes)?;
@@ -704,7 +701,8 @@ impl WasmEdgeProcessor {
     async fn verify_module_security(&self, module: &WasmModule) -> StreamResult<()> {
         // Verify digital signature if present
         if let Some(signature) = &module.metadata.signature {
-            self.verify_digital_signature(&module.bytecode, signature).await?;
+            self.verify_digital_signature(&module.bytecode, signature)
+                .await?;
         }
 
         // Check security policy compliance
@@ -723,21 +721,24 @@ impl WasmEdgeProcessor {
     }
 
     /// Check if sufficient resources are available
-    async fn check_resource_requirements(&self, requirements: &ResourceRequirements) -> StreamResult<()> {
+    async fn check_resource_requirements(
+        &self,
+        requirements: &ResourceRequirements,
+    ) -> StreamResult<()> {
         let available = &self.execution_context.available_resources;
 
         if requirements.memory_mb > available.memory_mb {
-            return Err(StreamError::InsufficientResources(
-                format!("Insufficient memory: need {} MB, have {} MB", 
-                    requirements.memory_mb, available.memory_mb)
-            ));
+            return Err(StreamError::InsufficientResources(format!(
+                "Insufficient memory: need {} MB, have {} MB",
+                requirements.memory_mb, available.memory_mb
+            )));
         }
 
         if requirements.cpu_cores > available.cpu_cores as f32 {
-            return Err(StreamError::InsufficientResources(
-                format!("Insufficient CPU: need {} cores, have {} cores", 
-                    requirements.cpu_cores, available.cpu_cores)
-            ));
+            return Err(StreamError::InsufficientResources(format!(
+                "Insufficient CPU: need {} cores, have {} cores",
+                requirements.cpu_cores, available.cpu_cores
+            )));
         }
 
         Ok(())
@@ -754,38 +755,44 @@ impl WasmEdgeProcessor {
         let version = &bytecode[4..8];
 
         if magic != b"\x00asm" {
-            return Err(StreamError::InvalidModule("Invalid WASM magic number".to_string()));
+            return Err(StreamError::InvalidModule(
+                "Invalid WASM magic number".to_string(),
+            ));
         }
 
-        if version != &[0x01, 0x00, 0x00, 0x00] {
-            return Err(StreamError::InvalidModule("Unsupported WASM version".to_string()));
+        if version != [0x01, 0x00, 0x00, 0x00] {
+            return Err(StreamError::InvalidModule(
+                "Unsupported WASM version".to_string(),
+            ));
         }
 
-        // Enhanced validation using wasmparser
-        let mut validator = Validator::new_with_features(WasmFeatures {
-            mutable_global: true,
-            saturating_float_to_int: true,
-            sign_extension: true,
-            reference_types: true,
-            multi_value: true,
-            bulk_memory: true,
-            simd: true,
-            relaxed_simd: false,
-            threads: false,
-            shared_everything_threads: false,
-            tail_call: false,
-            floats: true,
-            multi_memory: false,
-            exceptions: false,
-            memory64: false,
-            extended_const: false,
-            component_model: false,
-            function_references: false,
-            memory_control: false,
-            gc: false,
-            custom_page_sizes: false,
-            wide_arithmetic: false,
-        });
+        // Enhanced validation using wasmparser. `WasmFeatures` is a bitflags
+        // type (wasmparser 0.252+), so build it flag-by-flag rather than via
+        // struct-literal field initialization.
+        let mut features = WasmParserFeatures::empty();
+        features.set(WasmParserFeatures::MUTABLE_GLOBAL, true);
+        features.set(WasmParserFeatures::SATURATING_FLOAT_TO_INT, true);
+        features.set(WasmParserFeatures::SIGN_EXTENSION, true);
+        features.set(WasmParserFeatures::REFERENCE_TYPES, true);
+        features.set(WasmParserFeatures::MULTI_VALUE, true);
+        features.set(WasmParserFeatures::BULK_MEMORY, true);
+        features.set(WasmParserFeatures::SIMD, true);
+        features.set(WasmParserFeatures::RELAXED_SIMD, false);
+        features.set(WasmParserFeatures::THREADS, false);
+        features.set(WasmParserFeatures::SHARED_EVERYTHING_THREADS, false);
+        features.set(WasmParserFeatures::TAIL_CALL, false);
+        features.set(WasmParserFeatures::FLOATS, true);
+        features.set(WasmParserFeatures::MULTI_MEMORY, false);
+        features.set(WasmParserFeatures::EXCEPTIONS, false);
+        features.set(WasmParserFeatures::MEMORY64, false);
+        features.set(WasmParserFeatures::EXTENDED_CONST, false);
+        features.set(WasmParserFeatures::COMPONENT_MODEL, false);
+        features.set(WasmParserFeatures::FUNCTION_REFERENCES, false);
+        features.set(WasmParserFeatures::MEMORY_CONTROL, false);
+        features.set(WasmParserFeatures::GC, false);
+        features.set(WasmParserFeatures::CUSTOM_PAGE_SIZES, false);
+        features.set(WasmParserFeatures::WIDE_ARITHMETIC, false);
+        let mut validator = Validator::new_with_features(features);
 
         match validator.validate_all(bytecode) {
             Ok(_) => {
@@ -794,7 +801,10 @@ impl WasmEdgeProcessor {
             }
             Err(e) => {
                 error!("WASM module validation failed: {}", e);
-                Err(StreamError::InvalidModule(format!("Validation failed: {}", e)))
+                Err(StreamError::InvalidModule(format!(
+                    "Validation failed: {}",
+                    e
+                )))
             }
         }
     }
@@ -819,30 +829,43 @@ impl WasmEdgeProcessor {
 
     /// Serialize stream event for WASM processing
     fn serialize_event(&self, event: &StreamEvent) -> StreamResult<Vec<u8>> {
-        serde_json::to_vec(event)
-            .map_err(|e| StreamError::SerializationError(e.to_string()))
+        serde_json::to_vec(event).map_err(|e| StreamError::Serialization(e.to_string()))
     }
 
     /// Deserialize events from WASM output
     fn deserialize_events(&self, bytes: &[u8]) -> StreamResult<Vec<StreamEvent>> {
-        serde_json::from_slice(bytes)
-            .map_err(|e| StreamError::SerializationError(e.to_string()))
+        serde_json::from_slice(bytes).map_err(|e| StreamError::Deserialization(e.to_string()))
     }
 
-    /// Execute WebAssembly function (simulated)
+    /// Execute a WebAssembly function.
+    ///
+    /// `WasmRuntime::engine` (see [`WasmEngine`]) only describes *which*
+    /// runtime and configuration a module would run under; this type does not
+    /// embed an actual execution engine instance (no `wasmtime::Engine`
+    /// handle, no Wasmer store, no wasm3 VM). There is therefore no way to
+    /// genuinely execute WASM bytecode here. Rather than fabricating a result
+    /// (e.g. echoing the input back as if it were the function's real
+    /// output — which would silently corrupt callers relying on the
+    /// transformation actually happening), this returns an explicit
+    /// `UnsupportedOperation` error so failures are loud, not silent.
+    ///
+    /// Real WASM execution (via `wasmtime`, gated behind the crate's `wasm`
+    /// feature) is implemented by the sibling `wasm_edge_computing` module,
+    /// which does hold a live `wasmtime::Engine`; callers that need actual
+    /// execution should use `wasm_edge_computing::WasmEdgeProcessor` instead.
     async fn execute_wasm_function(
         &self,
         _bytecode: &[u8],
-        _function_name: &str,
-        input: &[u8],
+        function_name: &str,
+        _input: &[u8],
     ) -> StreamResult<Vec<u8>> {
-        // This is a simulation - in a real implementation, you would:
-        // 1. Instantiate the WASM module
-        // 2. Call the specified function with input
-        // 3. Return the function output
-
-        // For now, just echo the input as a simple transformation
-        Ok(input.to_vec())
+        Err(StreamError::UnsupportedOperation(format!(
+            "WASM function execution ('{function_name}') is not available: this processor's \
+             WasmRuntime ({:?}) does not embed a real execution engine. Use \
+             wasm_edge_computing::WasmEdgeProcessor (built on wasmtime, feature = \"wasm\") for \
+             genuine WASM execution.",
+            self.runtime.engine
+        )))
     }
 
     /// Verify digital signature
@@ -851,26 +874,44 @@ impl WasmEdgeProcessor {
         data: &[u8],
         signature: &DigitalSignature,
     ) -> StreamResult<()> {
-        debug!("Verifying digital signature using {:?} algorithm", signature.algorithm);
-        
+        debug!(
+            "Verifying digital signature using {:?} algorithm",
+            signature.algorithm
+        );
+
         match signature.algorithm {
-            SignatureAlgorithm::Ed25519 => {
-                self.verify_ed25519_signature(data, signature).await
-            }
+            SignatureAlgorithm::Ed25519 => self.verify_ed25519_signature(data, signature).await,
             SignatureAlgorithm::RSA => {
-                self.verify_rsa_signature(data, signature).await
+                #[cfg(feature = "wasm-rsa")]
+                {
+                    self.verify_rsa_signature(data, signature).await
+                }
+                #[cfg(not(feature = "wasm-rsa"))]
+                {
+                    Err(StreamError::UnsupportedOperation(
+                        "RSA signature verification requires the `wasm-rsa` cargo feature \
+                         (opt-in due to RUSTSEC-2023-0071)"
+                            .to_string(),
+                    ))
+                }
             }
             SignatureAlgorithm::ECDSA => {
                 warn!("ECDSA signature verification not yet implemented");
-                Err(StreamError::UnsupportedOperation("ECDSA verification not implemented".to_string()))
+                Err(StreamError::UnsupportedOperation(
+                    "ECDSA verification not implemented".to_string(),
+                ))
             }
             SignatureAlgorithm::Falcon => {
                 warn!("Falcon signature verification not yet implemented");
-                Err(StreamError::UnsupportedOperation("Falcon verification not implemented".to_string()))
+                Err(StreamError::UnsupportedOperation(
+                    "Falcon verification not implemented".to_string(),
+                ))
             }
             SignatureAlgorithm::Dilithium => {
                 warn!("Dilithium signature verification not yet implemented");
-                Err(StreamError::UnsupportedOperation("Dilithium verification not implemented".to_string()))
+                Err(StreamError::UnsupportedOperation(
+                    "Dilithium verification not implemented".to_string(),
+                ))
             }
         }
     }
@@ -883,23 +924,32 @@ impl WasmEdgeProcessor {
     ) -> StreamResult<()> {
         // Parse the public key
         if signature.public_key.len() != 32 {
-            return Err(StreamError::InvalidSignature("Invalid Ed25519 public key length".to_string()));
+            return Err(StreamError::InvalidSignature(
+                "Invalid Ed25519 public key length".to_string(),
+            ));
         }
 
-        let public_key_bytes: [u8; 32] = signature.public_key.as_slice().try_into()
-            .map_err(|_| StreamError::InvalidSignature("Failed to parse Ed25519 public key".to_string()))?;
-        
-        let verifying_key = VerifyingKey::from_bytes(&public_key_bytes)
-            .map_err(|e| StreamError::InvalidSignature(format!("Invalid Ed25519 public key: {}", e)))?;
+        let public_key_bytes: [u8; 32] =
+            signature.public_key.as_slice().try_into().map_err(|_| {
+                StreamError::InvalidSignature("Failed to parse Ed25519 public key".to_string())
+            })?;
+
+        let verifying_key = VerifyingKey::from_bytes(&public_key_bytes).map_err(|e| {
+            StreamError::InvalidSignature(format!("Invalid Ed25519 public key: {}", e))
+        })?;
 
         // Parse the signature
         if signature.signature.len() != 64 {
-            return Err(StreamError::InvalidSignature("Invalid Ed25519 signature length".to_string()));
+            return Err(StreamError::InvalidSignature(
+                "Invalid Ed25519 signature length".to_string(),
+            ));
         }
 
-        let signature_bytes: [u8; 64] = signature.signature.as_slice().try_into()
-            .map_err(|_| StreamError::InvalidSignature("Failed to parse Ed25519 signature".to_string()))?;
-        
+        let signature_bytes: [u8; 64] =
+            signature.signature.as_slice().try_into().map_err(|_| {
+                StreamError::InvalidSignature("Failed to parse Ed25519 signature".to_string())
+            })?;
+
         let sig = Signature::from_bytes(&signature_bytes);
 
         // Verify the signature
@@ -910,19 +960,22 @@ impl WasmEdgeProcessor {
             }
             Err(e) => {
                 error!("Ed25519 signature verification failed: {}", e);
-                Err(StreamError::InvalidSignature("Ed25519 signature verification failed".to_string()))
+                Err(StreamError::InvalidSignature(
+                    "Ed25519 signature verification failed".to_string(),
+                ))
             }
         }
     }
 
-    /// Verify RSA signature
+    /// Verify RSA signature (opt-in via the `wasm-rsa` feature; RUSTSEC-2023-0071).
+    #[cfg(feature = "wasm-rsa")]
     async fn verify_rsa_signature(
         &self,
         data: &[u8],
         signature: &DigitalSignature,
     ) -> StreamResult<()> {
         use rsa::pkcs1::DecodeRsaPublicKey;
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
 
         // Parse the RSA public key from DER format
         let public_key = RsaPublicKey::from_pkcs1_der(&signature.public_key)
@@ -936,15 +989,21 @@ impl WasmEdgeProcessor {
         let hash = hasher.finalize();
 
         // Verify the signature
-        match verifying_key.verify(&hash, &signature.signature.as_slice().try_into()
-            .map_err(|_| StreamError::InvalidSignature("Invalid RSA signature format".to_string()))?) {
+        match verifying_key.verify(
+            &hash,
+            &signature.signature.as_slice().try_into().map_err(|_| {
+                StreamError::InvalidSignature("Invalid RSA signature format".to_string())
+            })?,
+        ) {
             Ok(_) => {
                 debug!("RSA signature verification successful");
                 Ok(())
             }
             Err(e) => {
                 error!("RSA signature verification failed: {}", e);
-                Err(StreamError::InvalidSignature("RSA signature verification failed".to_string()))
+                Err(StreamError::InvalidSignature(
+                    "RSA signature verification failed".to_string(),
+                ))
             }
         }
     }
@@ -1046,8 +1105,13 @@ impl Default for WasmSecurityManager {
                 filesystem_isolation: FilesystemIsolation {
                     chroot_enabled: true,
                     readonly_filesystem: true,
-                    allowed_paths: vec!["/tmp".to_string()],
-                    temp_directory: Some("/tmp/wasm".to_string()),
+                    allowed_paths: vec![std::env::temp_dir().to_string_lossy().into_owned()],
+                    temp_directory: Some(
+                        std::env::temp_dir()
+                            .join("oxirs-wasm")
+                            .to_string_lossy()
+                            .into_owned(),
+                    ),
                 },
             },
             code_verifier: CodeVerifier {
@@ -1177,5 +1241,112 @@ mod tests {
 
         let result = processor.load_module(module).await;
         assert!(result.is_ok());
+    }
+
+    /// Regression test for wasm_edge_processor.rs:832 — `process_event` used to
+    /// echo the serialized input event back as if it were genuine WASM
+    /// function output, so `deserialize_events` happily "recovered" the
+    /// original input as a fake successful transformation. This asserts the
+    /// processor instead fails loudly with `UnsupportedOperation` because it
+    /// has no embedded execution engine, so no caller can mistake "did
+    /// nothing" for "ran the WASM function".
+    #[tokio::test]
+    async fn test_process_event_fails_loudly_without_real_wasm_runtime() {
+        let processor = WasmEdgeProcessor::new(
+            "no_engine".to_string(),
+            WasmRuntime {
+                engine: WasmEngine::Wasm3 { stack_size: 1024 },
+                memory_limit: 1024 * 1024,
+                fuel_limit: 100_000,
+                timeout: std::time::Duration::from_secs(10),
+                optimization_level: OptimizationLevel::O1,
+                features: WasmFeatures {
+                    simd: false,
+                    threads: false,
+                    tail_call: false,
+                    multi_value: false,
+                    reference_types: false,
+                    bulk_memory: false,
+                    sign_extension: false,
+                    saturating_float_to_int: false,
+                },
+            },
+        );
+
+        let module = WasmModule {
+            id: "echo_module".to_string(),
+            name: "Echo Module".to_string(),
+            version: "1.0.0".to_string(),
+            bytecode: b"\x00asm\x01\x00\x00\x00".to_vec(),
+            metadata: WasmModuleMetadata {
+                author: "Test Author".to_string(),
+                description: "Test module".to_string(),
+                created_at: chrono::Utc::now(),
+                checksum: "abc123".to_string(),
+                signature: None,
+                license: "MIT".to_string(),
+                tags: vec!["test".to_string()],
+            },
+            capabilities: WasmCapabilities {
+                input_formats: vec![DataFormat::Json],
+                output_formats: vec![DataFormat::Json],
+                processing_types: vec![ProcessingType::Filter],
+                supported_events: vec![StreamEventType::TripleAdded],
+                exports: Vec::new(),
+                imports: Vec::new(),
+            },
+            resource_requirements: ResourceRequirements {
+                memory_mb: 16,
+                cpu_cores: 0.5,
+                disk_mb: 1,
+                network_mbps: 1,
+                execution_time_ms: 100,
+                fuel_consumption: 1000,
+            },
+            security_policy: SecurityPolicy {
+                trusted: true,
+                sandbox_level: SandboxLevel::Basic,
+                allowed_hosts: Vec::new(),
+                allowed_syscalls: Vec::new(),
+                resource_limits: ResourceLimits {
+                    max_memory: 1024 * 1024,
+                    max_fuel: 10_000,
+                    max_stack_depth: 1024,
+                    max_execution_time: std::time::Duration::from_secs(1),
+                },
+                network_access: NetworkAccess::None,
+            },
+        };
+        processor.load_module(module).await.unwrap();
+
+        let event = StreamEvent::TripleAdded {
+            subject: "http://test.org/s".to_string(),
+            predicate: "http://test.org/p".to_string(),
+            object: "\"o\"".to_string(),
+            graph: None,
+            metadata: crate::EventMetadata {
+                event_id: uuid::Uuid::new_v4().to_string(),
+                timestamp: chrono::Utc::now(),
+                source: "test".to_string(),
+                user: None,
+                context: None,
+                caused_by: None,
+                version: "1.0".to_string(),
+                properties: HashMap::new(),
+                checksum: None,
+            },
+        };
+
+        let result = processor
+            .process_event(event, "echo_module", "transform")
+            .await;
+        assert!(
+            result.is_err(),
+            "process_event must not silently echo the input back as fake WASM output"
+        );
+        assert!(matches!(
+            result.unwrap_err(),
+            StreamError::UnsupportedOperation(_)
+        ));
     }
 }

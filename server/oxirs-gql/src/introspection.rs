@@ -5,7 +5,9 @@
 
 use crate::ast::Value;
 use crate::execution::{ExecutionContext, FieldResolver};
-use crate::types::{ArgumentType, EnumValue, FieldType, GraphQLType, ScalarType, Schema};
+use crate::types::{
+    ArgumentType, BuiltinScalars, EnumValue, FieldType, GraphQLType, ObjectType, ScalarType, Schema,
+};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 // serde_json::Value as JsonValue removed - unused import
@@ -1175,6 +1177,167 @@ impl IntrospectionQuery {
     }
 }
 
+/// Build the GraphQL meta-type ([`GraphQLType::Object`]) definitions for
+/// `__Schema`, `__Type`, `__Field`, `__InputValue`, `__EnumValue` and
+/// `__Directive` (see the GraphQL spec, "Schema Introspection").
+///
+/// Registering these as real object types -- rather than the opaque
+/// `Scalar` placeholders previously used for the `__schema`/`__type` root
+/// fields -- lets [`crate::execution::QueryExecutor::complete_value`] honor
+/// selection sets on introspection queries (`{ __schema { queryType { name
+/// fields { name } } } }`) instead of silently discarding them.
+///
+/// [`IntrospectionResolver`] resolves `__schema`/`__type` eagerly into a
+/// single, fully materialized value tree; the executor projects the
+/// client's selection set directly onto that tree (see
+/// `QueryExecutor::project_introspection_value`) using these type
+/// definitions purely to know which nested field is itself an object
+/// (and which concrete meta-type it is) versus a plain scalar leaf.
+pub fn introspection_meta_types() -> Vec<GraphQLType> {
+    let string_field = |name: &str| {
+        FieldType::new(
+            name.to_string(),
+            GraphQLType::Scalar(BuiltinScalars::string()),
+        )
+    };
+    let bool_field = |name: &str| {
+        FieldType::new(
+            name.to_string(),
+            GraphQLType::Scalar(BuiltinScalars::boolean()),
+        )
+    };
+    let type_ref = |field_name: &str| {
+        FieldType::new(
+            field_name.to_string(),
+            GraphQLType::Object(ObjectType::new("__Type".to_string())),
+        )
+    };
+    let type_list = |field_name: &str| {
+        FieldType::new(
+            field_name.to_string(),
+            GraphQLType::List(Box::new(GraphQLType::Object(ObjectType::new(
+                "__Type".to_string(),
+            )))),
+        )
+    };
+
+    let input_value_type = ObjectType::new("__InputValue".to_string())
+        .with_field("name".to_string(), string_field("name"))
+        .with_field("description".to_string(), string_field("description"))
+        .with_field("type".to_string(), type_ref("type"))
+        .with_field("defaultValue".to_string(), string_field("defaultValue"));
+
+    let enum_value_type = ObjectType::new("__EnumValue".to_string())
+        .with_field("name".to_string(), string_field("name"))
+        .with_field("description".to_string(), string_field("description"))
+        .with_field("isDeprecated".to_string(), bool_field("isDeprecated"))
+        .with_field(
+            "deprecationReason".to_string(),
+            string_field("deprecationReason"),
+        );
+
+    let field_type = ObjectType::new("__Field".to_string())
+        .with_field("name".to_string(), string_field("name"))
+        .with_field("description".to_string(), string_field("description"))
+        .with_field(
+            "args".to_string(),
+            FieldType::new(
+                "args".to_string(),
+                GraphQLType::List(Box::new(GraphQLType::Object(ObjectType::new(
+                    "__InputValue".to_string(),
+                )))),
+            ),
+        )
+        .with_field("type".to_string(), type_ref("type"))
+        .with_field("isDeprecated".to_string(), bool_field("isDeprecated"))
+        .with_field(
+            "deprecationReason".to_string(),
+            string_field("deprecationReason"),
+        );
+
+    let directive_type = ObjectType::new("__Directive".to_string())
+        .with_field("name".to_string(), string_field("name"))
+        .with_field("description".to_string(), string_field("description"))
+        .with_field(
+            "locations".to_string(),
+            FieldType::new(
+                "locations".to_string(),
+                GraphQLType::List(Box::new(GraphQLType::Scalar(BuiltinScalars::string()))),
+            ),
+        )
+        .with_field(
+            "args".to_string(),
+            FieldType::new(
+                "args".to_string(),
+                GraphQLType::List(Box::new(GraphQLType::Object(ObjectType::new(
+                    "__InputValue".to_string(),
+                )))),
+            ),
+        )
+        .with_field("isRepeatable".to_string(), bool_field("isRepeatable"));
+
+    let type_type = ObjectType::new("__Type".to_string())
+        .with_field("kind".to_string(), string_field("kind"))
+        .with_field("name".to_string(), string_field("name"))
+        .with_field("description".to_string(), string_field("description"))
+        .with_field(
+            "fields".to_string(),
+            FieldType::new(
+                "fields".to_string(),
+                GraphQLType::List(Box::new(GraphQLType::Object(ObjectType::new(
+                    "__Field".to_string(),
+                )))),
+            ),
+        )
+        .with_field("interfaces".to_string(), type_list("interfaces"))
+        .with_field("possibleTypes".to_string(), type_list("possibleTypes"))
+        .with_field(
+            "enumValues".to_string(),
+            FieldType::new(
+                "enumValues".to_string(),
+                GraphQLType::List(Box::new(GraphQLType::Object(ObjectType::new(
+                    "__EnumValue".to_string(),
+                )))),
+            ),
+        )
+        .with_field(
+            "inputFields".to_string(),
+            FieldType::new(
+                "inputFields".to_string(),
+                GraphQLType::List(Box::new(GraphQLType::Object(ObjectType::new(
+                    "__InputValue".to_string(),
+                )))),
+            ),
+        )
+        .with_field("ofType".to_string(), type_ref("ofType"))
+        .with_field("specifiedByURL".to_string(), string_field("specifiedByURL"));
+
+    let schema_type = ObjectType::new("__Schema".to_string())
+        .with_field("description".to_string(), string_field("description"))
+        .with_field("types".to_string(), type_list("types"))
+        .with_field("queryType".to_string(), type_ref("queryType"))
+        .with_field("mutationType".to_string(), type_ref("mutationType"))
+        .with_field("subscriptionType".to_string(), type_ref("subscriptionType"))
+        .with_field(
+            "directives".to_string(),
+            FieldType::new(
+                "directives".to_string(),
+                GraphQLType::List(Box::new(GraphQLType::Object(ObjectType::new(
+                    "__Directive".to_string(),
+                )))),
+            ),
+        );
+
+    vec![
+        GraphQLType::Object(schema_type),
+        GraphQLType::Object(type_type),
+        GraphQLType::Object(field_type),
+        GraphQLType::Object(input_value_type),
+        GraphQLType::Object(enum_value_type),
+        GraphQLType::Object(directive_type),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1346,5 +1509,73 @@ mod tests {
             input_value_introspection.default_value(),
             Some("\"default\"".to_string())
         );
+    }
+
+    /// Regression test: `__schema`/`__type` used to be typed as
+    /// `GraphQLType::Scalar`, so `complete_value` in the executor ignored
+    /// any selection set given for them. These meta-types must be real
+    /// `Object` types with the fields that `IntrospectionResolver` and
+    /// `QueryExecutor::project_introspection_value` expect.
+    #[test]
+    fn test_introspection_meta_types_are_objects_with_expected_fields() {
+        let meta_types = introspection_meta_types();
+        let by_name: HashMap<String, &GraphQLType> = meta_types
+            .iter()
+            .map(|t| (t.name().to_string(), t))
+            .collect();
+
+        for expected in [
+            "__Schema",
+            "__Type",
+            "__Field",
+            "__InputValue",
+            "__EnumValue",
+            "__Directive",
+        ] {
+            let ty = by_name
+                .get(expected)
+                .unwrap_or_else(|| panic!("missing meta type: {expected}"));
+            assert!(
+                matches!(ty, GraphQLType::Object(_)),
+                "{expected} must be an Object type, not a Scalar"
+            );
+        }
+
+        let GraphQLType::Object(schema_type) = by_name["__Schema"] else {
+            unreachable!()
+        };
+        for field in [
+            "queryType",
+            "mutationType",
+            "subscriptionType",
+            "types",
+            "directives",
+        ] {
+            assert!(
+                schema_type.fields.contains_key(field),
+                "__Schema is missing field '{field}'"
+            );
+        }
+
+        let GraphQLType::Object(type_type) = by_name["__Type"] else {
+            unreachable!()
+        };
+        for field in [
+            "kind",
+            "name",
+            "description",
+            "fields",
+            "interfaces",
+            "possibleTypes",
+            "enumValues",
+            "inputFields",
+            "ofType",
+            "specifiedByURL",
+        ] {
+            assert!(
+                type_type.fields.contains_key(field),
+                "__Type is missing field '{field}'"
+            );
+        }
     }
 }

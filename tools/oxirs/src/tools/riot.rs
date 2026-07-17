@@ -1,9 +1,18 @@
 //! Riot - RDF parsing and serialization tool
 //!
 //! Equivalent to Apache Jena's riot command. Parses RDF files and converts
-//! between different RDF serialization formats.
+//! between different RDF serialization formats using oxirs-core's real,
+//! format-aware parser/serializer (`oxirs_core::format::{RdfParser,
+//! RdfFormat}` — the same stack `rdfparse.rs`/`rdfcopy.rs` build on for
+//! Turtle/N-Triples, extended here to N-Quads/TriG/RDF-XML/JSON-LD/N3 too).
+//! Every parsed quad comes from real content; `--validate` counts one real
+//! parse error per malformed statement rather than silently skipping it.
 
 use super::{utils, ToolResult, ToolStats};
+use oxirs_core::format::serializer::simple::serialize_quads_to_string;
+use oxirs_core::format::{JsonLdProfileSet, RdfFormat as CoreRdfFormat, RdfParser};
+use oxirs_core::model::Quad;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 /// Run riot command - RDF parsing and serialization
@@ -156,309 +165,154 @@ fn process_rdf_file(
     // Read file content
     let content = utils::read_input(file_path)?;
 
-    // Parse RDF content
-    let (triples, errors) = parse_rdf_content(&content, input_format, base_uri)?;
+    // Parse RDF content via the real oxirs-core format parser
+    let (quads, errors) = parse_rdf_content(&content, input_format, base_uri)?;
 
     if validate_only || count_only {
         return Ok(ProcessResult {
-            triple_count: triples.len(),
+            triple_count: quads.len(),
             errors,
             output: String::new(),
         });
     }
 
     // Serialize to output format
-    let output = serialize_rdf_content(&triples, output_format)?;
+    let output = serialize_rdf_content(&quads, output_format)?;
 
     Ok(ProcessResult {
-        triple_count: triples.len(),
+        triple_count: quads.len(),
         errors,
         output,
     })
 }
 
-/// Simple RDF triple representation
-#[derive(Debug, Clone)]
-struct RdfTriple {
-    subject: String,
-    predicate: String,
-    object: String,
-    graph: Option<String>, // For quads
+/// Map a `utils::detect_rdf_format`/`--syntax` string to oxirs-core's
+/// parser/serializer-facing `RdfFormat`.
+fn tool_format_to_core(format: &str) -> ToolResult<CoreRdfFormat> {
+    match format {
+        "turtle" | "ttl" => Ok(CoreRdfFormat::Turtle),
+        "ntriples" | "nt" => Ok(CoreRdfFormat::NTriples),
+        "nquads" | "nq" => Ok(CoreRdfFormat::NQuads),
+        "trig" => Ok(CoreRdfFormat::TriG),
+        "n3" => Ok(CoreRdfFormat::N3),
+        "rdfxml" | "rdf" | "xml" => Ok(CoreRdfFormat::RdfXml),
+        "jsonld" | "json-ld" | "json" => Ok(CoreRdfFormat::JsonLd {
+            profile: JsonLdProfileSet::empty(),
+        }),
+        other => Err(format!("Parsing for format '{other}' is not supported").into()),
+    }
 }
 
-/// Parse RDF content and return triples/quads
+/// Parse RDF content and return quads plus a real per-statement error count.
+///
+/// Unlike the previous ad hoc line parser, malformed statements are never
+/// silently dropped: every parse failure yielded by the real oxirs-core
+/// format parser increments `errors`, so `--validate` reflects the actual
+/// state of the file.
 fn parse_rdf_content(
     content: &str,
     format: &str,
     base_uri: Option<&str>,
-) -> ToolResult<(Vec<RdfTriple>, usize)> {
-    let mut triples = Vec::new();
-    let mut errors = 0;
+) -> ToolResult<(Vec<Quad>, usize)> {
+    let core_format = tool_format_to_core(format)?;
 
-    match format {
-        "ntriples" => {
-            // Parse N-Triples format
-            for (line_num, line) in content.lines().enumerate() {
-                let line = line.trim();
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
+    let mut parser = RdfParser::new(core_format);
+    if let Some(base) = base_uri {
+        parser = parser.with_base_iri(base.to_string());
+    }
 
-                match parse_ntriples_line(line, base_uri) {
-                    Ok(Some(triple)) => triples.push(triple),
-                    Ok(None) => {} // Empty line or comment
-                    Err(e) => {
-                        eprintln!("    Line {}: {}", line_num + 1, e);
-                        errors += 1;
-                    }
-                }
-            }
-        }
-        "nquads" => {
-            // Parse N-Quads format
-            for (line_num, line) in content.lines().enumerate() {
-                let line = line.trim();
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
+    let mut quads = Vec::new();
+    let mut errors = 0usize;
 
-                match parse_nquads_line(line, base_uri) {
-                    Ok(Some(triple)) => triples.push(triple),
-                    Ok(None) => {}
-                    Err(e) => {
-                        eprintln!("    Line {}: {}", line_num + 1, e);
-                        errors += 1;
-                    }
-                }
+    for (idx, result) in parser
+        .for_reader(Cursor::new(content.as_bytes().to_vec()))
+        .enumerate()
+    {
+        match result {
+            Ok(quad) => quads.push(quad),
+            Err(e) => {
+                eprintln!("    Statement {}: {e}", idx + 1);
+                errors += 1;
             }
-        }
-        "turtle" => {
-            // Basic Turtle parsing (simplified)
-            match parse_turtle_content(content, base_uri) {
-                Ok(parsed_triples) => triples.extend(parsed_triples),
-                Err(e) => {
-                    eprintln!("    Turtle parsing error: {e}");
-                    errors += 1;
-                }
-            }
-        }
-        _ => {
-            return Err(format!(
-                "Parsing for format '{}' is not supported. \
-                 Supported formats: ntriples, nquads, turtle",
-                format
-            )
-            .into());
         }
     }
 
-    Ok((triples, errors))
+    Ok((quads, errors))
 }
 
-/// Parse a single N-Triples line
-fn parse_ntriples_line(line: &str, _base_uri: Option<&str>) -> Result<Option<RdfTriple>, String> {
-    if !line.ends_with(" .") {
-        return Err("N-Triples line must end with ' .'".to_string());
-    }
-
-    let line = &line[..line.len() - 2]; // Remove " ."
-    let parts: Vec<&str> = line.split_whitespace().collect();
-
-    if parts.len() < 3 {
-        return Err("N-Triples line must have at least 3 parts".to_string());
-    }
-
-    let subject = parse_ntriples_term(parts[0])?;
-    let predicate = parse_ntriples_term(parts[1])?;
-    let object = parse_ntriples_term(&parts[2..].join(" "))?;
-
-    Ok(Some(RdfTriple {
-        subject,
-        predicate,
-        object,
-        graph: None,
-    }))
+/// Serialize RDF quads to the specified format via oxirs-core's real
+/// format-aware serializer.
+fn serialize_rdf_content(quads: &[Quad], format: &str) -> ToolResult<String> {
+    let core_format = tool_format_to_core(format)?;
+    serialize_quads_to_string(quads, core_format)
+        .map_err(|e| format!("Failed to serialize as '{format}': {e}").into())
 }
 
-/// Parse a single N-Quads line
-fn parse_nquads_line(line: &str, _base_uri: Option<&str>) -> Result<Option<RdfTriple>, String> {
-    if !line.ends_with(" .") {
-        return Err("N-Quads line must end with ' .'".to_string());
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_valid_turtle_no_errors() {
+        let content =
+            "@prefix ex: <http://example.org/> .\nex:s ex:p ex:o .\nex:s ex:p2 \"lit\" .\n";
+        let (quads, errors) = parse_rdf_content(content, "turtle", None).expect("parse");
+        assert_eq!(quads.len(), 2);
+        assert_eq!(errors, 0);
     }
 
-    let line = &line[..line.len() - 2]; // Remove " ."
-    let parts: Vec<&str> = line.split_whitespace().collect();
-
-    if parts.len() < 3 {
-        return Err("N-Quads line must have at least 3 parts".to_string());
+    #[test]
+    fn test_parse_valid_ntriples_no_errors() {
+        let content = "<http://example.org/s> <http://example.org/p> <http://example.org/o> .\n";
+        let (quads, errors) = parse_rdf_content(content, "ntriples", None).expect("parse");
+        assert_eq!(quads.len(), 1);
+        assert_eq!(errors, 0);
     }
 
-    let subject = parse_ntriples_term(parts[0])?;
-    let predicate = parse_ntriples_term(parts[1])?;
-
-    // For N-Quads, we need to handle the case where object might be multiple tokens (for literals)
-    // and there might be a graph component
-    let mut object_parts = Vec::new();
-    let mut graph = None;
-    let mut in_literal = false;
-
-    for (i, part) in parts[2..].iter().enumerate() {
-        if part.starts_with('"') && !in_literal {
-            in_literal = true;
-            object_parts.push(*part);
-        } else if part.ends_with('"') && in_literal {
-            object_parts.push(*part);
-            // in_literal = false; // Not needed as we break
-
-            // Check if there's a graph component after the object
-            if i + 3 < parts.len() - 2 {
-                // parts[2..] indexing
-                let potential_graph = parts[i + 3];
-                if potential_graph.starts_with('<') && potential_graph.ends_with('>') {
-                    graph = Some(parse_ntriples_term(potential_graph)?);
-                }
-            }
-            break;
-        } else if in_literal {
-            object_parts.push(*part);
-        } else if part.starts_with('<') && part.ends_with('>') {
-            // IRI object or graph
-            if object_parts.is_empty() {
-                object_parts.push(*part);
-                // Check if there's a graph after this
-                if i + 3 < parts.len() - 2 {
-                    let potential_graph = parts[i + 3];
-                    if potential_graph.starts_with('<') && potential_graph.ends_with('>') {
-                        graph = Some(parse_ntriples_term(potential_graph)?);
-                    }
-                }
-                break;
-            } else {
-                // This is probably the graph
-                graph = Some(parse_ntriples_term(part)?);
-                break;
-            }
-        } else {
-            object_parts.push(*part);
-        }
+    #[test]
+    fn test_parse_malformed_ntriples_counts_real_error() {
+        // Missing closing '>' on the predicate makes this an invalid statement;
+        // the old ad hoc parser silently dropped anything not ending in " .",
+        // so it would report 0 errors here. The real parser must count it.
+        let content = "<http://example.org/s> <http://example.org/p <http://example.org/o> .\n";
+        let (_quads, errors) = parse_rdf_content(content, "ntriples", None).expect("parse call");
+        assert!(
+            errors > 0,
+            "malformed N-Triples statement must be counted as a real error"
+        );
     }
 
-    if object_parts.is_empty() {
-        return Err("No object found in N-Quads line".to_string());
+    #[test]
+    fn test_parse_turtle_prefixed_predicate_object_list_not_dropped() {
+        // The old ad hoc Turtle parser only understood single-line
+        // `subject predicate object .`; predicate/object lists via `;`/`,`
+        // and multi-line statements were silently skipped with no error.
+        let content = "@prefix ex: <http://example.org/> .\nex:alice ex:knows ex:bob ;\n    ex:knows ex:carol .\n";
+        let (quads, errors) = parse_rdf_content(content, "turtle", None).expect("parse");
+        assert_eq!(errors, 0);
+        assert_eq!(
+            quads.len(),
+            2,
+            "predicate-object list across multiple lines must yield both real triples, not be silently dropped"
+        );
     }
 
-    let object = parse_ntriples_term(&object_parts.join(" "))?;
+    #[test]
+    fn test_serialize_and_reparse_roundtrip() {
+        let content = "<http://example.org/s> <http://example.org/p> <http://example.org/o> .\n";
+        let (quads, errors) = parse_rdf_content(content, "ntriples", None).expect("parse");
+        assert_eq!(errors, 0);
 
-    Ok(Some(RdfTriple {
-        subject,
-        predicate,
-        object,
-        graph,
-    }))
-}
-
-/// Parse N-Triples term (IRI, blank node, or literal)
-fn parse_ntriples_term(term: &str) -> Result<String, String> {
-    let term = term.trim();
-
-    if term.starts_with('<') && term.ends_with('>') {
-        // IRI
-        let iri = &term[1..term.len() - 1];
-        utils::validate_iri(iri)?;
-        Ok(term.to_string())
-    } else if term.starts_with("_:") {
-        // Blank node
-        Ok(term.to_string())
-    } else if term.starts_with('"') {
-        // Literal (simplified parsing)
-        Ok(term.to_string())
-    } else {
-        Err(format!("Invalid N-Triples term: {term}"))
-    }
-}
-
-/// Basic Turtle parsing (very simplified)
-fn parse_turtle_content(content: &str, _base_uri: Option<&str>) -> Result<Vec<RdfTriple>, String> {
-    // This is a very basic Turtle parser - a real implementation would be much more complex
-    let mut triples = Vec::new();
-    let _current_subject: Option<String> = None;
-    let _current_predicate: Option<String> = None;
-
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with('@') {
-            continue;
-        }
-
-        // Very basic parsing - just handle simple subject predicate object . patterns
-        if let Some(line) = line.strip_suffix(" .") {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-
-            if parts.len() >= 3 {
-                let subject = parts[0].to_string();
-                let predicate = parts[1].to_string();
-                let object = parts[2..].join(" ");
-
-                triples.push(RdfTriple {
-                    subject,
-                    predicate,
-                    object,
-                    graph: None,
-                });
-            }
-        }
+        let serialized = serialize_rdf_content(&quads, "turtle").expect("serialize");
+        let (reparsed, reparse_errors) =
+            parse_rdf_content(&serialized, "turtle", None).expect("reparse");
+        assert_eq!(reparse_errors, 0);
+        assert_eq!(reparsed.len(), 1);
     }
 
-    Ok(triples)
-}
-
-/// Serialize RDF triples to specified format
-fn serialize_rdf_content(triples: &[RdfTriple], format: &str) -> ToolResult<String> {
-    let mut output = String::new();
-
-    match format {
-        "ntriples" => {
-            for triple in triples {
-                output.push_str(&format!(
-                    "{} {} {} .\n",
-                    triple.subject, triple.predicate, triple.object
-                ));
-            }
-        }
-        "nquads" => {
-            for triple in triples {
-                if let Some(ref graph) = triple.graph {
-                    output.push_str(&format!(
-                        "{} {} {} {} .\n",
-                        triple.subject, triple.predicate, triple.object, graph
-                    ));
-                } else {
-                    output.push_str(&format!(
-                        "{} {} {} .\n",
-                        triple.subject, triple.predicate, triple.object
-                    ));
-                }
-            }
-        }
-        "turtle" => {
-            // Basic Turtle serialization
-            output.push_str("# Generated by oxirs riot\n\n");
-            for triple in triples {
-                output.push_str(&format!(
-                    "{} {} {} .\n",
-                    triple.subject, triple.predicate, triple.object
-                ));
-            }
-        }
-        _ => {
-            return Err(format!(
-                "Serialization for format '{}' is not supported. \
-                 Supported formats: ntriples, nquads, turtle",
-                format
-            )
-            .into());
-        }
+    #[test]
+    fn test_unsupported_format_errors() {
+        assert!(parse_rdf_content("", "bogus-format", None).is_err());
+        assert!(serialize_rdf_content(&[], "bogus-format").is_err());
     }
-
-    Ok(output)
 }

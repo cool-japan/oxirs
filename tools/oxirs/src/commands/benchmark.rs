@@ -7,21 +7,13 @@
 //! - Comparing benchmark results for regression detection
 
 use super::CommandResult;
+use oxirs_core::rdf_store::RdfStore;
 use scirs2_core::random::{Random, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-
-// Placeholder Store type until oxirs_core is available
-struct Store;
-
-impl Store {
-    fn open(_path: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(Store)
-    }
-}
 
 /// Run performance benchmarks on a dataset
 pub async fn run(
@@ -51,7 +43,7 @@ pub async fn run(
     };
 
     let store = if dataset_path.is_dir() {
-        Store::open(&dataset_path)?
+        RdfStore::open(&dataset_path).map_err(|e| format!("Failed to open dataset: {e}"))?
     } else {
         return Err(format!(
             "Dataset '{dataset}' not found. Use 'oxirs init' to create a dataset."
@@ -323,16 +315,18 @@ impl DurationSerde {
 
 /// Run warmup iterations
 fn run_warmup_iterations(
-    _store: &Store,
+    store: &RdfStore,
     suite: &str,
     warmup: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let queries = get_benchmark_queries(suite)?;
 
-    for (_query_name, _query) in queries.iter().take(3) {
-        // Run a few queries for warmup
+    for (_query_name, query) in queries.iter().take(3) {
+        // Run a few queries for warmup against the real store; failures are
+        // expected/tolerated during warmup (e.g. empty dataset) so results
+        // are intentionally discarded here.
         for _ in 0..warmup {
-            simulate_query_execution();
+            let _ = store.query(query);
         }
         print!(".");
         use std::io::Write;
@@ -343,9 +337,15 @@ fn run_warmup_iterations(
     Ok(())
 }
 
+/// Execute a single benchmark query against the real store, reporting
+/// whether it completed successfully.
+fn execute_benchmark_query(store: &RdfStore, query: &str) -> bool {
+    store.query(query).is_ok()
+}
+
 /// Run benchmark suite
 fn run_benchmark_suite(
-    _store: &Store,
+    store: &RdfStore,
     suite: &str,
     iterations: usize,
     detailed: bool,
@@ -357,7 +357,7 @@ fn run_benchmark_suite(
     let mut successful_queries = 0;
     let mut total_errors = 0;
 
-    for (i, (query_name, _query)) in queries.iter().enumerate() {
+    for (i, (query_name, query)) in queries.iter().enumerate() {
         if detailed {
             println!("Running query {}/{}: {}", i + 1, queries.len(), query_name);
         } else {
@@ -375,7 +375,7 @@ fn run_benchmark_suite(
             }
 
             let start = Instant::now();
-            let success = simulate_query_execution();
+            let success = execute_benchmark_query(store, query);
             let duration = start.elapsed();
 
             execution_times.push(duration);
@@ -493,22 +493,6 @@ fn get_benchmark_queries(suite: &str) -> Result<Vec<(String, String)>, Box<dyn s
         ]),
         _ => Err(format!("Unknown benchmark suite: {suite}").into()),
     }
-}
-
-/// Simulate query execution (placeholder)
-fn simulate_query_execution() -> bool {
-    use scirs2_core::random::Random;
-
-    // Simulate some work with realistic timing
-    let delay = {
-        let mut random = Random::default();
-        1 + random.random_range(0..15_u64) // 1-15ms
-    };
-    std::thread::sleep(Duration::from_millis(delay));
-
-    // Simulate 95% success rate
-    let mut random = Random::default();
-    random.random_f64() < 0.95
 }
 
 /// Display benchmark results
@@ -1063,5 +1047,32 @@ mod tests {
         let serde: DurationSerde = duration.into();
         let back: Duration = serde.into();
         assert_eq!(duration, back);
+    }
+
+    /// Regression test: `oxirs benchmark run` must execute real queries
+    /// against a real `oxirs_core::RdfStore` instead of the old placeholder
+    /// `Store` + `simulate_query_execution()`, which fabricated timings
+    /// (a random 1-15ms sleep) and a random ~95% success rate unrelated to
+    /// any actual query outcome.
+    #[test]
+    fn test_run_benchmark_suite_executes_real_queries_deterministically() {
+        let unique = std::process::id() as u64 * 7_919 + line!() as u64;
+        let dir = std::env::temp_dir().join(format!("oxirs-benchmark-suite-test-{unique}"));
+        std::fs::create_dir_all(&dir).expect("create temp dataset dir");
+
+        let store = RdfStore::open(&dir).expect("open store");
+
+        let results = run_benchmark_suite(&store, "custom", 5, false)
+            .expect("benchmark suite should run real queries against the store");
+
+        // A trivial `SELECT * WHERE { ?s ?p ?o } LIMIT 1` against a real
+        // (even empty) store always succeeds deterministically -- the old
+        // placeholder instead fabricated a coin-flip ~95% success rate, so
+        // this would be flaky under the old implementation.
+        assert_eq!(results.statistics.success_rate, 1.0);
+        assert_eq!(results.statistics.total_errors, 0);
+        assert_eq!(results.statistics.total_queries_executed, 5);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

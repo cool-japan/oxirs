@@ -13,6 +13,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
+/// Callback invoked once a client request reaches a real 2f+1 matching-commit
+/// quorum in [`BftConsensus::handle_commit`], carrying `(client_id,
+/// timestamp, execution_result)` recovered from the original
+/// [`BftMessage::Request`]. See [`BftConsensus::set_commit_callback`].
+type CommitCallback = dyn Fn(String, u64, Vec<u8>) + Send + Sync;
+
 /// Byzantine fault tolerance configuration
 #[derive(Debug, Clone)]
 pub struct BftConfig {
@@ -167,6 +173,14 @@ pub struct BftConsensus {
     byzantine_tracker: Arc<RwLock<ByzantineTracker>>,
     /// View change timer
     view_timer: Arc<RwLock<Option<Instant>>>,
+    /// Optional observer notified from [`BftConsensus::send_reply`] once
+    /// [`BftConsensus::handle_commit`] observes a real 2f+1 matching-commit
+    /// quorum for a request. This is the commit-observation hook a wrapper
+    /// like `BftConsensusManager` (in `bft_consensus.rs`) would register in
+    /// order to complete a caller's pending `process_request` future instead
+    /// of it timing out -- see [`BftConsensus::set_commit_callback`] for the
+    /// exact integration contract and its current limitation.
+    commit_callback: Arc<RwLock<Option<Arc<CommitCallback>>>>,
 }
 
 /// Message log for consensus tracking
@@ -277,7 +291,38 @@ impl BftConsensus {
             message_log: Arc::new(RwLock::new(MessageLog::new())),
             byzantine_tracker: Arc::new(RwLock::new(ByzantineTracker::new(5))),
             view_timer: Arc::new(RwLock::new(None)),
+            commit_callback: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Register a callback fired the moment [`BftConsensus::handle_commit`]
+    /// observes a real 2f+1 matching-commit quorum for a request -- i.e. the
+    /// commit-observation point real BFT submissions need in order to
+    /// complete instead of timing out. The callback receives the original
+    /// request's `client_id`, `timestamp`, and the serialized
+    /// [`BftConsensus::execute_operation`] result.
+    ///
+    /// # Integration contract / current limitation
+    ///
+    /// This engine has no notion of the caller-generated `request_id` a
+    /// wrapper such as `BftConsensusManager::process_request` (in
+    /// `bft_consensus.rs`) uses to key its pending-completion map: that
+    /// `request_id` is a UUID minted by the wrapper and is **not** threaded
+    /// into [`BftMessage::Request`], so this engine cannot look it up here.
+    /// A wrapper wiring this callback must therefore correlate on
+    /// `(client_id, timestamp)` itself, e.g. by keying its own pending map on
+    /// that pair (or embedding its `request_id` inside the `operation`
+    /// payload before submission) rather than on the UUID alone, and then
+    /// resolve/complete the matching waiter (for `BftConsensusManager` that
+    /// final step is calling `notify_request_committed`) from inside the
+    /// callback registered here.
+    pub fn set_commit_callback<F>(&self, callback: F)
+    where
+        F: Fn(String, u64, Vec<u8>) + Send + Sync + 'static,
+    {
+        if let Ok(mut slot) = self.commit_callback.write() {
+            *slot = Some(Arc::new(callback));
+        }
     }
 
     /// Register a node's public key
@@ -775,14 +820,37 @@ impl BftConsensus {
         Ok(())
     }
 
-    /// Send reply to client
+    /// Notify the registered commit observer (if any) and send the reply to
+    /// the client.
     ///
-    /// This is a placeholder implementation. In a production system, this would:
+    /// This is called by [`BftConsensus::handle_commit`] exactly once a
+    /// request reaches a real 2f+1 matching-commit quorum, so it is the
+    /// commit-observation point: the [`CommitCallback`] registered via
+    /// [`BftConsensus::set_commit_callback`] fires here with the real
+    /// `client_id`/`timestamp`/execution result recovered from the
+    /// `Reply` message, letting a wrapper complete the caller's pending
+    /// request instead of it timing out.
+    ///
+    /// Actual client network delivery of the `Reply` remains a placeholder:
     /// - Serialize the Reply message to bytes
     /// - Send the reply back to the requesting client
     /// - Use the client connection manager for delivery
     /// - Handle client disconnections gracefully
-    fn send_reply(&self, _reply: BftMessage) -> Result<()> {
+    fn send_reply(&self, reply: BftMessage) -> Result<()> {
+        if let BftMessage::Reply {
+            client_id,
+            timestamp,
+            result,
+            ..
+        } = &reply
+        {
+            if let Ok(guard) = self.commit_callback.read() {
+                if let Some(callback) = guard.as_ref() {
+                    callback(client_id.clone(), *timestamp, result.clone());
+                }
+            }
+        }
+
         // Integration with network layer will be implemented when:
         // 1. Client connection tracking is available
         // 2. Reply routing mechanism is in place
@@ -909,5 +977,122 @@ mod tests {
 
         assert_ne!(digest1, digest2);
         assert_eq!(digest1.len(), 32); // SHA256 produces 32 bytes
+    }
+
+    /// Regression test for the commit-observation hook: the callback
+    /// registered via `set_commit_callback` must fire exactly once, with the
+    /// original request's `client_id`/`timestamp`, precisely when the
+    /// engine observes a real 2f+1 matching-commit quorum -- not before.
+    #[test]
+    fn test_commit_quorum_invokes_registered_callback() {
+        let config = BftConfig::new(4); // max_faulty=1, required_votes=3
+        let primary = BftConsensus::new("1".to_string(), config).unwrap();
+
+        // Register three remote nodes whose commit votes the primary trusts.
+        let mut remotes: Vec<(String, SigningKey)> = Vec::new();
+        for id in ["2", "3", "4"] {
+            let seed: [u8; 32] = rand::random();
+            let signing_key = SigningKey::from_bytes(&seed);
+            primary
+                .register_node(id.to_string(), signing_key.verifying_key())
+                .unwrap();
+            remotes.push((id.to_string(), signing_key));
+        }
+
+        let calls: Arc<std::sync::Mutex<Vec<(String, u64, Vec<u8>)>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let calls_clone = calls.clone();
+        primary.set_commit_callback(move |client_id, timestamp, result| {
+            calls_clone
+                .lock()
+                .expect("test mutex poisoned")
+                .push((client_id, timestamp, result));
+        });
+
+        // Submit a client request as the (self) primary; this stores a
+        // pre-prepare at (view=0, sequence=1) carrying the original request.
+        let operation = b"insert triple".to_vec();
+        let request = BftMessage::Request {
+            client_id: "client-42".to_string(),
+            operation: operation.clone(),
+            timestamp: 1234,
+            signature: None,
+        };
+        primary.process_request(request).unwrap();
+
+        let view = primary.current_view().unwrap();
+        let sequence = 1;
+        let digest = BftConsensus::create_digest(&operation);
+
+        // Deliver commit votes one at a time: the callback must stay silent
+        // until the third (2f+1 = 3) vote lands.
+        for (idx, (node_id, signing_key)) in remotes.iter().enumerate() {
+            let commit = BftMessage::Commit {
+                view,
+                sequence,
+                digest: digest.clone(),
+                node_id: node_id.clone(),
+                signature: signing_key.sign(&digest).to_bytes().to_vec(),
+            };
+            primary.handle_message(commit, node_id).unwrap();
+
+            let observed = calls.lock().expect("test mutex poisoned").len();
+            if idx < 2 {
+                assert_eq!(observed, 0, "callback must not fire before 2f+1 commits");
+            } else {
+                assert_eq!(
+                    observed, 1,
+                    "callback must fire exactly once at 2f+1 commits"
+                );
+            }
+        }
+
+        let recorded = calls.lock().expect("test mutex poisoned");
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].0, "client-42");
+        assert_eq!(recorded[0].1, 1234);
+    }
+
+    /// The default (no callback registered) path must keep working exactly
+    /// as before: reaching quorum should not panic or otherwise change
+    /// behavior when nobody is listening.
+    #[test]
+    fn test_commit_quorum_without_callback_does_not_panic() {
+        let config = BftConfig::new(4);
+        let primary = BftConsensus::new("1".to_string(), config).unwrap();
+
+        let mut remotes: Vec<(String, SigningKey)> = Vec::new();
+        for id in ["2", "3", "4"] {
+            let seed: [u8; 32] = rand::random();
+            let signing_key = SigningKey::from_bytes(&seed);
+            primary
+                .register_node(id.to_string(), signing_key.verifying_key())
+                .unwrap();
+            remotes.push((id.to_string(), signing_key));
+        }
+
+        let operation = b"delete triple".to_vec();
+        let request = BftMessage::Request {
+            client_id: "client-7".to_string(),
+            operation: operation.clone(),
+            timestamp: 99,
+            signature: None,
+        };
+        primary.process_request(request).unwrap();
+
+        let view = primary.current_view().unwrap();
+        let sequence = 1;
+        let digest = BftConsensus::create_digest(&operation);
+
+        for (node_id, signing_key) in &remotes {
+            let commit = BftMessage::Commit {
+                view,
+                sequence,
+                digest: digest.clone(),
+                node_id: node_id.clone(),
+                signature: signing_key.sign(&digest).to_bytes().to_vec(),
+            };
+            primary.handle_message(commit, node_id).unwrap();
+        }
     }
 }

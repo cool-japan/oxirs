@@ -509,6 +509,15 @@ impl AuthService {
         users.get(username).cloned()
     }
 
+    /// List all registered users, keyed by username.
+    ///
+    /// Used by admin-only endpoints (e.g. `GET /$/users`) that need the real
+    /// user registry rather than a single hardcoded placeholder entry.
+    pub async fn list_users(&self) -> HashMap<String, UserConfig> {
+        let users = self.users.read().await;
+        users.clone()
+    }
+
     /// Hash a password using bcrypt
     pub fn hash_password(&self, password: &str) -> FusekiResult<String> {
         #[cfg(feature = "auth")]

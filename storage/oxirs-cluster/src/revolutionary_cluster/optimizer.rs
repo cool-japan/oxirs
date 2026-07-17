@@ -107,7 +107,7 @@ impl RevolutionaryClusterOptimizer {
 
         // Stage 1: Unified coordination analysis
         let coordination_analysis = {
-            let coordinator = self.unified_coordinator.read().expect("rwlock should not be poisoned");
+            let coordinator = self.unified_coordinator.read().unwrap_or_else(|e| e.into_inner());
             coordinator
                 .analyze_cluster_coordination_requirements(cluster_state, optimization_context)
                 .await?
@@ -115,7 +115,7 @@ impl RevolutionaryClusterOptimizer {
 
         // Stage 2: AI-powered consensus optimization
         let consensus_optimization = if self.config.enable_ai_consensus_optimization {
-            let optimizer = self.consensus_optimizer.read().expect("rwlock should not be poisoned");
+            let optimizer = self.consensus_optimizer.read().unwrap_or_else(|e| e.into_inner());
             Some(optimizer.optimize_consensus_protocol(cluster_state).await?)
         } else {
             None
@@ -123,7 +123,7 @@ impl RevolutionaryClusterOptimizer {
 
         // Stage 3: Intelligent data distribution
         let data_distribution_optimization = if self.config.enable_intelligent_data_distribution {
-            let engine = self.data_distribution_engine.read().expect("rwlock should not be poisoned");
+            let engine = self.data_distribution_engine.read().unwrap_or_else(|e| e.into_inner());
             Some(engine.optimize_data_distribution(cluster_state).await?)
         } else {
             None
@@ -131,7 +131,7 @@ impl RevolutionaryClusterOptimizer {
 
         // Stage 4: Adaptive replication optimization
         let replication_optimization = if self.config.enable_adaptive_replication {
-            let manager = self.replication_manager.read().expect("rwlock should not be poisoned");
+            let manager = self.replication_manager.read().unwrap_or_else(|e| e.into_inner());
             Some(manager.optimize_replication_strategy(cluster_state).await?)
         } else {
             None
@@ -139,7 +139,7 @@ impl RevolutionaryClusterOptimizer {
 
         // Stage 5: Quantum network optimization
         let network_optimization = if self.config.enable_quantum_networking {
-            let optimizer = self.network_optimizer.read().expect("rwlock should not be poisoned");
+            let optimizer = self.network_optimizer.read().unwrap_or_else(|e| e.into_inner());
             Some(optimizer.optimize_network_topology(cluster_state).await?)
         } else {
             None
@@ -147,13 +147,13 @@ impl RevolutionaryClusterOptimizer {
 
         // Stage 6: Advanced cluster analytics
         if self.config.enable_advanced_cluster_analytics {
-            let mut analytics = self.cluster_analytics.write().expect("rwlock should not be poisoned");
+            let mut analytics = self.cluster_analytics.write().unwrap_or_else(|e| e.into_inner());
             analytics.collect_cluster_metrics(cluster_state).await?;
         }
 
         // Stage 7: Predictive scaling
         let scaling_prediction = if self.config.enable_predictive_scaling {
-            let predictor = self.scaling_predictor.read().expect("rwlock should not be poisoned");
+            let predictor = self.scaling_predictor.read().unwrap_or_else(|e| e.into_inner());
             Some(predictor.predict_scaling_requirements(cluster_state).await?)
         } else {
             None
@@ -174,7 +174,7 @@ impl RevolutionaryClusterOptimizer {
         // Stage 9: Update optimization statistics
         let optimization_time = start_time.elapsed();
         {
-            let mut stats = self.optimization_stats.write().expect("rwlock should not be poisoned");
+            let mut stats = self.optimization_stats.write().unwrap_or_else(|e| e.into_inner());
             stats.record_optimization(
                 cluster_state.nodes.len(),
                 optimization_time,
@@ -261,19 +261,19 @@ impl RevolutionaryClusterOptimizer {
         cluster_state: &ClusterState,
         consensus_context: &ConsensusContext,
     ) -> Result<ConsensusOptimizationResult> {
-        let optimizer = self.consensus_optimizer.read().expect("rwlock should not be poisoned");
+        let optimizer = self.consensus_optimizer.read().unwrap_or_else(|e| e.into_inner());
         optimizer.optimize_consensus_with_context(cluster_state, consensus_context).await
     }
 
     /// Optimize data distribution across cluster
     pub async fn optimize_data_distribution(&self, cluster_state: &ClusterState) -> Result<DataDistributionOptimizationResult> {
-        let engine = self.data_distribution_engine.read().expect("rwlock should not be poisoned");
+        let engine = self.data_distribution_engine.read().unwrap_or_else(|e| e.into_inner());
         engine.optimize_data_distribution(cluster_state).await
     }
 
     /// Get cluster analytics
     pub async fn get_cluster_analytics(&self) -> ClusterAnalytics {
-        let analytics = self.cluster_analytics.read().expect("rwlock should not be poisoned");
+        let analytics = self.cluster_analytics.read().unwrap_or_else(|e| e.into_inner());
         analytics.get_analytics().await
     }
 
@@ -284,7 +284,42 @@ impl RevolutionaryClusterOptimizer {
 
     /// Predict cluster scaling needs
     pub async fn predict_scaling_needs(&self, cluster_state: &ClusterState) -> Result<ScalingPrediction> {
-        let predictor = self.scaling_predictor.read().expect("rwlock should not be poisoned");
+        let predictor = self.scaling_predictor.read().unwrap_or_else(|e| e.into_inner());
         predictor.predict_scaling_requirements(cluster_state).await
+    }
+}
+
+#[cfg(test)]
+mod poison_recovery_tests {
+    use super::*;
+
+    /// Regression test for the lock-poisoning panic epidemic: if any writer
+    /// panics while holding one of the optimizer's internal RwLocks, every
+    /// subsequent call used to panic too (`.expect("rwlock should not be
+    /// poisoned")`). We now recover the poisoned guard instead, so a call
+    /// after a poisoning event must succeed rather than panic.
+    #[tokio::test]
+    async fn get_cluster_analytics_survives_poisoned_lock() {
+        let config = RevolutionaryClusterConfig::default();
+        let optimizer = RevolutionaryClusterOptimizer::new(config)
+            .await
+            .expect("optimizer construction should succeed");
+
+        // Poison the cluster_analytics RwLock by panicking while holding the
+        // write guard, simulating a panic in some other code path.
+        let analytics_lock = Arc::clone(&optimizer.cluster_analytics);
+        let join_result = std::thread::spawn(move || {
+            let _guard = analytics_lock.write().unwrap_or_else(|e| e.into_inner());
+            panic!("intentional poison for regression test");
+        })
+        .join();
+        assert!(join_result.is_err(), "spawned thread should have panicked");
+        assert!(
+            optimizer.cluster_analytics.is_poisoned(),
+            "lock should be poisoned after the panic"
+        );
+
+        // This must not panic even though the lock is now poisoned.
+        let _ = optimizer.get_cluster_analytics().await;
     }
 }

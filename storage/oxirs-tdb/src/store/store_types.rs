@@ -24,6 +24,14 @@ pub struct TdbConfig {
     pub enable_query_monitoring: bool,
     /// Enable spatial indexing (GeoSPARQL)
     pub enable_spatial_indexing: bool,
+    /// Enable named-graph (quad) indexes (GSPO/GPOS/GOSP).
+    ///
+    /// When enabled (the default), the store maintains quad indexes so the
+    /// quad API (`insert_quad`/`scan_quads`/…) can store and query named
+    /// graphs. The default (unnamed) graph is always served by the triple
+    /// indexes regardless of this flag. Mirrors
+    /// [`StoreParams::enable_quad_indexes`](crate::store::StoreParams).
+    pub enable_quad_indexes: bool,
 }
 
 impl TdbConfig {
@@ -39,6 +47,7 @@ impl TdbConfig {
             enable_statistics: true,
             enable_query_monitoring: true,
             enable_spatial_indexing: true,
+            enable_quad_indexes: true,
         }
     }
 
@@ -81,6 +90,12 @@ impl TdbConfig {
     /// Enable/disable spatial indexing
     pub fn with_spatial_indexing(mut self, enable: bool) -> Self {
         self.enable_spatial_indexing = enable;
+        self
+    }
+
+    /// Enable/disable named-graph (quad) indexes.
+    pub fn with_quad_indexes(mut self, enable: bool) -> Self {
+        self.enable_quad_indexes = enable;
         self
     }
 }

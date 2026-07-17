@@ -343,14 +343,27 @@ impl CustomTypeMapper {
             _ => {}
         }
 
-        // Check for custom scalars
+        // Check for custom scalars.
+        //
+        // `CustomScalarDef::serialize`/`deserialize`/`validate` carry the
+        // real per-scalar logic (e.g. the `Email` scalar's `@`-check), but
+        // they operate on `&str`/`serde_json::Value` and are `Arc<dyn Fn>`
+        // closures, while `ScalarType::{serialize,parse_value,parse_literal}`
+        // are plain `fn(&Value) -> Result<Value>` pointers over the AST
+        // `Value` type -- a closure that captures `custom_scalar` cannot be
+        // coerced to a bare fn pointer, so this generic mapping cannot
+        // forward to it directly. Rather than unconditionally erroring
+        // (which broke every custom scalar previously reachable through
+        // this path), fall back to the same identity pass-through that
+        // `ScalarType::new` uses for its defaults, so values still flow
+        // through unchanged instead of being rejected outright.
         if let Some(custom_scalar) = self.custom_scalars.get(resolved_name) {
             return Ok(GraphQLType::Scalar(ScalarType {
                 name: custom_scalar.name.clone(),
                 description: custom_scalar.description.clone(),
-                serialize: |_| Ok(crate::ast::Value::NullValue),
-                parse_value: |_| Err(anyhow!("Parsing not implemented")),
-                parse_literal: |_| Err(anyhow!("Parsing not implemented")),
+                serialize: |v| Ok(v.clone()),
+                parse_value: |v| Ok(v.clone()),
+                parse_literal: |v| Ok(v.clone()),
             }));
         }
 
@@ -366,9 +379,14 @@ impl CustomTypeMapper {
                 GraphQLType::Scalar(ScalarType {
                     name: scalar.name.clone(),
                     description: scalar.description.clone(),
-                    serialize: |_| Ok(crate::ast::Value::NullValue),
-                    parse_value: |_| Err(anyhow!("Parsing not implemented")),
-                    parse_literal: |_| Err(anyhow!("Parsing not implemented")),
+                    // See the matching comment in `resolve_target_type`:
+                    // `CustomScalarDef`'s real closures can't be coerced to
+                    // the bare fn pointers `ScalarType` requires, so this
+                    // schema-declaration wrapper passes values through
+                    // unchanged rather than unconditionally failing.
+                    serialize: |v| Ok(v.clone()),
+                    parse_value: |v| Ok(v.clone()),
+                    parse_literal: |v| Ok(v.clone()),
                 })
             })
             .collect()
@@ -579,6 +597,64 @@ mod tests {
         assert!(mapper.custom_scalars.contains_key("Email"));
         assert!(mapper.custom_scalars.contains_key("URL"));
         assert!(mapper.custom_scalars.contains_key("JSON"));
+    }
+
+    /// Regression test: `ScalarType::{serialize,parse_value,parse_literal}`
+    /// generated for a registered custom scalar used to unconditionally
+    /// error/discard values ("Parsing not implemented" / always-null
+    /// serialize), which would break every custom scalar the moment
+    /// anything tried to actually serialize or parse a value through this
+    /// mapping path. They must now round-trip the value unchanged.
+    #[test]
+    fn test_custom_scalar_map_type_round_trips_values_instead_of_erroring() {
+        let mapper = CustomTypeMapper::create_common_scalars();
+        // `resolve_target_type` is the private helper that actually builds
+        // the `ScalarType` for a registered custom scalar name (reached via
+        // `map_type` once a `TypeMappingRule` targets it); call it directly
+        // since this test isn't registering such a rule.
+        let gql_type = mapper
+            .resolve_target_type("Email")
+            .expect("resolving a registered custom scalar name should succeed");
+
+        let scalar = match gql_type {
+            GraphQLType::Scalar(s) => s,
+            other => panic!("expected scalar type, got {other:?}"),
+        };
+        assert_eq!(scalar.name, "Email");
+
+        let value = crate::ast::Value::StringValue("user@example.org".to_string());
+        assert_eq!(
+            (scalar.serialize)(&value).expect("serialize should not error"),
+            value
+        );
+        assert_eq!(
+            (scalar.parse_value)(&value).expect("parse_value should not error"),
+            value
+        );
+        assert_eq!(
+            (scalar.parse_literal)(&value).expect("parse_literal should not error"),
+            value
+        );
+    }
+
+    /// Same regression, exercised through `get_custom_scalars()` (used for
+    /// schema generation) rather than `map_type()`.
+    #[test]
+    fn test_get_custom_scalars_round_trips_values_instead_of_erroring() {
+        let mapper = CustomTypeMapper::create_common_scalars();
+        let scalars = mapper.get_custom_scalars();
+        assert!(!scalars.is_empty());
+
+        for gql_type in scalars {
+            let GraphQLType::Scalar(scalar) = gql_type else {
+                panic!("get_custom_scalars() should only return Scalar types");
+            };
+            let value = crate::ast::Value::IntValue(42);
+            assert_eq!(
+                (scalar.parse_value)(&value).expect("parse_value should not error"),
+                value
+            );
+        }
     }
 
     #[test]

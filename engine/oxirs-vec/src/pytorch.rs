@@ -1,4 +1,16 @@
-//! PyTorch integration for embedding generation and neural network models
+//! PyTorch-shaped embedding generation — currently a deterministic MOCK, not
+//! real PyTorch inference.
+//!
+//! [`PyTorchEmbedder`] models the API a real `tch` (libtorch FFI) or
+//! `candle-core` (Pure Rust) backed embedder would expose, but
+//! [`PyTorchEmbedder::load_model`] and the internal forward pass never
+//! actually load a model or run a neural network: they only validate that
+//! `model_path` exists and then compute a hash-seeded pseudo-random vector.
+//! `tch` requires a C++ libtorch FFI dependency, which is disallowed by the
+//! COOLJAPAN Pure Rust Policy for this crate's default build; `candle-core`
+//! is Pure Rust but is not currently a workspace dependency. Until one of
+//! those is wired in, treat this type as test-only / an API placeholder —
+//! do not use it for anything that needs real semantic embeddings.
 
 use crate::real_time_embedding_pipeline::traits::{
     ContentItem, EmbeddingGenerator, GeneratorStatistics, ProcessingResult, ProcessingStatus,
@@ -58,7 +70,8 @@ impl Default for PyTorchConfig {
     }
 }
 
-/// PyTorch model wrapper for embedding generation
+/// PyTorch-shaped embedding generator — **currently a deterministic mock**,
+/// not real PyTorch inference. See the `pytorch` module-level docs.
 #[derive(Debug)]
 pub struct PyTorchEmbedder {
     config: PyTorchConfig,
@@ -138,7 +151,15 @@ impl PyTorchEmbedder {
         })
     }
 
-    /// Load PyTorch model from file
+    /// "Load" a PyTorch model from file.
+    ///
+    /// **This does not actually load or run a PyTorch model.** It only
+    /// verifies `model_path` exists on disk, then populates
+    /// [`PyTorchModelMetadata`] with hardcoded values; no weights are read
+    /// and no `tch`/`candle-core` runtime is invoked. See the module-level
+    /// docs. Real inference calls ([`Self::embed_text`],
+    /// [`Self::embed_batch`]) log a warning the first time they run against
+    /// a model "loaded" this way.
     pub fn load_model(&mut self) -> Result<()> {
         if !self.config.model_path.exists() {
             return Err(anyhow!(
@@ -147,7 +168,14 @@ impl PyTorchEmbedder {
             ));
         }
 
-        // Mock model loading - in real implementation would use tch or candle-core
+        tracing::warn!(
+            "PyTorchEmbedder::load_model({:?}): this is a MOCK — no PyTorch model is \
+             actually loaded and no real weights are read. Embeddings produced by this \
+             embedder are deterministic hash-based pseudo-random vectors, not real \
+             semantic embeddings. See the `pytorch` module docs.",
+            self.config.model_path
+        );
+
         let metadata = PyTorchModelMetadata {
             model_name: "pytorch_embedder".to_string(),
             model_version: "1.0.0".to_string(),
@@ -249,14 +277,15 @@ impl PyTorchEmbedder {
         Ok(tokens)
     }
 
-    /// Forward pass through the model (mock implementation)
+    /// **MOCK forward pass — not real PyTorch inference.** Generates a
+    /// deterministic (hash-seeded) pseudo-random vector from the token IDs
+    /// rather than running any neural network. See the module-level docs.
     fn forward_pass(&self, tokens: &[i32]) -> Result<Vec<f32>> {
         let metadata = self
             .model_metadata
             .as_ref()
             .ok_or_else(|| anyhow!("Model metadata not available"))?;
 
-        // Mock forward pass - generate deterministic embeddings based on tokens
         let mut rng = Random::seed(tokens.iter().map(|&t| t as u64).sum::<u64>());
 
         let mut embedding = vec![0.0f32; metadata.embedding_dimension];
@@ -550,6 +579,45 @@ mod tests {
         let manager = PyTorchModelManager::new("default".to_string());
         assert_eq!(manager.default_model, "default");
         assert!(manager.list_models().is_empty());
+    }
+
+    /// Regression test documenting the P2 finding: `PyTorchEmbedder` is a
+    /// deterministic mock, not real inference. Verifies it is at least
+    /// internally consistent (same text -> same vector; distinct texts ->
+    /// distinct vectors with overwhelming probability) so callers who *do*
+    /// use it as an offline placeholder get stable, reproducible output.
+    #[test]
+    fn test_pytorch_embedder_mock_is_deterministic_not_real_inference() -> Result<()> {
+        let dir =
+            std::env::temp_dir().join(format!("oxirs_vec_pytorch_test_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir)?;
+        let model_path = dir.join("mock_model.pt");
+        std::fs::write(&model_path, b"not a real pytorch model")?;
+
+        let config = PyTorchConfig {
+            model_path: model_path.clone(),
+            ..PyTorchConfig::default()
+        };
+        let mut embedder = PyTorchEmbedder::new(config)?;
+        embedder.load_model()?;
+
+        let a = embedder.embed_text("hello world")?;
+        let b = embedder.embed_text("hello world")?;
+        let c = embedder.embed_text("a completely different sentence")?;
+
+        assert_eq!(
+            a.as_f32(),
+            b.as_f32(),
+            "mock embeddings must be deterministic"
+        );
+        assert_ne!(
+            a.as_f32(),
+            c.as_f32(),
+            "distinct inputs should (with overwhelming probability) differ"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+        Ok(())
     }
 
     #[test]

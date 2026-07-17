@@ -143,13 +143,19 @@ impl StringInterner {
 
         // Fast path: try to get existing string with read lock
         {
-            let strings = self.strings.read().expect("strings lock poisoned");
+            let strings = self
+                .strings
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             if let Some(weak_ref) = strings.get(s) {
                 if let Some(arc_str) = weak_ref.upgrade() {
                     // Update stats
                     self.cache_hit_counter.inc();
                     {
-                        let mut stats = self.stats.write().expect("stats lock poisoned");
+                        let mut stats = self
+                            .stats
+                            .write()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
                         stats.total_requests += 1;
                         stats.cache_hits += 1;
                     }
@@ -159,7 +165,10 @@ impl StringInterner {
         }
 
         // Slow path: need to create new string with write lock
-        let mut strings = self.strings.write().expect("strings lock poisoned");
+        let mut strings = self
+            .strings
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         // Double-check in case another thread added it while we were waiting
         if let Some(weak_ref) = strings.get(s) {
@@ -168,7 +177,10 @@ impl StringInterner {
                 self.cache_hit_counter.inc();
                 drop(strings); // Release write lock early
                 {
-                    let mut stats = self.stats.write().expect("stats lock poisoned");
+                    let mut stats = self
+                        .stats
+                        .write()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
                     stats.total_requests += 1;
                     stats.cache_hits += 1;
                 }
@@ -185,7 +197,10 @@ impl StringInterner {
         self.cache_miss_counter.inc();
         drop(strings); // Release write lock early
         {
-            let mut stats = self.stats.write().expect("stats lock poisoned");
+            let mut stats = self
+                .stats
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             stats.total_requests += 1;
             stats.cache_misses += 1;
             stats.total_strings_stored += 1;
@@ -202,17 +217,20 @@ impl StringInterner {
             let string_to_id = self
                 .string_to_id
                 .read()
-                .expect("string_to_id lock poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             if let Some(&id) = string_to_id.get(s) {
                 // We have the ID, now get the Arc<str>
                 let id_to_string = self
                     .id_to_string
                     .read()
-                    .expect("id_to_string lock poisoned");
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 if let Some(arc_str) = id_to_string.get(&id) {
                     // Update stats
                     {
-                        let mut stats = self.stats.write().expect("stats lock poisoned");
+                        let mut stats = self
+                            .stats
+                            .write()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
                         stats.total_requests += 1;
                         stats.cache_hits += 1;
                     }
@@ -232,14 +250,14 @@ impl StringInterner {
             let mut string_to_id = self
                 .string_to_id
                 .write()
-                .expect("string_to_id lock poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             string_to_id.insert(s.to_string(), id);
         }
         {
             let mut id_to_string = self
                 .id_to_string
                 .write()
-                .expect("id_to_string lock poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             id_to_string.insert(id, arc_str.clone());
         }
 
@@ -251,7 +269,7 @@ impl StringInterner {
         let string_to_id = self
             .string_to_id
             .read()
-            .expect("string_to_id lock poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         string_to_id.get(s).copied()
     }
 
@@ -260,7 +278,7 @@ impl StringInterner {
         let id_to_string = self
             .id_to_string
             .read()
-            .expect("id_to_string lock poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         id_to_string.get(&id).cloned()
     }
 
@@ -269,7 +287,7 @@ impl StringInterner {
         let id_to_string = self
             .id_to_string
             .read()
-            .expect("id_to_string lock poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         id_to_string
             .iter()
             .map(|(&id, s)| (id, s.clone()))
@@ -280,7 +298,10 @@ impl StringInterner {
     ///
     /// Returns the number of entries cleaned up
     pub fn cleanup(&self) -> usize {
-        let mut strings = self.strings.write().expect("strings lock poisoned");
+        let mut strings = self
+            .strings
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let before = strings.len();
         strings.retain(|_, weak_ref| weak_ref.strong_count() > 0);
         let after = strings.len();
@@ -289,7 +310,10 @@ impl StringInterner {
 
     /// Get current statistics
     pub fn stats(&self) -> InternerStats {
-        self.stats.read().expect("stats lock poisoned").clone()
+        self.stats
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     /// Get the number of unique strings currently stored
@@ -298,9 +322,13 @@ impl StringInterner {
         let id_count = self
             .string_to_id
             .read()
-            .expect("string_to_id lock poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .len();
-        let string_count = self.strings.read().expect("strings lock poisoned").len();
+        let string_count = self
+            .strings
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .len();
         std::cmp::max(id_count, string_count)
     }
 
@@ -308,7 +336,7 @@ impl StringInterner {
     pub fn id_mapping_count(&self) -> usize {
         self.string_to_id
             .read()
-            .expect("string_to_id lock poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .len()
     }
 
@@ -316,7 +344,7 @@ impl StringInterner {
     pub fn is_empty(&self) -> bool {
         self.strings
             .read()
-            .expect("strings lock poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .is_empty()
     }
 
@@ -328,7 +356,10 @@ impl StringInterner {
 
         // First pass: collect existing strings with read lock
         {
-            let string_map = self.strings.read().expect("strings lock poisoned");
+            let string_map = self
+                .strings
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             for &s in strings {
                 if let Some(weak_ref) = string_map.get(s) {
                     if let Some(arc_str) = weak_ref.upgrade() {
@@ -343,8 +374,14 @@ impl StringInterner {
 
         // Second pass: create missing strings with write lock
         if !to_create.is_empty() {
-            let mut string_map = self.strings.write().expect("strings lock poisoned");
-            let mut stats = self.stats.write().expect("stats lock poisoned");
+            let mut string_map = self
+                .strings
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut stats = self
+                .stats
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
 
             for (index, s) in to_create {
                 // Double-check in case another thread added it
@@ -381,13 +418,20 @@ impl StringInterner {
 
     /// Get memory usage statistics for performance monitoring
     pub fn memory_usage(&self) -> MemoryUsage {
-        let string_map_size = self.strings.read().expect("strings lock poisoned").len();
+        let string_map_size = self
+            .strings
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .len();
         let id_map_size = self
             .string_to_id
             .read()
-            .expect("string_to_id lock poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .len();
-        let stats = self.stats.read().expect("stats lock poisoned");
+        let stats = self
+            .stats
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         MemoryUsage {
             interned_strings: string_map_size,
@@ -451,7 +495,10 @@ impl StringInterner {
 
         // Get current sizes
         let current_size = {
-            let strings = self.strings.read().expect("strings lock poisoned");
+            let strings = self
+                .strings
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             strings.len()
         };
 
@@ -459,15 +506,18 @@ impl StringInterner {
         let optimal_capacity = ((current_size as f64 * 1.3) as usize).max(1024);
 
         {
-            let mut strings = self.strings.write().expect("strings lock poisoned");
+            let mut strings = self
+                .strings
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut string_to_id = self
                 .string_to_id
                 .write()
-                .expect("string_to_id lock poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut id_to_string = self
                 .id_to_string
                 .write()
-                .expect("id_to_string lock poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
 
             // Create new maps with optimal capacity
             let mut new_strings = HashMap::with_capacity(optimal_capacity);
@@ -498,7 +548,10 @@ impl StringInterner {
 
         // Update stats
         {
-            let mut stats = self.stats.write().expect("stats lock poisoned");
+            let mut stats = self
+                .stats
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             stats.total_strings_stored = current_size;
         }
 
@@ -523,21 +576,31 @@ impl std::fmt::Debug for StringInterner {
         f.debug_struct("StringInterner")
             .field(
                 "strings_count",
-                &self.strings.read().expect("strings lock poisoned").len(),
+                &self
+                    .strings
+                    .read()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .len(),
             )
             .field(
                 "id_mappings_count",
                 &self
                     .string_to_id
                     .read()
-                    .expect("string_to_id lock poisoned")
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .len(),
             )
             .field(
                 "next_id",
                 &self.next_id.load(std::sync::atomic::Ordering::Relaxed),
             )
-            .field("stats", &self.stats.read().expect("stats lock poisoned"))
+            .field(
+                "stats",
+                &self
+                    .stats
+                    .read()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            )
             .finish()
     }
 }
@@ -728,6 +791,27 @@ impl RdfVocabulary for InternedString {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_string_interner_survives_lock_poisoning() {
+        // Regression test: a panic while holding one of the interner's
+        // internal locks from another thread must not permanently disable
+        // it - intern/stats should recover via into_inner() rather than
+        // propagating the poison via `.expect()`.
+        let interner = Arc::new(StringInterner::new());
+
+        let poisoning_interner = interner.clone();
+        let handle = std::thread::spawn(move || {
+            let _guard = poisoning_interner.strings.write().unwrap();
+            panic!("intentionally poison the strings lock");
+        });
+        let _ = handle.join();
+
+        let s = interner.intern("http://example.org/after-poison");
+        assert_eq!(s.as_ref(), "http://example.org/after-poison");
+        let stats = interner.stats();
+        assert!(stats.total_requests >= 1);
+    }
 
     #[test]
     fn test_string_interner_basic() {

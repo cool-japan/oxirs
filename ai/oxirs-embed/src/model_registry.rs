@@ -115,7 +115,6 @@ pub struct ModelRegistry {
     deployments: Arc<RwLock<HashMap<Uuid, ModelDeployment>>>,
     ab_tests: Arc<RwLock<HashMap<Uuid, ABTestConfig>>>,
     performance_history: Arc<RwLock<HashMap<Uuid, Vec<PerformanceMetrics>>>>,
-    #[allow(dead_code)]
     storage_path: PathBuf,
 }
 
@@ -145,6 +144,11 @@ impl ModelRegistry {
             performance_history: Arc::new(RwLock::new(HashMap::new())),
             storage_path,
         }
+    }
+
+    /// Base directory this registry's model artifacts are stored under.
+    pub fn storage_path(&self) -> &std::path::Path {
+        &self.storage_path
     }
 
     /// Register a new model
@@ -500,41 +504,89 @@ impl ModelRegistry {
     }
 }
 
+/// A model, loaded into memory and shared across concurrent callers of
+/// [`ModelServer`].
+type SharedEmbeddingModel = Arc<Box<dyn EmbeddingModel>>;
+
+/// Registry of in-memory models, keyed by version ID, backing
+/// [`ModelServer::loaded_models`].
+type LoadedModelMap = Arc<RwLock<HashMap<Uuid, SharedEmbeddingModel>>>;
+
 /// Model serving infrastructure
 pub struct ModelServer {
     registry: Arc<ModelRegistry>,
-    #[allow(dead_code)]
-    loaded_models: Arc<RwLock<HashMap<Uuid, Box<dyn EmbeddingModel>>>>,
+    /// On-disk artifact repository (see [`crate::persistence::ModelRepository`]),
+    /// rooted under the owning [`ModelRegistry`]'s storage path. Artifacts are
+    /// looked up by `version_id.to_string()`; callers must persist a version's
+    /// artifact there (via [`crate::persistence::ModelRepository::save_model`])
+    /// before [`load_model`](Self::load_model) can find it.
+    repository: tokio::sync::Mutex<crate::persistence::ModelRepository>,
+    loaded_models: LoadedModelMap,
     warm_up_cache: Arc<RwLock<HashMap<Uuid, Vec<String>>>>,
 }
 
 impl ModelServer {
-    pub fn new(registry: Arc<ModelRegistry>) -> Self {
-        Self {
+    /// Create a new model server backed by an on-disk artifact repository
+    /// rooted at `registry`'s storage path.
+    pub fn new(registry: Arc<ModelRegistry>) -> Result<Self> {
+        let repo_path = registry.storage_path().join("artifacts");
+        let repository = crate::persistence::ModelRepository::new(&repo_path)?;
+        Ok(Self {
             registry,
+            repository: tokio::sync::Mutex::new(repository),
             loaded_models: Arc::new(RwLock::new(HashMap::new())),
             warm_up_cache: Arc::new(RwLock::new(HashMap::new())),
-        }
+        })
     }
 
-    /// Load model into memory
-    pub async fn load_model(&self, _version_id: Uuid) -> Result<()> {
-        // In real implementation, this would load the actual model
-        // For now, we just mark it as loaded
+    /// Load a model version into memory from the on-disk artifact repository.
+    ///
+    /// Looks up the artifact previously saved under the key
+    /// `version_id.to_string()` and caches the reconstructed model for
+    /// subsequent [`get_model`](Self::get_model) calls. Returns an error if no
+    /// artifact has been saved for this version yet.
+    pub async fn load_model(&self, version_id: Uuid) -> Result<()> {
+        let model = {
+            let repo = self.repository.lock().await;
+            repo.load_model(&version_id.to_string())?
+        };
+        self.loaded_models
+            .write()
+            .await
+            .insert(version_id, Arc::new(model));
         Ok(())
     }
 
-    /// Warm up model with sample inputs
+    /// Warm up model with sample inputs.
+    ///
+    /// If the model is already loaded, actually runs `encode` over the
+    /// samples once so its internal caches are genuinely primed; otherwise
+    /// the samples are recorded for a future load.
     pub async fn warm_up_model(&self, version_id: Uuid, samples: Vec<String>) -> Result<()> {
-        self.warm_up_cache.write().await.insert(version_id, samples);
+        self.warm_up_cache
+            .write()
+            .await
+            .insert(version_id, samples.clone());
 
-        // In real implementation, run inference on samples to warm up caches
+        if let Some(model) = self.loaded_models.read().await.get(&version_id).cloned() {
+            model.encode(&samples).await?;
+        }
+
         Ok(())
     }
 
-    /// Get model for inference
-    pub async fn get_model(&self, _version_id: Uuid) -> Result<Arc<Box<dyn EmbeddingModel>>> {
-        Err(anyhow!("Model loading not implemented"))
+    /// Get a previously loaded model for inference. Returns an error if
+    /// [`load_model`](Self::load_model) has not been called successfully for
+    /// this version.
+    pub async fn get_model(&self, version_id: Uuid) -> Result<SharedEmbeddingModel> {
+        self.loaded_models
+            .read()
+            .await
+            .get(&version_id)
+            .cloned()
+            .ok_or_else(|| {
+                anyhow!("Model version {version_id} is not loaded; call load_model first")
+            })
     }
 
     /// Route request based on A/B test
@@ -686,5 +738,58 @@ mod tests {
 
         let active_tests = registry.get_active_ab_tests().await;
         assert_eq!(active_tests.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_model_server_get_model_before_load_errors() {
+        let temp_dir = tempdir().expect("should succeed");
+        let registry = Arc::new(ModelRegistry::new(temp_dir.path().to_path_buf()));
+        let server = ModelServer::new(registry).expect("server should construct");
+
+        let result = server.get_model(Uuid::new_v4()).await;
+        assert!(result.is_err(), "expected error before load_model");
+    }
+
+    #[tokio::test]
+    async fn test_model_server_load_model_missing_artifact_errors() {
+        let temp_dir = tempdir().expect("should succeed");
+        let registry = Arc::new(ModelRegistry::new(temp_dir.path().to_path_buf()));
+        let server = ModelServer::new(registry).expect("server should construct");
+
+        let result = server.load_model(Uuid::new_v4()).await;
+        assert!(
+            result.is_err(),
+            "expected an error when no artifact has been saved for this version"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_model_server_load_and_get_model_round_trip() {
+        let temp_dir = tempdir().expect("should succeed");
+        let registry_path = temp_dir.path().to_path_buf();
+        let version_id = Uuid::new_v4();
+
+        // Seed the artifact repository directly (as a real persistence layer
+        // would after training) before the server ever starts.
+        let artifacts_path = registry_path.join("artifacts");
+        let mut seed_repo =
+            crate::persistence::ModelRepository::new(&artifacts_path).expect("repo should open");
+        let model = crate::models::TransE::new(ModelConfig::default());
+        seed_repo
+            .save_model(&model, &version_id.to_string(), None)
+            .expect("save should succeed");
+
+        let registry = Arc::new(ModelRegistry::new(registry_path));
+        let server = ModelServer::new(registry).expect("server should construct");
+
+        server
+            .load_model(version_id)
+            .await
+            .expect("load should succeed");
+        let loaded = server
+            .get_model(version_id)
+            .await
+            .expect("get should succeed");
+        assert_eq!(loaded.model_type(), "TransE");
     }
 }

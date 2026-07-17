@@ -721,6 +721,11 @@ impl MmapStore {
         })?;
 
         data_file.flush()?;
+        // Force the appended quad data and updated header out to durable
+        // storage. `flush()` only drains the userspace buffer (a no-op for
+        // `std::fs::File`); `sync_all()` is what actually makes the append-only
+        // writes crash-safe, as promised by this module's documentation.
+        data_file.sync_all()?;
         buffer.clear();
         self.update_mmap()?;
 
@@ -1154,11 +1159,11 @@ impl MmapStore {
 
         let deleted_count = self.deleted_quads.read().len();
         if deleted_count == 0 {
+            // Persist the term interner; a failure here means the on-disk term
+            // dictionary would drift from the data file, so surface it rather
+            // than swallowing it.
             let term_path = self.path.join("terms.oxirs");
-            if let Err(e) = self.term_interner.read().save(&term_path) {
-                eprintln!("Warning: Failed to save term interner during compaction: {e}");
-            }
-            println!("Compaction completed (no deleted entries)");
+            self.term_interner.read().save(&term_path)?;
             return Ok(());
         }
 
@@ -1230,10 +1235,11 @@ impl MmapStore {
         temp_data_file.flush()?;
         temp_data_file.sync_all()?;
 
+        // Persist the term interner alongside the compacted data file; a
+        // failure here would leave the term dictionary inconsistent with the
+        // rewritten data, so propagate it instead of swallowing it.
         let term_path = self.path.join("terms.oxirs");
-        if let Err(e) = self.term_interner.read().save(&term_path) {
-            eprintln!("Warning: Failed to save term interner during compaction: {e}");
-        }
+        self.term_interner.read().save(&term_path)?;
 
         let data_path = self.path.join("data.oxirs");
 

@@ -1,7 +1,6 @@
 //! RDF Triple representation with encoded NodeIds
 
 use crate::dictionary::NodeId;
-use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -88,6 +87,44 @@ impl From<Triple> for OspKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct EmptyValue;
 
+/// Compute an inclusive-start / exclusive-end key-component range that bounds
+/// the longest leading run of *specified* (`Some`) components of an index whose
+/// key order is `components` (already reordered into the index's own ordering).
+///
+/// The returned arrays are the raw component tuples for the start and end keys.
+/// Any interior or trailing wildcards (a `None` after the leading run, or bound
+/// components that follow a wildcard) are left for the caller to apply as a
+/// residual filter. Returns `(None, None)` when the very first component is a
+/// wildcard, meaning a full index scan is required.
+///
+/// [`NodeId::NULL`] (`0`) is used as the minimum sentinel for trailing
+/// components; because dictionary ids start at [`NodeId::FIRST`] (`1`), a real
+/// key component is never `0`, so `(v0, .., v_{k-1}, 0, ..)` is a correct
+/// inclusive lower bound and `(v0, .., v_{k-1}.next(), 0, ..)` a correct
+/// exclusive upper bound for the leading prefix `v0..v_{k-1}`.
+pub(crate) fn prefix_bounds<const N: usize>(
+    components: [Option<NodeId>; N],
+) -> (Option<[NodeId; N]>, Option<[NodeId; N]>) {
+    let mut prefix = 0usize;
+    while prefix < N && components[prefix].is_some() {
+        prefix += 1;
+    }
+    if prefix == 0 {
+        return (None, None);
+    }
+
+    let mut start = [NodeId::NULL; N];
+    for (slot, comp) in start.iter_mut().zip(components.iter()).take(prefix) {
+        if let Some(value) = comp {
+            *slot = *value;
+        }
+    }
+
+    let mut end = start;
+    end[prefix - 1] = start[prefix - 1].next();
+    (Some(start), Some(end))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,6 +192,37 @@ mod tests {
 
         assert!(key1 < key2);
         assert!(key2 < key3);
+    }
+
+    #[test]
+    fn test_prefix_bounds_full_prefix() {
+        let (start, end) = prefix_bounds([
+            Some(NodeId::new(3)),
+            Some(NodeId::new(4)),
+            Some(NodeId::new(5)),
+        ]);
+        assert_eq!(
+            start,
+            Some([NodeId::new(3), NodeId::new(4), NodeId::new(5)])
+        );
+        // Exclusive upper bound bumps the last bound component.
+        assert_eq!(end, Some([NodeId::new(3), NodeId::new(4), NodeId::new(6)]));
+    }
+
+    #[test]
+    fn test_prefix_bounds_partial_prefix() {
+        // Only the leading run (s) is bounded; a wildcard breaks the run so the
+        // trailing bound object must be handled by a residual filter.
+        let (start, end) = prefix_bounds([Some(NodeId::new(7)), None, Some(NodeId::new(9))]);
+        assert_eq!(start, Some([NodeId::new(7), NodeId::NULL, NodeId::NULL]));
+        assert_eq!(end, Some([NodeId::new(8), NodeId::NULL, NodeId::NULL]));
+    }
+
+    #[test]
+    fn test_prefix_bounds_full_scan() {
+        let (start, end) = prefix_bounds::<3>([None, None, None]);
+        assert!(start.is_none());
+        assert!(end.is_none());
     }
 
     #[test]

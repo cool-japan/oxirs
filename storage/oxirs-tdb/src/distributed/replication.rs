@@ -50,15 +50,19 @@
 //!
 //! ```rust,no_run
 //! use oxirs_tdb::distributed::replication::{ReplicationManager, ReplicationConfig, ReplicationMode};
+//! use oxirs_tdb::consensus::transport::LoopbackSimulationTransport;
 //!
 //! # async fn example() -> anyhow::Result<()> {
-//! // Create replication manager
+//! // Create replication manager. A real multi-node deployment must supply a
+//! // transport backed by real network I/O; LoopbackSimulationTransport is
+//! // only for single-process tests/local development.
 //! let config = ReplicationConfig {
 //!     mode: ReplicationMode::MasterSlave,
 //!     ..Default::default()
 //! };
 //!
-//! let mut manager = ReplicationManager::new("node1".to_string(), config);
+//! let mut manager =
+//!     ReplicationManager::with_transport("node1".to_string(), config, LoopbackSimulationTransport::arc());
 //!
 //! // Add replicas
 //! manager.add_replica("replica1".to_string(), "http://replica1:8080".to_string()).await?;
@@ -70,6 +74,7 @@
 //! # }
 //! ```
 
+use crate::consensus::transport::NetworkTransport;
 use crate::error::{Result, TdbError};
 use anyhow::Context;
 use chrono::{DateTime, Duration, Utc};
@@ -221,6 +226,12 @@ pub struct ReplicationManager {
     current_lsn: Arc<Mutex<u64>>,
     /// Statistics
     stats: Arc<Mutex<ReplicationStats>>,
+    /// Real (or explicitly-simulated) network transport used to ship changes
+    /// to replicas. `None` means no transport has been configured, in which
+    /// case `replicate_changes()` fails loudly with
+    /// `TdbError::DistributedTransportNotConfigured` instead of counting
+    /// fabricated acknowledgements as successful replication.
+    transport: Option<Arc<dyn NetworkTransport>>,
 }
 
 /// Replication statistics
@@ -247,7 +258,15 @@ pub struct ReplicationStats {
 }
 
 impl ReplicationManager {
-    /// Create a new Replication Manager
+    /// Create a new Replication Manager with no transport configured.
+    ///
+    /// **Note:** `replicate_changes()` on a manager built this way always
+    /// fails with [`TdbError::DistributedTransportNotConfigured`] — there is
+    /// no way to honestly ship changes to replicas without a transport. Use
+    /// [`ReplicationManager::with_transport`] (with a real network-backed
+    /// transport, or
+    /// [`crate::consensus::transport::LoopbackSimulationTransport`] for
+    /// single-node tests) to actually replicate.
     pub fn new(node_id: String, config: ReplicationConfig) -> Self {
         let initial_role = match config.mode {
             ReplicationMode::MasterSlave => ReplicaRole::Master,
@@ -262,7 +281,21 @@ impl ReplicationManager {
             change_buffer: Arc::new(Mutex::new(VecDeque::new())),
             current_lsn: Arc::new(Mutex::new(0)),
             stats: Arc::new(Mutex::new(ReplicationStats::default())),
+            transport: None,
         }
+    }
+
+    /// Create a new Replication Manager backed by a real (or
+    /// explicitly-simulated) [`NetworkTransport`]. This is the constructor
+    /// production code should use.
+    pub fn with_transport(
+        node_id: String,
+        config: ReplicationConfig,
+        transport: Arc<dyn NetworkTransport>,
+    ) -> Self {
+        let mut manager = Self::new(node_id, config);
+        manager.transport = Some(transport);
+        manager
     }
 
     /// Add a replica node
@@ -334,6 +367,13 @@ impl ReplicationManager {
 
     /// Replicate changes to all replicas
     pub async fn replicate_changes(&mut self, changes: Vec<ReplicationChange>) -> Result<()> {
+        if self.transport.is_none() {
+            return Err(TdbError::DistributedTransportNotConfigured {
+                node_id: self.node_id.clone(),
+                protocol: "Replication".to_string(),
+            });
+        }
+
         let start_time = Utc::now();
 
         match self.config.sync_mode {
@@ -423,17 +463,23 @@ impl ReplicationManager {
         Ok(())
     }
 
-    /// Send changes to a specific replica (simulated)
+    /// Send changes to a specific replica over the configured
+    /// `NetworkTransport`.
     async fn send_changes_to_replica(
         &self,
-        _node_id: &str,
-        _changes: &[ReplicationChange],
+        node_id: &str,
+        changes: &[ReplicationChange],
     ) -> Result<()> {
-        // Future enhancement: Implement actual network communication (gRPC/HTTP/TCP).
-        // For v0.1.0: Simulated replication allows testing of replication logic locally.
-        // The complete replication protocol and conflict resolution are fully implemented.
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        Ok(())
+        let transport =
+            self.transport
+                .as_ref()
+                .ok_or_else(|| TdbError::DistributedTransportNotConfigured {
+                    node_id: self.node_id.clone(),
+                    protocol: "Replication".to_string(),
+                })?;
+        let payload = oxicode::serde::encode_to_vec(&changes.to_vec(), oxicode::config::standard())
+            .map_err(|e| TdbError::Serialization(e.to_string()))?;
+        transport.send_replication_changes(node_id, &payload).await
     }
 
     /// Check replica health and update status
@@ -576,7 +622,11 @@ mod tests {
     #[tokio::test]
     async fn test_replication_manager_creation() {
         let config = ReplicationConfig::default();
-        let manager = ReplicationManager::new("node1".to_string(), config);
+        let manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         assert_eq!(manager.node_id(), "node1");
         assert_eq!(manager.role(), ReplicaRole::Master);
@@ -584,9 +634,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_add_replicas() {
+    async fn test_replicate_changes_without_transport_fails_loudly() {
+        // Regression test for the fabricated-replication-ack bug: without a
+        // NetworkTransport, replicate_changes() must never report
+        // successful_replications for acks that never happened.
         let config = ReplicationConfig::default();
         let mut manager = ReplicationManager::new("node1".to_string(), config);
+        manager
+            .add_replica("replica1".to_string(), "http://replica1:8080".to_string())
+            .await
+            .unwrap();
+
+        let changes = vec![ReplicationChange {
+            lsn: 1,
+            txn_id: "txn-1".to_string(),
+            timestamp: Utc::now(),
+            data: vec![1, 2, 3],
+            source_node: "node1".to_string(),
+        }];
+
+        let err = manager.replicate_changes(changes).await.unwrap_err();
+        assert!(matches!(
+            err,
+            TdbError::DistributedTransportNotConfigured { .. }
+        ));
+        assert_eq!(manager.stats().successful_replications, 0);
+    }
+
+    #[tokio::test]
+    async fn test_add_replicas() {
+        let config = ReplicationConfig::default();
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         manager
             .add_replica("replica1".to_string(), "http://replica1:8080".to_string())
@@ -604,7 +686,11 @@ mod tests {
     #[tokio::test]
     async fn test_record_change() {
         let config = ReplicationConfig::default();
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         let lsn = manager
             .record_change("txn-001".to_string(), vec![1, 2, 3, 4])
@@ -626,7 +712,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         manager
             .add_replica("replica1".to_string(), "http://replica1:8080".to_string())
@@ -654,7 +744,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         manager
             .add_replica("replica1".to_string(), "http://replica1:8080".to_string())
@@ -687,7 +781,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         manager
             .add_replica("replica1".to_string(), "http://replica1:8080".to_string())
@@ -711,7 +809,11 @@ mod tests {
     #[tokio::test]
     async fn test_promote_to_master() {
         let config = ReplicationConfig::default();
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         manager
             .add_replica("replica1".to_string(), "http://replica1:8080".to_string())
@@ -732,7 +834,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         let change1 = ReplicationChange {
             lsn: 1,
@@ -770,7 +876,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         let change1 = ReplicationChange {
             lsn: 1,
@@ -803,7 +913,11 @@ mod tests {
             ..Default::default()
         };
 
-        let manager = ReplicationManager::new("node1".to_string(), config);
+        let manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         manager.replicas.write().insert(
             "replica1".to_string(),
@@ -833,7 +947,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         // Add 5 changes (buffer size is 3)
         for i in 0..5 {
@@ -850,7 +968,11 @@ mod tests {
     #[tokio::test]
     async fn test_replication_stats() {
         let config = ReplicationConfig::default();
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         manager
             .add_replica("replica1".to_string(), "http://replica1:8080".to_string())
@@ -873,7 +995,11 @@ mod tests {
     #[tokio::test]
     async fn test_remove_replica() {
         let config = ReplicationConfig::default();
-        let mut manager = ReplicationManager::new("node1".to_string(), config);
+        let mut manager = ReplicationManager::with_transport(
+            "node1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         manager
             .add_replica("replica1".to_string(), "http://replica1:8080".to_string())

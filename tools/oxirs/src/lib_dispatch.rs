@@ -77,7 +77,26 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             format,
             graph,
             resume,
-        } => crate::commands::import::run(dataset, file, format, graph, resume)
+            max_file_size,
+            dataset_type,
+        } => crate::commands::import::run(
+            dataset,
+            file,
+            format,
+            graph,
+            resume,
+            Some(max_file_size),
+            dataset_type,
+        )
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+        Commands::Batch {
+            dataset,
+            files,
+            format,
+            graph,
+            parallel,
+        } => crate::commands::batch::import_batch(dataset, files, format, graph, parallel)
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Export {

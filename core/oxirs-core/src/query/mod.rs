@@ -535,7 +535,9 @@ impl QueryEngine {
             TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
             TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
             TermPattern::QuotedTriple(_) => {
-                panic!("RDF-star quoted triples not yet fully supported in query module")
+                return Err(OxirsError::Query(
+                    "RDF-star quoted triples are not yet supported as object patterns in the query module".to_string(),
+                ));
             }
         };
 

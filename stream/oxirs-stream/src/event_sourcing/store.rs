@@ -9,11 +9,14 @@ use super::{
 use crate::{EventMetadata, StreamEvent};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use serde::de::DeserializeOwned;
 use std::collections::VecDeque;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -65,22 +68,68 @@ pub struct PersistenceManager {
 }
 
 impl EventStore {
-    /// Create a new event store
-    pub fn new(config: EventStoreConfig) -> Self {
+    /// Create a new event store.
+    ///
+    /// This is fallible because construction may need to create the on-disk
+    /// persistence directory (fail-fast if that isn't possible) and loads any
+    /// previously persisted events/snapshots back into memory ("load-on-open")
+    /// so a restart never silently drops durable history.
+    pub async fn new(config: EventStoreConfig) -> Result<Self> {
         let persistence_manager =
-            Arc::new(PersistenceManager::new(config.persistence_backend.clone()));
+            Arc::new(PersistenceManager::new(config.persistence_backend.clone())?);
 
-        Self {
+        let memory_events = Arc::new(RwLock::new(BTreeMap::new()));
+        let stream_versions = Arc::new(RwLock::new(HashMap::new()));
+        let indexes = Arc::new(EventIndexes::new());
+        let snapshots = Arc::new(RwLock::new(HashMap::new()));
+        let next_sequence = Arc::new(AtomicU64::new(1));
+
+        // Load-on-open: recover previously persisted events so eviction never
+        // has to guess whether history already made it to durable storage.
+        let loaded_events = persistence_manager.load_persisted_events().await?;
+        let mut max_sequence = 0u64;
+        {
+            let mut mem = memory_events.write().await;
+            let mut versions = stream_versions.write().await;
+            for mut event in loaded_events {
+                // These records came from durable storage, so they are safe to evict again.
+                event.storage_metadata.persistence_status = PersistenceStatus::Persisted;
+                max_sequence = max_sequence.max(event.sequence_number);
+                let version_slot = versions.entry(event.stream_id.clone()).or_insert(0);
+                if event.stream_version > *version_slot {
+                    *version_slot = event.stream_version;
+                }
+                indexes.add_event(&event).await?;
+                mem.insert(event.sequence_number, event);
+            }
+        }
+        next_sequence.store(max_sequence + 1, Ordering::SeqCst);
+
+        let loaded_snapshots = persistence_manager.load_persisted_snapshots().await?;
+        {
+            let mut snapshot_map = snapshots.write().await;
+            for snapshot in loaded_snapshots {
+                snapshot_map
+                    .entry(snapshot.stream_id.clone())
+                    .or_insert_with(Vec::new)
+                    .push(snapshot);
+            }
+            for stream_snapshots in snapshot_map.values_mut() {
+                stream_snapshots.sort_by_key(|s| s.stream_version);
+            }
+        }
+
+        Ok(Self {
             config,
-            memory_events: Arc::new(RwLock::new(BTreeMap::new())),
-            stream_versions: Arc::new(RwLock::new(HashMap::new())),
-            next_sequence: Arc::new(AtomicU64::new(1)),
-            indexes: Arc::new(EventIndexes::new()),
-            snapshots: Arc::new(RwLock::new(HashMap::new())),
+            memory_events,
+            stream_versions,
+            next_sequence,
+            indexes,
+            snapshots,
             persistence_manager,
             stats: Arc::new(EventSourcingStats::default()),
             operation_semaphore: Arc::new(Semaphore::new(1000)), // Max 1000 concurrent operations
-        }
+        })
     }
 
     /// Store an event in the event store
@@ -100,7 +149,7 @@ impl EventStore {
         // Create stored event
         let checksum = self.calculate_checksum(&event)?;
         let original_size = self.estimate_size(&event);
-        let stored_event = StoredEvent {
+        let mut stored_event = StoredEvent {
             event_id: Uuid::new_v4(),
             sequence_number,
             stream_id: stream_id.clone(),
@@ -120,31 +169,64 @@ impl EventStore {
         {
             let mut memory_events = self.memory_events.write().await;
             memory_events.insert(sequence_number, stored_event.clone());
-
-            // Evict old events if needed
-            if memory_events.len() > self.config.max_memory_events {
-                let to_remove: Vec<u64> = memory_events
-                    .keys()
-                    .take(memory_events.len() - self.config.max_memory_events)
-                    .cloned()
-                    .collect();
-
-                for seq in to_remove {
-                    memory_events.remove(&seq);
-                }
-            }
         }
 
         // Update indexes
         self.indexes.add_event(&stored_event).await?;
 
-        // Queue for persistence if enabled
-        if self.config.enable_persistence {
-            self.persistence_manager
-                .queue_operation(PersistenceOperation::StoreEvent(Box::new(
-                    stored_event.clone(),
-                )))
-                .await?;
+        // Persist synchronously (not just queued) so we know the true durability
+        // status of this event before it can ever be considered for eviction.
+        if self.config.enable_persistence && self.persistence_manager.is_durable() {
+            match self.persistence_manager.persist_event(&stored_event).await {
+                Ok(()) => {
+                    stored_event.storage_metadata.persistence_status = PersistenceStatus::Persisted;
+                    self.stats
+                        .persistence_operations
+                        .fetch_add(1, Ordering::Relaxed);
+                    let mut memory_events = self.memory_events.write().await;
+                    if let Some(entry) = memory_events.get_mut(&sequence_number) {
+                        entry.storage_metadata.persistence_status = PersistenceStatus::Persisted;
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to persist event {} for stream {}: {}",
+                        stored_event.event_id, stream_id, e
+                    );
+                    stored_event.storage_metadata.persistence_status = PersistenceStatus::Failed {
+                        error: e.to_string(),
+                    };
+                    self.stats.failed_operations.fetch_add(1, Ordering::Relaxed);
+                    let mut memory_events = self.memory_events.write().await;
+                    if let Some(entry) = memory_events.get_mut(&sequence_number) {
+                        entry.storage_metadata.persistence_status = PersistenceStatus::Failed {
+                            error: e.to_string(),
+                        };
+                    }
+                }
+            }
+        }
+
+        // Evict old events, but only ones that are safe to lose from memory:
+        // either persistence isn't expected for this store (Memory backend or
+        // persistence disabled), or the event has actually made it to durable
+        // storage. Events still pending/failed persistence are never evicted,
+        // so "persisted" eviction never silently discards undurable data.
+        {
+            let mut memory_events = self.memory_events.write().await;
+            if memory_events.len() > self.config.max_memory_events {
+                let overflow = memory_events.len() - self.config.max_memory_events;
+                let evictable: Vec<u64> = memory_events
+                    .iter()
+                    .filter(|(_, event)| self.can_evict(event))
+                    .map(|(seq, _)| *seq)
+                    .take(overflow)
+                    .collect();
+
+                for seq in evictable {
+                    memory_events.remove(&seq);
+                }
+            }
         }
 
         // Check if snapshot is needed
@@ -300,11 +382,15 @@ impl EventStore {
             }
         }
 
-        // Queue for persistence
-        if self.config.enable_persistence {
+        // Persist the snapshot synchronously; a snapshot write failure is a real
+        // error the caller needs to know about rather than a silently dropped write.
+        if self.config.enable_persistence && self.persistence_manager.is_durable() {
             self.persistence_manager
-                .queue_operation(PersistenceOperation::StoreSnapshot(snapshot.clone()))
-                .await?;
+                .persist_snapshot(&snapshot)
+                .await
+                .map_err(|e| {
+                    anyhow::anyhow!("Failed to persist snapshot for stream {stream_id}: {e}")
+                })?;
         }
 
         self.stats.snapshots_created.fetch_add(1, Ordering::Relaxed);
@@ -350,6 +436,21 @@ impl EventStore {
             let aggregated = self.aggregate_events(&events)?;
             Ok(aggregated)
         }
+    }
+
+    /// Whether an in-memory event is safe to evict: either this store never
+    /// promised durability for it (persistence disabled, or a non-durable
+    /// backend such as `Memory`), or it has actually been written to durable
+    /// storage. Events that are still pending or failed persistence are kept
+    /// in memory so eviction can never silently discard undurable data.
+    fn can_evict(&self, event: &StoredEvent) -> bool {
+        if !self.config.enable_persistence || !self.persistence_manager.is_durable() {
+            return true;
+        }
+        matches!(
+            event.storage_metadata.persistence_status,
+            PersistenceStatus::Persisted | PersistenceStatus::Archived
+        )
     }
 
     /// Check if an event matches the query criteria
@@ -652,16 +753,162 @@ impl EventIndexes {
 }
 
 impl PersistenceManager {
-    /// Create new persistence manager
-    pub fn new(backend: PersistenceBackend) -> Self {
-        Self {
+    /// Create new persistence manager.
+    ///
+    /// For the `FileSystem` backend this eagerly creates the base directory so
+    /// construction fails fast (rather than failing later, silently, on the
+    /// first write) if the path is unusable.
+    pub fn new(backend: PersistenceBackend) -> Result<Self> {
+        if let PersistenceBackend::FileSystem { base_path } = &backend {
+            std::fs::create_dir_all(base_path).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to create event store persistence directory '{base_path}': {e}"
+                )
+            })?;
+        }
+
+        Ok(Self {
             backend,
             pending_operations: Arc::new(Mutex::new(VecDeque::new())),
             stats: Arc::new(PersistenceStats::default()),
+        })
+    }
+
+    /// Whether this backend actually durably persists data. `Memory` is an
+    /// explicit "no persistence" backend, so events stored under it were never
+    /// expected to survive a restart or be excluded from eviction.
+    pub fn is_durable(&self) -> bool {
+        matches!(self.backend, PersistenceBackend::FileSystem { .. })
+    }
+
+    /// Persist a single event immediately (append-only JSON-lines write with
+    /// an fsync before returning), so the caller knows for certain whether the
+    /// event actually reached durable storage.
+    pub async fn persist_event(&self, event: &StoredEvent) -> Result<()> {
+        match &self.backend {
+            PersistenceBackend::Memory => Ok(()),
+            PersistenceBackend::FileSystem { base_path } => {
+                let line = serde_json::to_string(event)?;
+                self.append_jsonl(base_path, "events.jsonl", line).await
+            }
+            PersistenceBackend::Database { .. } | PersistenceBackend::ObjectStorage { .. } => {
+                Err(anyhow::anyhow!(
+                    "Persistence backend {:?} is not implemented; use FileSystem or Memory",
+                    self.backend
+                ))
+            }
         }
     }
 
-    /// Queue a persistence operation
+    /// Persist a snapshot immediately (append-only JSON-lines write with an
+    /// fsync before returning).
+    pub async fn persist_snapshot(&self, snapshot: &EventSnapshot) -> Result<()> {
+        match &self.backend {
+            PersistenceBackend::Memory => Ok(()),
+            PersistenceBackend::FileSystem { base_path } => {
+                let line = serde_json::to_string(snapshot)?;
+                self.append_jsonl(base_path, "snapshots.jsonl", line).await
+            }
+            PersistenceBackend::Database { .. } | PersistenceBackend::ObjectStorage { .. } => {
+                Err(anyhow::anyhow!(
+                    "Persistence backend {:?} is not implemented; use FileSystem or Memory",
+                    self.backend
+                ))
+            }
+        }
+    }
+
+    /// Load all previously persisted events (load-on-open recovery).
+    pub async fn load_persisted_events(&self) -> Result<Vec<StoredEvent>> {
+        match &self.backend {
+            PersistenceBackend::FileSystem { base_path } => {
+                let path = Path::new(base_path).join("events.jsonl");
+                Self::read_jsonl(&path).await
+            }
+            _ => Ok(Vec::new()),
+        }
+    }
+
+    /// Load all previously persisted snapshots (load-on-open recovery).
+    pub async fn load_persisted_snapshots(&self) -> Result<Vec<EventSnapshot>> {
+        match &self.backend {
+            PersistenceBackend::FileSystem { base_path } => {
+                let path = Path::new(base_path).join("snapshots.jsonl");
+                Self::read_jsonl(&path).await
+            }
+            _ => Ok(Vec::new()),
+        }
+    }
+
+    /// Append one JSON-line record to `base_path/file_name`, fsync-ing before
+    /// returning so a successful result is a durability guarantee.
+    async fn append_jsonl(&self, base_path: &str, file_name: &str, line: String) -> Result<()> {
+        let path = Path::new(base_path).join(file_name);
+        let mut file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to open persistence file '{}': {e}", path.display())
+            })?;
+        file.write_all(line.as_bytes()).await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to write to persistence file '{}': {e}",
+                path.display()
+            )
+        })?;
+        file.write_all(b"\n").await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to write to persistence file '{}': {e}",
+                path.display()
+            )
+        })?;
+        file.flush()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to flush '{}': {e}", path.display()))?;
+        file.sync_data()
+            .await
+            .map_err(|e| anyhow::anyhow!("fsync failed for '{}': {e}", path.display()))?;
+
+        self.stats
+            .bytes_written
+            .fetch_add(line.len() as u64 + 1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    /// Read and parse a JSON-lines file, skipping (and logging) any corrupt
+    /// records instead of failing the whole load.
+    async fn read_jsonl<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>> {
+        if !tokio::fs::try_exists(path).await.unwrap_or(false) {
+            return Ok(Vec::new());
+        }
+
+        let content = tokio::fs::read_to_string(path)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read '{}': {e}", path.display()))?;
+
+        let mut items = Vec::new();
+        for (line_no, line) in content.lines().enumerate() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<T>(line) {
+                Ok(item) => items.push(item),
+                Err(e) => warn!(
+                    "Skipping corrupt persisted record at {}:{}: {e}",
+                    path.display(),
+                    line_no + 1
+                ),
+            }
+        }
+        Ok(items)
+    }
+
+    /// Queue a persistence operation for later batch processing (used for
+    /// archival/deletion bookkeeping; regular event/snapshot writes go through
+    /// [`Self::persist_event`]/[`Self::persist_snapshot`] synchronously).
     pub async fn queue_operation(&self, operation: PersistenceOperation) -> Result<()> {
         let mut queue = self.pending_operations.lock().await;
         queue.push_back(operation);
@@ -693,21 +940,19 @@ impl PersistenceManager {
         Ok(())
     }
 
-    /// Execute a single persistence operation
+    /// Execute a single queued persistence operation
     async fn execute_operation(&self, operation: PersistenceOperation) -> Result<()> {
         match &self.backend {
-            PersistenceBackend::Memory => {
-                // No-op for memory backend
-                Ok(())
-            }
+            PersistenceBackend::Memory => Ok(()),
             PersistenceBackend::FileSystem { base_path } => {
                 self.execute_filesystem_operation(operation, base_path)
                     .await
             }
-            _ => {
-                // Other backends not implemented in this example
-                warn!("Persistence backend not implemented: {:?}", self.backend);
-                Ok(())
+            PersistenceBackend::Database { .. } | PersistenceBackend::ObjectStorage { .. } => {
+                Err(anyhow::anyhow!(
+                    "Persistence backend {:?} is not implemented; use FileSystem or Memory",
+                    self.backend
+                ))
             }
         }
     }
@@ -716,21 +961,28 @@ impl PersistenceManager {
     async fn execute_filesystem_operation(
         &self,
         operation: PersistenceOperation,
-        _base_path: &str,
+        base_path: &str,
     ) -> Result<()> {
         match operation {
-            PersistenceOperation::StoreEvent(_event) => {
-                // Simulate file write
-                tokio::time::sleep(Duration::from_millis(1)).await;
-                self.stats.bytes_written.fetch_add(1024, Ordering::Relaxed);
+            PersistenceOperation::StoreEvent(event) => {
+                let line = serde_json::to_string(&*event)?;
+                self.append_jsonl(base_path, "events.jsonl", line).await?;
             }
-            PersistenceOperation::StoreSnapshot(_snapshot) => {
-                // Simulate snapshot write
-                tokio::time::sleep(Duration::from_millis(5)).await;
-                self.stats.bytes_written.fetch_add(10240, Ordering::Relaxed);
+            PersistenceOperation::StoreSnapshot(snapshot) => {
+                let line = serde_json::to_string(&snapshot)?;
+                self.append_jsonl(base_path, "snapshots.jsonl", line)
+                    .await?;
             }
-            _ => {
-                // Other operations
+            PersistenceOperation::ArchiveEvents(events) => {
+                for event in &events {
+                    let line = serde_json::to_string(event)?;
+                    self.append_jsonl(base_path, "archive.jsonl", line).await?;
+                }
+            }
+            PersistenceOperation::DeleteEvents(sequence_numbers) => {
+                let line = serde_json::to_string(&sequence_numbers)?;
+                self.append_jsonl(base_path, "deletions.jsonl", line)
+                    .await?;
             }
         }
         Ok(())

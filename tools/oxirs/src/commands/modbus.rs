@@ -1,18 +1,26 @@
 //! Modbus protocol CLI commands
 //!
 //! Provides CLI commands for:
-//! - Monitoring Modbus TCP/RTU devices
-//! - Reading and writing registers
-//! - Converting Modbus data to RDF triples
-//! - Running mock Modbus servers for testing
-
-#![allow(dead_code)] // Stub implementations for Phase D
+//! - Monitoring Modbus TCP devices (real network I/O via `oxirs_modbus`)
+//! - Reading and writing holding registers over TCP
+//! - Running a real mock Modbus TCP server for testing
+//!
+//! Modbus RTU (serial) and CAN/register-to-RDF generation are not yet wired
+//! into the CLI (RTU would require enabling `oxirs-modbus`'s `rtu` feature,
+//! which pulls in the `tokio-serial` -> `serialport` C/udev dependency chain
+//! that the COOLJAPAN Pure-Rust default-build policy keeps out of the
+//! default build); those commands fail loudly with an explicit error rather
+//! than silently reporting fake success.
 
 use crate::cli::CliContext;
 use crate::cli_actions::ModbusAction;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use colored::Colorize;
+use oxirs_modbus::protocol::ModbusTcpClient;
+use oxirs_modbus::testing::MockModbusServer;
+use std::io::Write as _;
 use std::path::PathBuf;
+use std::time::Duration;
 
 /// Execute Modbus command
 pub async fn execute(action: ModbusAction, _ctx: &CliContext) -> Result<()> {
@@ -26,14 +34,14 @@ pub async fn execute(action: ModbusAction, _ctx: &CliContext) -> Result<()> {
             format,
             output,
         } => monitor_tcp_command(address, unit_id, start, count, interval, format, output).await,
-        ModbusAction::MonitorRtu {
-            port,
-            baud,
-            unit_id,
-            start,
-            count,
-            interval,
-        } => monitor_rtu_command(port, baud, unit_id, start, count, interval).await,
+        ModbusAction::MonitorRtu { .. } => {
+            anyhow::bail!(
+                "`oxirs modbus monitor-rtu` is not yet supported: RTU (serial) support \
+                 requires enabling oxirs-modbus's `rtu` feature, which pulls in a \
+                 C/udev serial-port dependency chain kept out of the default Pure-Rust \
+                 build. Use `monitor-tcp` against a Modbus TCP gateway instead."
+            )
+        }
         ModbusAction::Read {
             device,
             register_type,
@@ -47,14 +55,89 @@ pub async fn execute(action: ModbusAction, _ctx: &CliContext) -> Result<()> {
             value,
             datatype,
         } => write_command(device, address, value, datatype).await,
-        ModbusAction::ToRdf {
-            device,
-            config,
-            output,
-            format,
-            count,
-        } => to_rdf_command(device, config, output, format, count).await,
+        ModbusAction::ToRdf { .. } => {
+            anyhow::bail!(
+                "`oxirs modbus to-rdf` is not yet wired into the CLI: register-map \
+                 configuration parsing and RDF/PROV-O triple generation from live \
+                 readings have not been implemented in this pass."
+            )
+        }
         ModbusAction::MockServer { port, config } => mock_server_command(port, config).await,
+    }
+}
+
+/// Connect a real `ModbusTcpClient` to `device`, reporting a clear error if
+/// the address cannot be reached.
+async fn connect_tcp(device: &str, unit_id: u8) -> Result<ModbusTcpClient> {
+    ModbusTcpClient::connect(device, unit_id)
+        .await
+        .with_context(|| format!("Failed to connect to Modbus TCP device at {device}"))
+}
+
+/// Read `count` registers of `register_type` starting at `address` and
+/// return them as raw `u16` values.
+async fn read_registers(
+    client: &mut ModbusTcpClient,
+    register_type: &str,
+    address: u16,
+    count: u16,
+) -> Result<Vec<u16>> {
+    match register_type.to_lowercase().as_str() {
+        "holding" => client
+            .read_holding_registers(address, count)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read holding registers: {e}")),
+        "input" => client
+            .read_input_registers(address, count)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read input registers: {e}")),
+        "coil" => {
+            let bits = client
+                .read_coils(address, count)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to read coils: {e}"))?;
+            Ok(bits.into_iter().map(u16::from).collect())
+        }
+        "discrete" => {
+            let bits = client
+                .read_discrete_inputs(address, count)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to read discrete inputs: {e}"))?;
+            Ok(bits.into_iter().map(u16::from).collect())
+        }
+        other => anyhow::bail!(
+            "Unsupported register type '{other}'; supported: holding, input, coil, discrete"
+        ),
+    }
+}
+
+/// Interpret raw register(s) according to `datatype`. Returns a display string.
+fn interpret_registers(registers: &[u16], datatype: Option<&str>) -> String {
+    let dt = datatype.map(str::to_lowercase);
+    match dt.as_deref() {
+        Some("int16") => format!("{}", registers.first().copied().unwrap_or(0) as i16),
+        Some("uint16") | None => registers
+            .iter()
+            .map(|r| r.to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        Some(name @ ("int32" | "uint32" | "float32")) if registers.len() < 2 => {
+            format!("(need 2 registers for '{name}', got {})", registers.len())
+        }
+        Some("int32") => {
+            let raw = ((registers[0] as u32) << 16) | registers[1] as u32;
+            format!("{}", raw as i32)
+        }
+        Some("uint32") => {
+            let raw = ((registers[0] as u32) << 16) | registers[1] as u32;
+            format!("{raw}")
+        }
+        Some("float32") => {
+            let raw = ((registers[0] as u32) << 16) | registers[1] as u32;
+            format!("{}", f32::from_bits(raw))
+        }
+        Some("bit") => format!("{}", registers.first().copied().unwrap_or(0) != 0),
+        Some(other) => format!("(unsupported datatype '{other}', raw: {registers:?})"),
     }
 }
 
@@ -70,45 +153,55 @@ async fn monitor_tcp_command(
     println!("{}", "Monitor Modbus TCP device".bright_cyan().bold());
     println!("Address: {}", address.yellow());
     println!("Unit ID: {}", unit_id);
-    println!("Registers: {} - {}", start, start + count - 1);
+    println!("Registers: {} - {}", start, start + count.max(1) - 1);
     println!("Interval: {} ms", interval);
-
-    if let Some(out) = output {
+    if let Some(out) = &output {
         println!("Output: {} ({})", out.display(), format);
     }
 
-    println!("\n{} Monitoring infrastructure ready", "✓".green());
-    println!(
-        "{} Full implementation requires oxirs-modbus integration",
-        "TODO:".yellow()
-    );
-    println!("\nExample output:");
-    println!("[12:34:56.789] Register 40001: 2250 (22.5°C)");
-    println!("[12:34:57.789] Register 40001: 2251 (22.6°C)");
+    let mut client = connect_tcp(&address, unit_id).await?;
+    println!("\n{} Connected", "✓".green());
+    println!("{} Press Ctrl+C to stop\n", "Info:".cyan());
 
-    Ok(())
-}
+    let mut out_file = match &output {
+        Some(path) => Some(
+            std::fs::File::create(path)
+                .with_context(|| format!("Failed to create output file {}", path.display()))?,
+        ),
+        None => None,
+    };
 
-async fn monitor_rtu_command(
-    port: String,
-    baud: u32,
-    unit_id: u8,
-    start: u16,
-    count: u16,
-    interval: u64,
-) -> Result<()> {
-    println!("{}", "Monitor Modbus RTU device".bright_cyan().bold());
-    println!("Port: {}", port.yellow());
-    println!("Baud rate: {}", baud);
-    println!("Unit ID: {}", unit_id);
-    println!("Registers: {} - {}", start, start + count - 1);
-    println!("Interval: {} ms", interval);
-
-    println!("\n{} Monitoring infrastructure ready", "✓".green());
-    println!(
-        "{} Full implementation requires oxirs-modbus integration",
-        "TODO:".yellow()
-    );
+    let mut ticker = tokio::time::interval(Duration::from_millis(interval.max(1)));
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                println!("\n{} Monitoring stopped", "Info:".cyan());
+                break;
+            }
+            _ = ticker.tick() => {
+                let now = chrono::Local::now();
+                match client.read_holding_registers(start, count).await {
+                    Ok(registers) => {
+                        for (i, value) in registers.iter().enumerate() {
+                            let line = format!(
+                                "[{}] Register {}: {}",
+                                now.format("%H:%M:%S%.3f"),
+                                start + i as u16,
+                                value
+                            );
+                            println!("{line}");
+                            if let Some(f) = out_file.as_mut() {
+                                writeln!(f, "{line}").with_context(|| "Failed to write output file")?;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        anyhow::bail!("Failed to read registers from {address}: {e}");
+                    }
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -125,13 +218,18 @@ async fn read_command(
     println!("Type: {}", register_type);
     println!("Address: {}", address);
     println!("Count: {}", count);
-
-    if let Some(dt) = datatype {
+    if let Some(dt) = &datatype {
         println!("Data type: {}", dt);
     }
 
-    println!("\n{} Register read infrastructure ready", "✓".green());
-    println!("{} Connect and read registers", "TODO:".yellow());
+    let mut client = connect_tcp(&device, 1).await?;
+    let registers = read_registers(&mut client, &register_type, address, count).await?;
+
+    println!("\n{} Raw registers: {:?}", "✓".green(), registers);
+    println!(
+        "Interpreted value: {}",
+        interpret_registers(&registers, datatype.as_deref())
+    );
 
     Ok(())
 }
@@ -148,103 +246,138 @@ async fn write_command(
     println!("Value: {}", value);
     println!("Data type: {}", datatype);
 
-    println!("\n{} Register write infrastructure ready", "✓".green());
-    println!("{} Connect and write register", "TODO:".yellow());
+    let raw: u16 = match datatype.to_lowercase().as_str() {
+        "uint16" | "int16" | "bit" => value
+            .parse::<i32>()
+            .with_context(|| format!("Invalid integer value '{value}'"))?
+            as u16,
+        other => anyhow::bail!(
+            "`oxirs modbus write` currently only supports single-register datatypes \
+             (uint16, int16, bit); '{other}' requires a multi-register write which is \
+             not yet wired into the CLI."
+        ),
+    };
 
-    Ok(())
-}
+    let mut client = connect_tcp(&device, 1).await?;
+    client
+        .write_single_register(address, raw)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to write register: {e}"))?;
 
-async fn to_rdf_command(
-    device: String,
-    config: PathBuf,
-    output: PathBuf,
-    format: String,
-    count: usize,
-) -> Result<()> {
-    println!("{}", "Generate RDF from Modbus data".bright_cyan().bold());
-    println!("Device: {}", device.yellow());
-    println!("Config: {}", config.display());
-    println!("Output: {}", output.display());
-    println!("Format: {}", format);
-    println!("Readings: {}", count);
-
-    println!("\n{} RDF generation infrastructure ready", "✓".green());
-    println!(
-        "{} Read registers and generate RDF triples",
-        "TODO:".yellow()
-    );
+    println!("\n{} Register written", "✓".green());
 
     Ok(())
 }
 
 async fn mock_server_command(port: u16, config: Option<PathBuf>) -> Result<()> {
     println!("{}", "Start Modbus mock server".bright_cyan().bold());
-    println!("Port: {}", port.to_string().yellow());
+    println!("Requested port: {}", port.to_string().yellow());
 
-    if let Some(cfg) = config {
-        println!("Config: {}", cfg.display());
+    if let Some(cfg) = &config {
+        println!(
+            "{} --config is not yet supported for the mock server; using built-in test data ({})",
+            "Warning:".yellow(),
+            cfg.display()
+        );
     }
 
+    // The underlying `MockModbusServer` always binds an OS-assigned ephemeral
+    // port (`127.0.0.1:0`) rather than a caller-chosen one; report the real
+    // bound address truthfully instead of pretending `--port` was honored.
+    let server = MockModbusServer::start()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to start mock Modbus server: {e}"))?;
+
     println!(
-        "\n{} Starting mock server on port {}...",
-        "Info:".cyan(),
-        port
+        "\n{} Mock server running on {} (real listener, holding/input registers pre-populated)",
+        "✓".green(),
+        server.address()
     );
-    println!("{} Mock server running", "✓".green());
+    if server.address().split(':').next_back() != Some(&port.to_string()) {
+        println!(
+            "{} the underlying mock server binds an OS-assigned ephemeral port; \
+             requested port {port} could not be honored.",
+            "Note:".yellow()
+        );
+    }
     println!("{} Press Ctrl+C to stop", "Info:".cyan());
 
-    println!("\n{} Mock server infrastructure ready", "TODO:".yellow());
+    tokio::signal::ctrl_c()
+        .await
+        .context("Failed to listen for Ctrl+C")?;
+
+    println!("\n{} Shutting down mock server", "Info:".cyan());
+    server.shutdown().await;
 
     Ok(())
 }
 
-async fn export_command(
-    dataset: String,
-    series: u64,
-    output: PathBuf,
-    format: String,
-    start: Option<String>,
-    end: Option<String>,
-) -> Result<()> {
-    println!("{}", "Export time-series data".bright_cyan().bold());
-    println!("Dataset: {}", dataset.yellow());
-    println!("Series: {}", series);
-    println!("Output: {}", output.display());
-    println!("Format: {}", format.to_uppercase());
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    if let Some(s) = start {
-        println!("Start: {}", s);
+    /// Regression test: `oxirs modbus read` (and by extension `monitor-tcp` /
+    /// `write`) must perform a real TCP round trip against a Modbus server
+    /// instead of printing "TODO" and returning `Ok(())` with no I/O at all.
+    #[tokio::test]
+    async fn test_read_command_round_trips_against_real_mock_server() {
+        let server = MockModbusServer::start()
+            .await
+            .expect("start mock modbus server");
+
+        let mut client = connect_tcp(server.address(), 1)
+            .await
+            .expect("connect to mock server");
+
+        // MockServerData::with_test_data() seeds holding_registers[0] = 100.
+        let registers = read_registers(&mut client, "holding", 0, 1)
+            .await
+            .expect("read holding register 0");
+
+        assert_eq!(registers, vec![100]);
+
+        server.shutdown().await;
     }
-    if let Some(e) = end {
-        println!("End: {}", e);
+
+    #[tokio::test]
+    async fn test_write_then_read_round_trips_a_real_value() {
+        let server = MockModbusServer::start()
+            .await
+            .expect("start mock modbus server");
+
+        let mut writer = connect_tcp(server.address(), 1)
+            .await
+            .expect("connect writer");
+        writer
+            .write_single_register(50, 4242)
+            .await
+            .expect("write register 50");
+
+        let mut reader = connect_tcp(server.address(), 1)
+            .await
+            .expect("connect reader");
+        let registers = read_registers(&mut reader, "holding", 50, 1)
+            .await
+            .expect("read register 50 back");
+
+        assert_eq!(registers, vec![4242]);
+
+        server.shutdown().await;
     }
 
-    println!("\n{} Export infrastructure ready", "✓".green());
-    println!(
-        "{} Query and export to {}",
-        "TODO:".yellow(),
-        format.to_uppercase()
-    );
+    #[test]
+    fn test_interpret_registers_float32() {
+        let value = 22.5_f32;
+        let bits = value.to_bits();
+        let hi = (bits >> 16) as u16;
+        let lo = (bits & 0xFFFF) as u16;
+        let display = interpret_registers(&[hi, lo], Some("float32"));
+        let parsed: f32 = display.parse().expect("should parse as float");
+        assert!((parsed - 22.5).abs() < f32::EPSILON);
+    }
 
-    Ok(())
-}
-
-async fn benchmark_command(dataset: String, points: usize, series_count: usize) -> Result<()> {
-    println!(
-        "{}",
-        "Benchmark time-series write performance"
-            .bright_cyan()
-            .bold()
-    );
-    println!("Dataset: {}", dataset.yellow());
-    println!("Points: {}", points.to_string().cyan());
-    println!("Series: {}", series_count);
-
-    println!("\n{} Running benchmark...", "Info:".cyan());
-    println!("Target: 1M+ writes/sec");
-
-    println!("\n{} Benchmark complete", "✓".green());
-    println!("{} Run actual HybridStore benchmark", "TODO:".yellow());
-
-    Ok(())
+    #[test]
+    fn test_interpret_registers_uint16() {
+        assert_eq!(interpret_registers(&[42], Some("uint16")), "42");
+    }
 }

@@ -16,7 +16,11 @@ use std::sync::{Arc, Mutex};
 pub struct ParallelConfig {
     /// Number of threads to use (0 = use rayon's default thread pool)
     pub num_threads: usize,
-    /// Size of chunks to process in parallel
+    /// Target number of complete statements to group into each parallel
+    /// chunk. Chunks are always cut on complete-statement boundaries (a
+    /// statement is never split across two chunks), so the actual statement
+    /// count in a given chunk may occasionally exceed this when a single
+    /// statement is unusually large.
     pub chunk_size: usize,
     /// Whether to continue parsing after errors
     pub lenient: bool,
@@ -57,6 +61,21 @@ impl ParallelConfig {
     }
 }
 
+/// Outcome of a parallel parse.
+///
+/// In strict mode a per-chunk parse error aborts the whole parse (returned as
+/// `Err` from [`ParallelParser::parse_all`]) exactly as before; `errors` is
+/// therefore always empty in that mode. In lenient mode, per-chunk parse
+/// errors are collected here instead of being silently printed to stderr, so
+/// the caller can inspect (or count) how much data failed to parse.
+#[derive(Debug, Default)]
+pub struct ParallelParseOutcome {
+    /// Triples successfully parsed from every chunk.
+    pub triples: Vec<Triple>,
+    /// Errors collected from chunks that failed to parse (lenient mode only).
+    pub errors: Vec<crate::error::TurtleParseError>,
+}
+
 /// Parallel parser for processing RDF files using multiple threads
 #[cfg(feature = "parallel")]
 pub struct ParallelParser<R: Read> {
@@ -82,8 +101,26 @@ impl<R: Read + Send + Sync> ParallelParser<R> {
     /// Parse the entire document in parallel
     ///
     /// This splits the document into chunks and parses them concurrently.
-    /// Note: This loads the entire document into memory for splitting.
-    pub fn parse_all(&mut self) -> TurtleResult<Vec<Triple>> {
+    /// Chunks are cut on complete-statement boundaries (see
+    /// [`crate::statement_boundary`]) rather than raw line boundaries, so a
+    /// statement that spans multiple lines (a pretty-printed predicate/object
+    /// list, or a triple-quoted string containing embedded newlines) is
+    /// always kept whole in a single chunk instead of being corrupted or
+    /// silently dropped at a chunk boundary.
+    ///
+    /// `@prefix`/`@base`/`PREFIX`/`BASE` declarations are extracted (as
+    /// complete statements, so a rare multi-line prefix declaration is still
+    /// captured whole) and prepended to every data chunk so prefixed names
+    /// resolve correctly no matter which chunk the declaration appeared in.
+    ///
+    /// In lenient mode, per-chunk parse errors are collected into the
+    /// returned [`ParallelParseOutcome::errors`] instead of being silently
+    /// printed to stderr.
+    ///
+    /// Note: This loads the entire document into memory for splitting, since
+    /// finding a statement boundary may require looking arbitrarily far ahead
+    /// past a string literal.
+    pub fn parse_all(&mut self) -> TurtleResult<ParallelParseOutcome> {
         use std::io::Read;
 
         // Read entire document
@@ -92,53 +129,70 @@ impl<R: Read + Send + Sync> ParallelParser<R> {
             .read_to_string(&mut content)
             .map_err(crate::error::TurtleParseError::io)?;
 
-        // Extract prefix and base declarations
-        let mut prefixes = String::new();
-        let mut data_lines = Vec::new();
-
-        for line in content.lines() {
-            let trimmed = line.trim();
+        // Split into complete statements first (rather than by raw line), then
+        // separate prefix/base declarations from data statements.
+        let boundaries = crate::statement_boundary::statement_boundaries(&content);
+        let mut prefix_header = String::new();
+        let mut data_statements = String::new();
+        let mut start = 0usize;
+        for &end in &boundaries {
+            let statement = &content[start..end];
+            let trimmed = statement.trim_start();
             if trimmed.starts_with("@prefix")
                 || trimmed.starts_with("@base")
                 || trimmed.starts_with("PREFIX")
+                || trimmed.starts_with("prefix")
                 || trimmed.starts_with("BASE")
+                || trimmed.starts_with("base")
             {
-                prefixes.push_str(line);
-                prefixes.push('\n');
-            } else if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                data_lines.push(line);
+                prefix_header.push_str(statement);
+            } else {
+                data_statements.push_str(statement);
             }
+            start = end;
+        }
+        // Any trailing bytes after the last complete statement (a truncated
+        // or malformed final statement, or trailing whitespace/comments) are
+        // still handed to the parser so they can surface a proper syntax
+        // error instead of being silently dropped.
+        if start < content.len() {
+            data_statements.push_str(&content[start..]);
         }
 
-        // Split data lines into chunks
-        let chunks: Vec<Vec<&str>> = data_lines
-            .chunks(self.config.chunk_size)
-            .map(|chunk| chunk.to_vec())
-            .collect();
+        // Split data statements into chunks, each ending on a complete
+        // statement boundary.
+        let chunks = crate::statement_boundary::split_into_statement_chunks(
+            &data_statements,
+            self.config.chunk_size,
+        );
 
-        // Parse chunks in parallel, each with prefixes prepended
-        let prefix_arc = std::sync::Arc::new(prefixes);
+        // Parse chunks in parallel, each with the collected prefixes prepended
+        let prefix_arc = std::sync::Arc::new(prefix_header);
         let results: Vec<TurtleResult<Vec<Triple>>> = chunks
             .par_iter()
             .map(|chunk| {
-                let chunk_text = format!("{}{}", prefix_arc, chunk.join("\n"));
+                let chunk_text = format!("{prefix_arc}{chunk}");
                 self.parse_chunk(&chunk_text)
             })
             .collect();
 
         // Collect results
         let mut all_triples = Vec::new();
+        let mut errors = Vec::new();
         for result in results {
             match result {
                 Ok(triples) => all_triples.extend(triples),
                 Err(e) if self.config.lenient => {
-                    eprintln!("Warning: Parse error in chunk: {}", e);
+                    errors.push(e);
                 }
                 Err(e) => return Err(e),
             }
         }
 
-        Ok(all_triples)
+        Ok(ParallelParseOutcome {
+            triples: all_triples,
+            errors,
+        })
     }
 
     /// Parse a chunk of text
@@ -269,8 +323,9 @@ mod tests {
         let result = parser.parse_all();
 
         assert!(result.is_ok());
-        let triples = result.expect("result should be Ok");
-        assert_eq!(triples.len(), 3);
+        let outcome = result.expect("result should be Ok");
+        assert_eq!(outcome.triples.len(), 3);
+        assert!(outcome.errors.is_empty());
     }
 
     #[test]
@@ -285,8 +340,9 @@ mod tests {
         let result = parser.parse_all();
 
         match &result {
-            Ok(triples) => {
-                assert_eq!(triples.len(), 1000);
+            Ok(outcome) => {
+                assert_eq!(outcome.triples.len(), 1000);
+                assert!(outcome.errors.is_empty());
             }
             Err(e) => {
                 panic!("Parse failed: {:?}", e);
@@ -333,7 +389,39 @@ mod tests {
         let mut parser = ParallelParser::with_config(Cursor::new(turtle), config);
         let result = parser.parse_all();
 
-        // Should succeed in lenient mode
+        // Should succeed in lenient mode, and the chunk-level error must be
+        // surfaced to the caller rather than only printed to stderr.
         assert!(result.is_ok());
+        let outcome = result.expect("result should be Ok");
+        assert!(
+            !outcome.errors.is_empty(),
+            "lenient mode should report the chunk parse error instead of silently discarding it"
+        );
+    }
+
+    #[test]
+    fn test_parallel_parser_does_not_split_multiline_statement() {
+        // Regression test: a statement pretty-printed across multiple lines
+        // (semicolon-separated predicate/object list) must survive parallel
+        // chunking intact even with a chunk size of 1 statement per chunk,
+        // instead of being corrupted or silently dropped because it landed on
+        // a raw line-based chunk boundary.
+        let turtle = concat!(
+            "@prefix ex: <http://example.org/> .\n",
+            "ex:alice\n",
+            "  ex:name \"Alice\" ;\n",
+            "  ex:age \"30\" ;\n",
+            "  ex:email \"alice@example.org\" .\n",
+            "ex:bob ex:name \"Bob\" .\n",
+        );
+
+        let config = ParallelConfig::default().with_chunk_size(1);
+        let mut parser = ParallelParser::with_config(Cursor::new(turtle), config);
+        let result = parser.parse_all();
+
+        let outcome = result.expect("parsing should succeed");
+        assert!(outcome.errors.is_empty());
+        // 3 triples for ex:alice (name/age/email) + 1 for ex:bob
+        assert_eq!(outcome.triples.len(), 4);
     }
 }

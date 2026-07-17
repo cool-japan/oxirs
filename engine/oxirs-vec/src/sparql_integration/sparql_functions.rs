@@ -390,13 +390,24 @@ impl SparqlVectorFunctions {
             _ => return Err(anyhow!("First argument must be text")),
         };
 
-        // Use the embed query type to generate the embedding
+        // Use the embed query type to generate the embedding; execute_embed_query
+        // (query_executor.rs) computes a real embedding via the embedding manager
+        // and stores it under a deterministic `embedded_<hash>` ID, returning
+        // that ID (with a 1.0 score) rather than the vector itself.
         let query = VectorQuery::new("embed".to_string(), args.to_vec());
-        let _result = executor.execute_optimized_query(&query)?;
+        let result = executor.execute_optimized_query(&query)?;
 
-        // For embed functions, we want to return the vector itself
-        // This is a simplified implementation - in practice, you'd generate the actual vector
-        let vector = crate::Vector::new(vec![0.0; 384]); // Placeholder vector
+        let (id, _score) = result
+            .results
+            .first()
+            .ok_or_else(|| anyhow!("embed_text: embedding query returned no result"))?;
+
+        // Fetch the actual computed vector back from the store by its ID
+        // instead of fabricating a zero vector.
+        let vector = executor
+            .get_vector(id)
+            .ok_or_else(|| anyhow!("embed_text: embedded vector '{}' not found in store", id))?;
+
         Ok(VectorServiceResult::Vector(vector))
     }
 
@@ -599,9 +610,77 @@ impl CustomVectorFunction for AverageSimilarityFunction {
 
 #[cfg(test)]
 mod tests {
+    use super::super::config::VectorQueryOptimizer;
     use super::*;
-    use crate::Vector;
+    use crate::embeddings::{EmbeddingManager, EmbeddingStrategy};
+    use crate::{Vector, VectorStore};
     use anyhow::Result;
+
+    /// Regression test for the P1 finding: `execute_embed_text` used to
+    /// discard the computed embedding and return a hardcoded all-zero
+    /// vector. It must now return the *actual* embedding produced by the
+    /// embedding manager (and that vector must also be retrievable from the
+    /// store under the ID the query reported).
+    #[test]
+    fn test_execute_embed_text_returns_real_embedding() -> Result<()> {
+        let vector_store = VectorStore::new();
+        let mut embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100)?;
+        // Build a small vocabulary so TF-IDF produces a non-trivial vector.
+        embedding_manager.build_vocabulary(&[
+            "hello world example text".to_string(),
+            "another document for vocabulary".to_string(),
+        ])?;
+        let optimizer = VectorQueryOptimizer::default();
+        let mut executor =
+            QueryExecutor::new(vector_store, embedding_manager, optimizer, None, None);
+
+        let functions = SparqlVectorFunctions::new();
+        let args = vec![VectorServiceArg::String(
+            "hello world example text".to_string(),
+        )];
+
+        let result = functions.execute_embed_text(&args, &mut executor)?;
+
+        let vector = match result {
+            VectorServiceResult::Vector(v) => v,
+            other => panic!("expected VectorServiceResult::Vector, got {other:?}"),
+        };
+
+        // The old buggy implementation always returned 384 zeros; a real
+        // TF-IDF embedding over a matching-vocabulary document must not be
+        // all-zero.
+        let values = vector.as_f32();
+        assert!(
+            values.iter().any(|&v| v != 0.0),
+            "embed_text must return the real computed embedding, not a zero vector"
+        );
+
+        // The vector should also be independently retrievable from the store,
+        // proving execute_embed_query really persisted (and didn't fabricate)
+        // the returned vector.
+        let expected_id = format!(
+            "embedded_{}",
+            hash_string_for_test("hello world example text")
+        );
+        let stored = executor
+            .get_vector(&expected_id)
+            .expect("embedding should have been indexed under its deterministic ID");
+        assert_eq!(vector.as_f32(), stored.as_f32());
+
+        Ok(())
+    }
+
+    /// Mirrors the private `hash_string` helper in `query_executor.rs` so the
+    /// test can predict the deterministic embedding ID without exposing that
+    /// helper publicly.
+    fn hash_string_for_test(s: &str) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        s.hash(&mut hasher);
+        hasher.finish()
+    }
 
     #[test]
     fn test_function_registration() {

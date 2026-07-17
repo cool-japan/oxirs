@@ -12,7 +12,11 @@
 //! - **DID Methods**: did:key (Ed25519), did:web (HTTP-based)
 //! - **Verifiable Credentials**: W3C VC Data Model 2.0
 //! - **Signed Graphs**: RDF Dataset Canonicalization + Ed25519 signatures
-//! - **Key Management**: Secure key storage and derivation
+//! - **Key Management**: Ed25519/X25519/P-256 key lifecycle with real keypair
+//!   generation; a pluggable [`kms::KmsBackend`] trait for external HSM/cloud
+//!   KMS integration. NOTE: no cloud KMS SDK backend ships with this crate; the
+//!   only bundled backends are INSECURE test mocks gated behind the non-default
+//!   `insecure-mock-kms` feature (see the `kms` module security notice).
 //!
 //! ## Example
 //!
@@ -113,11 +117,13 @@ pub use key_management::{
 };
 pub use kms::{
     audit::{AuditEvent, AuditEventKind, AuditLog},
-    create_mock_kms,
     pkcs11::{KeyHandle, Pkcs11Mechanism, Pkcs11Slot},
-    KeyUsage, KmsAlgorithm, KmsBackend, KmsDidSigner, KmsKeyMetadata, KmsProvider, MockAwsKms,
-    MockAzureKms, MockGcpKms,
+    KeyUsage, KmsAlgorithm, KmsBackend, KmsDidSigner, KmsKeyMetadata,
 };
+// NOTE: the bundled insecure mock KMS backends (`InsecureMockAwsKms`, …,
+// `create_insecure_mock_kms`) are intentionally NOT re-exported at the crate
+// root and are gated behind the non-default `insecure-mock-kms` feature. Reach
+// them via `oxirs_did::kms::` only. See the `kms` module security notice.
 pub use proof::{
     jws::{
         attach_jws_proof, extract_jws_proof, sign_document, verify_document, CompactJws,

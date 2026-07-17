@@ -439,6 +439,11 @@ pub mod time_travel;
 pub mod tls_security;
 pub mod types;
 pub mod wasm_edge_computing;
+// Standalone WASM plugin processor (distinct data model from `wasm_edge_computing`).
+// Its `execute_wasm_function` does not embed a real execution engine, so it always
+// returns `StreamError::UnsupportedOperation` rather than fabricating output; use
+// `wasm_edge_computing::WasmEdgeProcessor` (built on wasmtime) for genuine execution.
+pub mod wasm_edge_processor;
 pub mod webhook;
 
 // New v0.3.0 modules for advanced features

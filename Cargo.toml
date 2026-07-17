@@ -108,7 +108,7 @@ oxirs-physics = { version = "0.3.3", path = "ai/oxirs-physics" }
 oxirs-graphrag = { version = "0.3.3", path = "ai/oxirs-graphrag" }
 oxirs-did = { version = "0.3.3", path = "security/oxirs-did" }
 oxirs-wasm = { version = "0.3.3", path = "platforms/oxirs-wasm" }
-oxirs-modbus = { version = "0.3.3", path = "stream/oxirs-modbus" }
+oxirs-modbus = { version = "0.3.3", path = "stream/oxirs-modbus", default-features = false }
 oxirs-tsdb = { version = "0.3.3", path = "storage/oxirs-tsdb" }
 # Quarantined DuckDB analytics-bridge adapter (publish = false; no version — never published).
 # Holds the libduckdb-sys C FFI kept off oxirs-tsdb's published Pure-Rust surface (Pure Rust Policy v2).

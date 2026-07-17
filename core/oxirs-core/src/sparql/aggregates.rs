@@ -248,9 +248,12 @@ impl AggregateAccumulator {
 pub fn extract_aggregates(sparql: &str) -> Result<Vec<AggregateExpression>> {
     let mut aggregates = Vec::new();
 
-    if let Some(select_start) = sparql.to_uppercase().find("SELECT") {
-        if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
-            let select_clause = &sparql[select_start + 6..where_start];
+    if let Some(select_start) = super::query_locator::find_keyword(sparql, "SELECT") {
+        // The `WHERE` keyword is optional per SPARQL 1.1; the projection clause
+        // ends at `WHERE` if present, otherwise at the graph pattern's `{`.
+        if let Some(clause_end) = super::query_locator::select_projection_end(sparql, select_start)
+        {
+            let select_clause = &sparql[select_start + 6..clause_end];
 
             // Look for aggregate patterns like (COUNT(?var) AS ?alias)
             let mut pos = 0;

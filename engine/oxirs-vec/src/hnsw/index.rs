@@ -265,6 +265,24 @@ impl VectorIndex for HnswIndex {
             .and_then(|&id| self.nodes.get(id))
             .map(|node| &node.vector)
     }
+
+    fn iter_vectors(&self) -> Vec<(String, Vector)> {
+        // Iterate via `uri_to_id` (not `nodes` directly): removed nodes keep
+        // their slot to avoid ID shifts but have their URI mapping removed,
+        // so this naturally skips tombstoned entries.
+        self.uri_to_id
+            .iter()
+            .filter_map(|(uri, &id)| {
+                self.nodes
+                    .get(id)
+                    .map(|node| (uri.clone(), node.vector.clone()))
+            })
+            .collect()
+    }
+
+    fn supports_enumeration(&self) -> bool {
+        true
+    }
 }
 
 impl HnswIndex {

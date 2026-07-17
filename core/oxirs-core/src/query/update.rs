@@ -15,9 +15,6 @@ use crate::{
 };
 use std::collections::HashMap;
 
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
-
 /// Batch size threshold for automatic batching
 const BATCH_THRESHOLD: usize = 100;
 
@@ -136,32 +133,18 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Batch insert quads with optimal performance
+    ///
+    /// Persistence is serialized inside the store layer (a single append
+    /// writer behind a `Mutex`), so issuing per-quad inserts from multiple
+    /// Rayon threads gave no throughput benefit while racing concurrent
+    /// rewrites of the backing file into a corrupt state. Inserts are
+    /// therefore driven sequentially through the store's thread-safe
+    /// `insert_quad`; batching still amortizes the caller-side chunking.
     fn batch_insert_quads(&self, quads: &[Quad]) -> Result<()> {
-        // Process in chunks to avoid memory issues
+        // Process in chunks to keep peak memory bounded.
         for chunk in quads.chunks(self.batch_size) {
-            // Collect quads to insert
-            let batch: Vec<Quad> = chunk.to_vec();
-
-            #[cfg(feature = "parallel")]
-            {
-                // Use parallel insertion for very large batches
-                if batch.len() > 1000 {
-                    let results: Vec<Result<bool>> = batch
-                        .par_iter()
-                        .map(|quad| self.store.insert_quad(quad.clone()))
-                        .collect();
-
-                    // Check for errors
-                    for result in results {
-                        result?;
-                    }
-                    continue;
-                }
-            }
-
-            // Sequential insertion for smaller batches
-            for quad in batch {
-                self.store.insert_quad(quad)?;
+            for quad in chunk {
+                self.store.insert_quad(quad.clone())?;
             }
         }
 
@@ -169,31 +152,14 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Batch delete quads with optimal performance
+    ///
+    /// Like [`Self::batch_insert_quads`], deletions are applied sequentially
+    /// through the store's thread-safe `remove_quad`; parallelizing them only
+    /// reintroduced the concurrent-file-rewrite race without any speedup.
     fn batch_delete_quads(&self, quads: &[Quad]) -> Result<()> {
-        // Process in chunks to avoid memory issues
+        // Process in chunks to keep peak memory bounded.
         for chunk in quads.chunks(self.batch_size) {
-            // Collect quads to delete
-            let batch: Vec<Quad> = chunk.to_vec();
-
-            #[cfg(feature = "parallel")]
-            {
-                // Use parallel deletion for very large batches
-                if batch.len() > 1000 {
-                    let results: Vec<Result<bool>> = batch
-                        .par_iter()
-                        .map(|quad| self.store.remove_quad(quad))
-                        .collect();
-
-                    // Check for errors
-                    for result in results {
-                        result?;
-                    }
-                    continue;
-                }
-            }
-
-            // Sequential deletion for smaller batches
-            for quad in &batch {
+            for quad in chunk {
                 self.store.remove_quad(quad)?;
             }
         }
@@ -283,17 +249,172 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Execute LOAD operation
+    ///
+    /// Fetches the RDF document identified by `source`, parses it, and inserts
+    /// the resulting quads into `destination` (or the default graph when no
+    /// destination is given). `http(s)://`, `file://` and bare local
+    /// filesystem paths are supported; other URI schemes yield an explicit
+    /// error. When `silent` is set, any failure is downgraded to a warning and
+    /// the operation reports success, per the SPARQL 1.1 `LOAD SILENT`
+    /// semantics.
     fn execute_load(
         &self,
         source: &NamedNode,
-        _destination: &Option<NamedNode>,
-        _silent: bool,
+        destination: &Option<NamedNode>,
+        silent: bool,
     ) -> Result<()> {
-        // For now, return an error as we don't have HTTP loading capability
-        // In a full implementation, this would fetch RDF from the source IRI
-        Err(OxirsError::Update(format!(
-            "LOAD operation not implemented for source: {source}"
-        )))
+        match self.load_from_source(source, destination) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                if silent {
+                    tracing::warn!("LOAD SILENT failed for source {}: {}", source.as_str(), e);
+                    Ok(())
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Fetch, parse and insert the RDF document referenced by `source`.
+    fn load_from_source(&self, source: &NamedNode, destination: &Option<NamedNode>) -> Result<()> {
+        use crate::parser::{detect_format_from_content, Parser, RdfFormat};
+
+        let iri = source.as_str();
+
+        // Resolve the source into raw text plus optional format hints.
+        let (content, content_type, extension): (String, Option<String>, Option<String>) =
+            if let Some(path) = iri.strip_prefix("file://") {
+                // Strip an optional authority component ("file://host/path" or
+                // "file:///path") down to a local filesystem path.
+                let local_path = path.strip_prefix("localhost").unwrap_or(path);
+                let local_path = if let Some(rest) = local_path.strip_prefix('/') {
+                    // Keep a single leading slash for absolute paths.
+                    format!("/{rest}")
+                } else {
+                    local_path.to_string()
+                };
+                let text = std::fs::read_to_string(&local_path).map_err(|e| {
+                    OxirsError::Update(format!("LOAD failed reading {local_path}: {e}"))
+                })?;
+                let ext = Self::extension_from_path(&local_path);
+                (text, None, ext)
+            } else if iri.starts_with("http://") || iri.starts_with("https://") {
+                let (text, content_type) = Self::fetch_http(iri)?;
+                (text, content_type, Self::extension_from_path(iri))
+            } else if !iri.contains("://") {
+                // Treat a scheme-less reference as a local filesystem path.
+                let text = std::fs::read_to_string(iri)
+                    .map_err(|e| OxirsError::Update(format!("LOAD failed reading {iri}: {e}")))?;
+                let ext = Self::extension_from_path(iri);
+                (text, None, ext)
+            } else {
+                return Err(OxirsError::Update(format!(
+                    "LOAD does not support the URI scheme of source: {iri}"
+                )));
+            };
+
+        // Determine the concrete RDF serialization.
+        let format = content_type
+            .as_deref()
+            .and_then(Self::media_type_to_format)
+            .or_else(|| extension.as_deref().and_then(RdfFormat::from_extension))
+            .or_else(|| detect_format_from_content(&content))
+            .ok_or_else(|| {
+                OxirsError::Update(format!(
+                    "LOAD could not determine the RDF format of source: {iri}"
+                ))
+            })?;
+
+        let parser = Parser::new(format);
+        let quads = parser
+            .parse_str_to_quads(&content)
+            .map_err(|e| OxirsError::Update(format!("LOAD failed parsing {iri}: {e}")))?;
+
+        // Insert into the requested destination graph (default graph otherwise).
+        let target_graph = destination.clone().map(GraphName::NamedNode);
+        for quad in quads {
+            let final_quad = if let Some(ref target) = target_graph {
+                Quad::new(
+                    quad.subject().clone(),
+                    quad.predicate().clone(),
+                    quad.object().clone(),
+                    target.clone(),
+                )
+            } else {
+                quad
+            };
+            self.store.insert_quad(final_quad)?;
+        }
+
+        Ok(())
+    }
+
+    /// Fetch an HTTP(S) resource, returning its body and optional content type.
+    ///
+    /// The request runs on a dedicated thread with its own current-thread
+    /// runtime so that `LOAD` works whether or not the caller is already inside
+    /// a Tokio runtime (a nested `Runtime::new()` would otherwise panic).
+    fn fetch_http(url: &str) -> Result<(String, Option<String>)> {
+        let url_owned = url.to_string();
+        std::thread::scope(|scope| {
+            let handle = scope.spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| {
+                        OxirsError::Update(format!("LOAD failed to create HTTP runtime: {e}"))
+                    })?;
+                runtime.block_on(async {
+                    let response = reqwest::get(&url_owned).await.map_err(|e| {
+                        OxirsError::Update(format!("LOAD failed to fetch {url_owned}: {e}"))
+                    })?;
+                    if !response.status().is_success() {
+                        return Err(OxirsError::Update(format!(
+                            "LOAD received HTTP {} fetching {url_owned}",
+                            response.status()
+                        )));
+                    }
+                    let content_type = response
+                        .headers()
+                        .get("content-type")
+                        .and_then(|v| v.to_str().ok())
+                        .map(|s| s.split(';').next().unwrap_or(s).trim().to_string());
+                    let text = response.text().await.map_err(|e| {
+                        OxirsError::Update(format!("LOAD failed reading body of {url_owned}: {e}"))
+                    })?;
+                    Ok::<_, OxirsError>((text, content_type))
+                })
+            });
+            handle
+                .join()
+                .map_err(|_| OxirsError::Update("LOAD HTTP fetch thread panicked".to_string()))?
+        })
+    }
+
+    /// Map an HTTP `Content-Type` media type to an [`RdfFormat`].
+    fn media_type_to_format(media_type: &str) -> Option<crate::parser::RdfFormat> {
+        use crate::parser::RdfFormat;
+        match media_type.to_lowercase().trim() {
+            "text/turtle" | "application/x-turtle" => Some(RdfFormat::Turtle),
+            "application/n-triples" | "text/plain" => Some(RdfFormat::NTriples),
+            "application/trig" | "application/x-trig" => Some(RdfFormat::TriG),
+            "application/n-quads" | "text/x-nquads" => Some(RdfFormat::NQuads),
+            "application/rdf+xml" | "application/xml" | "text/xml" => Some(RdfFormat::RdfXml),
+            "application/ld+json" | "application/json" => Some(RdfFormat::JsonLd),
+            _ => None,
+        }
+    }
+
+    /// Extract a lowercase file extension from a path or IRI, if present.
+    fn extension_from_path(path: &str) -> Option<String> {
+        // Ignore any query/fragment portion of an IRI before looking for a dot.
+        let path = path.split(['?', '#']).next().unwrap_or(path);
+        let last_segment = path.rsplit('/').next().unwrap_or(path);
+        last_segment
+            .rsplit_once('.')
+            .map(|(_, ext)| ext.to_lowercase())
+            .filter(|ext| !ext.is_empty())
     }
 
     /// Execute CLEAR operation
@@ -329,17 +450,53 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Execute CREATE operation
-    fn execute_create(&self, _graph: &NamedNode, _silent: bool) -> Result<()> {
-        // Graph creation is implicit in most RDF stores
-        // For now, this is a no-op
-        Ok(())
+    ///
+    /// Registers a named graph via the store's `create_graph` API, honoring
+    /// `SILENT`. Stores that create graphs implicitly on first insert report
+    /// `NotSupported`; that is treated as success since the graph will exist
+    /// as soon as data is added.
+    fn execute_create(&self, graph: &NamedNode, silent: bool) -> Result<()> {
+        match self.store.create_graph(Some(graph)) {
+            Ok(()) => Ok(()),
+            Err(OxirsError::NotSupported(_)) => Ok(()),
+            Err(e) => {
+                if silent {
+                    Ok(())
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 
     /// Execute DROP operation
-    fn execute_drop(&self, graph: &GraphTarget, _silent: bool) -> Result<()> {
-        // DROP is similar to CLEAR but also removes the graph container
-        // For now, we implement it the same as CLEAR
-        self.execute_clear(graph, _silent)
+    ///
+    /// DROP removes a graph's contents and, unlike CLEAR, its registration.
+    /// The store's `drop_graph` API is used when available; stores that manage
+    /// graph membership implicitly (reporting `NotSupported`) fall back to
+    /// clearing the graph contents. `SILENT` downgrades errors to success.
+    fn execute_drop(&self, graph: &GraphTarget, silent: bool) -> Result<()> {
+        let graph_name = match graph {
+            GraphTarget::Default => Some(GraphName::DefaultGraph),
+            GraphTarget::Named(name) => Some(GraphName::NamedNode(name.clone())),
+            // ALL targets every named graph; there is no single handle to drop,
+            // so fall through to the content clear below.
+            GraphTarget::All => None,
+        };
+
+        if let Some(ref gn) = graph_name {
+            match self.store.drop_graph(Some(gn)) {
+                Ok(()) => return Ok(()),
+                // Graph membership is implicit for this store; clear contents.
+                Err(OxirsError::NotSupported(_)) => {}
+                Err(e) => {
+                    return if silent { Ok(()) } else { Err(e) };
+                }
+            }
+        }
+
+        // Fallback (implicit-graph stores) and the ALL case: remove contents.
+        self.execute_clear(graph, silent)
     }
 
     /// Execute COPY operation
@@ -1465,5 +1622,140 @@ impl UpdateParser {
                 silent,
             }],
         })
+    }
+}
+
+#[cfg(test)]
+mod load_tests {
+    use super::*;
+    use crate::model::GraphName;
+    use crate::query::algebra::{Update, UpdateOperation};
+    use crate::rdf_store::RdfStore;
+    use std::io::Write;
+
+    /// Create a unique, isolated temporary directory under the system temp dir.
+    fn unique_temp_dir(tag: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let mut dir = std::env::temp_dir();
+        dir.push(format!(
+            "oxirs_update_load_{tag}_{}_{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn load_update(source: NamedNode, destination: Option<NamedNode>, silent: bool) -> Update {
+        Update {
+            base: None,
+            prefixes: HashMap::new(),
+            operations: vec![UpdateOperation::Load {
+                source,
+                destination,
+                silent,
+            }],
+        }
+    }
+
+    #[test]
+    fn test_load_from_local_file() -> Result<()> {
+        let store = RdfStore::new()?;
+        let dir = unique_temp_dir("localfile");
+        let path = dir.join("data.ttl");
+        {
+            let mut f = std::fs::File::create(&path).expect("create ttl file");
+            writeln!(
+                f,
+                "<http://example.org/s> <http://example.org/p> <http://example.org/o> ."
+            )
+            .expect("write ttl");
+        }
+
+        let source = NamedNode::new(format!("file://{}", path.display()))?;
+        UpdateExecutor::new(&store).execute(&load_update(source, None, false))?;
+
+        assert_eq!(store.len()?, 1);
+
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_into_named_graph() -> Result<()> {
+        let store = RdfStore::new()?;
+        let dir = unique_temp_dir("namedgraph");
+        let path = dir.join("data.nt");
+        {
+            let mut f = std::fs::File::create(&path).expect("create nt file");
+            writeln!(
+                f,
+                "<http://example.org/s> <http://example.org/p> <http://example.org/o> ."
+            )
+            .expect("write nt");
+        }
+
+        let graph = NamedNode::new("http://example.org/g")?;
+        let source = NamedNode::new(format!("file://{}", path.display()))?;
+        UpdateExecutor::new(&store).execute(&load_update(source, Some(graph.clone()), false))?;
+
+        let graph_name = GraphName::NamedNode(graph);
+        let in_graph = store.find_quads(None, None, None, Some(&graph_name))?;
+        assert_eq!(in_graph.len(), 1);
+
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_unsupported_scheme_errors_unless_silent() -> Result<()> {
+        let store = RdfStore::new()?;
+
+        // A non-silent LOAD from an unsupported scheme must surface an error.
+        let source = NamedNode::new("ftp://example.org/data.ttl")?;
+        let result = UpdateExecutor::new(&store).execute(&load_update(source.clone(), None, false));
+        assert!(result.is_err(), "non-silent LOAD should return an error");
+
+        // The same LOAD with SILENT must report success and leave the store empty.
+        let silent_result = UpdateExecutor::new(&store).execute(&load_update(source, None, true));
+        assert!(silent_result.is_ok(), "silent LOAD should succeed");
+        assert_eq!(store.len()?, 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_missing_local_file_silent_ok() -> Result<()> {
+        let store = RdfStore::new()?;
+        let missing = unique_temp_dir("missing").join("does_not_exist.ttl");
+        let source = NamedNode::new(format!("file://{}", missing.display()))?;
+
+        // Non-silent fails, silent succeeds.
+        assert!(UpdateExecutor::new(&store)
+            .execute(&load_update(source.clone(), None, false))
+            .is_err());
+        assert!(UpdateExecutor::new(&store)
+            .execute(&load_update(source, None, true))
+            .is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_extension_from_path() {
+        assert_eq!(
+            UpdateExecutor::extension_from_path("http://example.org/data.ttl"),
+            Some("ttl".to_string())
+        );
+        assert_eq!(
+            UpdateExecutor::extension_from_path("http://example.org/data.nt?x=1#frag"),
+            Some("nt".to_string())
+        );
+        assert_eq!(
+            UpdateExecutor::extension_from_path("http://example.org/nodot"),
+            None
+        );
     }
 }

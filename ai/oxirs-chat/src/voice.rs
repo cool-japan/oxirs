@@ -425,13 +425,11 @@ impl GoogleSttProvider {
 impl SpeechToTextProvider for GoogleSttProvider {
     async fn transcribe(&self, _audio_data: &[u8], _config: &VoiceConfig) -> Result<SttResult> {
         warn!("Google STT integration not yet implemented");
-        Ok(SttResult {
-            text: "[Google STT placeholder]".to_string(),
-            confidence: 0.90,
-            language: Some("en-US".to_string()),
-            duration_ms: 1000,
-            word_timestamps: vec![],
-        })
+        anyhow::bail!(
+            "Google STT provider is not implemented: no API integration is wired up, so no \
+             transcript can be produced. Select a different `stt_provider` (e.g. OpenAI) or \
+             implement the Google Speech-to-Text API client."
+        )
     }
 
     async fn transcribe_stream(
@@ -459,13 +457,11 @@ impl AzureSttProvider {
 impl SpeechToTextProvider for AzureSttProvider {
     async fn transcribe(&self, _audio_data: &[u8], _config: &VoiceConfig) -> Result<SttResult> {
         warn!("Azure STT integration not yet implemented");
-        Ok(SttResult {
-            text: "[Azure STT placeholder]".to_string(),
-            confidence: 0.92,
-            language: Some("en-US".to_string()),
-            duration_ms: 1000,
-            word_timestamps: vec![],
-        })
+        anyhow::bail!(
+            "Azure STT provider is not implemented: no API integration is wired up, so no \
+             transcript can be produced. Select a different `stt_provider` (e.g. OpenAI) or \
+             implement the Azure Speech Services client."
+        )
     }
 
     async fn transcribe_stream(
@@ -493,13 +489,11 @@ impl LocalWhisperProvider {
 impl SpeechToTextProvider for LocalWhisperProvider {
     async fn transcribe(&self, _audio_data: &[u8], _config: &VoiceConfig) -> Result<SttResult> {
         warn!("Local Whisper integration not yet implemented");
-        Ok(SttResult {
-            text: "[Local Whisper placeholder]".to_string(),
-            confidence: 0.88,
-            language: Some("en-US".to_string()),
-            duration_ms: 1000,
-            word_timestamps: vec![],
-        })
+        anyhow::bail!(
+            "Local Whisper provider is not implemented: no on-device model is loaded, so no \
+             transcript can be produced. Select a different `stt_provider` (e.g. OpenAI) or \
+             implement the local Whisper inference backend."
+        )
     }
 
     async fn transcribe_stream(
@@ -660,13 +654,13 @@ impl GoogleTtsProvider {
 
 #[async_trait::async_trait]
 impl TextToSpeechProvider for GoogleTtsProvider {
-    async fn synthesize(&self, text: &str, _config: &VoiceConfig) -> Result<TtsResult> {
+    async fn synthesize(&self, _text: &str, _config: &VoiceConfig) -> Result<TtsResult> {
         warn!("Google TTS integration not yet implemented");
-        Ok(TtsResult {
-            audio_data: vec![],
-            format: AudioFormat::Mp3,
-            duration_ms: (text.len() as u64) * 100,
-        })
+        anyhow::bail!(
+            "Google TTS provider is not implemented: no API integration is wired up, so no \
+             audio can be produced. Select a different `tts_provider` (e.g. OpenAI) or \
+             implement the Google Text-to-Speech API client."
+        )
     }
 
     async fn synthesize_stream(
@@ -692,13 +686,13 @@ impl AzureTtsProvider {
 
 #[async_trait::async_trait]
 impl TextToSpeechProvider for AzureTtsProvider {
-    async fn synthesize(&self, text: &str, _config: &VoiceConfig) -> Result<TtsResult> {
+    async fn synthesize(&self, _text: &str, _config: &VoiceConfig) -> Result<TtsResult> {
         warn!("Azure TTS integration not yet implemented");
-        Ok(TtsResult {
-            audio_data: vec![],
-            format: AudioFormat::Wav,
-            duration_ms: (text.len() as u64) * 100,
-        })
+        anyhow::bail!(
+            "Azure TTS provider is not implemented: no API integration is wired up, so no \
+             audio can be produced. Select a different `tts_provider` (e.g. OpenAI) or \
+             implement the Azure Speech Services client."
+        )
     }
 
     async fn synthesize_stream(
@@ -724,13 +718,13 @@ impl LocalTtsEngine {
 
 #[async_trait::async_trait]
 impl TextToSpeechProvider for LocalTtsEngine {
-    async fn synthesize(&self, text: &str, _config: &VoiceConfig) -> Result<TtsResult> {
+    async fn synthesize(&self, _text: &str, _config: &VoiceConfig) -> Result<TtsResult> {
         warn!("Local TTS engine not yet implemented");
-        Ok(TtsResult {
-            audio_data: vec![],
-            format: AudioFormat::Wav,
-            duration_ms: (text.len() as u64) * 100,
-        })
+        anyhow::bail!(
+            "Local TTS engine is not implemented: no on-device synthesis model is loaded, so \
+             no audio can be produced. Select a different `tts_provider` (e.g. OpenAI) or \
+             implement the local TTS inference backend."
+        )
     }
 
     async fn synthesize_stream(

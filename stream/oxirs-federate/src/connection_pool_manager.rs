@@ -135,6 +135,12 @@ pub struct PoolHealthChecker {
     last_check: Arc<RwLock<Instant>>,
     failure_count: Arc<RwLock<u32>>,
     check_interval: Duration,
+    /// Target service endpoint to probe. Empty if there's nothing real to
+    /// check against (e.g. a synthetic pool in a test), in which case the
+    /// checker trivially reports healthy rather than claiming a false
+    /// negative for a target that was never configured.
+    endpoint: String,
+    http_client: reqwest::Client,
 }
 
 /// Pool optimizer for dynamic sizing
@@ -334,6 +340,7 @@ impl ConnectionPoolManager {
             service.service_type.clone(),
             service_config,
             self.config.health_check_interval,
+            service.endpoint.clone(),
         );
 
         Ok(Arc::new(pool))
@@ -373,6 +380,7 @@ impl ServiceConnectionPool {
         service_type: ServiceType,
         config: ServicePoolConfig,
         health_check_interval: Duration,
+        endpoint: String,
     ) -> Self {
         let semaphore = Arc::new(Semaphore::new(config.max_connections));
         let metrics = Arc::new(RwLock::new(ServicePoolMetrics {
@@ -387,7 +395,7 @@ impl ServiceConnectionPool {
             semaphore,
             config,
             metrics,
-            health_checker: PoolHealthChecker::new(health_check_interval),
+            health_checker: PoolHealthChecker::new(health_check_interval, endpoint),
             last_resized: Arc::new(RwLock::new(Instant::now())),
         }
     }
@@ -485,11 +493,13 @@ impl ServiceConnectionPool {
 }
 
 impl PoolHealthChecker {
-    pub fn new(check_interval: Duration) -> Self {
+    pub fn new(check_interval: Duration, endpoint: String) -> Self {
         Self {
             last_check: Arc::new(RwLock::new(Instant::now())),
             failure_count: Arc::new(RwLock::new(0)),
             check_interval,
+            endpoint,
+            http_client: reqwest::Client::new(),
         }
     }
 
@@ -499,8 +509,7 @@ impl PoolHealthChecker {
             return Ok(true); // Too soon to check again
         }
 
-        // Simulate health check (in real implementation, this would ping the service)
-        let is_healthy = true; // Placeholder
+        let is_healthy = self.probe_endpoint().await;
 
         if !is_healthy {
             let mut failure_count = self.failure_count.write().await;
@@ -512,6 +521,56 @@ impl PoolHealthChecker {
 
         *self.last_check.write().await = Instant::now();
         Ok(is_healthy)
+    }
+
+    /// Actually probe the target service with a short-timeout HTTP request,
+    /// instead of assuming health. Tries a lightweight `HEAD` first (cheapest
+    /// on the server); some SPARQL/GraphQL endpoints reject `HEAD` outright,
+    /// so a plain `GET` is tried as a fallback before declaring the service
+    /// unreachable. Any response that isn't a server error (5xx) counts as
+    /// healthy — the goal is to detect "the service is down/unreachable",
+    /// not to validate the exact protocol semantics of every endpoint kind.
+    async fn probe_endpoint(&self) -> bool {
+        if self.endpoint.is_empty() {
+            // Nothing configured to probe (e.g. a synthetic pool with no
+            // real backing service) — don't report a false negative.
+            return true;
+        }
+
+        const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+
+        let head_result = self
+            .http_client
+            .head(&self.endpoint)
+            .timeout(PROBE_TIMEOUT)
+            .send()
+            .await;
+
+        match head_result {
+            Ok(response) => !response.status().is_server_error(),
+            Err(head_err) => {
+                debug!(
+                    "HEAD health probe failed for '{}' ({}); retrying with GET",
+                    self.endpoint, head_err
+                );
+                match self
+                    .http_client
+                    .get(&self.endpoint)
+                    .timeout(PROBE_TIMEOUT)
+                    .send()
+                    .await
+                {
+                    Ok(response) => !response.status().is_server_error(),
+                    Err(get_err) => {
+                        warn!(
+                            "Health probe failed for endpoint '{}': {}",
+                            self.endpoint, get_err
+                        );
+                        false
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -773,5 +832,67 @@ mod tests {
             .expect("async operation should succeed");
         let result = manager.warm_up_pools().await;
         assert!(result.is_ok());
+    }
+
+    /// Regression test for connection_pool_manager.rs:503 — `check_health()`
+    /// used to hardcode `is_healthy = true` and never actually contact the
+    /// service. This verifies it now performs a real probe: a reachable mock
+    /// server is reported healthy.
+    #[tokio::test]
+    async fn test_health_checker_probes_reachable_endpoint() {
+        let mock_server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("HEAD"))
+            .respond_with(wiremock::ResponseTemplate::new(200))
+            .mount(&mock_server)
+            .await;
+
+        // `check_interval: 0` bypasses the "too soon to check again" guard
+        // so the probe always actually runs.
+        let checker = PoolHealthChecker::new(Duration::from_secs(0), mock_server.uri());
+
+        let healthy = checker
+            .check_health()
+            .await
+            .expect("health probe should not error for a reachable server");
+        assert!(healthy, "a reachable mock server must be reported healthy");
+    }
+
+    /// Regression test: an endpoint with nothing listening must be reported
+    /// unhealthy, proving the checker genuinely dials out instead of always
+    /// returning `true`.
+    #[tokio::test]
+    async fn test_health_checker_detects_unreachable_endpoint() {
+        // Reserve an ephemeral port, then immediately release it without
+        // ever accepting a connection: this deterministically guarantees
+        // nothing is listening there (unlike starting-then-dropping a mock
+        // server, whose async listener task may not have torn down yet).
+        let listener =
+            std::net::TcpListener::bind("127.0.0.1:0").expect("binding an ephemeral port");
+        let port = listener.local_addr().expect("local addr").port();
+        drop(listener);
+        let dead_uri = format!("http://127.0.0.1:{port}/");
+
+        let checker = PoolHealthChecker::new(Duration::from_secs(0), dead_uri);
+
+        let healthy = checker
+            .check_health()
+            .await
+            .expect("check_health itself should not error out, just report unhealthy");
+        assert!(
+            !healthy,
+            "an unreachable endpoint must be reported unhealthy, not hardcoded to true"
+        );
+    }
+
+    /// Regression test: a checker with no endpoint configured (e.g. a
+    /// synthetic pool) should not report a false negative.
+    #[tokio::test]
+    async fn test_health_checker_empty_endpoint_is_trivially_healthy() {
+        let checker = PoolHealthChecker::new(Duration::from_secs(0), String::new());
+        let healthy = checker
+            .check_health()
+            .await
+            .expect("check_health should not error for an empty endpoint");
+        assert!(healthy);
     }
 }

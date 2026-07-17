@@ -53,9 +53,25 @@ pub trait VectorIndex: Send + Sync {
     /// Iterate all stored (id, vector) pairs.
     ///
     /// The default returns an empty list; concrete index types that hold their
-    /// vectors in memory should override this to enable `save_to_disk`.
+    /// vectors in memory (or can reconstruct them, e.g. via decoding quantized
+    /// codes) should override this **and** [`VectorIndex::supports_enumeration`]
+    /// so callers like `VectorStore::save_to_disk` can tell real emptiness
+    /// apart from "this index type cannot enumerate its vectors".
     fn iter_vectors(&self) -> Vec<(String, Vector)> {
         Vec::new()
+    }
+
+    /// Whether [`VectorIndex::iter_vectors`] returns a real, complete
+    /// enumeration of the vectors held by this index.
+    ///
+    /// Index types that override `iter_vectors` with a real implementation
+    /// (e.g. [`MemoryVectorIndex`], `HnswIndex`, `IvfIndex`, `PQIndex`) must
+    /// also override this to return `true`. Callers that need to persist or
+    /// otherwise fully enumerate an index (e.g. `VectorStore::save_to_disk`)
+    /// should check this flag and fail loudly instead of silently persisting
+    /// an empty snapshot when it is `false`.
+    fn supports_enumeration(&self) -> bool {
+        false
     }
 }
 
@@ -163,5 +179,9 @@ impl VectorIndex for MemoryVectorIndex {
 
     fn iter_vectors(&self) -> Vec<(String, Vector)> {
         self.vectors.clone()
+    }
+
+    fn supports_enumeration(&self) -> bool {
+        true
     }
 }

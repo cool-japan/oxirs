@@ -50,7 +50,7 @@ impl RuleIndex {
 
     /// Add a rule to the index
     pub fn add_rule(&self, rule: Rule) -> RuleId {
-        let mut rules = self.rules.write().expect("lock poisoned");
+        let mut rules = self.rules.write().unwrap_or_else(|e| e.into_inner());
         let rule_id = rules.len();
 
         // Index by body predicates
@@ -79,7 +79,7 @@ impl RuleIndex {
 
     /// Remove a rule from the index by ID
     pub fn remove_rule(&self, rule_id: RuleId) -> Option<Rule> {
-        let mut rules = self.rules.write().expect("lock poisoned");
+        let mut rules = self.rules.write().unwrap_or_else(|e| e.into_inner());
         if rule_id >= rules.len() {
             return None;
         }
@@ -119,10 +119,13 @@ impl RuleIndex {
                 .fetch_add(1, Ordering::Relaxed);
         }
 
-        let rules = self.rules.read().expect("lock poisoned");
+        let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
 
         if self.config.predicate_indexing {
-            let pred_index = self.predicate_index.read().expect("lock poisoned");
+            let pred_index = self
+                .predicate_index
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
             let key = PredicateKey(predicate.to_string());
 
             if let Some(rule_ids) = pred_index.get(&key) {
@@ -186,7 +189,10 @@ impl RuleIndex {
 
         // Try combined index first
         if self.config.combined_indexing {
-            let combined = self.combined_index.read().expect("lock poisoned");
+            let combined = self
+                .combined_index
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
             let key = CombinedKey {
                 predicate: predicate.to_string(),
                 subject_type: subject.map_or(ArgType::Any, |s| ArgType::Constant(s.to_string())),
@@ -208,7 +214,10 @@ impl RuleIndex {
 
         // Try first-arg index
         if self.config.first_arg_indexing && subject.is_some() {
-            let first_arg = self.first_arg_index.read().expect("lock poisoned");
+            let first_arg = self
+                .first_arg_index
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
             let key = FirstArgKey {
                 predicate: predicate.to_string(),
                 first_arg: subject.map(|s| s.to_string()),
@@ -229,7 +238,10 @@ impl RuleIndex {
 
         // Try predicate index
         if self.config.predicate_indexing {
-            let pred_index = self.predicate_index.read().expect("lock poisoned");
+            let pred_index = self
+                .predicate_index
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
             let key = PredicateKey(predicate.to_string());
 
             if let Some(rule_ids) = pred_index.get(&key) {
@@ -250,7 +262,7 @@ impl RuleIndex {
             self.statistics.full_scans.fetch_add(1, Ordering::Relaxed);
         }
 
-        let rules = self.rules.read().expect("lock poisoned");
+        let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
         if self.config.collect_statistics {
             self.statistics
                 .rules_checked
@@ -263,13 +275,13 @@ impl RuleIndex {
 
     /// Get a rule by ID
     pub fn get_rule(&self, rule_id: RuleId) -> Option<Rule> {
-        let rules = self.rules.read().expect("lock poisoned");
+        let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
         rules.get(rule_id).filter(|r| !r.name.is_empty()).cloned()
     }
 
     /// Get all rules (excluding removed ones)
     pub fn get_all_rules(&self) -> Vec<Rule> {
-        let rules = self.rules.read().expect("lock poisoned");
+        let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
         rules
             .iter()
             .filter(|r| !r.name.is_empty())
@@ -279,7 +291,7 @@ impl RuleIndex {
 
     /// Get the total number of indexed rules
     pub fn rule_count(&self) -> usize {
-        let rules = self.rules.read().expect("lock poisoned");
+        let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
         rules.iter().filter(|r| !r.name.is_empty()).count()
     }
 
@@ -300,10 +312,19 @@ impl RuleIndex {
 
     /// Clear all rules and indices
     pub fn clear(&self) {
-        let mut rules = self.rules.write().expect("lock poisoned");
-        let mut pred_index = self.predicate_index.write().expect("lock poisoned");
-        let mut first_arg = self.first_arg_index.write().expect("lock poisoned");
-        let mut combined = self.combined_index.write().expect("lock poisoned");
+        let mut rules = self.rules.write().unwrap_or_else(|e| e.into_inner());
+        let mut pred_index = self
+            .predicate_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut first_arg = self
+            .first_arg_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut combined = self
+            .combined_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         rules.clear();
         pred_index.clear();
@@ -315,10 +336,19 @@ impl RuleIndex {
 
     /// Get index memory usage estimate in bytes
     pub fn memory_usage(&self) -> usize {
-        let rules = self.rules.read().expect("lock poisoned");
-        let pred_index = self.predicate_index.read().expect("lock poisoned");
-        let first_arg = self.first_arg_index.read().expect("lock poisoned");
-        let combined = self.combined_index.read().expect("lock poisoned");
+        let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
+        let pred_index = self
+            .predicate_index
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let first_arg = self
+            .first_arg_index
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let combined = self
+            .combined_index
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
 
         let rules_size = rules.len() * std::mem::size_of::<Rule>();
         let pred_size = pred_index.len()
@@ -334,7 +364,10 @@ impl RuleIndex {
     // === Private indexing methods ===
 
     fn index_by_predicate(&self, rule: &Rule, rule_id: RuleId) {
-        let mut pred_index = self.predicate_index.write().expect("lock poisoned");
+        let mut pred_index = self
+            .predicate_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         for atom in &rule.body {
             if let Some(predicate) = Self::extract_predicate(atom) {
@@ -345,7 +378,10 @@ impl RuleIndex {
     }
 
     fn unindex_by_predicate(&self, rule: &Rule, rule_id: RuleId) {
-        let mut pred_index = self.predicate_index.write().expect("lock poisoned");
+        let mut pred_index = self
+            .predicate_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         for atom in &rule.body {
             if let Some(predicate) = Self::extract_predicate(atom) {
@@ -361,7 +397,10 @@ impl RuleIndex {
     }
 
     fn index_by_first_arg(&self, rule: &Rule, rule_id: RuleId) {
-        let mut first_arg_index = self.first_arg_index.write().expect("lock poisoned");
+        let mut first_arg_index = self
+            .first_arg_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         for atom in &rule.body {
             if let (Some(predicate), first_arg) =
@@ -377,7 +416,10 @@ impl RuleIndex {
     }
 
     fn unindex_by_first_arg(&self, rule: &Rule, rule_id: RuleId) {
-        let mut first_arg_index = self.first_arg_index.write().expect("lock poisoned");
+        let mut first_arg_index = self
+            .first_arg_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         for atom in &rule.body {
             if let (Some(predicate), first_arg) =
@@ -398,7 +440,10 @@ impl RuleIndex {
     }
 
     fn index_by_combined(&self, rule: &Rule, rule_id: RuleId) {
-        let mut combined_index = self.combined_index.write().expect("lock poisoned");
+        let mut combined_index = self
+            .combined_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         for atom in &rule.body {
             if let Some(key) = Self::extract_combined_key(atom) {
@@ -408,7 +453,10 @@ impl RuleIndex {
     }
 
     fn unindex_by_combined(&self, rule: &Rule, rule_id: RuleId) {
-        let mut combined_index = self.combined_index.write().expect("lock poisoned");
+        let mut combined_index = self
+            .combined_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         for atom in &rule.body {
             if let Some(key) = Self::extract_combined_key(atom) {
@@ -488,7 +536,7 @@ impl RuleIndex {
 
     /// Find rules whose body predicates match a wildcard pattern.
     pub fn find_rules_by_wildcard(&self, pattern: &str) -> Vec<RuleId> {
-        let rules = self.rules.read().expect("lock poisoned");
+        let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
         let mut result = Vec::new();
 
         for (id, rule) in rules.iter().enumerate() {
@@ -515,7 +563,7 @@ impl RuleIndex {
 
     /// Re-index a single rule (remove old entries, re-add).
     pub fn reindex_rule(&self, rule_id: RuleId) -> bool {
-        let rules = self.rules.read().expect("lock poisoned");
+        let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
         let rule = match rules.get(rule_id) {
             Some(r) if !r.name.is_empty() => r.clone(),
             _ => return false,
@@ -549,7 +597,7 @@ impl RuleIndex {
 
     /// Replace a rule in-place and re-index it.
     pub fn replace_rule(&self, rule_id: RuleId, new_rule: Rule) -> Option<Rule> {
-        let rules = self.rules.read().expect("lock poisoned");
+        let rules = self.rules.read().unwrap_or_else(|e| e.into_inner());
         if rule_id >= rules.len() || rules[rule_id].name.is_empty() {
             return None;
         }
@@ -580,7 +628,7 @@ impl RuleIndex {
         }
 
         // Store the new rule
-        let mut rules = self.rules.write().expect("lock poisoned");
+        let mut rules = self.rules.write().unwrap_or_else(|e| e.into_inner());
         rules[rule_id] = new_rule;
 
         Some(old_rule)
@@ -588,7 +636,10 @@ impl RuleIndex {
 
     /// Return predicate-level index density (entries / unique predicates).
     pub fn predicate_density(&self) -> f64 {
-        let pred_index = self.predicate_index.read().expect("lock poisoned");
+        let pred_index = self
+            .predicate_index
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         if pred_index.is_empty() {
             return 0.0;
         }
@@ -606,7 +657,7 @@ impl Default for RuleIndex {
 impl RuleDependencyGraph {
     /// Build a dependency graph from an existing index.
     pub fn from_index(index: &RuleIndex) -> Self {
-        let rules = index.rules.read().expect("lock poisoned");
+        let rules = index.rules.read().unwrap_or_else(|e| e.into_inner());
         let mut graph = Self::default();
 
         // Collect head predicates per rule
@@ -735,7 +786,7 @@ impl PriorityIndex {
 
     /// Return all rules ordered by priority (highest first).
     pub fn ordered_rules(&self, index: &RuleIndex) -> Vec<PrioritizedRule> {
-        let rules = index.rules.read().expect("lock poisoned");
+        let rules = index.rules.read().unwrap_or_else(|e| e.into_inner());
         let mut result: Vec<PrioritizedRule> = rules
             .iter()
             .enumerate()

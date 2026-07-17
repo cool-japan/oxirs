@@ -263,39 +263,86 @@ pub async fn logout_handler(
 }
 
 /// Get current user information
-#[instrument(skip(_state))]
+///
+/// Returns the profile of the actually authenticated caller (session cookie
+/// or JWT bearer token, resolved by the `AuthUser` extractor), never a
+/// hardcoded placeholder. Consulting `auth_service` for the freshest
+/// enabled/locked status keeps `account_status` accurate even if the
+/// session/JWT was minted before a later account change.
+#[instrument(skip(state, auth_user))]
 pub async fn user_info_handler(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
 ) -> Result<Json<UserInfoResponse>, FusekiError> {
-    // For now, return a placeholder response since auth extraction isn't fully implemented
+    let user = auth_user.0;
+
+    let account_status = match &state.auth_service {
+        Some(auth_service) => match auth_service.get_user(&user.username).await {
+            Some(cfg) if !cfg.enabled => "disabled".to_string(),
+            Some(cfg)
+                if cfg
+                    .locked_until
+                    .is_some_and(|locked_until| locked_until > chrono::Utc::now()) =>
+            {
+                "locked".to_string()
+            }
+            _ => "active".to_string(),
+        },
+        None => "active".to_string(),
+    };
+
     let response = UserInfoResponse {
-        username: "anonymous".to_string(),
-        email: None,
-        full_name: None,
-        roles: vec!["user".to_string()],
-        permissions: vec![],
-        last_login: None,
-        account_status: "active".to_string(),
+        username: user.username,
+        email: user.email,
+        full_name: user.full_name,
+        roles: user.roles,
+        permissions: user.permissions,
+        last_login: user.last_login.map(|t| t.to_rfc3339()),
+        account_status,
     };
 
     Ok(Json(response))
 }
 
 /// List all users (admin only)
-#[instrument(skip(_state))]
+///
+/// Requires an authenticated caller with `UserManagement` (or `GlobalAdmin`)
+/// permission and returns the real user registry from `AuthService`, not a
+/// single hardcoded entry.
+#[instrument(skip(state, auth_user))]
 pub async fn list_users_handler(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
 ) -> Result<Json<UsersListResponse>, FusekiError> {
-    // For now, return a placeholder response since auth extraction isn't fully implemented
-    let users = vec![UserSummary {
-        username: "admin".to_string(),
-        email: Some("admin@example.com".to_string()),
-        roles: vec!["admin".to_string()],
-        enabled: true,
-        last_login: None,
-        failed_login_attempts: 0,
-        locked_until: None,
-    }];
+    let caller = auth_user.0;
+    if !caller.permissions.contains(&Permission::UserManagement)
+        && !caller.permissions.contains(&Permission::GlobalAdmin)
+    {
+        return Err(FusekiError::forbidden(
+            "Insufficient permissions to list users",
+        ));
+    }
+
+    let auth_service = state
+        .auth_service
+        .as_ref()
+        .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
+
+    let mut users: Vec<UserSummary> = auth_service
+        .list_users()
+        .await
+        .into_iter()
+        .map(|(username, cfg)| UserSummary {
+            username,
+            email: cfg.email,
+            roles: cfg.roles,
+            enabled: cfg.enabled,
+            last_login: cfg.last_login.map(|t| t.to_rfc3339()),
+            failed_login_attempts: cfg.failed_login_attempts,
+            locked_until: cfg.locked_until.map(|t| t.to_rfc3339()),
+        })
+        .collect();
+    users.sort_by(|a, b| a.username.cmp(&b.username));
 
     let total_count = users.len();
     Ok(Json(UsersListResponse { users, total_count }))
@@ -658,5 +705,117 @@ mod tests {
         assert!(!is_valid_role("invalid"));
         assert!(!is_valid_role(""));
         assert!(!is_valid_role("custom_role"));
+    }
+
+    fn minimal_state() -> Arc<AppState> {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let config = crate::config::ServerConfig::default();
+        Arc::new(crate::server::build_minimal_app_state(store, config))
+    }
+
+    /// Regression: `GET /$/user` previously always returned a hardcoded
+    /// `"anonymous"` user regardless of who actually authenticated. It must
+    /// now echo back the real `AuthUser` extracted from the request.
+    #[tokio::test]
+    async fn test_user_info_handler_returns_real_authenticated_user() {
+        let state = minimal_state();
+        let user = crate::auth::User {
+            username: "alice".to_string(),
+            roles: vec!["writer".to_string()],
+            email: Some("alice@example.com".to_string()),
+            full_name: Some("Alice Example".to_string()),
+            last_login: None,
+            permissions: vec![Permission::SparqlQuery],
+        };
+
+        let response = user_info_handler(State(state), AuthUser(user))
+            .await
+            .expect("handler should succeed");
+
+        assert_eq!(response.username, "alice");
+        assert_ne!(response.username, "anonymous");
+        assert_eq!(response.email, Some("alice@example.com".to_string()));
+        assert_eq!(response.roles, vec!["writer".to_string()]);
+    }
+
+    /// Regression: `GET /$/users` previously always returned a single
+    /// hardcoded `admin`/`admin@example.com` entry no matter how many real
+    /// users existed. It must call `AuthService::list_users()` and require
+    /// admin permission.
+    #[tokio::test]
+    async fn test_list_users_handler_returns_real_users() {
+        let security_config = crate::config::SecurityConfig::default();
+        let auth_service = crate::auth::AuthService::new(security_config)
+            .await
+            .expect("auth service should construct");
+
+        auth_service
+            .upsert_user(
+                "bob".to_string(),
+                UserConfig {
+                    password_hash: "irrelevant-for-this-test".to_string(),
+                    roles: vec!["reader".to_string()],
+                    permissions: vec![],
+                    enabled: true,
+                    email: Some("bob@example.com".to_string()),
+                    full_name: None,
+                    last_login: None,
+                    failed_login_attempts: 0,
+                    locked_until: None,
+                },
+            )
+            .await
+            .expect("upsert should succeed");
+
+        let store = crate::store::Store::new().expect("in-memory store");
+        let config = crate::config::ServerConfig::default();
+        let mut state = crate::server::build_minimal_app_state(store, config);
+        state.auth_service = Some(auth_service);
+        let state = Arc::new(state);
+
+        let admin = crate::auth::User {
+            username: "admin".to_string(),
+            roles: vec!["admin".to_string()],
+            email: None,
+            full_name: None,
+            last_login: None,
+            permissions: vec![Permission::GlobalAdmin],
+        };
+
+        let response = list_users_handler(State(state), AuthUser(admin))
+            .await
+            .expect("handler should succeed for an admin caller");
+
+        assert_eq!(response.total_count, 1);
+        assert_eq!(response.users[0].username, "bob");
+        assert_eq!(response.users[0].email, Some("bob@example.com".to_string()));
+        assert!(
+            response
+                .users
+                .iter()
+                .all(|u| u.username != "admin" || u.email != Some("admin@example.com".to_string())),
+            "must not return the old hardcoded placeholder user"
+        );
+    }
+
+    /// A caller without `UserManagement`/`GlobalAdmin` permission must be
+    /// rejected rather than silently allowed to enumerate all users.
+    #[tokio::test]
+    async fn test_list_users_handler_forbidden_without_permission() {
+        let state = minimal_state();
+        let unprivileged = crate::auth::User {
+            username: "eve".to_string(),
+            roles: vec!["user".to_string()],
+            email: None,
+            full_name: None,
+            last_login: None,
+            permissions: vec![Permission::SparqlQuery],
+        };
+
+        let result = list_users_handler(State(state), AuthUser(unprivileged)).await;
+        assert!(
+            result.is_err(),
+            "a non-admin caller must not be able to list users"
+        );
     }
 }

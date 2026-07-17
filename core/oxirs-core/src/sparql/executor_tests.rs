@@ -358,3 +358,148 @@ fn test_select_distinct_reduces_duplicates() {
         all_subjects.len()
     );
 }
+
+// --- Optional WHERE keyword (SPARQL 1.1 `WhereClause ::= 'WHERE'? GroupGraphPattern`) ---
+
+#[test]
+fn test_ask_without_where_keyword_true_when_matching() {
+    let backend = make_populated_backend();
+    let executor = QueryExecutor::new(&backend);
+    let result = executor
+        .execute("ASK { ?s ?p ?o }")
+        .expect("ASK without WHERE should succeed");
+    match result.results() {
+        crate::rdf_store::types::QueryResults::Boolean(val) => {
+            assert!(
+                *val,
+                "ASK without WHERE keyword should return true against a non-empty store"
+            );
+        }
+        other => panic!("Expected Boolean result from ASK, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_ask_without_where_keyword_false_on_empty_store() {
+    let backend = make_empty_backend();
+    let executor = QueryExecutor::new(&backend);
+    let result = executor
+        .execute("ASK { ?s ?p ?o }")
+        .expect("ASK without WHERE on empty store should succeed");
+    match result.results() {
+        crate::rdf_store::types::QueryResults::Boolean(val) => {
+            assert!(
+                !val,
+                "ASK without WHERE keyword should return false against an empty store"
+            );
+        }
+        other => panic!("Expected Boolean result from ASK, got: {:?}", other),
+    }
+}
+
+#[test]
+fn test_select_star_without_where_keyword_returns_rows() {
+    let backend = make_populated_backend();
+    let executor = QueryExecutor::new(&backend);
+    let with_where = executor
+        .execute("SELECT * WHERE { ?s ?p ?o }")
+        .expect("SELECT * WHERE should succeed");
+    let without_where = executor
+        .execute("SELECT * { ?s ?p ?o }")
+        .expect("SELECT * without WHERE should succeed");
+    assert_eq!(
+        without_where.len(),
+        5,
+        "SELECT * without WHERE should return all 5 triples, got {}",
+        without_where.len()
+    );
+    assert_eq!(
+        without_where.len(),
+        with_where.len(),
+        "SELECT * with and without WHERE must return the same number of rows"
+    );
+}
+
+#[test]
+fn test_select_projection_without_where_keyword() {
+    let backend = make_populated_backend();
+    let executor = QueryExecutor::new(&backend);
+    let query = "SELECT ?o { ?s <http://xmlns.com/foaf/0.1/name> ?o }";
+    let result = executor
+        .execute(query)
+        .expect("SELECT ?o without WHERE should succeed");
+    assert_eq!(
+        result.len(),
+        2,
+        "Expected 2 name bindings without WHERE keyword, got {}",
+        result.len()
+    );
+}
+
+#[test]
+fn test_construct_without_where_keyword() {
+    let backend = make_populated_backend();
+    let executor = QueryExecutor::new(&backend);
+    // CONSTRUCT with an omitted WHERE: first `{...}` is the template, the
+    // second is the graph pattern.
+    let query = "CONSTRUCT { ?s ?p ?o } { ?s ?p ?o }";
+    let result = executor
+        .execute(query)
+        .expect("CONSTRUCT without WHERE should succeed");
+    assert!(
+        !result.is_empty(),
+        "CONSTRUCT without WHERE keyword should return a non-empty graph"
+    );
+}
+
+#[test]
+fn test_where_keyword_forms_unchanged() {
+    // Regression guard: the WHERE-spelled forms must keep working identically.
+    let backend = make_populated_backend();
+    let executor = QueryExecutor::new(&backend);
+
+    let select = executor
+        .execute("SELECT * WHERE { ?s ?p ?o }")
+        .expect("SELECT * WHERE should succeed");
+    assert_eq!(select.len(), 5);
+
+    let ask = executor
+        .execute("ASK WHERE { ?s ?p ?o }")
+        .expect("ASK WHERE should succeed");
+    match ask.results() {
+        crate::rdf_store::types::QueryResults::Boolean(val) => assert!(*val),
+        other => panic!("Expected Boolean from ASK WHERE, got: {:?}", other),
+    }
+
+    let construct = executor
+        .execute("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+        .expect("CONSTRUCT WHERE should succeed");
+    assert!(!construct.is_empty());
+}
+
+#[test]
+fn test_where_substring_in_iri_not_treated_as_keyword() {
+    // An IRI containing the substring "where" must not confuse WHERE-locating.
+    let mut storage = MemoryStorage::new();
+    let s = NamedNode::new_unchecked("http://example.org/nowhere");
+    let p = NamedNode::new_unchecked("http://example.org/somewhere");
+    let o = NamedNode::new_unchecked("http://example.org/elsewhere");
+    storage.insert_quad(Quad::new(
+        Subject::NamedNode(s),
+        Predicate::NamedNode(p),
+        Object::NamedNode(o),
+        GraphName::DefaultGraph,
+    ));
+    let backend = StorageBackend::Memory(Arc::new(RwLock::new(storage)));
+    let executor = QueryExecutor::new(&backend);
+
+    let result = executor
+        .execute("SELECT * { ?s <http://example.org/somewhere> ?o }")
+        .expect("SELECT with 'where' substring inside IRI should succeed");
+    assert_eq!(
+        result.len(),
+        1,
+        "Expected exactly 1 row despite 'where' substring inside the IRI, got {}",
+        result.len()
+    );
+}

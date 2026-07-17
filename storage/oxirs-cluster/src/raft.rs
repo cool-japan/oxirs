@@ -6,8 +6,42 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(feature = "raft")]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
+
+/// Errors specific to Raft consensus wiring being unavailable.
+///
+/// The OpenRaft 0.9.21 network/storage integration (`RaftNetworkFactory`,
+/// split log/state-machine storage, `Raft::new`) has not been completed in
+/// this build. A node asked to join a multi-node cluster therefore has no
+/// real ability to replicate a Raft log or safely claim leadership; every
+/// such operation must fail loudly instead of silently behaving as a
+/// single-node "leader" (the exact anti-pattern this type replaces).
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum RaftClusterError {
+    /// `init_raft` was called with one or more real peers, but this build
+    /// cannot construct a working multi-node `openraft::Raft` instance.
+    #[error(
+        "Raft consensus is not initialized for a multi-node cluster (node {node_id}, {peer_count} peer(s) requested). \
+         The OpenRaft 0.9.21 network/storage wiring is not implemented in this build, so multi-node clustering is \
+         unavailable. Refusing to silently act as a single-node leader."
+    )]
+    MultiNodeUnavailable {
+        node_id: OxirsNodeId,
+        peer_count: usize,
+    },
+
+    /// An operation that requires real cross-node consensus was attempted
+    /// on a node for which multi-node clustering was requested but is
+    /// unavailable in this build.
+    #[error(
+        "Node {node_id} cannot service this operation: multi-node Raft consensus was requested but is not \
+         available in this build."
+    )]
+    ConsensusUnavailable { node_id: OxirsNodeId },
+}
 
 /// Global shared storage for testing when Raft is not available
 static GLOBAL_SHARED_STORAGE: OnceLock<Arc<RwLock<RdfApp>>> = OnceLock::new();
@@ -645,6 +679,13 @@ pub struct RaftNode {
     node_id: OxirsNodeId,
     #[cfg(feature = "raft")]
     raft: Option<Raft<OxirsTypeConfig>>,
+    /// Set when `init_raft` was asked to form a real multi-node cluster
+    /// (peers other than this node were requested) but this build cannot
+    /// construct a working `openraft::Raft` instance to service it. Once
+    /// set, every operation that requires cross-node consensus must fail
+    /// loudly rather than silently behave as a single-node leader.
+    #[cfg(feature = "raft")]
+    multi_node_unavailable: AtomicBool,
     storage: Arc<RwLock<RdfApp>>,
 }
 
@@ -654,44 +695,72 @@ impl RaftNode {
             node_id,
             #[cfg(feature = "raft")]
             raft: None,
+            #[cfg(feature = "raft")]
+            multi_node_unavailable: AtomicBool::new(false),
             storage: Arc::new(RwLock::new(RdfApp::default())),
         }
     }
 
-    /// Initialize Raft with storage
+    /// Initialize Raft with storage.
+    ///
+    /// # OpenRaft 0.9.21 Migration Required
+    ///
+    /// OpenRaft 0.9.21 introduced breaking API changes that require
+    /// architectural refactoring (a `RaftNetworkFactory` implementation, a
+    /// log/state-machine storage split, and the new `Raft::new()`
+    /// signature). That migration has not been completed in this build.
+    ///
+    /// Behavior:
+    /// - If `peers` names any node other than `self`, a real multi-node
+    ///   cluster was requested. This build has no way to honor that
+    ///   request, so we refuse it outright with
+    ///   [`RaftClusterError::MultiNodeUnavailable`] instead of silently
+    ///   falling back to a fake single-node "leader" — every prior node in
+    ///   such a deployment used to independently believe itself the
+    ///   leader, which is the anti-pattern this guards against.
+    /// - If `peers` is empty (or names only `self`), this is a genuine
+    ///   single-node deployment and the in-process fallback storage is an
+    ///   honest implementation of a one-node "cluster".
+    ///
+    /// Migration references:
+    /// - <https://github.com/datafuselabs/openraft/blob/main/guide/migration-guide.md>
+    /// - <https://github.com/datafuselabs/openraft/tree/main/examples/raft-kv-memstore>
     #[cfg(feature = "raft")]
-    pub async fn init_raft(&mut self, _peers: BTreeSet<OxirsNodeId>) -> Result<()> {
-        // Note: OpenRaft 0.9.21 Migration Required
-        // ========================================
-        // OpenRaft 0.9.21 introduced breaking API changes that require architectural refactoring.
-        // This is a deliberate design decision to defer migration until the API stabilizes.
-        //
-        // Current State:
-        // - Using fallback to global shared storage (suitable for single-node and testing)
-        // - Raft consensus is optional via feature flag
-        //
-        // Migration Requirements (when upgrading to OpenRaft 0.9.21+):
-        // 1. Implement RaftNetworkFactory trait for network layer abstraction
-        // 2. Split OxirsStorage into:
-        //    - RaftLogStorage: Manages Raft log entries
-        //    - RaftStateMachine: Manages application state
-        // 3. Update initialization to use new Raft::new() signature:
-        //    `Raft::new(node_id, Arc::new(config), log_store, network_factory, state_machine)`
-        // 4. Replace Membership initialization with new nodes-based API
-        //
-        // References:
-        // - OpenRaft migration guide: https://github.com/datafuselabs/openraft/blob/main/guide/migration-guide.md
-        // - Network factory example: https://github.com/datafuselabs/openraft/tree/main/examples/raft-kv-memstore
-        //
-        // For now, we allow initialization to succeed but leave self.raft as None.
-        // This triggers fallback to global shared storage, which is suitable for testing and development.
-        tracing::warn!(
-            "Raft initialization incomplete for OpenRaft 0.9.21 - using fallback storage mode"
+    pub async fn init_raft(&mut self, peers: BTreeSet<OxirsNodeId>) -> Result<()> {
+        let other_peers: BTreeSet<OxirsNodeId> = peers
+            .into_iter()
+            .filter(|&peer| peer != self.node_id)
+            .collect();
+
+        if !other_peers.is_empty() {
+            self.multi_node_unavailable.store(true, Ordering::SeqCst);
+            tracing::error!(
+                node_id = self.node_id,
+                peer_count = other_peers.len(),
+                "Refusing to initialize Raft: multi-node clustering was requested but the OpenRaft 0.9.21 \
+                 network/storage wiring is incomplete in this build"
+            );
+            return Err(RaftClusterError::MultiNodeUnavailable {
+                node_id: self.node_id,
+                peer_count: other_peers.len(),
+            }
+            .into());
+        }
+
+        tracing::info!(
+            node_id = self.node_id,
+            "Initializing Raft in single-node mode (no other peers requested)"
         );
         Ok(())
     }
 
-    /// Check if this node is the leader
+    /// Check if this node is the leader.
+    ///
+    /// Only honest when either real Raft consensus elected this node, or
+    /// no multi-node cluster was ever requested (a genuine single-node
+    /// deployment trivially leads itself). If a multi-node cluster was
+    /// requested but real consensus could not be constructed, this
+    /// deliberately returns `false` instead of masquerading as a leader.
     pub async fn is_leader(&self) -> bool {
         #[cfg(feature = "raft")]
         {
@@ -700,14 +769,17 @@ impl RaftNode {
                     Some(leader) => leader == self.node_id,
                     None => false,
                 }
+            } else if self.multi_node_unavailable.load(Ordering::SeqCst) {
+                false
             } else {
-                // If raft is not initialized, assume single-node mode where this node is the leader
+                // No multi-node cluster was ever requested: honest single-node mode.
                 true
             }
         }
         #[cfg(not(feature = "raft"))]
         {
-            // Fallback for non-raft mode
+            // The "raft" feature is not compiled in at all, so no cluster
+            // capability is claimed; single-node behavior is honest here.
             true
         }
     }
@@ -728,7 +800,13 @@ impl RaftNode {
         }
     }
 
-    /// Submit a command for replication
+    /// Submit a command for replication.
+    ///
+    /// If a multi-node cluster was requested via `init_raft` but real
+    /// consensus could not be constructed, this returns
+    /// [`RaftClusterError::ConsensusUnavailable`] rather than silently
+    /// applying the command to local-only fallback storage — a write that
+    /// is never replicated to any peer must not be reported as successful.
     pub async fn submit_command(&self, cmd: RdfCommand) -> Result<RdfResponse> {
         #[cfg(feature = "raft")]
         {
@@ -738,8 +816,16 @@ impl RaftNode {
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to submit command: {}", e))?;
                 Ok(response.data)
+            } else if self.multi_node_unavailable.load(Ordering::SeqCst) {
+                Err(RaftClusterError::ConsensusUnavailable {
+                    node_id: self.node_id,
+                }
+                .into())
             } else {
-                // Fallback: use global shared storage for testing
+                // Genuine single-node mode: fallback storage honestly
+                // represents the only node in the "cluster". Global shared
+                // storage exists so multiple in-process RaftNode instances
+                // can be exercised together in tests.
                 if let Some(shared_storage) = get_global_shared_storage() {
                     let mut state = shared_storage.write().await;
                     Ok(state.apply_command(&cmd))
@@ -1060,6 +1146,88 @@ mod tests {
         assert_eq!(
             results[0],
             ("s".to_string(), "p".to_string(), "o".to_string())
+        );
+    }
+
+    /// Regression test for the "fake leader" anti-pattern: init_raft() must
+    /// fail loudly (not warn+Ok) when a real multi-node cluster is
+    /// requested, since this build cannot construct working openraft
+    /// consensus for it.
+    #[cfg(feature = "raft")]
+    #[tokio::test]
+    async fn test_init_raft_multi_node_request_fails_loudly() {
+        let mut node = RaftNode::new(1);
+        let peers: BTreeSet<OxirsNodeId> = [1u64, 2, 3].into_iter().collect();
+
+        let result = node.init_raft(peers).await;
+        assert!(
+            result.is_err(),
+            "requesting a multi-node cluster must fail, not silently succeed"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("multi-node")
+                || err
+                    .to_string()
+                    .contains("Raft consensus is not initialized"),
+            "error message should clearly explain the unavailable multi-node cluster: {err}"
+        );
+    }
+
+    /// After a failed multi-node init_raft(), the node must never claim
+    /// leadership or accept writes that pretend to be replicated.
+    #[cfg(feature = "raft")]
+    #[tokio::test]
+    async fn test_node_after_failed_multi_node_init_is_not_a_fake_leader() {
+        let mut node = RaftNode::new(42);
+        let peers: BTreeSet<OxirsNodeId> = [42u64, 7, 9].into_iter().collect();
+
+        let init_result = node.init_raft(peers).await;
+        assert!(init_result.is_err());
+
+        // The node must not silently masquerade as a single-node leader.
+        assert!(
+            !node.is_leader().await,
+            "node must not claim leadership after multi-node Raft init failed"
+        );
+
+        // Writes must fail loudly instead of being applied to unreplicated
+        // local-only fallback storage.
+        let cmd = RdfCommand::Insert {
+            subject: "s".to_string(),
+            predicate: "p".to_string(),
+            object: "o".to_string(),
+        };
+        let submit_result = node.submit_command(cmd).await;
+        assert!(
+            submit_result.is_err(),
+            "submit_command must fail rather than fabricate a successful unreplicated write"
+        );
+    }
+
+    /// A genuine single-node deployment (empty peer set, or a peer set
+    /// containing only self) must continue to work as an honest one-node
+    /// "cluster": init succeeds and the node is its own leader.
+    #[cfg(feature = "raft")]
+    #[tokio::test]
+    async fn test_init_raft_single_node_mode_stays_leader() {
+        let mut node = RaftNode::new(5);
+
+        // Explicitly listing only self is equivalent to no peers.
+        let peers: BTreeSet<OxirsNodeId> = [5u64].into_iter().collect();
+        let result = node.init_raft(peers).await;
+        assert!(result.is_ok(), "single-node init must succeed: {result:?}");
+        assert!(node.is_leader().await);
+
+        let cmd = RdfCommand::Insert {
+            subject: "s".to_string(),
+            predicate: "p".to_string(),
+            object: "o".to_string(),
+        };
+        let response = node.submit_command(cmd).await;
+        assert!(
+            response.is_ok(),
+            "single-node writes must still succeed: {response:?}"
         );
     }
 }

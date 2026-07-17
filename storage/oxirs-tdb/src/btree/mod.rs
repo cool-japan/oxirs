@@ -7,10 +7,9 @@ pub mod iterator;
 pub mod node;
 
 use crate::error::{Result, TdbError};
-use crate::storage::{BufferPool, PageGuard, PageId, PageType};
+use crate::storage::{BufferPool, PageId, PageType};
 use iterator::BTreeIterator;
 use node::{BTreeNode, InternalNode, LeafNode, ORDER};
-use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -68,7 +67,7 @@ where
     fn search_recursive(&self, page_id: PageId, key: &K) -> Result<Option<V>> {
         let node = {
             let guard = self.buffer_pool.fetch_page(page_id)?;
-            let page = guard.page();
+            let page = guard.page_checked()?;
             let page_ref = page.as_ref().ok_or(TdbError::PageNotFound(page_id))?;
             BTreeNode::<K, V>::deserialize_from_page(page_ref)?
         };
@@ -90,8 +89,8 @@ where
             let guard = self.buffer_pool.new_page(PageType::BTreeLeaf)?;
             let root_id = guard.page_id();
             {
-                let mut page = guard.page_mut();
-                let page = page.as_mut().expect("page should be available");
+                let mut page = guard.page_mut_checked()?;
+                let page = page.as_mut().ok_or(TdbError::PageNotFound(root_id))?;
                 let mut node = BTreeNode::new_leaf();
                 if let BTreeNode::Leaf(ref mut leaf) = node {
                     leaf.insert(key.clone(), value.clone());
@@ -103,9 +102,9 @@ where
             return Ok(None);
         }
 
-        let root_id = self
-            .root_page
-            .expect("root page should exist after is_none check");
+        let root_id = self.root_page.ok_or_else(|| {
+            TdbError::Other("B+Tree root page vanished after existence check".to_string())
+        })?;
 
         // Try insert, handle split if needed
         match self.insert_recursive(root_id, key.clone(), value.clone())? {
@@ -115,8 +114,8 @@ where
                 let new_root_guard = self.buffer_pool.new_page(PageType::BTreeInternal)?;
                 let new_root_id = new_root_guard.page_id();
                 {
-                    let mut page = new_root_guard.page_mut();
-                    let page = page.as_mut().expect("page should be available");
+                    let mut page = new_root_guard.page_mut_checked()?;
+                    let page = page.as_mut().ok_or(TdbError::PageNotFound(new_root_id))?;
                     let new_root = InternalNode {
                         keys: vec![split_key],
                         children: vec![root_id, new_page_id],
@@ -140,7 +139,7 @@ where
     ) -> Result<InsertResult<K, V>> {
         let mut node = {
             let guard = self.buffer_pool.fetch_page(page_id)?;
-            let page = guard.page();
+            let page = guard.page_checked()?;
             let page_ref = page.as_ref().ok_or(TdbError::PageNotFound(page_id))?;
             BTreeNode::<K, V>::deserialize_from_page(page_ref)?
         };
@@ -167,8 +166,8 @@ where
                         // Write updated internal node
                         let guard = self.buffer_pool.fetch_page(page_id)?;
                         {
-                            let mut page = guard.page_mut();
-                            let page = page.as_mut().expect("page should be available");
+                            let mut page = guard.page_mut_checked()?;
+                            let page = page.as_mut().ok_or(TdbError::PageNotFound(page_id))?;
                             node.serialize_to_page(page)?;
                         }
                         drop(guard);
@@ -196,8 +195,8 @@ where
                 // Write updated leaf
                 let guard = self.buffer_pool.fetch_page(page_id)?;
                 {
-                    let mut page = guard.page_mut();
-                    let page = page.as_mut().expect("page should be available");
+                    let mut page = guard.page_mut_checked()?;
+                    let page = page.as_mut().ok_or(TdbError::PageNotFound(page_id))?;
                     node.serialize_to_page(page)?;
                 }
                 drop(guard);
@@ -224,13 +223,16 @@ where
         let right_guard = self.buffer_pool.new_page(PageType::BTreeLeaf)?;
         let right_id = right_guard.page_id();
 
-        // Update next pointers
+        // Maintain the leaf linked list: the new right sibling takes over the
+        // left leaf's old successor, and the left leaf now points at the right
+        // sibling. Without this link, range scans (and full-index scans used
+        // for reopen/bloom-rebuild) silently skip every split-off right leaf.
         right_leaf.next = leaf.next;
-        //leaf.next = Some(right_id);  // Commented out to avoid double linking
+        leaf.next = Some(right_id);
 
         {
-            let mut page = right_guard.page_mut();
-            let page = page.as_mut().expect("page should be available");
+            let mut page = right_guard.page_mut_checked()?;
+            let page = page.as_mut().ok_or(TdbError::PageNotFound(right_id))?;
             let right_node = BTreeNode::Leaf(right_leaf);
             right_node.serialize_to_page(page)?;
         }
@@ -239,8 +241,8 @@ where
         // Write left leaf back
         let left_guard = self.buffer_pool.fetch_page(page_id)?;
         {
-            let mut page = left_guard.page_mut();
-            let page = page.as_mut().expect("page should be available");
+            let mut page = left_guard.page_mut_checked()?;
+            let page = page.as_mut().ok_or(TdbError::PageNotFound(page_id))?;
             let left_node = BTreeNode::Leaf(leaf);
             left_node.serialize_to_page(page)?;
         }
@@ -262,8 +264,8 @@ where
         let right_id = right_guard.page_id();
 
         {
-            let mut page = right_guard.page_mut();
-            let page = page.as_mut().expect("page should be available");
+            let mut page = right_guard.page_mut_checked()?;
+            let page = page.as_mut().ok_or(TdbError::PageNotFound(right_id))?;
             let right_node: BTreeNode<K, V> = BTreeNode::Internal(right_internal);
             right_node.serialize_to_page(page)?;
         }
@@ -272,8 +274,8 @@ where
         // Write left internal node back
         let left_guard = self.buffer_pool.fetch_page(page_id)?;
         {
-            let mut page = left_guard.page_mut();
-            let page = page.as_mut().expect("page should be available");
+            let mut page = left_guard.page_mut_checked()?;
+            let page = page.as_mut().ok_or(TdbError::PageNotFound(page_id))?;
             let left_node: BTreeNode<K, V> = BTreeNode::Internal(internal);
             left_node.serialize_to_page(page)?;
         }
@@ -296,7 +298,7 @@ where
     fn delete_recursive(&mut self, page_id: PageId, key: &K) -> Result<Option<V>> {
         let mut node = {
             let guard = self.buffer_pool.fetch_page(page_id)?;
-            let page = guard.page();
+            let page = guard.page_checked()?;
             let page_ref = page.as_ref().ok_or(TdbError::PageNotFound(page_id))?;
             BTreeNode::<K, V>::deserialize_from_page(page_ref)?
         };
@@ -314,8 +316,8 @@ where
                     // Write updated leaf
                     let guard = self.buffer_pool.fetch_page(page_id)?;
                     {
-                        let mut page = guard.page_mut();
-                        let page = page.as_mut().expect("page should be available");
+                        let mut page = guard.page_mut_checked()?;
+                        let page = page.as_mut().ok_or(TdbError::PageNotFound(page_id))?;
                         node.serialize_to_page(page)?;
                     }
                     drop(guard);
@@ -354,7 +356,7 @@ where
     fn find_leaf(&self, page_id: PageId, key: &K) -> Result<PageId> {
         let node = {
             let guard = self.buffer_pool.fetch_page(page_id)?;
-            let page = guard.page();
+            let page = guard.page_checked()?;
             let page_ref = page.as_ref().ok_or(TdbError::PageNotFound(page_id))?;
             BTreeNode::<K, V>::deserialize_from_page(page_ref)?
         };
@@ -373,7 +375,7 @@ where
     fn find_leftmost_leaf(&self, page_id: PageId) -> Result<PageId> {
         let node = {
             let guard = self.buffer_pool.fetch_page(page_id)?;
-            let page = guard.page();
+            let page = guard.page_checked()?;
             let page_ref = page.as_ref().ok_or(TdbError::PageNotFound(page_id))?;
             BTreeNode::<K, V>::deserialize_from_page(page_ref)?
         };
@@ -399,7 +401,7 @@ enum InsertResult<K, V> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{Allocator, FileManager};
+    use crate::storage::FileManager;
     use tempfile::TempDir;
 
     fn create_test_btree() -> (TempDir, BTree<i32, String>) {

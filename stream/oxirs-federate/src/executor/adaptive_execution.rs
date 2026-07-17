@@ -132,7 +132,10 @@ impl FederatedExecutor {
         adaptive_config: &mut LocalAdaptiveConfig,
     ) -> Result<Vec<StepResult>> {
         let group_start = Instant::now();
-        // Monitor resource usage before execution
+        // Monitor resource usage before execution. `refresh()` pulls a real
+        // system memory/CPU sample so strategy selection below reacts to
+        // actual load instead of a stale (or always-zero) reading.
+        resource_monitor.refresh();
         let _initial_memory = resource_monitor.get_memory_usage();
         let _initial_cpu = resource_monitor.get_cpu_usage();
 
@@ -185,7 +188,9 @@ impl FederatedExecutor {
             }
         };
 
-        // Monitor resource usage after execution
+        // Monitor resource usage after execution (re-sample so this reflects
+        // the group's actual impact, not the pre-execution reading).
+        resource_monitor.refresh();
         let final_memory = resource_monitor.get_memory_usage();
         let final_cpu = resource_monitor.get_cpu_usage();
         let group_duration = group_start.elapsed();

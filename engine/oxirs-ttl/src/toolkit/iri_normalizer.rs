@@ -517,6 +517,244 @@ fn is_valid_scheme(scheme: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
 }
 
+/// Generic components of an IRI reference (RFC 3986 §3), where every component but
+/// `path` may be absent for a relative reference.
+struct ReferenceComponents {
+    scheme: Option<String>,
+    authority: Option<String>,
+    path: String,
+    query: Option<String>,
+    fragment: Option<String>,
+}
+
+/// Split an IRI reference into its generic components without requiring a scheme,
+/// unlike [`parse_iri_components`] which is only valid for absolute IRIs.
+fn split_generic_reference(reference: &str) -> ReferenceComponents {
+    let (before_fragment, fragment) = match reference.find('#') {
+        Some(i) => (&reference[..i], Some(reference[i + 1..].to_string())),
+        None => (reference, None),
+    };
+
+    let (before_query, query) = match before_fragment.find('?') {
+        Some(i) => (
+            &before_fragment[..i],
+            Some(before_fragment[i + 1..].to_string()),
+        ),
+        None => (before_fragment, None),
+    };
+
+    // A scheme, if present, is always the component preceding the first ':' and must
+    // consist solely of valid scheme characters (this also naturally rules out a ':'
+    // appearing later in a path segment, matching the RFC 3986 §3.3 rule that a
+    // relative-path reference's first segment cannot contain a colon).
+    let scheme_end = before_query.find(':').filter(|&i| {
+        let candidate = &before_query[..i];
+        !candidate.is_empty()
+            && candidate
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic())
+            && candidate
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    });
+
+    let (scheme, rest) = match scheme_end {
+        Some(i) => (Some(before_query[..i].to_string()), &before_query[i + 1..]),
+        None => (None, before_query),
+    };
+
+    let (authority, path) = if let Some(after_slashes) = rest.strip_prefix("//") {
+        let end = after_slashes.find('/').unwrap_or(after_slashes.len());
+        (
+            Some(after_slashes[..end].to_string()),
+            after_slashes[end..].to_string(),
+        )
+    } else {
+        (None, rest.to_string())
+    };
+
+    ReferenceComponents {
+        scheme,
+        authority,
+        path,
+        query,
+        fragment,
+    }
+}
+
+/// Recompose generic reference components back into an IRI string (RFC 3986 §5.3).
+fn recompose(components: &ReferenceComponents) -> String {
+    let mut result = String::new();
+    if let Some(scheme) = &components.scheme {
+        result.push_str(scheme);
+        result.push(':');
+    }
+    if let Some(authority) = &components.authority {
+        result.push_str("//");
+        result.push_str(authority);
+    }
+    result.push_str(&components.path);
+    if let Some(query) = &components.query {
+        result.push('?');
+        result.push_str(query);
+    }
+    if let Some(fragment) = &components.fragment {
+        result.push('#');
+        result.push_str(fragment);
+    }
+    result
+}
+
+/// Merge a base path with a relative-path reference (RFC 3986 §5.3, "merge").
+fn merge_paths(base_has_authority: bool, base_path: &str, ref_path: &str) -> String {
+    if base_has_authority && base_path.is_empty() {
+        format!("/{ref_path}")
+    } else {
+        match base_path.rfind('/') {
+            Some(i) => format!("{}{}", &base_path[..=i], ref_path),
+            None => ref_path.to_string(),
+        }
+    }
+}
+
+/// Remove `.` and `..` dot-segments from a path per the precise algorithm in
+/// RFC 3986 §5.2.4.
+///
+/// This differs from the internal `remove_dot_segments` used by [`normalize_iri`] in
+/// that it follows the RFC's step-by-step buffer algorithm exactly (including
+/// preserving a trailing slash produced by a trailing `.`/`..` segment), which matters
+/// for correct reference resolution.
+fn remove_dot_segments_rfc3986(path: &str) -> String {
+    fn remove_last_output_segment(output: &mut String) {
+        match output.rfind('/') {
+            Some(pos) => output.truncate(pos),
+            None => output.clear(),
+        }
+    }
+
+    let mut input = path;
+    let mut output = String::new();
+
+    while !input.is_empty() {
+        if let Some(rest) = input.strip_prefix("../") {
+            input = rest;
+        } else if let Some(rest) = input.strip_prefix("./") {
+            input = rest;
+        } else if input.starts_with("/./") {
+            // Replace the "/./ " prefix with "/", keeping the leading slash.
+            input = &input[2..];
+        } else if input == "/." {
+            input = "/";
+        } else if input.starts_with("/../") {
+            // Replace the "/../ " prefix with "/" and drop the last output segment.
+            input = &input[3..];
+            remove_last_output_segment(&mut output);
+        } else if input == "/.." {
+            input = "/";
+            remove_last_output_segment(&mut output);
+        } else if input == "." || input == ".." {
+            input = "";
+        } else {
+            // Move the first path segment (including a leading '/' if present) to
+            // the output buffer.
+            let start = usize::from(input.starts_with('/'));
+            let end = input[start..]
+                .find('/')
+                .map(|i| i + start)
+                .unwrap_or(input.len());
+            output.push_str(&input[..end]);
+            input = &input[end..];
+        }
+    }
+
+    output
+}
+
+/// Resolve a (possibly relative) IRI reference against a base IRI, following the
+/// reference resolution algorithm defined in RFC 3986 §5.2 / §5.3 (also applicable to
+/// IRIs per RFC 3987). Handles absolute references, network-path references
+/// (`//host/path`), absolute-path references (`/path`), relative-path references, and
+/// same-document references (differing only in query/fragment), including dot-segment
+/// removal.
+///
+/// # Example
+///
+/// ```
+/// use oxirs_ttl::toolkit::iri_normalizer::resolve_reference;
+///
+/// assert_eq!(
+///     resolve_reference("http://example.org/data", "foo"),
+///     "http://example.org/foo"
+/// );
+/// assert_eq!(
+///     resolve_reference("http://example.org/a/b/c", "/x/y"),
+///     "http://example.org/x/y"
+/// );
+/// assert_eq!(
+///     resolve_reference("http://example.org/a/b/c", "../d"),
+///     "http://example.org/a/d"
+/// );
+/// assert_eq!(
+///     resolve_reference("http://example.org/a/b#frag1", "#frag2"),
+///     "http://example.org/a/b#frag2"
+/// );
+/// ```
+pub fn resolve_reference(base: &str, reference: &str) -> String {
+    let ref_components = split_generic_reference(reference);
+
+    if ref_components.scheme.is_some() {
+        return recompose(&ReferenceComponents {
+            scheme: ref_components.scheme,
+            authority: ref_components.authority,
+            path: remove_dot_segments_rfc3986(&ref_components.path),
+            query: ref_components.query,
+            fragment: ref_components.fragment,
+        });
+    }
+
+    let base_components = split_generic_reference(base);
+
+    let (t_authority, t_path, t_query) = if ref_components.authority.is_some() {
+        (
+            ref_components.authority,
+            remove_dot_segments_rfc3986(&ref_components.path),
+            ref_components.query,
+        )
+    } else if ref_components.path.is_empty() {
+        (
+            base_components.authority,
+            base_components.path,
+            ref_components.query.or(base_components.query),
+        )
+    } else if ref_components.path.starts_with('/') {
+        (
+            base_components.authority,
+            remove_dot_segments_rfc3986(&ref_components.path),
+            ref_components.query,
+        )
+    } else {
+        let merged = merge_paths(
+            base_components.authority.is_some(),
+            &base_components.path,
+            &ref_components.path,
+        );
+        (
+            base_components.authority,
+            remove_dot_segments_rfc3986(&merged),
+            ref_components.query,
+        )
+    };
+
+    recompose(&ReferenceComponents {
+        scheme: base_components.scheme,
+        authority: t_authority,
+        path: t_path,
+        query: t_query,
+        fragment: ref_components.fragment,
+    })
+}
+
 /// Compare two IRIs for equivalence
 ///
 /// This function normalizes both IRIs and compares them.
@@ -722,6 +960,80 @@ mod tests {
         // URN scheme normalization
         let iri = normalize_iri("URN:ISBN:0451450523").expect("valid IRI");
         assert_eq!(iri.as_str(), "urn:ISBN:0451450523");
+    }
+
+    #[test]
+    fn test_resolve_reference_relative_path_no_trailing_slash_in_base() {
+        // Base without a trailing slash: the last path segment must be dropped, not
+        // treated as a directory (regression for naive `format!("{base}{iri}")`).
+        assert_eq!(
+            resolve_reference("http://example.org/data", "foo"),
+            "http://example.org/foo"
+        );
+    }
+
+    #[test]
+    fn test_resolve_reference_absolute_path() {
+        assert_eq!(
+            resolve_reference("http://example.org/a/b/c", "/x/y"),
+            "http://example.org/x/y"
+        );
+    }
+
+    #[test]
+    fn test_resolve_reference_dot_segments() {
+        assert_eq!(
+            resolve_reference("http://example.org/a/b/c", "../d"),
+            "http://example.org/a/d"
+        );
+        assert_eq!(
+            resolve_reference("http://a/b/c/d;p?q", "./g"),
+            "http://a/b/c/g"
+        );
+        assert_eq!(
+            resolve_reference("http://a/b/c/d;p?q", "../../../g"),
+            "http://a/g"
+        );
+    }
+
+    #[test]
+    fn test_resolve_reference_fragment_only() {
+        assert_eq!(
+            resolve_reference("http://example.org/a/b#frag1", "#frag2"),
+            "http://example.org/a/b#frag2"
+        );
+    }
+
+    #[test]
+    fn test_resolve_reference_absolute_reference_unchanged() {
+        assert_eq!(
+            resolve_reference("http://example.org/a/", "http://other.org/z"),
+            "http://other.org/z"
+        );
+    }
+
+    #[test]
+    fn test_resolve_reference_network_path() {
+        assert_eq!(
+            resolve_reference("http://example.org/a/b", "//other.org/z"),
+            "http://other.org/z"
+        );
+    }
+
+    #[test]
+    fn test_resolve_reference_query_only() {
+        assert_eq!(
+            resolve_reference("http://example.org/a/b?x=1", "?y=2"),
+            "http://example.org/a/b?y=2"
+        );
+    }
+
+    #[test]
+    fn test_resolve_reference_empty_reference_same_document() {
+        assert_eq!(
+            resolve_reference("http://example.org/a/b?x=1#f", ""),
+            "http://example.org/a/b?x=1"
+        );
     }
 
     #[test]

@@ -2,15 +2,53 @@
 //!
 //! Beta.1 Feature: Production-Ready Storage Hardening
 //!
-//! This module provides production-grade features for TDB storage reliability:
+//! This module provides production-grade *building blocks* for TDB storage
+//! reliability:
 //! - Enhanced error handling with storage context
 //! - Storage health checking and diagnostics
 //! - Performance monitoring for storage operations
 //! - Circuit breakers for storage operations
 //! - Resource limits and quotas for storage
-//! - Corruption detection and repair
+//! - Page-level corruption detection and reporting (via CRC32 checksums)
+//!
+//! # Not automatically wired into `TdbStore`
+//!
+//! [`StorageCircuitBreaker`], [`StorageHealthCheck`], [`StorageResourceQuota`]
+//! and [`StoragePerformanceMonitor`] are **opt-in, standalone components**.
+//! `TdbStore`'s own read/write paths (`insert`/`query`/`flush`, ...) do not
+//! currently call into any of them -- constructing one of these types and
+//! never touching it has no effect on store behavior. If a deployment wants
+//! quota enforcement or circuit-breaking around store operations today, the
+//! caller must wrap its own call sites explicitly, e.g.:
+//!
+//! ```
+//! use oxirs_tdb::production::{StorageCircuitBreaker, CircuitBreakerConfig};
+//!
+//! let breaker = StorageCircuitBreaker::new(CircuitBreakerConfig::default());
+//! if breaker.allow_request() {
+//!     // ... call into TdbStore, then breaker.record_success()/record_failure() ...
+//!     breaker.record_success();
+//! }
+//! ```
+//!
+//! Automatic enforcement from inside `TdbStore` itself (so every deployment
+//! gets these guarantees without remembering to wrap each call site) is
+//! tracked as follow-up work; see `TdbStore`'s own docs for its current,
+//! narrower guarantees.
+//!
+//! # Corruption detection (not repair)
+//!
+//! [`verify_integrity`] scans every allocated page in a [`FileManager`] and
+//! recomputes its CRC32 checksum via [`Page::verify_checksum`], reporting the
+//! IDs of any page whose stored checksum does not match its bytes. This
+//! module intentionally does **not** attempt automatic repair: reconstructing
+//! a corrupt page (e.g. rebuilding a B+Tree leaf from a sibling index) is a
+//! store-level operation that requires knowledge the low-level file layer
+//! does not have, and is out of scope here. Detection + reporting is the
+//! honest scope of this module today.
 
 use crate::error::{Result, TdbError};
+use crate::storage::{FileManager, Page, PageId};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -579,9 +617,26 @@ impl StorageResourceQuota {
         Ok(())
     }
 
-    /// Free storage (update quota)
+    /// Free storage (update quota).
+    ///
+    /// Uses a saturating subtract so that freeing more bytes than are
+    /// currently tracked (e.g. due to a caller double-counting) can never
+    /// wrap `current_storage` around to a huge `u64` instead of clamping at
+    /// zero.
     pub fn free_storage(&self, bytes: u64) {
-        self.current_storage.fetch_sub(bytes, Ordering::Relaxed);
+        let mut current = self.current_storage.load(Ordering::Relaxed);
+        loop {
+            let new_value = current.saturating_sub(bytes);
+            match self.current_storage.compare_exchange_weak(
+                current,
+                new_value,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(observed) => current = observed,
+            }
+        }
     }
 
     /// Check if transaction rate limit allows operation
@@ -595,9 +650,9 @@ impl StorageResourceQuota {
 
         // Reset window if needed
         if now.duration_since(window_start) >= Duration::from_secs(1) {
-            *self.window_start.write() = now;
-            self.txn_count.store(0, Ordering::Relaxed);
-            return true;
+            let count = self.txn_count.load(Ordering::Relaxed);
+            let max = self.max_txn_rate.load(Ordering::Relaxed);
+            return count < max;
         }
 
         let count = self.txn_count.load(Ordering::Relaxed);
@@ -605,15 +660,40 @@ impl StorageResourceQuota {
         count < max
     }
 
-    /// Record a transaction (update rate limit)
+    /// Record a transaction (update rate limit).
+    ///
+    /// The window-reset check, the rate-limit check, and the increment are
+    /// performed under a single write-lock on `window_start` so that
+    /// concurrent callers cannot race between "check" and "act": without
+    /// this, two threads could both observe `count < max` before either one
+    /// increments, letting the effective rate exceed `max_txn_rate` under
+    /// contention.
     pub fn record_transaction(&self) -> Result<()> {
-        if !self.check_txn_rate() {
+        if !self.enforced.load(Ordering::Relaxed) {
+            self.txn_count.fetch_add(1, Ordering::Relaxed);
+            return Ok(());
+        }
+
+        let mut window_start = self.window_start.write();
+        let now = Instant::now();
+
+        if now.duration_since(*window_start) >= Duration::from_secs(1) {
+            *window_start = now;
+            self.txn_count.store(0, Ordering::Relaxed);
+        }
+
+        let max = self.max_txn_rate.load(Ordering::Relaxed);
+        // fetch_add first and compare against the post-increment value so
+        // the check and the increment are atomic with respect to each other
+        // (the window_start write-lock already serializes concurrent
+        // callers against each other for the window-reset step).
+        let count = self.txn_count.fetch_add(1, Ordering::Relaxed) + 1;
+        if count > max {
+            self.txn_count.fetch_sub(1, Ordering::Relaxed);
             return Err(TdbError::Other(
                 "Transaction rate limit exceeded".to_string(),
             ));
         }
-
-        self.txn_count.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 
@@ -664,6 +744,64 @@ impl StorageQuotaUsage {
             (self.txn_count as f64 / self.txn_max as f64) * 100.0
         }
     }
+}
+
+/// Result of a full-file integrity scan performed by [`verify_integrity`].
+#[derive(Debug, Clone, Default)]
+pub struct IntegrityReport {
+    /// Total number of pages examined (excludes page 0, the superblock,
+    /// which has its own dedicated format/verification).
+    pub pages_scanned: u64,
+    /// IDs of pages whose stored CRC32 checksum does not match their
+    /// on-disk bytes (structurally readable but corrupted), or whose header
+    /// failed to decode at all (structurally corrupt).
+    pub corrupt_pages: Vec<PageId>,
+    /// IDs of pages that were skipped because they are all-zero and
+    /// therefore indistinguishable from space that was extended on disk but
+    /// never actually written (not a corruption signal).
+    pub uninitialized_pages: Vec<PageId>,
+}
+
+impl IntegrityReport {
+    /// Whether the scan found any corrupted pages.
+    pub fn is_healthy(&self) -> bool {
+        self.corrupt_pages.is_empty()
+    }
+}
+
+/// Scan every page (other than the page-0 superblock) in `file_manager` and
+/// verify its CRC32 checksum, reporting which page IDs are corrupt.
+///
+/// This is **detection only** — see the module-level docs for why automatic
+/// repair is out of scope. Pages that are entirely zero bytes are treated as
+/// "never written" rather than corrupt, since [`FileManager::extend_to`]
+/// grows the file with zero-filled pages ahead of first use and those are
+/// not a sign of corruption.
+pub fn verify_integrity(file_manager: &FileManager) -> Result<IntegrityReport> {
+    let mut report = IntegrityReport::default();
+    let num_pages = file_manager.num_pages();
+
+    // Page 0 is the superblock and uses its own format/verification path.
+    for page_id in 1..num_pages {
+        match file_manager.read_page(page_id) {
+            Ok(page) => {
+                report.pages_scanned += 1;
+                if page.raw_data().iter().all(|&b| b == 0) {
+                    report.uninitialized_pages.push(page_id);
+                } else if !page.verify_checksum() {
+                    report.corrupt_pages.push(page_id);
+                }
+            }
+            Err(TdbError::Deserialization(_)) => {
+                // Header bytes did not even decode: structurally corrupt.
+                report.pages_scanned += 1;
+                report.corrupt_pages.push(page_id);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok(report)
 }
 
 #[cfg(test)]
@@ -768,5 +906,124 @@ mod tests {
         let usage = quota.usage();
         assert_eq!(usage.storage_used, 256 * 1024);
         assert_eq!(usage.txn_count, 100);
+    }
+
+    /// Regression test: `free_storage` used to call an unchecked
+    /// `fetch_sub`, which underflows a `u64` (wrapping to a huge value)
+    /// when freeing more bytes than are currently tracked. It must now
+    /// saturate at zero instead.
+    #[test]
+    fn test_free_storage_does_not_underflow() {
+        let quota = StorageResourceQuota::new(1024 * 1024, 100);
+        assert!(quota.allocate_storage(100).is_ok());
+
+        // Free far more than was ever allocated.
+        quota.free_storage(10_000);
+
+        let usage = quota.usage();
+        assert_eq!(usage.storage_used, 0, "must clamp at zero, not underflow");
+    }
+
+    /// Regression test: concurrent `record_transaction` calls must never let
+    /// more than `max_txn_rate` transactions through in a single window,
+    /// even under contention (previously check-then-act was not atomic).
+    #[test]
+    fn test_record_transaction_is_atomic_under_contention() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let quota = Arc::new(StorageResourceQuota::new(1024 * 1024, 50));
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let quota = Arc::clone(&quota);
+            handles.push(thread::spawn(move || {
+                let mut accepted = 0;
+                for _ in 0..20 {
+                    if quota.record_transaction().is_ok() {
+                        accepted += 1;
+                    }
+                }
+                accepted
+            }));
+        }
+
+        let total_accepted: usize = handles
+            .into_iter()
+            .map(|h| h.join().expect("thread should not panic"))
+            .sum();
+
+        assert!(
+            total_accepted <= 50,
+            "rate limit must not be exceeded under concurrency, got {total_accepted}"
+        );
+        assert_eq!(quota.usage().txn_count as usize, total_accepted);
+    }
+
+    /// Regression test for the module doc claim: `verify_integrity` must
+    /// detect a page whose bytes were corrupted after being written, and
+    /// must not flag never-written (all-zero) pages as corrupt.
+    #[test]
+    fn test_verify_integrity_detects_corrupted_page() {
+        use crate::storage::page::{Page, PageType};
+
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs_tdb_integrity_test_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("failed to create temp dir");
+        let file_path = dir.join("integrity_test.dat");
+
+        let fm = FileManager::open(&file_path, false).expect("failed to open FileManager");
+
+        // Extend to 3 pages: page 0 (superblock, skipped by the scan), page
+        // 1 (a real, valid page we will write), and page 2 (never written,
+        // all-zero, must be reported as uninitialized rather than corrupt).
+        fm.extend_to(3).expect("failed to extend file");
+
+        let mut page = Page::new(1, PageType::Metadata);
+        page.write_at(0, b"hello world")
+            .expect("failed to write page payload");
+        page.update_header();
+        fm.write_page(&mut page).expect("failed to write page");
+
+        // Sanity check: freshly-written page must currently verify clean.
+        let report = verify_integrity(&fm).expect("verify_integrity should succeed");
+        assert!(
+            report.is_healthy(),
+            "page should be healthy before corruption"
+        );
+        assert!(report.corrupt_pages.is_empty());
+        assert!(report.uninitialized_pages.contains(&2));
+
+        // Corrupt page 1's bytes directly on disk (bypassing the checksum
+        // update path), simulating bit rot / a torn write.
+        let mut raw = [0u8; crate::storage::page::PAGE_SIZE];
+        {
+            use std::io::{Read, Seek, SeekFrom};
+            let mut file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&file_path)
+                .expect("failed to reopen data file");
+            file.seek(SeekFrom::Start(crate::storage::page::PAGE_SIZE as u64))
+                .expect("seek failed");
+            file.read_exact(&mut raw).expect("read failed");
+            // Flip a byte well inside the payload region (past the header).
+            raw[100] ^= 0xFF;
+            file.seek(SeekFrom::Start(crate::storage::page::PAGE_SIZE as u64))
+                .expect("seek failed");
+            std::io::Write::write_all(&mut file, &raw).expect("write failed");
+        }
+
+        let fm2 = FileManager::open(&file_path, false).expect("failed to reopen FileManager");
+        let report2 = verify_integrity(&fm2).expect("verify_integrity should succeed");
+        assert!(!report2.is_healthy());
+        assert_eq!(report2.corrupt_pages, vec![1u64]);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

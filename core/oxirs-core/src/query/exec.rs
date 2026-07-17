@@ -195,7 +195,11 @@ impl<'a> QueryExecutor<'a> {
                 matches!(term, Term::Literal(lit) if lit == l)
             }
             TermPattern::QuotedTriple(_) => {
-                panic!("RDF-star quoted triples not yet supported in query execution")
+                // Fine-grained RDF-star quoted-triple matching is not implemented
+                // in this helper. Rather than crashing the query thread, treat
+                // the pattern as non-matching so an unsupported pattern degrades
+                // gracefully instead of panicking.
+                false
             }
         }
     }

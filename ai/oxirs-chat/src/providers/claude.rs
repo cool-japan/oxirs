@@ -1,7 +1,13 @@
-//! Anthropic Claude LLM provider
+//! Anthropic Claude LLM provider (model catalog / config types)
 //!
-//! Mock implementation supporting Claude 3 and 4 model families.
-//! In production, this would use the Anthropic Messages API.
+//! Provides the [`ClaudeModel`] catalog and [`ClaudeConfig`] builder used to
+//! describe Claude 3/4 model families. [`ClaudeClient::complete`] and
+//! [`ClaudeClient::chat`] do **not** call the real Anthropic API — no HTTP
+//! client is wired up here — and return [`ChatError::LlmGenerationError`]
+//! rather than a fabricated response. For an actual working Claude
+//! integration, use [`crate::llm::anthropic_provider::AnthropicProvider`],
+//! which implements [`crate::llm::LLMProvider`] against the real Anthropic
+//! Messages API.
 
 use crate::error::{ChatError, Result};
 use crate::llm::types::ChatMessage;
@@ -123,12 +129,14 @@ impl ClaudeClient {
         self.config.model.max_context_tokens()
     }
 
-    /// Rough token estimate: every 4 characters ≈ 1 token
-    fn estimate_tokens(text: &str) -> usize {
-        (text.chars().count() + 3) / 4
-    }
-
-    /// Send a single-turn completion request (mock)
+    /// Send a single-turn completion request.
+    ///
+    /// # Errors
+    /// Always returns [`ChatError::LlmGenerationError`]: this client has no
+    /// HTTP transport wired to the Anthropic Messages API, so it cannot
+    /// produce a real completion and must not fabricate one. Use
+    /// [`crate::llm::anthropic_provider::AnthropicProvider`] for a working
+    /// integration.
     pub async fn complete(&self, prompt: &str) -> Result<ClaudeResponse> {
         if prompt.is_empty() {
             return Err(ChatError::ValidationError(
@@ -141,22 +149,19 @@ impl ClaudeClient {
             ));
         }
 
-        let input_tokens = Self::estimate_tokens(prompt);
-        let response_text = format!(
-            "[Claude/{model}] Simulated completion for: {prompt}",
+        Err(ChatError::LlmGenerationError(format!(
+            "ClaudeClient (providers::claude) has no real Anthropic API transport wired up for \
+             model {model}; use crate::llm::anthropic_provider::AnthropicProvider for a working \
+             Claude integration instead of this config-only client",
             model = self.config.model.as_str()
-        );
-        let output_tokens = Self::estimate_tokens(&response_text);
-
-        Ok(ClaudeResponse {
-            content: response_text,
-            stop_reason: "end_turn".to_string(),
-            input_tokens,
-            output_tokens,
-        })
+        )))
     }
 
-    /// Send a multi-turn chat request (mock)
+    /// Send a multi-turn chat request.
+    ///
+    /// # Errors
+    /// Always returns [`ChatError::LlmGenerationError`], for the same reason
+    /// as [`complete`](Self::complete).
     pub async fn chat(&self, messages: &[ChatMessage]) -> Result<ClaudeResponse> {
         if messages.is_empty() {
             return Err(ChatError::ValidationError(
@@ -169,33 +174,12 @@ impl ClaudeClient {
             ));
         }
 
-        let combined_input = messages
-            .iter()
-            .map(|m| m.content.as_str())
-            .collect::<Vec<_>>()
-            .join(" ");
-        let input_tokens = Self::estimate_tokens(&combined_input);
-
-        let last_user = messages
-            .iter()
-            .rev()
-            .find(|m| matches!(m.role, crate::llm::types::ChatRole::User))
-            .map(|m| m.content.as_str())
-            .unwrap_or("(no user message)");
-
-        let response_text = format!(
-            "[Claude/{model}] Multi-turn response to: {last}",
-            model = self.config.model.as_str(),
-            last = last_user
-        );
-        let output_tokens = Self::estimate_tokens(&response_text);
-
-        Ok(ClaudeResponse {
-            content: response_text,
-            stop_reason: "end_turn".to_string(),
-            input_tokens,
-            output_tokens,
-        })
+        Err(ChatError::LlmGenerationError(format!(
+            "ClaudeClient (providers::claude) has no real Anthropic API transport wired up for \
+             model {model}; use crate::llm::anthropic_provider::AnthropicProvider for a working \
+             Claude integration instead of this config-only client",
+            model = self.config.model.as_str()
+        )))
     }
 }
 
@@ -264,15 +248,22 @@ mod tests {
         assert_eq!(client.max_context_tokens(), 200_000);
     }
 
+    /// Regression: even with a valid prompt and a configured API key,
+    /// `complete()` must not fabricate a response — it has no real
+    /// Anthropic API transport wired up, so it must fail loudly instead of
+    /// silently returning simulated content.
     #[tokio::test]
-    async fn test_complete_success() {
+    async fn test_complete_never_fabricates_response() {
         let client = make_client("test-key");
         let result = client.complete("Explain RDF triples.").await;
-        assert!(result.is_ok());
-        let r = result.expect("should succeed");
-        assert!(!r.content.is_empty());
-        assert!(r.is_end_turn());
-        assert!(r.total_tokens() > 0);
+        assert!(result.is_err());
+        let err = result.expect_err("must fail loudly instead of fabricating a completion");
+        assert!(matches!(err, ChatError::LlmGenerationError(_)));
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("Simulated"),
+            "error must not resemble a fabricated completion: {msg}"
+        );
     }
 
     #[tokio::test]
@@ -289,8 +280,10 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// Regression: same guarantee as
+    /// [`test_complete_never_fabricates_response`] for the multi-turn path.
     #[tokio::test]
-    async fn test_chat_success() {
+    async fn test_chat_never_fabricates_response() {
         let client = make_client("test-key");
         let messages = vec![
             ChatMessage {
@@ -310,10 +303,9 @@ mod tests {
             },
         ];
         let result = client.chat(&messages).await;
-        assert!(result.is_ok());
-        let r = result.expect("should succeed");
-        assert!(r.input_tokens > 0);
-        assert!(r.output_tokens > 0);
+        assert!(result.is_err());
+        let err = result.expect_err("must fail loudly instead of fabricating a completion");
+        assert!(matches!(err, ChatError::LlmGenerationError(_)));
     }
 
     #[tokio::test]

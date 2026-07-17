@@ -67,6 +67,12 @@ pub struct CompactionStats {
     pub bytes_saved: u64,
     /// Last compaction time
     pub last_run: Option<DateTime<Utc>>,
+    /// Number of old chunk files that could not be deleted after being
+    /// superseded by a merged chunk (permissions, file busy, disk issue,
+    /// etc). These files are leaked on disk: the compactor has already
+    /// dropped the chunk from its index, so nothing will retry the
+    /// deletion. Operators should investigate when this is nonzero.
+    pub stale_chunk_files_leaked: u64,
 }
 
 /// Background compactor for time-series chunks
@@ -83,6 +89,10 @@ pub struct Compactor {
 
     /// Total bytes processed
     bytes_processed: Arc<AtomicU64>,
+
+    /// Count of old chunk files that failed to delete after a merge (see
+    /// [`CompactionStats::stale_chunk_files_leaked`]).
+    stale_files_leaked: Arc<AtomicU64>,
 }
 
 impl Compactor {
@@ -98,6 +108,7 @@ impl Compactor {
             stats: Arc::new(RwLock::new(CompactionStats::default())),
             running: Arc::new(AtomicBool::new(false)),
             bytes_processed: Arc::new(AtomicU64::new(0)),
+            stale_files_leaked: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -278,9 +289,22 @@ impl Compactor {
         for chunk_entry in chunks {
             index.remove_chunk(chunk_entry.chunk_id)?;
 
-            // Delete old chunk file
+            // Delete old chunk file. The chunk has already been dropped
+            // from the index above, so a failure here leaks the file on
+            // disk rather than corrupting anything -- but it must not be
+            // swallowed silently, or operators have no way to notice disk
+            // usage creeping up from undeleted post-compaction chunks.
             if let Some(path) = &chunk_entry.file_path {
-                let _ = std::fs::remove_file(path); // Ignore errors
+                if let Err(e) = std::fs::remove_file(path) {
+                    self.stale_files_leaked.fetch_add(1, Ordering::SeqCst);
+                    tracing::warn!(
+                        chunk_id = chunk_entry.chunk_id,
+                        path = %path.display(),
+                        error = %e,
+                        "failed to delete superseded chunk file after compaction merge; \
+                         file is now leaked on disk"
+                    );
+                }
             }
         }
 
@@ -295,11 +319,13 @@ impl Compactor {
 
     /// Get compaction statistics
     pub fn stats(&self) -> TsdbResult<CompactionStats> {
-        let stats = self
+        let mut stats = self
             .stats
             .read()
-            .map_err(|e| TsdbError::Query(format!("Lock poisoned: {e}")))?;
-        Ok(stats.clone())
+            .map_err(|e| TsdbError::Query(format!("Lock poisoned: {e}")))?
+            .clone();
+        stats.stale_chunk_files_leaked = self.stale_files_leaked.load(Ordering::SeqCst);
+        Ok(stats)
     }
 
     /// Reset compaction statistics
@@ -310,6 +336,7 @@ impl Compactor {
             .map_err(|e| TsdbError::Query(format!("Lock poisoned: {e}")))?;
         *stats = CompactionStats::default();
         self.bytes_processed.store(0, Ordering::SeqCst);
+        self.stale_files_leaked.store(0, Ordering::SeqCst);
         Ok(())
     }
 
@@ -472,6 +499,47 @@ mod tests {
 
         assert_eq!(merged, 2);
         assert_eq!(created, 1);
+
+        std::fs::remove_dir_all(&temp_dir)?;
+        Ok(())
+    }
+
+    /// Regression test: a chunk-file deletion failure after a successful
+    /// merge used to be swallowed via `let _ = std::fs::remove_file(path)`
+    /// with no logging and no way for an operator to observe it. It must
+    /// now be counted in `CompactionStats::stale_chunk_files_leaked`.
+    #[tokio::test]
+    async fn test_merge_chunks_counts_leaked_files_on_delete_failure() -> TsdbResult<()> {
+        let temp_dir = env::temp_dir().join("tsdb_compactor_leaked_file_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let mut store = ColumnarStore::new(&temp_dir, Duration::hours(2), 100)?;
+        store.set_fsync(false);
+
+        let chunk1 = create_test_chunk(100, 1000, 50)?;
+        let chunk2 = create_test_chunk(100, 1100, 50)?;
+
+        let mut entry1 = store.write_chunk(&chunk1)?;
+        let entry2 = store.write_chunk(&chunk2)?;
+
+        // Point entry1's file_path at a location that does not exist, so
+        // `std::fs::remove_file` fails during the merge's cleanup step
+        // even though the chunk itself was read successfully via its
+        // chunk_id (read_chunk does not go through `file_path`).
+        entry1.file_path = Some(temp_dir.join("this-file-does-not-exist.chunk"));
+
+        let compactor = Compactor::new();
+        let (merged, created, _saved) = compactor
+            .merge_chunks(&store, 100, &[entry1, entry2])
+            .await?;
+        assert_eq!(merged, 2);
+        assert_eq!(created, 1);
+
+        let stats = compactor.stats()?;
+        assert_eq!(
+            stats.stale_chunk_files_leaked, 1,
+            "the missing-path deletion failure must be counted, not silently dropped"
+        );
 
         std::fs::remove_dir_all(&temp_dir)?;
         Ok(())

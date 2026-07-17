@@ -1,22 +1,38 @@
 //! Cloud KMS Integration for DID key management
 //!
-//! Provides mock Cloud KMS backends (AWS KMS, GCP KMS, Azure Key Vault) for
-//! managing cryptographic keys used with DIDs and Verifiable Credentials.
+//! Defines the [`KmsBackend`] abstraction and the [`KmsDidSigner`] high-level
+//! helper for signing DIDs / Verifiable Credentials through a KMS backend.
 //!
-//! All signing operations use HMAC-SHA256 over (key_id || data) with the stored
-//! private key bytes as the HMAC key — sufficient for testing and mock usage.
-//! Production deployments should wire in actual cloud SDK calls.
+//! # Security notice
+//!
+//! This crate does **not** ship a real cloud KMS integration (no AWS/GCP/Azure
+//! SDK backend exists). The only bundled backends —
+//! [`InsecureMockAwsKms`], [`InsecureMockGcpKms`], [`InsecureMockAzureKms`] —
+//! are **INSECURE test doubles**: they derive the "private" key
+//! deterministically from the (public, routinely logged) `key_id`, so anyone
+//! who knows the `key_id` can recompute the signing key. They provide **no key
+//! custody whatsoever** and MUST NOT be used in production.
+//!
+//! To keep them out of production builds they are compiled only when the
+//! non-default `insecure-mock-kms` Cargo feature is enabled, and their type
+//! names carry the `Insecure` prefix. Real deployments must supply their own
+//! [`KmsBackend`] implementation wired to an actual HSM / cloud KMS SDK.
 
 // v0.3.0: Simulated PKCS#11 HSM signer
 pub mod audit;
 pub mod pkcs11;
 
 use crate::{DidDocument, DidError, DidResult, VerificationMethod};
+#[cfg(feature = "insecure-mock-kms")]
 use hmac::{Hmac, Mac};
+#[cfg(feature = "insecure-mock-kms")]
 use sha2::Sha256;
+#[cfg(feature = "insecure-mock-kms")]
 use std::collections::HashMap;
+#[cfg(feature = "insecure-mock-kms")]
 use std::sync::RwLock;
 
+#[cfg(feature = "insecure-mock-kms")]
 type HmacSha256 = Hmac<Sha256>;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,9 +95,10 @@ pub struct KmsKeyMetadata {
 // Internal key entry (stored per backend)
 // ─────────────────────────────────────────────────────────────────────────────
 
+#[cfg(feature = "insecure-mock-kms")]
 struct KmsKeyEntry {
     metadata: KmsKeyMetadata,
-    /// Deterministically derived pseudo-private-key bytes
+    /// Deterministically derived pseudo-private-key bytes (INSECURE mock only)
     private_key_bytes: Vec<u8>,
 }
 
@@ -105,11 +122,12 @@ pub trait KmsBackend: Send + Sync {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared helper — HMAC-SHA256 signing
+// Shared helper — HMAC-SHA256 signing (INSECURE mock backends only)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Sign `data` with HMAC-SHA256 keyed by `private_key_bytes`, prepending `key_id`
 /// to the message for domain separation.
+#[cfg(feature = "insecure-mock-kms")]
 fn hmac_sign(private_key_bytes: &[u8], key_id: &str, data: &[u8]) -> Vec<u8> {
     let mut mac =
         HmacSha256::new_from_slice(private_key_bytes).expect("HMAC accepts any key length");
@@ -118,7 +136,11 @@ fn hmac_sign(private_key_bytes: &[u8], key_id: &str, data: &[u8]) -> Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
-/// Derive deterministic pseudo-private-key bytes from key_id and algorithm
+/// Derive deterministic pseudo-private-key bytes from key_id and algorithm.
+///
+/// INSECURE: the result is fully determined by public inputs (`key_id` and the
+/// algorithm name), so it provides no key custody. Mock backends only.
+#[cfg(feature = "insecure-mock-kms")]
 fn derive_key_bytes(key_id: &str, algorithm: &KmsAlgorithm) -> Vec<u8> {
     use sha2::Digest;
     let mut hasher = sha2::Sha256::new();
@@ -140,6 +162,7 @@ fn derive_key_bytes(key_id: &str, algorithm: &KmsAlgorithm) -> Vec<u8> {
 }
 
 /// Derive a mock public key from private key bytes (first half, reversed)
+#[cfg(feature = "insecure-mock-kms")]
 fn derive_public_key(private_key_bytes: &[u8]) -> Vec<u8> {
     let half = private_key_bytes.len() / 2;
     let mut pub_key = private_key_bytes[..half.max(1)].to_vec();
@@ -147,6 +170,7 @@ fn derive_public_key(private_key_bytes: &[u8]) -> Vec<u8> {
     pub_key
 }
 
+#[cfg(feature = "insecure-mock-kms")]
 fn now_unix() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -155,24 +179,42 @@ fn now_unix() -> i64 {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Macro to generate mock backend structs to avoid repetition
+// INSECURE mock backends (feature `insecure-mock-kms`, non-default)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Explicit acknowledgement token required to construct an insecure mock KMS.
+///
+/// Obtaining one forces the caller to spell out, at the call site, that they
+/// understand the backend derives its signing key from the public `key_id` and
+/// provides no real key custody.
+#[cfg(feature = "insecure-mock-kms")]
+#[derive(Debug, Clone, Copy)]
+pub struct InsecureAck(());
+
+#[cfg(feature = "insecure-mock-kms")]
+impl InsecureAck {
+    /// Certify that you understand the mock KMS backends are NOT secure and are
+    /// for testing/development only.
+    pub fn acknowledge_insecure() -> Self {
+        InsecureAck(())
+    }
+}
+
+#[cfg(feature = "insecure-mock-kms")]
 macro_rules! impl_mock_kms {
     ($name:ident, $display:literal) => {
-        /// Mock $display KMS backend
+        #[doc = concat!("INSECURE in-memory mock ", $display, " KMS backend (TEST ONLY).")]
+        ///
+        /// Derives the signing key deterministically from the public `key_id`;
+        /// provides no key custody. Never use in production.
         pub struct $name {
             keys: RwLock<HashMap<String, KmsKeyEntry>>,
         }
 
-        impl Default for $name {
-            fn default() -> Self {
-                Self::new()
-            }
-        }
-
         impl $name {
-            pub fn new() -> Self {
+            /// Construct an insecure mock backend. Requires an explicit
+            /// [`InsecureAck`] to force acknowledgement that this is not secure.
+            pub fn new(_ack: InsecureAck) -> Self {
                 Self {
                     keys: RwLock::new(HashMap::new()),
                 }
@@ -278,27 +320,35 @@ macro_rules! impl_mock_kms {
     };
 }
 
-impl_mock_kms!(MockAwsKms, "AWS");
-impl_mock_kms!(MockGcpKms, "GCP");
-impl_mock_kms!(MockAzureKms, "Azure");
+#[cfg(feature = "insecure-mock-kms")]
+impl_mock_kms!(InsecureMockAwsKms, "AWS");
+#[cfg(feature = "insecure-mock-kms")]
+impl_mock_kms!(InsecureMockGcpKms, "GCP");
+#[cfg(feature = "insecure-mock-kms")]
+impl_mock_kms!(InsecureMockAzureKms, "Azure");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Provider enum + factory
+// Provider enum + factory (INSECURE mocks only)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Select which cloud provider mock to instantiate
+/// Select which insecure cloud-provider mock to instantiate.
+#[cfg(feature = "insecure-mock-kms")]
 pub enum KmsProvider {
-    MockAws,
-    MockGcp,
-    MockAzure,
+    InsecureMockAws,
+    InsecureMockGcp,
+    InsecureMockAzure,
 }
 
-/// Create a mock KMS backend for the given provider
-pub fn create_mock_kms(provider: KmsProvider) -> Box<dyn KmsBackend> {
+/// Create an INSECURE mock KMS backend for the given provider.
+///
+/// Requires an explicit [`InsecureAck`]; these backends are for testing only
+/// (see the module-level security notice).
+#[cfg(feature = "insecure-mock-kms")]
+pub fn create_insecure_mock_kms(provider: KmsProvider, ack: InsecureAck) -> Box<dyn KmsBackend> {
     match provider {
-        KmsProvider::MockAws => Box::new(MockAwsKms::new()),
-        KmsProvider::MockGcp => Box::new(MockGcpKms::new()),
-        KmsProvider::MockAzure => Box::new(MockAzureKms::new()),
+        KmsProvider::InsecureMockAws => Box::new(InsecureMockAwsKms::new(ack)),
+        KmsProvider::InsecureMockGcp => Box::new(InsecureMockGcpKms::new(ack)),
+        KmsProvider::InsecureMockAzure => Box::new(InsecureMockAzureKms::new(ack)),
     }
 }
 
@@ -402,15 +452,19 @@ impl KmsDidSigner {
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[cfg(test)]
+#[cfg(all(test, feature = "insecure-mock-kms"))]
 mod tests {
     use super::*;
+
+    fn ack() -> InsecureAck {
+        InsecureAck::acknowledge_insecure()
+    }
 
     // ── AWS KMS ──────────────────────────────────────────────────────────────
 
     #[test]
     fn test_aws_create_ed25519_key() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         let meta = kms.create_key("my-key", KmsAlgorithm::Ed25519).unwrap();
         assert_eq!(meta.key_id, "my-key");
         assert_eq!(meta.algorithm.as_str(), "Ed25519");
@@ -419,14 +473,14 @@ mod tests {
 
     #[test]
     fn test_aws_create_duplicate_key_fails() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         kms.create_key("dup", KmsAlgorithm::Ed25519).unwrap();
         assert!(kms.create_key("dup", KmsAlgorithm::Ed25519).is_err());
     }
 
     #[test]
     fn test_aws_sign_and_verify() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         kms.create_key("signing-key", KmsAlgorithm::EcP256).unwrap();
 
         let data = b"hello world";
@@ -439,7 +493,7 @@ mod tests {
 
     #[test]
     fn test_aws_verify_wrong_data_fails() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         kms.create_key("k1", KmsAlgorithm::Ed25519).unwrap();
 
         let sig = kms.sign("k1", b"original").unwrap();
@@ -449,13 +503,13 @@ mod tests {
 
     #[test]
     fn test_aws_sign_missing_key_error() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         assert!(kms.sign("nonexistent", b"data").is_err());
     }
 
     #[test]
     fn test_aws_get_public_key() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         kms.create_key("pk-key", KmsAlgorithm::Ed25519).unwrap();
         let pub_key = kms.get_public_key("pk-key").unwrap();
         assert!(!pub_key.is_empty());
@@ -463,7 +517,7 @@ mod tests {
 
     #[test]
     fn test_aws_delete_key() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         kms.create_key("del-key", KmsAlgorithm::Ed25519).unwrap();
         kms.delete_key("del-key").unwrap();
         assert!(kms.sign("del-key", b"data").is_err());
@@ -471,13 +525,13 @@ mod tests {
 
     #[test]
     fn test_aws_delete_missing_key_error() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         assert!(kms.delete_key("ghost").is_err());
     }
 
     #[test]
     fn test_aws_list_keys() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         kms.create_key("a", KmsAlgorithm::Ed25519).unwrap();
         kms.create_key("b", KmsAlgorithm::EcP256).unwrap();
 
@@ -490,7 +544,7 @@ mod tests {
 
     #[test]
     fn test_aws_all_algorithms_create() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         kms.create_key("ed", KmsAlgorithm::Ed25519).unwrap();
         kms.create_key("p256", KmsAlgorithm::EcP256).unwrap();
         kms.create_key("p384", KmsAlgorithm::EcP384).unwrap();
@@ -505,7 +559,7 @@ mod tests {
 
     #[test]
     fn test_gcp_create_and_sign() {
-        let kms = MockGcpKms::new();
+        let kms = InsecureMockGcpKms::new(ack());
         kms.create_key("gcp-key", KmsAlgorithm::EcP256).unwrap();
 
         let sig = kms.sign("gcp-key", b"gcp-data").unwrap();
@@ -515,14 +569,14 @@ mod tests {
 
     #[test]
     fn test_gcp_list_empty() {
-        let kms = MockGcpKms::new();
+        let kms = InsecureMockGcpKms::new(ack());
         let keys = kms.list_keys().unwrap();
         assert!(keys.is_empty());
     }
 
     #[test]
     fn test_gcp_public_key_differs_from_private() {
-        let kms = MockGcpKms::new();
+        let kms = InsecureMockGcpKms::new(ack());
         kms.create_key("gcp-pk", KmsAlgorithm::Ed25519).unwrap();
 
         let pub_key = kms.get_public_key("gcp-pk").unwrap();
@@ -532,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_gcp_delete_and_recreate() {
-        let kms = MockGcpKms::new();
+        let kms = InsecureMockGcpKms::new(ack());
         kms.create_key("reuse", KmsAlgorithm::Ed25519).unwrap();
         kms.delete_key("reuse").unwrap();
         // Should succeed after deletion
@@ -543,7 +597,7 @@ mod tests {
 
     #[test]
     fn test_azure_create_and_sign() {
-        let kms = MockAzureKms::new();
+        let kms = InsecureMockAzureKms::new(ack());
         kms.create_key("az-key", KmsAlgorithm::Rsa2048).unwrap();
 
         let sig = kms.sign("az-key", b"azure-data").unwrap();
@@ -553,7 +607,7 @@ mod tests {
 
     #[test]
     fn test_azure_wrong_signature() {
-        let kms = MockAzureKms::new();
+        let kms = InsecureMockAzureKms::new(ack());
         kms.create_key("az2", KmsAlgorithm::EcP256).unwrap();
 
         let bad_sig = vec![0u8; 32];
@@ -563,7 +617,7 @@ mod tests {
 
     #[test]
     fn test_azure_list_after_delete() {
-        let kms = MockAzureKms::new();
+        let kms = InsecureMockAzureKms::new(ack());
         kms.create_key("x", KmsAlgorithm::Ed25519).unwrap();
         kms.create_key("y", KmsAlgorithm::Ed25519).unwrap();
         kms.delete_key("x").unwrap();
@@ -577,7 +631,7 @@ mod tests {
 
     #[test]
     fn test_create_mock_kms_aws() {
-        let kms = create_mock_kms(KmsProvider::MockAws);
+        let kms = create_insecure_mock_kms(KmsProvider::InsecureMockAws, ack());
         kms.create_key("factory-aws", KmsAlgorithm::Ed25519)
             .unwrap();
         let keys = kms.list_keys().unwrap();
@@ -586,7 +640,7 @@ mod tests {
 
     #[test]
     fn test_create_mock_kms_gcp() {
-        let kms = create_mock_kms(KmsProvider::MockGcp);
+        let kms = create_insecure_mock_kms(KmsProvider::InsecureMockGcp, ack());
         kms.create_key("factory-gcp", KmsAlgorithm::EcP256).unwrap();
         let keys = kms.list_keys().unwrap();
         assert_eq!(keys.len(), 1);
@@ -594,7 +648,7 @@ mod tests {
 
     #[test]
     fn test_create_mock_kms_azure() {
-        let kms = create_mock_kms(KmsProvider::MockAzure);
+        let kms = create_insecure_mock_kms(KmsProvider::InsecureMockAzure, ack());
         kms.create_key("factory-azure", KmsAlgorithm::Rsa2048)
             .unwrap();
         let keys = kms.list_keys().unwrap();
@@ -605,7 +659,7 @@ mod tests {
 
     #[test]
     fn test_kms_did_signer_create_document() {
-        let backend = create_mock_kms(KmsProvider::MockAws);
+        let backend = create_insecure_mock_kms(KmsProvider::InsecureMockAws, ack());
         backend
             .create_key("did-signer-key", KmsAlgorithm::Ed25519)
             .unwrap();
@@ -621,7 +675,7 @@ mod tests {
 
     #[test]
     fn test_kms_did_signer_sign_credential() {
-        let backend = create_mock_kms(KmsProvider::MockGcp);
+        let backend = create_insecure_mock_kms(KmsProvider::InsecureMockGcp, ack());
         backend.create_key("vc-key", KmsAlgorithm::EcP256).unwrap();
 
         let signer = KmsDidSigner::new(backend, "vc-key");
@@ -641,7 +695,7 @@ mod tests {
 
     #[test]
     fn test_kms_did_signer_verify_credential() {
-        let backend = create_mock_kms(KmsProvider::MockAzure);
+        let backend = create_insecure_mock_kms(KmsProvider::InsecureMockAzure, ack());
         backend
             .create_key("verify-key", KmsAlgorithm::Ed25519)
             .unwrap();
@@ -660,7 +714,7 @@ mod tests {
 
     #[test]
     fn test_kms_did_signer_tampered_credential_fails() {
-        let backend = create_mock_kms(KmsProvider::MockAws);
+        let backend = create_insecure_mock_kms(KmsProvider::InsecureMockAws, ack());
         backend
             .create_key("tamper-key", KmsAlgorithm::EcP256)
             .unwrap();
@@ -683,7 +737,7 @@ mod tests {
 
     #[test]
     fn test_kms_did_signer_missing_proof_error() {
-        let backend = create_mock_kms(KmsProvider::MockAws);
+        let backend = create_insecure_mock_kms(KmsProvider::InsecureMockAws, ack());
         backend
             .create_key("no-proof-key", KmsAlgorithm::Ed25519)
             .unwrap();
@@ -696,7 +750,7 @@ mod tests {
 
     #[test]
     fn test_key_metadata_fields() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         let meta = kms.create_key("meta-test", KmsAlgorithm::EcP384).unwrap();
 
         assert_eq!(meta.key_id, "meta-test");
@@ -717,7 +771,7 @@ mod tests {
 
     #[test]
     fn test_signatures_are_deterministic() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         kms.create_key("det-key", KmsAlgorithm::Ed25519).unwrap();
 
         let sig1 = kms.sign("det-key", b"same data").unwrap();
@@ -727,7 +781,7 @@ mod tests {
 
     #[test]
     fn test_different_keys_produce_different_signatures() {
-        let kms = MockAwsKms::new();
+        let kms = InsecureMockAwsKms::new(ack());
         kms.create_key("key-a", KmsAlgorithm::Ed25519).unwrap();
         kms.create_key("key-b", KmsAlgorithm::Ed25519).unwrap();
 

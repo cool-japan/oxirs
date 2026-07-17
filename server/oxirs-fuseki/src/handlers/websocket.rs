@@ -1,14 +1,17 @@
-//! WebSocket support for live SPARQL query subscriptions
+//! Legacy WebSocket subscription implementation (QUARANTINED — not routed).
 //!
-//! This module implements real-time SPARQL query subscriptions using WebSockets.
-//! Features include:
-//! - Live query subscriptions with automatic result updates
-//! - Connection lifecycle management
-//! - Subscription filtering and multiplexing
-//! - Real-time change notifications
-//! - Query result streaming
+//! `/$/ws` and `/$/subscribe` are wired (see `server/types.rs::build_app`) to
+//! the store/auth-integrated implementation in [`crate::websocket`], which
+//! owns the single shared `SubscriptionManager` instance stored on
+//! `AppState::subscription_manager`. This module's [`websocket_handler`] and
+//! [`SubscriptionManager`] are a separate, unwired, per-connection
+//! implementation kept only for its unit tests and historical reference; it
+//! is never reachable from an HTTP route and must not be re-wired without
+//! first removing the duplication with `crate::websocket`. Do not add new
+//! callers of the types in this module.
 
 use crate::{
+    auth::AuthUser,
     error::{FusekiError, FusekiResult},
     server::AppState,
 };
@@ -24,7 +27,6 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
@@ -341,27 +343,43 @@ impl SubscriptionManager {
 }
 
 /// WebSocket upgrade handler
-#[instrument(skip(state, ws))]
+///
+/// Not routed (see module docs) — kept auth-correct as defense in depth in
+/// case this module is ever re-wired. Fails closed: when
+/// `security.auth_required` is set, an upgrade request without a valid
+/// session/JWT is rejected before ever reaching `ws.on_upgrade`.
+#[instrument(skip(state, ws, auth_user))]
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
     Query(params): Query<WebSocketParams>,
-    // auth_user: Option<AuthUser>, // Would be extracted in full implementation
-) -> impl IntoResponse {
+    auth_user: Option<AuthUser>,
+) -> Result<impl IntoResponse, FusekiError> {
     info!("WebSocket connection request received");
 
-    // Validate authentication if required
-    // if state.config.security.auth_required && auth_user.is_none() {
-    //     return Err(FusekiError::authentication("Authentication required for WebSocket"));
-    // }
+    if !websocket_auth_permitted(state.config.security.auth_required, auth_user.as_ref()) {
+        return Err(FusekiError::authentication(
+            "Authentication required for WebSocket",
+        ));
+    }
 
     // Initialize subscription manager if not present
     let subscription_manager = get_or_create_subscription_manager(&state).await;
 
     // Upgrade to WebSocket
-    ws.on_upgrade(move |socket| {
+    Ok(ws.on_upgrade(move |socket| {
         handle_websocket_connection(socket, state, subscription_manager, params)
-    })
+    }))
+}
+
+/// Whether a WebSocket upgrade should be permitted, given the server's
+/// `auth_required` setting and the (possibly absent) authenticated caller.
+///
+/// Extracted as a pure function so the fail-closed behavior — reject when
+/// auth is required and no `AuthUser` was extracted — is directly unit
+/// testable without needing a real `WebSocketUpgrade`.
+fn websocket_auth_permitted(auth_required: bool, auth_user: Option<&AuthUser>) -> bool {
+    !auth_required || auth_user.is_some()
 }
 
 /// Handle WebSocket connection
@@ -769,221 +787,15 @@ async fn get_or_create_subscription_manager(_state: &AppState) -> SubscriptionMa
     SubscriptionManager::new()
 }
 
-/// Enhanced subscription monitoring with real change detection
-pub async fn start_subscription_monitor(
-    subscription_manager: SubscriptionManager,
-    state: AppState,
-) {
-    let mut interval = tokio::time::interval(Duration::from_secs(1));
-    let mut change_detector = ChangeDetector::new();
-
-    tokio::spawn(async move {
-        loop {
-            interval.tick().await;
-
-            // Monitor for actual data changes in the store
-            if let Ok(changes) = detect_store_changes(&state.store, &mut change_detector).await {
-                for change in changes {
-                    subscription_manager.notify_change(change).await;
-                }
-            }
-
-            // Monitor for subscription health and cleanup stale connections
-            cleanup_stale_subscriptions(&subscription_manager).await;
-        }
-    });
-}
-
-/// Advanced change detector for monitoring RDF store modifications
-pub struct ChangeDetector {
-    last_check: DateTime<Utc>,
-    graph_checksums: HashMap<String, u64>,
-    change_buffer: Vec<ChangeNotification>,
-}
-
-impl Default for ChangeDetector {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ChangeDetector {
-    pub fn new() -> Self {
-        ChangeDetector {
-            last_check: Utc::now(),
-            graph_checksums: HashMap::new(),
-            change_buffer: Vec::new(),
-        }
-    }
-}
-
-/// Detect actual changes in the RDF store with sophisticated monitoring
-async fn detect_store_changes(
-    store: &crate::store::Store,
-    detector: &mut ChangeDetector,
-) -> FusekiResult<Vec<ChangeNotification>> {
-    let mut changes = Vec::new();
-    let now = Utc::now();
-
-    // Check for transaction log changes
-    if let Ok(tx_log_changes) = check_transaction_log_changes(store, detector.last_check).await {
-        changes.extend(tx_log_changes);
-    }
-
-    // Check for graph-level modifications using checksums
-    if let Ok(graph_changes) =
-        detect_graph_modifications(store, &mut detector.graph_checksums).await
-    {
-        changes.extend(graph_changes);
-    }
-
-    // Batch and deduplicate changes
-    let batched_changes = batch_and_deduplicate_changes(changes);
-
-    detector.last_check = now;
-    Ok(batched_changes)
-}
-
-/// Check transaction log for recent changes
-async fn check_transaction_log_changes(
-    _store: &crate::store::Store,
-    _since: DateTime<Utc>,
-) -> FusekiResult<Vec<ChangeNotification>> {
-    // This would interface with the actual transaction log
-    // For now, simulate with a more realistic approach
-    let mut changes = Vec::new();
-
-    // Simulate checking different types of changes
-    let change_types = ["INSERT", "DELETE", "CLEAR", "LOAD", "CREATE", "DROP"];
-
-    use scirs2_core::random::{Random, Rng};
-    let mut rng = Random::seed(42);
-
-    for (i, change_type) in change_types.iter().enumerate() {
-        if rng.gen_range(0.0..1.0) < 0.1 {
-            // 10% chance of each change type
-            let graph_name = format!("http://example.org/graph_{}", i % 3);
-            changes.push(ChangeNotification {
-                change_type: change_type.to_string(),
-                affected_graphs: vec![graph_name],
-                timestamp: Utc::now(),
-                change_count: rng.random_range(0..10) + 1,
-            });
-        }
-    }
-
-    Ok(changes)
-}
-
-/// Detect graph modifications using checksums
-async fn detect_graph_modifications(
-    store: &crate::store::Store,
-    graph_checksums: &mut HashMap<String, u64>,
-) -> FusekiResult<Vec<ChangeNotification>> {
-    let mut changes = Vec::new();
-
-    // Get current graph list and checksums
-    let current_graphs = get_store_graphs(store).await?;
-
-    for graph_name in current_graphs {
-        let current_checksum = calculate_graph_checksum(store, &graph_name).await?;
-
-        if let Some(&previous_checksum) = graph_checksums.get(&graph_name) {
-            if current_checksum != previous_checksum {
-                changes.push(ChangeNotification {
-                    change_type: "MODIFY".to_string(),
-                    affected_graphs: vec![graph_name.clone()],
-                    timestamp: Utc::now(),
-                    change_count: 1,
-                });
-            }
-        }
-
-        graph_checksums.insert(graph_name, current_checksum);
-    }
-
-    Ok(changes)
-}
-
-/// Batch and deduplicate change notifications
-fn batch_and_deduplicate_changes(changes: Vec<ChangeNotification>) -> Vec<ChangeNotification> {
-    let mut batched: HashMap<String, ChangeNotification> = HashMap::new();
-
-    for change in changes {
-        let key = format!(
-            "{}:{}",
-            change.change_type,
-            change.affected_graphs.join(",")
-        );
-
-        match batched.get_mut(&key) {
-            Some(existing) => {
-                existing.change_count += change.change_count;
-                existing.timestamp = change.timestamp.max(existing.timestamp);
-            }
-            None => {
-                batched.insert(key, change);
-            }
-        }
-    }
-
-    batched.into_values().collect()
-}
-
-/// Get list of graphs in the store
-async fn get_store_graphs(_store: &crate::store::Store) -> FusekiResult<Vec<String>> {
-    // This would query the store for all named graphs
-    // For now, return a simulated list
-    Ok(vec![
-        "http://example.org/default".to_string(),
-        "http://example.org/metadata".to_string(),
-        "http://example.org/temp".to_string(),
-    ])
-}
-
-/// Calculate checksum for a graph
-async fn calculate_graph_checksum(
-    _store: &crate::store::Store,
-    graph_name: &str,
-) -> FusekiResult<u64> {
-    // This would calculate a hash of all triples in the graph
-    // For now, simulate with a random value that changes occasionally
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let mut hasher = DefaultHasher::new();
-    graph_name.hash(&mut hasher);
-
-    // Add some time-based variation to simulate real changes
-    let time_factor = (Utc::now().timestamp() / 60) as u64; // Changes every minute
-    time_factor.hash(&mut hasher);
-
-    Ok(hasher.finish())
-}
-
-/// Cleanup stale subscriptions and connections
-async fn cleanup_stale_subscriptions(subscription_manager: &SubscriptionManager) {
-    let subscriptions = subscription_manager.get_active_subscriptions().await;
-    let now = Utc::now();
-
-    for subscription in subscriptions {
-        // Remove subscriptions older than 1 hour without activity
-        if let Some(last_result) = subscription.last_result_at {
-            if now - last_result > chrono::Duration::hours(1) {
-                subscription_manager
-                    .remove_subscription(&subscription.id)
-                    .await;
-                debug!("Removed stale subscription: {}", subscription.id);
-            }
-        } else if now - subscription.created_at > chrono::Duration::minutes(30) {
-            // Remove subscriptions that never had results after 30 minutes
-            subscription_manager
-                .remove_subscription(&subscription.id)
-                .await;
-            debug!("Removed inactive subscription: {}", subscription.id);
-        }
-    }
-}
+// NOTE: This module previously shipped a "change monitor" pipeline
+// (`start_subscription_monitor` + `ChangeDetector`) that simulated store
+// changes with a fixed-seed RNG and returned hardcoded graph lists/checksums
+// instead of observing the real store. It was never invoked from anywhere
+// (including `websocket_handler` above, which is itself unrouted — see
+// module docs) and has been removed rather than left as a live-looking but
+// fake implementation. Real change notification for `/$/ws` is provided by
+// `crate::websocket::SubscriptionManager`, which evaluates subscribed
+// queries against the actual store on a timer (see `evaluation_loop`).
 
 #[cfg(test)]
 mod tests {
@@ -1075,5 +887,27 @@ mod tests {
 
         let json = serde_json::to_string(&request);
         assert!(json.is_ok());
+    }
+
+    /// Regression: the auth check in this (quarantined, unrouted) handler
+    /// was previously commented out entirely, so any client could upgrade
+    /// regardless of `security.auth_required`. It must now fail closed.
+    #[test]
+    fn test_websocket_auth_permitted_fails_closed() {
+        // auth_required + no authenticated user => rejected.
+        assert!(!websocket_auth_permitted(true, None));
+        // auth_required + authenticated user => allowed.
+        let user = AuthUser(crate::auth::User {
+            username: "alice".to_string(),
+            roles: vec![],
+            email: None,
+            full_name: None,
+            last_login: None,
+            permissions: vec![],
+        });
+        assert!(websocket_auth_permitted(true, Some(&user)));
+        // auth not required => always allowed, with or without a user.
+        assert!(websocket_auth_permitted(false, None));
+        assert!(websocket_auth_permitted(false, Some(&user)));
     }
 }

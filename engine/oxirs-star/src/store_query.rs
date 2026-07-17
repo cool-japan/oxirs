@@ -16,7 +16,13 @@ use crate::store::StarStore;
 use crate::{StarError, StarResult};
 
 impl StarStore {
-    /// Query triples matching a pattern
+    /// Query triples matching a pattern.
+    ///
+    /// S/P/O-bound patterns that contain no quoted-triple term are delegated
+    /// to the core store's indexed `find_quads` lookup instead of scanning
+    /// (and converting) every triple in the store; only quoted-triple
+    /// patterns fall back to a full scan of the (typically much smaller)
+    /// star-triple set.
     pub fn query(
         &self,
         subject: Option<&StarTerm>,
@@ -25,35 +31,37 @@ impl StarStore {
     ) -> StarResult<Vec<StarTriple>> {
         let mut results = Vec::new();
 
-        // Query star triples (those containing quoted triples)
-        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
-        for triple in star_triples.iter() {
-            let matches = (subject.is_none() || subject == Some(&triple.subject))
-                && (predicate.is_none() || predicate == Some(&triple.predicate))
-                && (object.is_none() || object == Some(&triple.object));
+        // Query star triples (those containing quoted triples). This set is
+        // kept separate from the (indexed) core store, so it is always a
+        // linear scan; it is expected to be small relative to regular data.
+        {
+            let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
+            for triple in star_triples.iter() {
+                let matches = (subject.is_none() || subject == Some(&triple.subject))
+                    && (predicate.is_none() || predicate == Some(&triple.predicate))
+                    && (object.is_none() || object == Some(&triple.object));
 
-            if matches {
-                results.push(triple.clone());
+                if matches {
+                    results.push(triple.clone());
+                }
             }
         }
 
-        // Query regular triples from core store if no quoted triples in pattern
+        // Query regular triples from core store if no quoted triples appear
+        // in the pattern. Delegate directly to the core store's indexed
+        // find_quads (via query_core_store) instead of dumping and
+        // re-filtering the entire store.
         if subject.map_or(true, |s| !matches!(s, StarTerm::QuotedTriple(_)))
             && predicate.map_or(true, |p| !matches!(p, StarTerm::QuotedTriple(_)))
             && object.map_or(true, |o| !matches!(o, StarTerm::QuotedTriple(_)))
         {
-            // Get all regular triples and filter
-            let all = self.all_triples();
-            for triple in all {
-                // Only include if not already in results and matches pattern
-                if !triple.contains_quoted_triples() {
-                    let matches = (subject.is_none() || subject == Some(&triple.subject))
-                        && (predicate.is_none() || predicate == Some(&triple.predicate))
-                        && (object.is_none() || object == Some(&triple.object));
-
-                    if matches && !results.contains(&triple) {
-                        results.push(triple);
-                    }
+            let mut seen: std::collections::HashSet<StarTriple> = results.iter().cloned().collect();
+            let core_results = self.query_core_store(subject, predicate, object)?;
+            for triple in core_results {
+                // query_core_store only ever returns non-quoted triples
+                // (quoted triples live in star_triples), but guard anyway.
+                if !triple.contains_quoted_triples() && seen.insert(triple.clone()) {
+                    results.push(triple);
                 }
             }
         }
@@ -61,7 +69,12 @@ impl StarStore {
         Ok(results)
     }
 
-    /// Get all triples in the store
+    /// Get all triples in the store.
+    ///
+    /// This performs a genuine full scan of both the star-triple set and the
+    /// core store, and is intended for full-scan use cases (export, stats,
+    /// iteration). Bounded S/P/O lookups should use [`StarStore::query`]
+    /// instead, which delegates to the core store's indices.
     pub fn triples(&self) -> Vec<StarTriple> {
         let mut all_triples = Vec::new();
 
@@ -74,13 +87,9 @@ impl StarStore {
         // Add regular triples from core store (release lock quickly)
         {
             let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
-            if let Ok(core_triples) = core_store.triples() {
+            if let Ok(quads) = core_store.find_quads(None, None, None, None) {
                 drop(core_store); // Release lock before conversion
-                for core_triple in core_triples {
-                    if let Ok(star_triple) = self.convert_from_core_triple(&core_triple) {
-                        all_triples.push(star_triple);
-                    }
-                }
+                all_triples.extend(self.convert_core_quads_lossy(quads, "triples"));
             }
         }
 
@@ -231,12 +240,12 @@ impl StarStore {
         if min_depth == 0 {
             let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
             if let Ok(quads) = core_store.find_quads(None, None, None, None) {
-                for quad in quads {
-                    let core_triple = quad.to_triple();
-                    if let Ok(star_triple) = self.convert_from_core_triple(&core_triple) {
-                        if !star_triple.contains_quoted_triples() {
-                            results.push(star_triple);
-                        }
+                drop(core_store);
+                for star_triple in
+                    self.convert_core_quads_lossy(quads, "find_triples_by_nesting_depth")
+                {
+                    if !star_triple.contains_quoted_triples() {
+                        results.push(star_triple);
                     }
                 }
             }
@@ -280,15 +289,13 @@ impl StarStore {
         // Add regular triples from core store
         let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
         if let Ok(quads) = core_store.find_quads(None, None, None, None) {
-            for quad in quads {
-                let core_triple = quad.to_triple();
-                if let Ok(star_triple) = self.convert_from_core_triple(&core_triple) {
-                    // Only add if it doesn't contain quoted triples (those are already in star_triples)
-                    if !star_triple.contains_quoted_triples() {
-                        graph
-                            .insert(star_triple)
-                            .expect("triple should be valid after core store validation");
-                    }
+            drop(core_store);
+            for star_triple in self.convert_core_quads_lossy(quads, "to_graph") {
+                // Only add if it doesn't contain quoted triples (those are already in star_triples)
+                if !star_triple.contains_quoted_triples() {
+                    graph
+                        .insert(star_triple)
+                        .expect("triple should be valid after core store validation");
                 }
             }
         }
@@ -391,6 +398,47 @@ impl StarStore {
         Ok(results)
     }
 
+    /// Convert core quads (`quads`) into [`StarTriple`]s, logging a single
+    /// `warn!` with the skipped count (rather than silently discarding data)
+    /// if any triple could not be converted.
+    ///
+    /// This currently affects quoted triples synced into the core store via
+    /// [`oxirs_core::model::Subject::QuotedTriple`] /
+    /// [`oxirs_core::model::Object::QuotedTriple`]: `StarStore`'s
+    /// core-to-star conversion does not support them yet (see
+    /// [`StarStore::convert_subject_from_core`] /
+    /// [`StarStore::convert_object_from_core`]), so any such quad is
+    /// skipped here rather than surfacing an error to every caller of the
+    /// read APIs that go through this helper.
+    pub(crate) fn convert_core_quads_lossy(
+        &self,
+        quads: Vec<oxirs_core::model::Quad>,
+        context: &str,
+    ) -> Vec<StarTriple> {
+        let mut triples = Vec::with_capacity(quads.len());
+        let mut skipped = 0usize;
+
+        for quad in quads {
+            let core_triple = quad.to_triple();
+            match self.convert_from_core_triple(&core_triple) {
+                Ok(star_triple) => triples.push(star_triple),
+                Err(_) => skipped += 1,
+            }
+        }
+
+        if skipped > 0 {
+            tracing::warn!(
+                skipped_count = skipped,
+                context,
+                "Skipped {skipped} triple(s) from the core store during '{context}': quoted \
+                 triples synced from the core store are not yet supported by StarStore's read \
+                 APIs"
+            );
+        }
+
+        triples
+    }
+
     /// Convert a core RDF Triple to a StarTriple
     pub(crate) fn convert_from_core_triple(
         &self,
@@ -489,13 +537,10 @@ impl StarStore {
             let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
             if let Ok(quads) = core_store.find_quads(None, None, None, None) {
                 drop(core_store); // Release lock before conversion
-                for quad in quads {
-                    let core_triple = quad.to_triple();
-                    if let Ok(star_triple) = self.convert_from_core_triple(&core_triple) {
-                        // Only add if it doesn't contain quoted triples (those are already in star_triples)
-                        if !star_triple.contains_quoted_triples() {
-                            all_triples.push(star_triple);
-                        }
+                for star_triple in self.convert_core_quads_lossy(quads, "all_triples") {
+                    // Only add if it doesn't contain quoted triples (those are already in star_triples)
+                    if !star_triple.contains_quoted_triples() {
+                        all_triples.push(star_triple);
                     }
                 }
             }
@@ -577,5 +622,147 @@ impl<'a> Iterator for StreamingTripleIterator<'a> {
             self.total_processed += 1;
         }
         triple
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::{StarTerm, StarTriple};
+    use crate::store::StarStore;
+    use crate::StarResult;
+
+    /// Regression test for the P0 performance fix: `query()` must delegate
+    /// bound S/P/O patterns to the core store's indexed `find_quads` lookup
+    /// (via `query_core_store`) instead of dumping and re-scanning the whole
+    /// store, and must not return duplicate results.
+    #[test]
+    fn test_query_bounded_pattern_uses_indexed_lookup() -> StarResult<()> {
+        let store = StarStore::new();
+
+        let alice = StarTerm::iri("http://example.org/alice")?;
+        let bob = StarTerm::iri("http://example.org/bob")?;
+        let knows = StarTerm::iri("http://example.org/knows")?;
+        let likes = StarTerm::iri("http://example.org/likes")?;
+
+        store.insert(&StarTriple::new(alice.clone(), knows.clone(), bob.clone()))?;
+        store.insert(&StarTriple::new(alice.clone(), likes.clone(), bob.clone()))?;
+        store.insert(&StarTriple::new(bob.clone(), knows.clone(), alice.clone()))?;
+
+        // Subject-bound pattern: only alice's two triples should come back.
+        let results = store.query(Some(&alice), None, None)?;
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|t| t.subject == alice));
+
+        // Fully-bound pattern: exactly one match, no duplicates.
+        let results = store.query(Some(&alice), Some(&knows), Some(&bob))?;
+        assert_eq!(results.len(), 1);
+
+        // Predicate-bound pattern spanning multiple subjects.
+        let results = store.query(None, Some(&knows), None)?;
+        assert_eq!(results.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_query_matches_star_and_regular_triples() -> StarResult<()> {
+        let store = StarStore::new();
+
+        let inner = StarTriple::new(
+            StarTerm::iri("http://example.org/s1")?,
+            StarTerm::iri("http://example.org/p1")?,
+            StarTerm::literal("o1")?,
+        );
+        let quoted_triple = StarTriple::new(
+            StarTerm::quoted_triple(inner),
+            StarTerm::iri("http://example.org/certainty")?,
+            StarTerm::literal("0.9")?,
+        );
+        let regular_triple = StarTriple::new(
+            StarTerm::iri("http://example.org/s2")?,
+            StarTerm::iri("http://example.org/p2")?,
+            StarTerm::literal("o2")?,
+        );
+
+        store.insert(&quoted_triple)?;
+        store.insert(&regular_triple)?;
+
+        // Unbound pattern returns both the quoted-triple-bearing triple and
+        // the plain triple, with no duplicates.
+        let results = store.query(None, None, None)?;
+        assert_eq!(results.len(), 2);
+        assert!(results.contains(&quoted_triple));
+        assert!(results.contains(&regular_triple));
+
+        Ok(())
+    }
+
+    /// Regression test for the P2 error-handling fix: quoted triples synced
+    /// into the core store (e.g. by external tooling writing directly to
+    /// `oxirs_core::rdf_store`, bypassing `StarStore::insert`'s routing to
+    /// `star_triples`) are not silently swallowed alongside otherwise-valid
+    /// data — they are skipped individually (StarStore's core->star
+    /// conversion does not support them yet) while unrelated triples in the
+    /// same read are still returned correctly. Whether a `warn!` was
+    /// actually emitted is not asserted here (would require a tracing
+    /// test-capture dependency); this test covers the functional contract:
+    /// no panic, no silent loss of *other* data.
+    #[test]
+    fn test_core_quoted_triples_are_skipped_not_silently_corrupting_reads() -> StarResult<()> {
+        use oxirs_core::model::{
+            NamedNode as CoreNamedNode, Object as CoreObject, Predicate as CorePredicate,
+            Quad as CoreQuad, QuotedTriple as CoreQuotedTriple, Subject as CoreSubject,
+            Triple as CoreTriple,
+        };
+        use oxirs_core::rdf_store::ConcreteStore;
+
+        let store = StarStore::new();
+
+        // A regular, fully-convertible triple.
+        let regular = StarTriple::new(
+            StarTerm::iri("http://example.org/s")?,
+            StarTerm::iri("http://example.org/p")?,
+            StarTerm::literal("o")?,
+        );
+        store.insert(&regular)?;
+
+        // Directly insert a quad into the core store whose *subject* is a
+        // QuotedTriple, simulating data synced in from outside StarStore's
+        // own insert() path (which always routes quoted triples to
+        // star_triples, never to the core store).
+        let inner = CoreTriple::new(
+            CoreSubject::NamedNode(
+                CoreNamedNode::new("http://example.org/inner-s").expect("valid IRI"),
+            ),
+            CorePredicate::NamedNode(
+                CoreNamedNode::new("http://example.org/inner-p").expect("valid IRI"),
+            ),
+            CoreObject::NamedNode(
+                CoreNamedNode::new("http://example.org/inner-o").expect("valid IRI"),
+            ),
+        );
+        let quoted_subject_quad = CoreQuad::new_default_graph(
+            CoreSubject::QuotedTriple(Box::new(CoreQuotedTriple::new(inner))),
+            CorePredicate::NamedNode(
+                CoreNamedNode::new("http://example.org/meta").expect("valid IRI"),
+            ),
+            CoreObject::NamedNode(
+                CoreNamedNode::new("http://example.org/unsupported").expect("valid IRI"),
+            ),
+        );
+        {
+            let core_store = store.core_store.write().unwrap_or_else(|e| e.into_inner());
+            ConcreteStore::insert_quad(&core_store, quoted_subject_quad)
+                .expect("core-level insert should succeed");
+        }
+
+        // The regular triple is still returned correctly; the unsupported
+        // quoted-subject quad is skipped rather than panicking or silently
+        // discarding the *other* data too.
+        let all = store.triples();
+        assert!(all.contains(&regular));
+        assert_eq!(all.len(), 1);
+
+        Ok(())
     }
 }

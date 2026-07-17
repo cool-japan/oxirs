@@ -9,8 +9,9 @@ use crate::query::range::TimeRange;
 use crate::query::resample::ResampleBucket;
 use crate::query::window::WindowSpec;
 use crate::series::DataPoint;
-use crate::storage::TimeChunk;
+use crate::storage::{ColumnarStore, TimeChunk};
 use chrono::{DateTime, Duration, Utc};
+use std::sync::Arc;
 
 /// Query result
 #[derive(Debug, Clone)]
@@ -29,27 +30,88 @@ pub struct QueryResult {
     pub points_processed: usize,
 }
 
+/// Backing storage for a [`QueryEngine`].
+///
+/// `InMemory` keeps chunks fully resident in a `Vec`, as loaded by
+/// [`QueryEngine::add_chunk`]/[`QueryEngine::add_chunks`]. `Columnar` instead
+/// reads chunk metadata from the [`crate::storage::SeriesIndex`] and lazily
+/// decompresses only the chunks that overlap the requested time range,
+/// backed by the crate's real on-disk [`ColumnarStore`] pipeline.
+#[derive(Debug)]
+enum ChunkSource {
+    InMemory(Vec<TimeChunk>),
+    Columnar(Arc<ColumnarStore>),
+}
+
 /// Query engine for executing time-series queries
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct QueryEngine {
-    /// All loaded chunks (in a real impl, this would be a storage backend)
-    chunks: Vec<TimeChunk>,
+    source: ChunkSource,
+}
+
+impl Default for QueryEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryEngine {
-    /// Create a new query engine
+    /// Create a new, empty in-memory query engine.
+    ///
+    /// Chunks must be loaded explicitly via [`QueryEngine::add_chunk`] /
+    /// [`QueryEngine::add_chunks`]. For querying a durable, disk-backed
+    /// series without pre-loading every chunk into memory, use
+    /// [`QueryEngine::from_columnar_store`] instead.
     pub fn new() -> Self {
-        Self { chunks: Vec::new() }
+        Self {
+            source: ChunkSource::InMemory(Vec::new()),
+        }
     }
 
-    /// Add a chunk to the engine
+    /// Create a query engine that lazily reads chunks from a durable
+    /// [`ColumnarStore`] by time range instead of requiring the whole
+    /// series to be pre-loaded into memory.
+    ///
+    /// Only the chunks overlapping a query's requested time range (or, when
+    /// no range is given, all chunks for the series) are read from disk and
+    /// decompressed; nothing is cached beyond `ColumnarStore`'s own chunk
+    /// cache.
+    pub fn from_columnar_store(store: Arc<ColumnarStore>) -> Self {
+        Self {
+            source: ChunkSource::Columnar(store),
+        }
+    }
+
+    /// True if this engine reads lazily from a [`ColumnarStore`] rather than
+    /// holding chunks in memory.
+    pub fn is_columnar_backed(&self) -> bool {
+        matches!(self.source, ChunkSource::Columnar(_))
+    }
+
+    /// Add a chunk to the engine.
+    ///
+    /// Only meaningful for an in-memory engine (created via
+    /// [`QueryEngine::new`]); on a [`QueryEngine::from_columnar_store`]
+    /// engine this is a no-op since chunks are read lazily from disk --
+    /// write through [`ColumnarStore::write_chunk`] directly instead.
     pub fn add_chunk(&mut self, chunk: TimeChunk) {
-        self.chunks.push(chunk);
+        if let ChunkSource::InMemory(chunks) = &mut self.source {
+            chunks.push(chunk);
+        } else {
+            tracing::warn!(
+                series_id = chunk.series_id,
+                "add_chunk() is a no-op on a ColumnarStore-backed QueryEngine; \
+                 write through ColumnarStore::write_chunk() instead"
+            );
+        }
     }
 
-    /// Add multiple chunks
+    /// Add multiple chunks. See [`QueryEngine::add_chunk`] for the
+    /// ColumnarStore-backed caveat.
     pub fn add_chunks(&mut self, chunks: Vec<TimeChunk>) {
-        self.chunks.extend(chunks);
+        for chunk in chunks {
+            self.add_chunk(chunk);
+        }
     }
 
     /// Start building a query
@@ -57,12 +119,76 @@ impl QueryEngine {
         QueryBuilder::new(self)
     }
 
-    /// Get chunk metadata for optimization
+    /// Get chunk metadata for optimization.
+    ///
+    /// Only populated for an in-memory engine; a [`QueryEngine::from_columnar_store`]
+    /// engine does not hold decompressed `TimeChunk`s in memory and always
+    /// returns an empty list here (use its `SeriesIndex` directly for chunk
+    /// metadata without decompression).
     pub fn get_chunks_for_series(&self, series_id: u64) -> Vec<&TimeChunk> {
-        self.chunks
-            .iter()
-            .filter(|c| c.series_id == series_id)
-            .collect()
+        match &self.source {
+            ChunkSource::InMemory(chunks) => {
+                chunks.iter().filter(|c| c.series_id == series_id).collect()
+            }
+            ChunkSource::Columnar(_) => Vec::new(),
+        }
+    }
+
+    /// Load the data points for `series_id` (optionally restricted to
+    /// `time_range`) along with the number of chunks scanned to produce
+    /// them, regardless of backing storage.
+    fn load_points(
+        &self,
+        series_id: u64,
+        time_range: Option<&TimeRange>,
+    ) -> TsdbResult<(Vec<DataPoint>, usize)> {
+        match &self.source {
+            ChunkSource::InMemory(chunks) => {
+                let relevant: Vec<&TimeChunk> = chunks
+                    .iter()
+                    .filter(|c| {
+                        c.series_id == series_id
+                            && time_range.map(|tr| tr.overlaps_chunk(c)).unwrap_or(true)
+                    })
+                    .collect();
+
+                let chunks_scanned = relevant.len();
+                let mut points: Vec<DataPoint> = Vec::new();
+                for chunk in relevant {
+                    let chunk_points = if let Some(range) = time_range {
+                        chunk.query_range(range.start, range.end)?
+                    } else {
+                        chunk.decompress()?
+                    };
+                    points.extend(chunk_points);
+                }
+                Ok((points, chunks_scanned))
+            }
+            ChunkSource::Columnar(store) => {
+                let entries = match time_range {
+                    Some(range) => {
+                        store
+                            .index()
+                            .get_chunks_in_range(series_id, range.start, range.end)?
+                    }
+                    None => store.index().get_chunks_for_series(series_id)?,
+                };
+
+                let chunks_scanned = entries.len();
+                let mut points: Vec<DataPoint> = Vec::new();
+                for entry in &entries {
+                    let chunk = store.read_chunk(entry.chunk_id)?;
+                    let chunk_points = if let Some(range) = time_range {
+                        chunk.query_range(range.start, range.end)?
+                    } else {
+                        chunk.decompress()?
+                    };
+                    points.extend(chunk_points);
+                }
+                points.sort_by_key(|p| p.timestamp);
+                Ok((points, chunks_scanned))
+            }
+        }
     }
 }
 
@@ -158,34 +284,12 @@ impl<'a> QueryBuilder<'a> {
             .series_id
             .ok_or_else(|| TsdbError::Query("Series ID required".to_string()))?;
 
-        // Get relevant chunks
-        let chunks: Vec<&TimeChunk> = self
+        // Read the relevant points lazily from whichever backing storage
+        // this engine uses (in-memory `Vec<TimeChunk>` or a durable
+        // `ColumnarStore`, read by time range via its `SeriesIndex`).
+        let (mut points, chunks_scanned) = self
             .engine
-            .chunks
-            .iter()
-            .filter(|c| {
-                c.series_id == series_id
-                    && self
-                        .time_range
-                        .as_ref()
-                        .map(|tr| tr.overlaps_chunk(c))
-                        .unwrap_or(true)
-            })
-            .collect();
-
-        let chunks_scanned = chunks.len();
-
-        // Decompress and filter data
-        let mut points: Vec<DataPoint> = Vec::new();
-
-        for chunk in &chunks {
-            let chunk_points = if let Some(ref range) = self.time_range {
-                chunk.query_range(range.start, range.end)?
-            } else {
-                chunk.decompress()?
-            };
-            points.extend(chunk_points);
-        }
+            .load_points(series_id, self.time_range.as_ref())?;
 
         let points_processed = points.len();
 
@@ -412,5 +516,165 @@ mod tests {
         // No chunks for series 999
         assert_eq!(result.chunks_scanned, 0);
         assert!(result.points.is_empty());
+    }
+
+    // -- ColumnarStore-backed engine (regression tests for the P1 finding) --
+
+    fn temp_columnar_store(name: &str) -> (Arc<ColumnarStore>, std::path::PathBuf) {
+        let path = std::env::temp_dir().join(format!(
+            "oxirs_tsdb_query_engine_test_{name}_{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        let _ = std::fs::remove_dir_all(&path);
+        let mut store = ColumnarStore::new(&path, Duration::hours(2), 16)
+            .expect("columnar store creation should succeed");
+        store.set_fsync(false);
+        (Arc::new(store), path)
+    }
+
+    #[test]
+    fn test_columnar_backed_engine_reads_lazily_from_disk() {
+        let (store, path) = temp_columnar_store("basic");
+        let start = Utc::now();
+
+        let points: Vec<DataPoint> = (0..100)
+            .map(|i| DataPoint {
+                timestamp: start + Duration::seconds(i),
+                value: i as f64,
+            })
+            .collect();
+        let chunk = TimeChunk::new(1, start, Duration::hours(2), points)
+            .expect("chunk construction should succeed");
+        store
+            .write_chunk(&chunk)
+            .expect("chunk write should succeed");
+
+        let engine = QueryEngine::from_columnar_store(Arc::clone(&store));
+        assert!(engine.is_columnar_backed());
+
+        let result = engine
+            .query()
+            .series(1)
+            .execute()
+            .expect("query should succeed");
+
+        assert_eq!(result.series_id, 1);
+        assert_eq!(result.points.len(), 100);
+        assert_eq!(result.chunks_scanned, 1);
+
+        let _ = std::fs::remove_dir_all(&path);
+    }
+
+    #[test]
+    fn test_columnar_backed_engine_time_range_scans_only_overlapping_chunks() {
+        let (store, path) = temp_columnar_store("time_range");
+        // Truncate to millisecond precision: chunk compression stores
+        // timestamps at millisecond granularity, so a sub-millisecond
+        // `Utc::now()` boundary would otherwise round away from the exact
+        // query start and make the range filter's `>=` comparison flaky.
+        let start = DateTime::from_timestamp_millis(Utc::now().timestamp_millis())
+            .expect("valid timestamp");
+
+        // Two disjoint chunks for the same series.
+        let chunk1_points: Vec<DataPoint> = (0..50)
+            .map(|i| DataPoint {
+                timestamp: start + Duration::seconds(i),
+                value: i as f64,
+            })
+            .collect();
+        let chunk1 = TimeChunk::new(1, start, Duration::seconds(50), chunk1_points)
+            .expect("chunk construction should succeed");
+
+        let chunk2_start = start + Duration::hours(3);
+        let chunk2_points: Vec<DataPoint> = (0..50)
+            .map(|i| DataPoint {
+                timestamp: chunk2_start + Duration::seconds(i),
+                value: (100 + i) as f64,
+            })
+            .collect();
+        let chunk2 = TimeChunk::new(1, chunk2_start, Duration::seconds(50), chunk2_points)
+            .expect("chunk construction should succeed");
+
+        store
+            .write_chunk(&chunk1)
+            .expect("chunk write should succeed");
+        store
+            .write_chunk(&chunk2)
+            .expect("chunk write should succeed");
+
+        let engine = QueryEngine::from_columnar_store(Arc::clone(&store));
+
+        // Querying only the first chunk's range must not scan the second.
+        let result = engine
+            .query()
+            .series(1)
+            .time_range(start, start + Duration::seconds(50))
+            .execute()
+            .expect("query should succeed");
+
+        assert_eq!(result.chunks_scanned, 1);
+        assert_eq!(result.points.len(), 50);
+        assert!(result.points.iter().all(|p| p.value < 100.0));
+
+        let _ = std::fs::remove_dir_all(&path);
+    }
+
+    #[test]
+    fn test_columnar_backed_engine_aggregation() {
+        let (store, path) = temp_columnar_store("aggregation");
+        let start = Utc::now();
+
+        let points: Vec<DataPoint> = (0..100)
+            .map(|i| DataPoint {
+                timestamp: start + Duration::seconds(i),
+                value: i as f64,
+            })
+            .collect();
+        let chunk = TimeChunk::new(1, start, Duration::hours(2), points)
+            .expect("chunk construction should succeed");
+        store
+            .write_chunk(&chunk)
+            .expect("chunk write should succeed");
+
+        let engine = QueryEngine::from_columnar_store(Arc::clone(&store));
+        let result = engine
+            .query()
+            .series(1)
+            .aggregate(Aggregation::Avg)
+            .execute()
+            .expect("query should succeed");
+
+        let avg = result
+            .aggregated_value
+            .expect("aggregation should be present");
+        assert!((avg - 49.5).abs() < 0.1);
+
+        let _ = std::fs::remove_dir_all(&path);
+    }
+
+    #[test]
+    fn test_add_chunk_is_noop_on_columnar_backed_engine() {
+        let (store, path) = temp_columnar_store("add_chunk_noop");
+        let mut engine = QueryEngine::from_columnar_store(Arc::clone(&store));
+
+        let start = Utc::now();
+        let points = vec![DataPoint {
+            timestamp: start,
+            value: 1.0,
+        }];
+        let chunk = TimeChunk::new(1, start, Duration::hours(2), points)
+            .expect("chunk construction should succeed");
+        // add_chunk() must not panic and must not make the point queryable,
+        // since it was never written through ColumnarStore::write_chunk.
+        engine.add_chunk(chunk);
+
+        let result = engine
+            .query()
+            .series(1)
+            .execute()
+            .expect("query should succeed");
+        assert!(result.points.is_empty());
+
+        let _ = std::fs::remove_dir_all(&path);
     }
 }

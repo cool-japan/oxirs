@@ -32,6 +32,18 @@ impl QueryExecutor {
             AccessPath::FullScan => self.full_scan_pattern(pattern, dataset)?,
         };
 
+        // Enforce the runtime triple-scan budget on the store hot path. Each
+        // matched triple counts as one scanned triple for this pattern; the
+        // check is incremental so a runaway scan is aborted before the whole
+        // result Solution is materialized further up the pipeline. This also
+        // surfaces any concurrent row-limit breach (see
+        // `ExecutionBudget::record_triple_scan`).
+        if let Some(ref budget) = self.execution_budget {
+            budget
+                .record_triple_scan(solution.len() as u64)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+        }
+
         // Feed actual cardinality back to the adaptive statistics store so
         // the optimizer can recalibrate future estimates for this pattern.
         let pattern_id = pattern_fingerprint(pattern);

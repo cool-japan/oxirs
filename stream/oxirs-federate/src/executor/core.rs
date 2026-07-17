@@ -100,47 +100,37 @@ impl FederatedExecutor {
         Ok(results)
     }
 
-    /// Get current memory usage
+    /// Get current process memory usage (resident set size, in bytes).
+    ///
+    /// Backed by a real [`sysinfo`] sample of this process, not a
+    /// process-id-derived placeholder (`std::process::id() * 1024` used to
+    /// be returned here, which is nonsense unrelated to actual memory use
+    /// and made every `memory_used` delta in
+    /// [`Self::execute_step_with_monitoring`] meaningless). Only this one
+    /// process's stats are refreshed per call (not a full-system refresh),
+    /// keeping the before/after sampling in that method cheap.
     pub fn get_current_memory_usage(&self) -> u64 {
-        // Simplified memory tracking - in practice would use system APIs
-        std::process::id() as u64 * 1024 // Placeholder
+        let pid = sysinfo::Pid::from_u32(std::process::id());
+        let mut system = sysinfo::System::new();
+        system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        system.process(pid).map(|p| p.memory()).unwrap_or(0)
     }
 
-    /// Execute a single step
+    /// Execute a single step.
+    ///
+    /// Delegates to the real [`execute_step`] implementation (the same one
+    /// the non-adaptive [`Self::execute_plan`] path uses) so this is a
+    /// genuine network/query call, not a fabricated always-`Success`,
+    /// `data: None` result. This method is reachable via
+    /// [`Self::execute_step_with_monitoring`] from the adaptive executor's
+    /// `Streaming` strategy, so a caller relying on that path previously got
+    /// silently fake results.
     pub async fn execute_single_step(
         &self,
         step: &ExecutionStep,
-        _completed_steps: &HashMap<String, StepResult>,
+        completed_steps: &HashMap<String, StepResult>,
     ) -> Result<StepResult> {
-        let start_time = Instant::now();
-
-        // Basic step execution logic - this would be expanded with real implementation
-        let status = ExecutionStatus::Success;
-        let success = status == ExecutionStatus::Success;
-        let data = None; // Would contain actual query results
-        let error = None;
-        let error_message = None;
-        let execution_time = start_time.elapsed();
-        let service_response_time = execution_time;
-        let memory_used = 0; // Would track actual memory usage
-        let result_size = 0; // Would track actual result size
-        let cache_hit = false; // Would check cache
-
-        Ok(StepResult {
-            step_id: step.step_id.clone(),
-            step_type: step.step_type,
-            status,
-            data,
-            error,
-            execution_time,
-            service_id: step.service_id.clone(),
-            memory_used,
-            result_size,
-            success,
-            error_message,
-            service_response_time,
-            cache_hit,
-        })
+        execute_step(step, completed_steps).await
     }
 
     /// Execute individual step with performance monitoring
@@ -182,5 +172,80 @@ impl FederatedExecutor {
 impl Default for FederatedExecutor {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::planner::StepType;
+    use std::time::Duration as StdDuration;
+
+    /// Regression test for executor/core.rs:110 — `execute_single_step` used
+    /// to be a fake step executor: it never inspected `step` at all and
+    /// always returned `Ok(StepResult { status: Success, success: true,
+    /// data: None, .. })` unconditionally, reachable via the public
+    /// adaptive-execution `Streaming` strategy. It must now delegate to the
+    /// real `step_execution::execute_step`, which genuinely attempts the
+    /// query. `execute_step` reports per-step failures inside `StepResult`
+    /// (status/success/error fields) rather than via the outer `Result`, so
+    /// the observable proof that this is real execution (not the old stub)
+    /// is that an unrunnable step (no `service_id`) comes back marked
+    /// failed, with a real error message, instead of a fabricated success.
+    #[tokio::test]
+    async fn test_execute_single_step_delegates_to_real_execution() {
+        let executor = FederatedExecutor::new();
+
+        let step = ExecutionStep {
+            step_id: "step-1".to_string(),
+            step_type: StepType::ServiceQuery,
+            service_id: None, // Deliberately unrunnable.
+            service_url: None,
+            auth_config: None,
+            query_fragment: "SELECT * WHERE { ?s ?p ?o }".to_string(),
+            dependencies: Vec::new(),
+            estimated_cost: 1.0,
+            timeout: StdDuration::from_secs(5),
+            retry_config: None,
+        };
+        let completed_steps = HashMap::new();
+
+        let result = executor
+            .execute_single_step(&step, &completed_steps)
+            .await
+            .expect("execute_step wraps failures in StepResult, not the outer Result");
+
+        assert!(
+            !result.success,
+            "a ServiceQuery step with no service_id must genuinely fail, proving \
+             execute_single_step is no longer a fake always-Success stub"
+        );
+        assert_eq!(result.status, ExecutionStatus::Failed);
+        assert!(
+            result.error.is_some(),
+            "a real failure must carry a real error message, not a fabricated `None`"
+        );
+        assert!(
+            result.data.is_none(),
+            "a failed step must not carry fabricated result data"
+        );
+    }
+
+    /// Regression test for executor/core.rs:106 — `get_current_memory_usage`
+    /// used to return `std::process::id() * 1024`, a number with no
+    /// relationship to actual memory use (e.g. PID 5 would "use" 5120
+    /// bytes). It must now report this test process's real resident set
+    /// size, which is always well above a single-digit-PID's fake reading
+    /// for any running Rust test binary.
+    #[test]
+    fn test_get_current_memory_usage_reports_real_process_memory() {
+        let executor = FederatedExecutor::new();
+        let memory = executor.get_current_memory_usage();
+
+        assert!(
+            memory > 1_000_000,
+            "a running test binary's RSS should be well over 1MB; got {memory} bytes, which \
+             looks like the old process-id-derived placeholder rather than real memory"
+        );
     }
 }

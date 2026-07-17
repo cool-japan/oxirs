@@ -44,6 +44,7 @@ sysinfo.workspace = true
 redis.workspace = true
 lru.workspace = true
 oxiarc-deflate.workspace = true
+oxiarc-brotli.workspace = true
 
 # WebSocket support for subscriptions
 tokio-tungstenite.workspace = true

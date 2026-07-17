@@ -257,9 +257,10 @@ impl PropertyPathPattern {
                     TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
                     TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
                     TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
-                    TermPattern::QuotedTriple(_) => {
-                        panic!("RDF-star quoted triples not yet supported in property paths")
-                    }
+                    // RDF-star quoted triples cannot be expressed as a simple
+                    // object pattern here; return None so the caller falls back
+                    // to the general path evaluator instead of panicking.
+                    TermPattern::QuotedTriple(_) => return None,
                 };
 
                 Some(TriplePattern {

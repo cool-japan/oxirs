@@ -4,6 +4,7 @@
 
 use super::{utils, ToolResult};
 use crate::export::{ExportFormat, Exporter};
+use oxirs_core::format::{FormatHandler, JsonLdProfileSet, RdfFormat as CoreRdfFormat};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -90,68 +91,51 @@ struct RdfTriple {
 }
 
 impl RdfTriple {
-    fn from_ntriples_line(line: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            return Err("Empty or comment line".into());
-        }
-
-        // Simple parsing - split by whitespace, recombine properly
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 3 {
-            return Err("Invalid N-Triples line".into());
-        }
-
-        let subject = parts[0].to_string();
-        let predicate = parts[1].to_string();
-        let object = parts[2..parts.len() - 1].join(" "); // Everything except the final "."
-
-        Ok(RdfTriple {
-            subject,
-            predicate,
-            object,
-        })
-    }
-
     fn to_ntriples(&self) -> String {
         format!("{} {} {} .", self.subject, self.predicate, self.object)
     }
 }
 
-/// Read RDF data from file (simplified implementation)
-fn read_rdf_file(file_path: &PathBuf) -> Result<Vec<RdfTriple>, Box<dyn std::error::Error>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let mut triples = Vec::new();
-
-    let format = detect_format(file_path)?;
-
+/// Map the tool's `ExportFormat` to oxirs-core's parser-facing `RdfFormat`.
+fn export_format_to_core(format: ExportFormat) -> CoreRdfFormat {
     match format {
-        ExportFormat::NTriples => {
-            for line_result in reader.lines() {
-                let line = line_result?;
-                if let Ok(triple) = RdfTriple::from_ntriples_line(&line) {
-                    triples.push(triple);
-                }
-            }
-        }
-        _ => {
-            // For other formats, return a placeholder
-            eprintln!(
-                "Warning: Full parsing for {format:?} format not implemented, creating placeholder"
-            );
-            triples.push(RdfTriple {
-                subject: format!("<file://{}>", file_path.display()),
-                predicate: "<http://example.org/source>".to_string(),
-                object: format!(
-                    "\"{}\"",
-                    file_path.file_name().unwrap_or_default().to_string_lossy()
-                ),
-            });
-        }
+        ExportFormat::Turtle => CoreRdfFormat::Turtle,
+        ExportFormat::NTriples => CoreRdfFormat::NTriples,
+        ExportFormat::RdfXml => CoreRdfFormat::RdfXml,
+        ExportFormat::JsonLd => CoreRdfFormat::JsonLd {
+            profile: JsonLdProfileSet::empty(),
+        },
+        ExportFormat::TriG => CoreRdfFormat::TriG,
+        ExportFormat::NQuads => CoreRdfFormat::NQuads,
     }
+}
 
-    Ok(triples)
+/// Read RDF data from file, parsing the real content via oxirs-core's format
+/// handlers (Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD). Every
+/// triple returned here comes from the file's actual content — no
+/// placeholder/synthesized triples are ever emitted.
+fn read_rdf_file(file_path: &PathBuf) -> Result<Vec<RdfTriple>, Box<dyn std::error::Error>> {
+    let format = detect_format(file_path)?;
+    let core_format = export_format_to_core(format);
+
+    let file = File::open(file_path)?;
+    let handler = FormatHandler::new(core_format);
+    let parsed = handler.parse_triples(file).map_err(|e| {
+        format!(
+            "Failed to parse '{}' as {:?}: {e}",
+            file_path.display(),
+            format
+        )
+    })?;
+
+    Ok(parsed
+        .into_iter()
+        .map(|t| RdfTriple {
+            subject: t.subject().to_string(),
+            predicate: t.predicate().to_string(),
+            object: t.object().to_string(),
+        })
+        .collect())
 }
 
 /// Write concatenated RDF data
@@ -274,15 +258,6 @@ mod tests {
     }
 
     #[test]
-    fn test_rdf_triple_parsing() {
-        let line = "<http://example.org/s> <http://example.org/p> \"object\" .";
-        let triple = RdfTriple::from_ntriples_line(line).unwrap();
-        assert_eq!(triple.subject, "<http://example.org/s>");
-        assert_eq!(triple.predicate, "<http://example.org/p>");
-        assert_eq!(triple.object, "\"object\"");
-    }
-
-    #[test]
     fn test_write_ntriples_output() {
         let triples = vec![
             RdfTriple {
@@ -310,5 +285,59 @@ mod tests {
 
         // Cleanup
         let _ = std::fs::remove_file(&temp_file);
+    }
+
+    fn unique_temp_path(label: &str, ext: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "oxirs_rdfcat_test_{label}_{}_{}.{ext}",
+            std::process::id(),
+            n
+        ))
+    }
+
+    #[test]
+    fn test_read_rdf_file_turtle_real_data_not_placeholder() {
+        let path = unique_temp_path("turtle_real", "ttl");
+        std::fs::write(
+            &path,
+            "@prefix ex: <http://example.org/> .\nex:alice ex:knows ex:bob .\nex:bob ex:knows ex:carol .\n",
+        )
+        .unwrap();
+
+        let triples = read_rdf_file(&path).expect("should parse real turtle content");
+        assert_eq!(
+            triples.len(),
+            2,
+            "must reflect the real triple count, not a single placeholder"
+        );
+        for t in &triples {
+            assert!(
+                !t.predicate.contains("example.org/source"),
+                "must not emit the old fabricated placeholder predicate"
+            );
+        }
+        assert!(triples.iter().any(|t| t.subject.contains("alice")));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_read_rdf_file_invalid_content_errors_instead_of_placeholder() {
+        let path = unique_temp_path("invalid", "rdf");
+        // Content matching the RDF/XML detection heuristic but not valid XML;
+        // real parsing must surface an error rather than silently emitting a
+        // synthesized placeholder triple.
+        std::fs::write(&path, "<?xml this is not well-formed rdf/xml at all").unwrap();
+
+        let result = read_rdf_file(&path);
+        assert!(
+            result.is_err(),
+            "malformed content must fail loudly, not produce a fabricated triple"
+        );
+
+        let _ = std::fs::remove_file(&path);
     }
 }

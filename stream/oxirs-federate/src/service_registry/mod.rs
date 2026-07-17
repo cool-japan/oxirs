@@ -21,6 +21,7 @@ pub mod serviceregistry_fetch_graphql_schema_group;
 pub mod serviceregistry_introspect_graphql_service_group;
 pub mod serviceregistry_new_group;
 pub mod serviceregistry_populate_service_capabilities_group;
+pub mod serviceregistry_refresh_capabilities_group;
 pub mod serviceregistry_remove_service_group;
 pub mod serviceregistry_start_group;
 pub mod serviceregistry_stop_group;
@@ -35,5 +36,6 @@ pub mod sparqlcapabilities_traits;
 pub mod types;
 
 // Re-export only the main types that are used externally
+pub use serviceregistry_refresh_capabilities_group::CapabilityRefreshStats;
 pub use serviceregistry_type::*;
 pub use types::*;

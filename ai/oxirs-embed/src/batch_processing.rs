@@ -751,21 +751,24 @@ impl BatchProcessingManager {
                 Ok(entities)
             }
             InputType::SparqlQuery => {
-                // Execute SPARQL query and extract entities
-                // This would need to be implemented based on SPARQL engine
-                warn!("SPARQL query input type not yet implemented");
-                Ok(Vec::new())
+                // Executing a SPARQL query against a live store and extracting
+                // entity bindings requires a SPARQL engine handle that
+                // `BatchProcessingManager` does not currently hold. Fail loudly
+                // instead of silently reporting zero entities processed as a
+                // successful job completion.
+                Err(anyhow::anyhow!(
+                    "BatchJob input type SparqlQuery is not yet implemented: no SPARQL engine \
+                     handle is wired into BatchProcessingManager"
+                ))
             }
-            InputType::DatabaseQuery => {
-                // Execute database query and extract entities
-                warn!("Database query input type not yet implemented");
-                Ok(Vec::new())
-            }
-            InputType::StreamSource => {
-                // Read from stream source
-                warn!("Stream source input type not yet implemented");
-                Ok(Vec::new())
-            }
+            InputType::DatabaseQuery => Err(anyhow::anyhow!(
+                "BatchJob input type DatabaseQuery is not yet implemented: no database \
+                     connection is wired into BatchProcessingManager"
+            )),
+            InputType::StreamSource => Err(anyhow::anyhow!(
+                "BatchJob input type StreamSource is not yet implemented: no streaming \
+                     source reader is wired into BatchProcessingManager"
+            )),
         }
     }
 
@@ -1080,6 +1083,82 @@ mod tests {
                 .unwrap_or(1)
         );
         assert_eq!(manager.config.chunk_size, 1000);
+    }
+
+    fn make_test_job(input_type: InputType, source: &str) -> BatchJob {
+        BatchJob {
+            job_id: Uuid::new_v4(),
+            name: "test_job".to_string(),
+            status: JobStatus::Pending,
+            input: BatchInput {
+                input_type,
+                source: source.to_string(),
+                filters: None,
+                incremental: None,
+            },
+            output: BatchOutput {
+                path: std::env::temp_dir()
+                    .join(format!("oxirs_batch_out_{}", Uuid::new_v4()))
+                    .display()
+                    .to_string(),
+                format: "parquet".to_string(),
+                compression: None,
+                partitioning: Some(PartitioningStrategy::None),
+            },
+            config: BatchJobConfig {
+                chunk_size: 100,
+                num_workers: 1,
+                max_retries: 1,
+                use_cache: false,
+                custom_params: HashMap::new(),
+            },
+            model_id: Uuid::new_v4(),
+            created_at: Utc::now(),
+            started_at: None,
+            completed_at: None,
+            progress: JobProgress::default(),
+            error: None,
+            checkpoint: None,
+        }
+    }
+
+    /// Regression test: unimplemented input types must fail loudly rather
+    /// than silently report zero entities as a successful load.
+    #[tokio::test]
+    async fn test_load_entities_unimplemented_input_types_error() {
+        let config = BatchProcessingConfig::default();
+        let cache_manager = Arc::new(CacheManager::new(crate::CacheConfig::default()));
+        let temp_dir = tempdir().expect("should succeed");
+        let manager =
+            BatchProcessingManager::new(config, cache_manager, temp_dir.path().to_path_buf());
+
+        for input_type in [
+            InputType::SparqlQuery,
+            InputType::DatabaseQuery,
+            InputType::StreamSource,
+        ] {
+            let job = make_test_job(input_type, "irrelevant source");
+            let result = manager.load_entities(&job).await;
+            assert!(
+                result.is_err(),
+                "expected an error for unimplemented input type"
+            );
+        }
+    }
+
+    /// Sanity check that implemented input types are unaffected by the
+    /// unimplemented-type error handling above.
+    #[tokio::test]
+    async fn test_load_entities_entity_list_still_works() {
+        let config = BatchProcessingConfig::default();
+        let cache_manager = Arc::new(CacheManager::new(crate::CacheConfig::default()));
+        let temp_dir = tempdir().expect("should succeed");
+        let manager =
+            BatchProcessingManager::new(config, cache_manager, temp_dir.path().to_path_buf());
+
+        let job = make_test_job(InputType::EntityList, r#"["e1", "e2"]"#);
+        let entities = manager.load_entities(&job).await.expect("should succeed");
+        assert_eq!(entities, vec!["e1".to_string(), "e2".to_string()]);
     }
 
     #[test]

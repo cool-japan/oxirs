@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use oxirs_core::{
     graph::Graph,
-    model::{BlankNode, NamedNode, Object, Predicate, Subject, Term},
+    model::{BlankNode, GraphName, NamedNode, Object, Predicate, Subject, Term},
     Store,
 };
 
@@ -72,40 +72,67 @@ impl ShapeParser {
         graph_name: Option<&str>,
     ) -> Result<Vec<Shape>> {
         let start_time = std::time::Instant::now();
-        let mut shapes = Vec::new();
 
-        let shape_nodes = self.find_shape_nodes(store, graph_name)?;
+        // Materialize the (optionally graph-scoped) store contents into an in-memory
+        // RDF graph and reuse the fully-implemented graph-based shape discovery and
+        // parsing path. This finds shapes by rdf:type sh:NodeShape/sh:PropertyShape as
+        // well as subjects bearing sh:targetClass/targetNode/targetObjectsOf/
+        // targetSubjectsOf/sh:property/sh:path and other shape-defining predicates.
+        let graph = self.build_graph_from_store(store, graph_name)?;
+        let triple_count = graph.len();
 
-        for shape_node in shape_nodes {
-            match self.parse_shape_from_store(store, &shape_node, graph_name) {
-                Ok(shape) => {
-                    self.stats.update_shape_parsed(
-                        shape.constraints.len(),
-                        std::time::Duration::from_millis(1),
-                    );
-                    shapes.push(shape);
-                }
-                Err(e) => {
-                    if self.strict_mode {
-                        return Err(e);
-                    } else {
-                        tracing::warn!("Failed to parse shape {}: {}", shape_node, e);
-                    }
-                }
-            }
+        let shapes = self.parse_shapes_from_graph(&graph)?;
+
+        // A validation library that silently loads zero shapes from a non-empty graph
+        // would make every subsequent validation trivially "conform" (a false negative).
+        // Surface this loudly so callers cannot proceed unaware.
+        if shapes.is_empty() && triple_count > 0 {
+            tracing::warn!(
+                "Loaded 0 SHACL shapes from a non-empty graph ({} triples): no \
+                 sh:NodeShape/sh:PropertyShape declarations nor target/constraint-bearing \
+                 subjects were discovered",
+                triple_count
+            );
         }
 
         let elapsed = start_time.elapsed();
         self.stats.parsing_time += elapsed;
 
         tracing::info!(
-            "Parsed {} shapes in {:?} (total shapes parsed: {})",
+            "Parsed {} shapes from store in {:?} (total shapes parsed: {})",
             shapes.len(),
             elapsed,
             self.stats.total_shapes_parsed
         );
 
         Ok(shapes)
+    }
+
+    /// Build an in-memory [`Graph`] from a [`Store`], optionally scoped to a single
+    /// named graph. Returns an error if the store cannot be read.
+    fn build_graph_from_store(&self, store: &dyn Store, graph_name: Option<&str>) -> Result<Graph> {
+        let quads = match graph_name {
+            Some(name) => {
+                let named = NamedNode::new(name).map_err(|e| {
+                    ShaclError::ShapeParsing(format!("Invalid graph name IRI {name}: {e}"))
+                })?;
+                let gn = GraphName::NamedNode(named);
+                store.find_quads(None, None, None, Some(&gn)).map_err(|e| {
+                    ShaclError::ShapeParsing(format!(
+                        "Failed to read quads from store graph {name}: {e}"
+                    ))
+                })?
+            }
+            None => store.quads().map_err(|e| {
+                ShaclError::ShapeParsing(format!("Failed to read quads from store: {e}"))
+            })?,
+        };
+
+        let mut graph = Graph::new();
+        for quad in quads {
+            graph.insert(quad.to_triple());
+        }
+        Ok(graph)
     }
 
     pub fn parse_shapes_from_rdf(
@@ -158,11 +185,6 @@ impl ShapeParser {
         Ok(shapes)
     }
 
-    fn find_shape_nodes(&self, _store: &dyn Store, _graph_name: Option<&str>) -> Result<Vec<Term>> {
-        tracing::warn!("Shape node discovery not yet implemented in refactored parser");
-        Ok(Vec::new())
-    }
-
     fn parse_shape(
         &mut self,
         graph: &Graph,
@@ -205,17 +227,6 @@ impl ShapeParser {
         }
 
         Ok(shape)
-    }
-
-    fn parse_shape_from_store(
-        &mut self,
-        _store: &dyn Store,
-        _shape_node: &Term,
-        _graph_name: Option<&str>,
-    ) -> Result<Shape> {
-        Err(ShaclError::ShapeParsing(
-            "Shape parsing not yet implemented in refactored parser".to_string(),
-        ))
     }
 
     pub fn stats(&self) -> &ShapeParsingStats {

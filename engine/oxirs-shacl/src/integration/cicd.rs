@@ -15,6 +15,7 @@
 use crate::{Severity, ValidationReport, ValidationViolation};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -347,18 +348,95 @@ impl CiCdEngine {
         }
     }
 
-    /// Analyze regression against baseline
-    fn analyze_regression(&self, _report: &ValidationReport) -> Option<RegressionAnalysis> {
-        // If no baseline configured, skip regression analysis
-        let _baseline_config = self.config.baseline.as_ref()?;
+    /// Analyze regression against baseline.
+    ///
+    /// Loads the baseline violation set from `baseline_path` (a JSON array of
+    /// [`ValidationViolation`], as written by [`Self::write_baseline`]) and diffs
+    /// it against the current report to classify violations as new, resolved, or
+    /// unchanged. If the baseline file cannot be read/parsed, regression analysis
+    /// is skipped (returns `None`) rather than fabricating a result.
+    fn analyze_regression(&self, report: &ValidationReport) -> Option<RegressionAnalysis> {
+        let baseline_config = self.config.baseline.as_ref()?;
 
-        // In a real implementation, this would:
-        // 1. Load baseline from file
-        // 2. Compare current violations with baseline
-        // 3. Identify new, resolved, and unchanged violations
+        let baseline_violations = match Self::load_baseline(&baseline_config.baseline_path) {
+            Ok(violations) => violations,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to load SHACL baseline from {}: {}; skipping regression analysis",
+                    baseline_config.baseline_path.display(),
+                    e
+                );
+                return None;
+            }
+        };
 
-        // For now, return None as baseline loading is not implemented
-        None
+        let current = report.violations();
+
+        let baseline_keys: HashSet<String> = baseline_violations
+            .iter()
+            .map(Self::violation_signature)
+            .collect();
+        let current_keys: HashSet<String> = current.iter().map(Self::violation_signature).collect();
+
+        let new_violations: Vec<ValidationViolation> = current
+            .iter()
+            .filter(|v| !baseline_keys.contains(&Self::violation_signature(v)))
+            .cloned()
+            .collect();
+        let resolved_violations: Vec<ValidationViolation> = baseline_violations
+            .iter()
+            .filter(|v| !current_keys.contains(&Self::violation_signature(v)))
+            .cloned()
+            .collect();
+        let unchanged_violations: Vec<ValidationViolation> = current
+            .iter()
+            .filter(|v| baseline_keys.contains(&Self::violation_signature(v)))
+            .cloned()
+            .collect();
+
+        let net_change = current.len() as i32 - baseline_violations.len() as i32;
+
+        Some(RegressionAnalysis {
+            new_violations,
+            resolved_violations,
+            unchanged_violations,
+            net_change,
+        })
+    }
+
+    /// Load a baseline violation set from a JSON file.
+    fn load_baseline(
+        path: &std::path::Path,
+    ) -> std::result::Result<Vec<ValidationViolation>, String> {
+        let contents = std::fs::read_to_string(path).map_err(|e| format!("read error: {e}"))?;
+        serde_json::from_str::<Vec<ValidationViolation>>(&contents)
+            .map_err(|e| format!("JSON parse error: {e}"))
+    }
+
+    /// Write the current report's violations to `path` as a JSON baseline that a
+    /// later run can diff against via [`Self::analyze_regression`].
+    pub fn write_baseline(
+        report: &ValidationReport,
+        path: &std::path::Path,
+    ) -> std::result::Result<(), String> {
+        let json = serde_json::to_string_pretty(report.violations())
+            .map_err(|e| format!("JSON serialization error: {e}"))?;
+        std::fs::write(path, json).map_err(|e| format!("write error: {e}"))
+    }
+
+    /// Build a stable identity key for a violation, ignoring volatile fields
+    /// (human-readable message, ancillary details) so cosmetic changes do not
+    /// register as new/resolved violations.
+    fn violation_signature(violation: &ValidationViolation) -> String {
+        format!(
+            "{:?}\u{1}{:?}\u{1}{:?}\u{1}{}\u{1}{}\u{1}{:?}",
+            violation.focus_node,
+            violation.result_path,
+            violation.value,
+            violation.source_shape.as_str(),
+            violation.source_constraint_component.as_str(),
+            violation.result_severity,
+        )
     }
 
     /// Determine overall pass/fail status
@@ -873,5 +951,72 @@ mod tests {
 
         let result = engine.process(&report);
         assert_eq!(result.exit_code, 0); // Success, no violations
+    }
+
+    #[test]
+    fn test_baseline_regression_diff() {
+        use crate::{ConstraintComponentId, ShapeId};
+        use oxirs_core::model::{NamedNode, Term};
+
+        let make_violation = |iri: &str, component: &str| {
+            ValidationViolation::new(
+                Term::NamedNode(NamedNode::new(iri).expect("valid IRI")),
+                ShapeId::new("http://ex/Shape"),
+                ConstraintComponentId::new(component),
+                Severity::Violation,
+            )
+        };
+
+        let violation_a = make_violation("http://ex/a", "minCount");
+        let violation_b = make_violation("http://ex/b", "maxCount");
+
+        // Baseline report contains only violation A.
+        let mut baseline_report = ValidationReport::new();
+        baseline_report.violations_mut().push(violation_a.clone());
+
+        let baseline_path = std::env::temp_dir().join(format!(
+            "shacl_cicd_baseline_{}_{}.json",
+            std::process::id(),
+            "regression_diff"
+        ));
+        CiCdEngine::write_baseline(&baseline_report, &baseline_path).expect("write baseline");
+
+        // Current report has A (unchanged) and B (new); A's original is gone
+        // from nothing — nothing resolved here.
+        let mut current_report = ValidationReport::new();
+        current_report.violations_mut().push(violation_a.clone());
+        current_report.violations_mut().push(violation_b.clone());
+
+        let config = CiCdConfig {
+            baseline: Some(BaselineConfig {
+                baseline_path: baseline_path.clone(),
+                fail_on_new_violations: true,
+                report_resolved: true,
+            }),
+            ..CiCdConfig::default()
+        };
+        let engine = CiCdEngine::new(config);
+
+        let result = engine.process(&current_report);
+
+        let regression = result
+            .regression
+            .expect("regression analysis must run when a baseline is configured");
+        assert_eq!(regression.new_violations.len(), 1, "B is a new violation");
+        assert_eq!(
+            regression.new_violations[0].focus_node,
+            violation_b.focus_node
+        );
+        assert_eq!(regression.resolved_violations.len(), 0);
+        assert_eq!(regression.unchanged_violations.len(), 1, "A is unchanged");
+        assert_eq!(regression.net_change, 1);
+
+        // fail_on_new_violations must flip the overall status to failed.
+        assert!(
+            !result.passed,
+            "a new violation with fail_on_new_violations must fail the gate"
+        );
+
+        let _ = std::fs::remove_file(&baseline_path);
     }
 }

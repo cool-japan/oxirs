@@ -87,6 +87,7 @@ impl WalEntry {
 }
 
 /// Write-Ahead Log for durability
+#[derive(Debug)]
 pub struct WriteAheadLog {
     /// Path to WAL file
     path: PathBuf,

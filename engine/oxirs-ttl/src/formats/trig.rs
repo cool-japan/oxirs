@@ -777,9 +777,25 @@ impl Parser<Quad> for TriGParser {
         self.parse_trig_content(buf_reader)
     }
 
+    /// Parse the given reader and expose the resulting quads as an iterator.
+    ///
+    /// # This is *not* a streaming/lazy parser
+    ///
+    /// Despite the `Iterator` return type, this implementation still parses
+    /// the entire document eagerly (via [`Self::parse_trig_content`]) before
+    /// returning; the whole document is buffered in memory and every quad
+    /// already exists before the first `next()` call returns. It exists so
+    /// `TriGParser` satisfies the generic [`Parser`] trait used uniformly
+    /// across formats, not to provide bounded-memory streaming.
+    ///
+    /// For genuine incremental/lazy parsing that only buffers a bounded
+    /// amount of the input at a time, use
+    /// [`crate::trig_streaming::TriGStreamingParser`] instead, which drives a
+    /// recursive-descent parser statement-by-statement directly off the
+    /// `Read` source. Its term/quad types (`StreamedQuad`, `TriGTerm`) are
+    /// lighter-weight `String`-based types rather than `oxirs_core::model`
+    /// types, since it does not depend on `oxirs-core`.
     fn for_reader<R: BufRead>(&self, reader: R) -> Box<dyn Iterator<Item = TurtleResult<Quad>>> {
-        // For streaming, we'll return all quads at once for now
-        // A proper implementation would use a streaming parser
         match self.parse_trig_content(reader) {
             Ok(quads) => Box::new(quads.into_iter().map(Ok)),
             Err(e) => Box::new(std::iter::once(Err(e))),

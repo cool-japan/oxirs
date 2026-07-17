@@ -9,13 +9,32 @@ use crate::types::*;
 use std::fmt::Write;
 
 impl SchemaGenerator {
+    /// Extract a URI's local name (the fragment after `#`, or otherwise the
+    /// last `/`-separated path segment) and PascalCase it into a GraphQL
+    /// type name.
+    ///
+    /// Note: `str::split` always yields at least one item, even when the
+    /// separator is absent (the whole string, unsplit) -- so naively taking
+    /// `uri.split('#').next_back()` is *always* `Some(..)` and would always
+    /// take this branch, silently making the `split('/')` fallback dead
+    /// code and PascalCase-ing the *entire* URI (scheme, host, punctuation
+    /// and all) for any class/property URI that doesn't contain `#`. Most
+    /// real-world vocabularies (schema.org, DBpedia, ...) use `/`-style
+    /// URIs, so this matters in practice; use `rfind` to only take the
+    /// fragment/segment when the separator is actually present.
     pub(crate) fn uri_to_graphql_name(&self, uri: &str) -> String {
-        if let Some(fragment) = uri.split('#').next_back() {
-            self.to_pascal_case(fragment)
-        } else if let Some(segment) = uri.split('/').next_back() {
-            self.to_pascal_case(segment)
+        let local_name = if let Some(idx) = uri.rfind('#') {
+            &uri[idx + 1..]
+        } else if let Some(idx) = uri.rfind('/') {
+            &uri[idx + 1..]
         } else {
+            uri
+        };
+
+        if local_name.is_empty() {
             "Resource".to_string()
+        } else {
+            self.to_pascal_case(local_name)
         }
     }
 
@@ -204,5 +223,53 @@ impl SchemaGenerator {
         )
         .expect("writing to String should not fail");
         writeln!(sdl).expect("writing to String should not fail");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test: `uri_to_graphql_name` used to PascalCase the
+    /// *entire* URI (scheme, host and all) for any class/property URI
+    /// without a `#` fragment, because `uri.split('#').next_back()` is
+    /// always `Some(..)` even when `#` is absent (it just yields the whole
+    /// string), which made the `/`-segment fallback unreachable. Most
+    /// real-world vocabularies use `/`-style URIs, so this must extract
+    /// just the last path segment.
+    #[test]
+    fn test_uri_to_graphql_name_uses_last_path_segment_for_slash_uris() {
+        let generator = SchemaGenerator::new();
+        assert_eq!(
+            generator.uri_to_graphql_name("http://example.org/Person"),
+            "Person"
+        );
+        assert_eq!(
+            generator.uri_to_graphql_name("http://xmlns.com/foaf/0.1/name"),
+            "Name"
+        );
+        assert_eq!(
+            generator.uri_to_graphql_name("http://schema.org/BlogPosting"),
+            "BlogPosting"
+        );
+    }
+
+    #[test]
+    fn test_uri_to_graphql_name_uses_fragment_for_hash_uris() {
+        let generator = SchemaGenerator::new();
+        assert_eq!(
+            generator.uri_to_graphql_name("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            "Type"
+        );
+    }
+
+    #[test]
+    fn test_uri_to_graphql_name_falls_back_to_resource_for_empty_local_name() {
+        let generator = SchemaGenerator::new();
+        assert_eq!(generator.uri_to_graphql_name(""), "Resource");
+        assert_eq!(
+            generator.uri_to_graphql_name("http://example.org/"),
+            "Resource"
+        );
     }
 }

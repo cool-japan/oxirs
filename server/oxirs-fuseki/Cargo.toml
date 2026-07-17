@@ -24,6 +24,11 @@ scirs2-core = { workspace = true, features = ["gpu"] }
 oxirs-core.workspace = true
 oxirs-arq.workspace = true
 oxirs-shacl.workspace = true
+# On-disk TDB2 backend (durable B+Tree persistence + named-graph quad support).
+# Wired in behind the `oxirs_core::Store` trait via `store::tdb_adapter`, so a
+# dataset configured as `StoreType::TDB2` / `dataset_type = "tdb2"` persists to
+# disk. Pure Rust by default (no C-FFI).
+oxirs-tdb.workspace = true
 
 # HTTP server framework
 tokio = { workspace = true, features = ["full"] }

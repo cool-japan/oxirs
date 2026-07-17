@@ -75,8 +75,16 @@
 //!
 //! ### Streaming Large Files
 //!
-//! ```rust,ignore,no_run
-//! use oxirs_core::parser::{Parser, RdfFormat};
+//! The high-level [`Parser`] in this module only exposes in-memory
+//! string/byte entry points ([`Parser::parse_str_to_quads`],
+//! [`Parser::parse_bytes_to_quads`], [`Parser::parse_str_with_handler`]) and
+//! always materializes the whole document before parsing, for every format.
+//! For genuine bounded-memory streaming from a [`std::io::Read`] source, use
+//! the lower-level [`crate::format::RdfParser`] instead, which reads
+//! incrementally for all six supported formats:
+//!
+//! ```rust,no_run
+//! use oxirs_core::format::{RdfParser, RdfFormat};
 //! use std::fs::File;
 //! use std::io::BufReader;
 //!
@@ -84,10 +92,10 @@
 //! let file = File::open("large_dataset.nt")?;
 //! let reader = BufReader::new(file);
 //!
-//! let parser = Parser::new(RdfFormat::NTriples);
+//! let parser = RdfParser::new(RdfFormat::NTriples);
 //! for quad in parser.for_reader(reader) {
 //!     let quad = quad?;
-//!     // Process quad without loading entire file into memory
+//!     // Process quad without loading the entire file into memory
 //! }
 //! # Ok(())
 //! # }
@@ -113,9 +121,13 @@
 //!
 //! ## Performance Tips
 //!
-//! 1. **Use streaming** - For large files, use `for_reader()` to avoid loading everything into memory
+//! 1. **Use streaming** - For large files, use [`crate::format::RdfParser::for_reader`]
+//!    (not the [`Parser`] in this module, which always buffers the whole document)
+//!    to avoid loading everything into memory
 //! 2. **Choose the right format** - N-Triples/N-Quads are fastest to parse (line-based)
-//! 3. **Enable async** - For I/O-bound workloads, async parsing provides better throughput
+//! 3. **Enable async** - [`AsyncStreamingParser`] truly streams N-Triples/N-Quads
+//!    incrementally; other formats are buffered up to a configurable limit
+//!    (see [`AsyncStreamingParser::with_max_buffer_size`]) before parsing
 //! 4. **Batch processing** - Process multiple files in parallel using rayon
 //!
 //! ## Error Handling
@@ -127,6 +139,11 @@
 //! - **Max errors** - Stop after a threshold of errors
 //!
 //! ## Format Support Matrix
+//!
+//! "Streaming" below means [`crate::format::RdfParser::for_reader`] (bounded
+//! memory, reads incrementally). The [`Parser`] in *this* module always
+//! buffers the whole input first regardless of format; [`AsyncStreamingParser`]
+//! truly streams only N-Triples/N-Quads (see the Performance Tips above).
 //!
 //! | Format | Triples | Quads | Prefixes | Comments | Streaming |
 //! |--------|---------|-------|----------|----------|-----------|
@@ -145,9 +162,6 @@
 
 #[cfg(feature = "async")]
 mod async_parser;
-mod format_states;
-
-use format_states::{TrigParserState, TurtleParserState};
 
 #[cfg(feature = "async")]
 pub use async_parser::{AsyncRdfSink, AsyncStreamingParser, MemoryAsyncSink, ParseProgress};
@@ -309,44 +323,28 @@ impl Parser {
     where
         F: FnMut(Quad) -> Result<()>,
     {
-        // Use TurtleParserState for now since Rio API has changed
-        let mut parser = TurtleParserState::new(self.config.base_iri.as_deref());
-
-        for (line_num, line) in data.lines().enumerate() {
-            let line = line.trim();
-
-            // Skip empty lines and comments
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-
-            match parser.parse_line(line) {
-                Ok(triples) => {
-                    for triple in triples {
-                        let quad = Quad::from_triple(triple);
-                        handler(quad)?;
-                    }
-                }
-                Err(e) => {
-                    if self.config.ignore_errors {
-                        tracing::warn!("Turtle parse error on line {}: {}", line_num + 1, e);
-                        continue;
-                    } else {
-                        return Err(OxirsError::Parse(format!(
-                            "Turtle parse error on line {}: {}",
-                            line_num + 1,
-                            e
-                        )));
-                    }
-                }
-            }
+        // Delegate to the real, oxttl-backed grammar (crate::format::turtle
+        // via crate::format::RdfParser) instead of a hand-rolled line-based
+        // state machine. This correctly handles semicolons/commas inside
+        // quoted literals, comma object lists, collections `( ... )`,
+        // blank-node property lists `[ ... ]`, and multi-line triple-quoted
+        // string literals -- none of which a per-line splitter can support.
+        let mut internal_parser = crate::format::RdfParser::new(crate::format::RdfFormat::Turtle);
+        if let Some(base) = &self.config.base_iri {
+            internal_parser = internal_parser.with_base_iri(base.clone());
         }
 
-        // Handle any pending statement
-        if let Some(triples) = parser.finalize()? {
-            for triple in triples {
-                let quad = Quad::from_triple(triple);
-                handler(quad)?;
+        for result in internal_parser.for_slice(data.as_bytes()) {
+            match result {
+                Ok(quad) => handler(quad)?,
+                Err(e) => {
+                    if self.config.ignore_errors {
+                        tracing::warn!("Turtle parse error: {e}");
+                        continue;
+                    } else {
+                        return Err(OxirsError::Parse(format!("Turtle parse error: {e}")));
+                    }
+                }
             }
         }
 
@@ -612,42 +610,25 @@ impl Parser {
     where
         F: FnMut(Quad) -> Result<()>,
     {
-        // Basic TriG parser - handles simple cases
-        let mut parser = TrigParserState::new(self.config.base_iri.as_deref());
-
-        for (line_num, line) in data.lines().enumerate() {
-            let line = line.trim();
-
-            // Skip empty lines and comments
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-
-            match parser.parse_line(line) {
-                Ok(quads) => {
-                    for quad in quads {
-                        handler(quad)?;
-                    }
-                }
-                Err(e) => {
-                    if self.config.ignore_errors {
-                        tracing::warn!("TriG parse error on line {}: {}", line_num + 1, e);
-                        continue;
-                    } else {
-                        return Err(OxirsError::Parse(format!(
-                            "TriG parse error on line {}: {}",
-                            line_num + 1,
-                            e
-                        )));
-                    }
-                }
-            }
+        // Delegate to the real, oxttl-backed TriG grammar (same rationale as
+        // parse_turtle above: named-graph blocks, nested Turtle syntax, and
+        // multi-line statements are not safely handled by line splitting).
+        let mut internal_parser = crate::format::RdfParser::new(crate::format::RdfFormat::TriG);
+        if let Some(base) = &self.config.base_iri {
+            internal_parser = internal_parser.with_base_iri(base.clone());
         }
 
-        // Handle any pending statements
-        if let Some(quads) = parser.finalize()? {
-            for quad in quads {
-                handler(quad)?;
+        for result in internal_parser.for_slice(data.as_bytes()) {
+            match result {
+                Ok(quad) => handler(quad)?,
+                Err(e) => {
+                    if self.config.ignore_errors {
+                        tracing::warn!("TriG parse error: {e}");
+                        continue;
+                    } else {
+                        return Err(OxirsError::Parse(format!("TriG parse error: {e}")));
+                    }
+                }
             }
         }
 
@@ -1213,6 +1194,142 @@ ex:alice foaf:name "Alice" ;
             .map(|q| q.to_triple().subject().clone())
             .collect();
         assert_eq!(subjects[0], subjects[1]);
+    }
+
+    /// Regression test for the P0 finding: semicolon-splitting used to be
+    /// done on the raw accumulated statement *before* any quote-aware
+    /// tokenization, so a literal value containing a `;` corrupted the
+    /// triple (spurious extra/garbled triples or parse errors). The real
+    /// oxttl-backed grammar must treat `;` inside a string literal as plain
+    /// literal content, not a predicate-object-list separator.
+    #[test]
+    fn test_turtle_semicolon_inside_literal_not_split() {
+        let turtle_data = r#"@prefix ex: <http://example.org/> .
+ex:alice ex:bio "Loves cats; dogs; and turtles" ;
+         ex:name "Alice" ."#;
+
+        let parser = Parser::new(RdfFormat::Turtle);
+        let quads = parser
+            .parse_str_to_quads(turtle_data)
+            .expect("semicolon inside a literal must not corrupt parsing");
+
+        assert_eq!(quads.len(), 2, "expected exactly 2 triples, got {quads:?}");
+
+        let bio_triple = quads
+            .iter()
+            .map(|q| q.to_triple())
+            .find(|t| t.predicate().to_string().contains("bio"))
+            .expect("bio triple should be present");
+        if let Object::Literal(lit) = bio_triple.object() {
+            assert_eq!(lit.value(), "Loves cats; dogs; and turtles");
+        } else {
+            panic!("Expected literal object for ex:bio");
+        }
+    }
+
+    /// Regression test for the P0 finding: the hand-rolled state machine had
+    /// no support for comma-separated object lists (`predicate obj1, obj2`).
+    #[test]
+    fn test_turtle_comma_object_list() {
+        let turtle_data = r#"@prefix ex: <http://example.org/> .
+ex:alice ex:knows ex:bob, ex:carol, ex:dave ."#;
+
+        let parser = Parser::new(RdfFormat::Turtle);
+        let quads = parser
+            .parse_str_to_quads(turtle_data)
+            .expect("comma object lists must parse");
+
+        assert_eq!(quads.len(), 3, "expected 3 triples, got {quads:?}");
+        let objects: std::collections::HashSet<String> = quads
+            .iter()
+            .map(|q| q.to_triple().object().to_string())
+            .collect();
+        assert!(objects.iter().any(|o| o.contains("bob")));
+        assert!(objects.iter().any(|o| o.contains("carol")));
+        assert!(objects.iter().any(|o| o.contains("dave")));
+    }
+
+    /// Regression test for the P0 finding: no support for blank-node
+    /// property lists (`[ p o ]`) or RDF collections (`( a b c )`).
+    #[test]
+    fn test_turtle_blank_node_property_list_and_collection() {
+        let turtle_data = r#"@prefix ex: <http://example.org/> .
+ex:alice ex:address [ ex:city "Springfield" ; ex:zip "12345" ] ;
+         ex:favorites ( ex:tea ex:coffee ex:cocoa ) ."#;
+
+        let parser = Parser::new(RdfFormat::Turtle);
+        let quads = parser
+            .parse_str_to_quads(turtle_data)
+            .expect("blank-node property lists and collections must parse");
+
+        // ex:address triple + 2 property triples on the blank node = 3
+        // ex:favorites triple + 3-element rdf:List (3 rdf:first + 3 rdf:rest, one being rdf:nil) = 4 triples
+        // Just assert we got a reasonable number of triples and specific content is present.
+        assert!(
+            quads.len() >= 7,
+            "expected at least 7 triples for property list + collection, got {} ({quads:?})",
+            quads.len()
+        );
+
+        let has_city = quads.iter().any(|q| {
+            let t = q.to_triple();
+            t.predicate().to_string().contains("city")
+                && matches!(t.object(), Object::Literal(l) if l.value() == "Springfield")
+        });
+        assert!(has_city, "blank-node property list content missing");
+
+        let has_first = quads.iter().any(|q| {
+            q.to_triple()
+                .predicate()
+                .to_string()
+                .contains("rdf-syntax-ns#first")
+        });
+        assert!(
+            has_first,
+            "RDF collection must expand to rdf:first/rdf:rest"
+        );
+    }
+
+    /// Regression test for the P0 finding: multi-line `data.lines()`
+    /// processing used to collapse newlines inside triple-quoted string
+    /// literals into spaces, corrupting their content.
+    #[test]
+    fn test_turtle_triple_quoted_multiline_literal() {
+        let turtle_data = "@prefix ex: <http://example.org/> .\nex:alice ex:bio \"\"\"Line one\nLine two\nLine three\"\"\" .";
+
+        let parser = Parser::new(RdfFormat::Turtle);
+        let quads = parser
+            .parse_str_to_quads(turtle_data)
+            .expect("triple-quoted multi-line literals must parse");
+
+        assert_eq!(quads.len(), 1);
+        let triple = quads[0].to_triple();
+        if let Object::Literal(lit) = triple.object() {
+            assert_eq!(lit.value(), "Line one\nLine two\nLine three");
+        } else {
+            panic!("Expected literal object");
+        }
+    }
+
+    /// Same triple-quoted multi-line literal regression, but through the
+    /// TriG entry point (which delegates through the same real grammar).
+    #[test]
+    fn test_trig_triple_quoted_multiline_literal_in_named_graph() {
+        let trig_data = "@prefix ex: <http://example.org/> .\nex:g1 { ex:alice ex:bio \"\"\"Line one\nLine two\"\"\" . }";
+
+        let parser = Parser::new(RdfFormat::TriG);
+        let quads = parser
+            .parse_str_to_quads(trig_data)
+            .expect("triple-quoted multi-line literals must parse in TriG too");
+
+        assert_eq!(quads.len(), 1);
+        assert!(!quads[0].is_default_graph());
+        let triple = quads[0].to_triple();
+        if let Object::Literal(lit) = triple.object() {
+            assert_eq!(lit.value(), "Line one\nLine two");
+        } else {
+            panic!("Expected literal object");
+        }
     }
 
     #[test]

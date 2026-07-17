@@ -32,7 +32,7 @@ use tracing::debug;
 
 use crate::model::{StarTerm, StarTriple};
 use crate::store::StarStore;
-use crate::StarResult;
+use crate::{StarError, StarResult};
 
 /// Property path expression for traversing RDF graphs
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -447,15 +447,34 @@ impl FederatedQueryExecutor {
         self.endpoints.insert(name.into(), url.into());
     }
 
-    /// Execute a federated query (simplified - would use HTTP in production)
+    /// Execute a federated query against a registered remote endpoint.
+    ///
+    /// This crate (`oxirs-star`) does not depend on an HTTP client, so no
+    /// network call is actually performed here. Rather than silently
+    /// fabricating an empty (and therefore misleadingly "successful") result
+    /// set, this fails loudly so callers cannot mistake "endpoint
+    /// unreachable / feature unimplemented" for "the remote graph is
+    /// genuinely empty". Real federated SPARQL execution should go through
+    /// `oxirs-arq`'s `service_federation` module, which does perform actual
+    /// HTTP SPARQL-protocol requests.
     pub fn execute_federated(
         &self,
-        _endpoint: &str,
+        endpoint: &str,
         _query: &str,
     ) -> StarResult<Vec<HashMap<String, StarTerm>>> {
-        // In production, this would send an HTTP request to the endpoint
-        // For now, return empty results
-        Ok(Vec::new())
+        let is_registered =
+            self.endpoints.contains_key(endpoint) || self.endpoints.values().any(|u| u == endpoint);
+        if !is_registered {
+            return Err(StarError::configuration_error(format!(
+                "Federated query endpoint '{endpoint}' is not registered; call \
+                 register_endpoint() first"
+            )));
+        }
+        Err(StarError::internal_error(format!(
+            "FederatedQueryExecutor::execute_federated is not implemented: oxirs-star has no \
+             HTTP client. Use oxirs-arq::service_federation for real federated SPARQL \
+             execution against endpoint '{endpoint}'."
+        )))
     }
 }
 
@@ -577,6 +596,26 @@ impl Default for FullTextSearch {
 mod tests {
     use super::*;
     use crate::model::{StarTerm, StarTriple};
+
+    #[test]
+    fn test_execute_federated_unregistered_endpoint_errors() {
+        let executor = FederatedQueryExecutor::new();
+        let result =
+            executor.execute_federated("http://example.org/sparql", "SELECT * WHERE { ?s ?p ?o }");
+        assert!(result.is_err());
+        let message = format!("{}", result.unwrap_err());
+        assert!(message.contains("not registered"));
+    }
+
+    #[test]
+    fn test_execute_federated_registered_endpoint_fails_loud_not_fake_success() {
+        let mut executor = FederatedQueryExecutor::new();
+        executor.register_endpoint("remote", "http://example.org/sparql");
+        let result = executor.execute_federated("remote", "SELECT * WHERE { ?s ?p ?o }");
+        // Must NOT fabricate an `Ok(vec![])` "success" — no HTTP client exists
+        // in this crate, so the call must fail loudly instead.
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_property_path_predicate() -> StarResult<()> {

@@ -401,20 +401,140 @@ fn parse_object(
     }
 }
 
-/// Parse literal from parts
+/// Parse a literal object from whitespace-split parts.
+///
+/// Handles the full RDF literal grammar used by RDF Patch:
+/// * `"value"` — a simple (xsd:string) literal
+/// * `"value"@lang` — a language-tagged literal
+/// * `"value"^^<datatype-iri>` — a datatype-typed literal
+///
+/// The closing quote is located with escape awareness (so `\"` inside the
+/// value does not terminate it), the value is unescaped, and any trailing
+/// ` .` statement terminator is ignored. A malformed literal is a hard error
+/// rather than being silently coerced into a corrupt simple literal.
 fn parse_literal(parts: &[&str]) -> Result<oxirs_core::model::Object, String> {
-    // Join parts and extract literal value
-    let joined = parts.join(" ");
+    use oxirs_core::model::{Literal, NamedNode, Object};
 
-    // Simple literal parsing (without language tags or datatypes for now)
-    if joined.starts_with('"') {
-        let value = joined.trim_matches('"').trim_end_matches(" .");
-        Ok(oxirs_core::model::Object::Literal(
-            oxirs_core::model::Literal::new_simple_literal(value),
-        ))
-    } else {
-        Err("Invalid literal format".to_string())
+    let joined = parts.join(" ");
+    let joined = joined.trim();
+
+    let mut chars = joined.char_indices();
+    match chars.next() {
+        Some((_, '"')) => {}
+        _ => {
+            return Err(format!(
+                "Invalid literal (expected opening quote): {joined}"
+            ))
+        }
     }
+
+    // Scan for the closing, unescaped quote, collecting the raw (still-escaped)
+    // value so it can be unescaped after the delimiter is found.
+    let mut raw_value = String::new();
+    let mut closing_end: Option<usize> = None;
+    while let Some((idx, c)) = chars.next() {
+        if c == '\\' {
+            raw_value.push('\\');
+            if let Some((_, next)) = chars.next() {
+                raw_value.push(next);
+            }
+            continue;
+        }
+        if c == '"' {
+            closing_end = Some(idx + c.len_utf8());
+            break;
+        }
+        raw_value.push(c);
+    }
+    let closing_end =
+        closing_end.ok_or_else(|| format!("Unterminated literal (no closing quote): {joined}"))?;
+    let value = unescape_literal_value(&raw_value);
+    let suffix = joined[closing_end..].trim();
+
+    // Language-tagged literal: "value"@lang
+    if let Some(rest) = suffix.strip_prefix('@') {
+        let lang = rest
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .trim_end_matches('.')
+            .trim();
+        if lang.is_empty() {
+            return Err(format!(
+                "Missing language tag after '@' in literal: {joined}"
+            ));
+        }
+        return Literal::new_language_tagged_literal(value, lang)
+            .map(Object::Literal)
+            .map_err(|e| format!("Invalid language tag '{lang}': {e}"));
+    }
+
+    // Datatype-typed literal: "value"^^<datatype-iri>
+    if let Some(rest) = suffix.strip_prefix("^^") {
+        let rest = rest.trim_start();
+        let iri = rest
+            .strip_prefix('<')
+            .and_then(|r| r.split('>').next())
+            .ok_or_else(|| format!("Invalid datatype in literal (expected <iri>): {suffix}"))?;
+        let datatype =
+            NamedNode::new(iri).map_err(|e| format!("Invalid datatype IRI '{iri}': {e}"))?;
+        return Ok(Object::Literal(Literal::new_typed_literal(value, datatype)));
+    }
+
+    // Nothing but an optional trailing '.' remains — a simple literal.
+    Ok(Object::Literal(Literal::new_simple_literal(value)))
+}
+
+/// Unescape the standard RDF/Turtle literal escape sequences within a literal
+/// value (`\t \b \n \r \f \" \' \\` and `\uXXXX` / `\UXXXXXXXX`). Unknown
+/// escapes are preserved verbatim so no information is silently lost.
+fn unescape_literal_value(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('t') => out.push('\t'),
+            Some('b') => out.push('\u{0008}'),
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('f') => out.push('\u{000C}'),
+            Some('"') => out.push('"'),
+            Some('\'') => out.push('\''),
+            Some('\\') => out.push('\\'),
+            Some('u') => {
+                let hex: String = chars.by_ref().take(4).collect();
+                match u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) {
+                    Some(ch) => out.push(ch),
+                    None => {
+                        out.push('\\');
+                        out.push('u');
+                        out.push_str(&hex);
+                    }
+                }
+            }
+            Some('U') => {
+                let hex: String = chars.by_ref().take(8).collect();
+                match u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) {
+                    Some(ch) => out.push(ch),
+                    None => {
+                        out.push('\\');
+                        out.push('U');
+                        out.push_str(&hex);
+                    }
+                }
+            }
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 /// Expand prefixed name to full IRI
@@ -652,6 +772,63 @@ A ex:alice ex:name "Alice" .
             patch.prefixes.get("ex"),
             Some(&"http://example.org/".to_string())
         );
+    }
+
+    #[test]
+    fn test_parse_typed_literal() {
+        use oxirs_core::model::Object;
+        let obj = parse_literal(&["\"5\"^^<http://www.w3.org/2001/XMLSchema#integer>", "."])
+            .expect("typed literal should parse");
+        match obj {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "5");
+                assert_eq!(
+                    lit.datatype().as_str(),
+                    "http://www.w3.org/2001/XMLSchema#integer",
+                    "datatype must be preserved, not silently discarded"
+                );
+            }
+            _ => panic!("expected typed literal"),
+        }
+    }
+
+    #[test]
+    fn test_parse_language_tagged_literal() {
+        use oxirs_core::model::Object;
+        let obj = parse_literal(&["\"bonjour\"@fr", "."]).expect("lang literal should parse");
+        match obj {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "bonjour");
+                assert_eq!(lit.language(), Some("fr"), "language tag must be preserved");
+            }
+            _ => panic!("expected language-tagged literal"),
+        }
+    }
+
+    #[test]
+    fn test_parse_typed_literal_not_corrupted() {
+        // Regression: previously `"5"^^<...>` became the garbage value
+        // `5"^^<...integer>` because only a leading quote was trimmed.
+        use oxirs_core::model::Object;
+        let obj = parse_literal(&["\"5\"^^<http://www.w3.org/2001/XMLSchema#integer>"])
+            .expect("typed literal parses without trailing dot too");
+        match obj {
+            Object::Literal(lit) => assert_eq!(lit.value(), "5"),
+            _ => panic!("expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_parse_simple_literal_with_spaces() {
+        use oxirs_core::model::Object;
+        let obj = parse_literal(&["\"hello", "world\"", "."]).expect("multi-word literal");
+        match obj {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "hello world");
+                assert_eq!(lit.language(), None);
+            }
+            _ => panic!("expected simple literal"),
+        }
     }
 
     #[test]

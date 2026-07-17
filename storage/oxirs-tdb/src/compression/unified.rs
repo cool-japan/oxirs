@@ -182,12 +182,10 @@ impl UnifiedCompression {
             CompressionAlgorithm::Zstd => self.compress_zstd(data, level.value() as i32)?,
             CompressionAlgorithm::Brotli => self.compress_brotli(data, level.value() as u32)?,
             CompressionAlgorithm::Snappy => self.compress_snappy(data)?,
-            _ => {
-                return Err(TdbError::Other(format!(
-                    "Algorithm {:?} not yet implemented",
-                    algorithm
-                )))
-            }
+            CompressionAlgorithm::Prefix => self.compress_prefix(data)?,
+            CompressionAlgorithm::Delta => self.compress_delta(data)?,
+            CompressionAlgorithm::RunLength => self.compress_run_length(data)?,
+            CompressionAlgorithm::Bitmap => self.compress_bitmap(data)?,
         };
 
         Ok(compressed)
@@ -201,10 +199,10 @@ impl UnifiedCompression {
             CompressionAlgorithm::Zstd => self.decompress_zstd(data),
             CompressionAlgorithm::Brotli => self.decompress_brotli(data),
             CompressionAlgorithm::Snappy => self.decompress_snappy(data),
-            _ => Err(TdbError::Other(format!(
-                "Algorithm {:?} not yet implemented",
-                algorithm
-            ))),
+            CompressionAlgorithm::Prefix => self.decompress_prefix(data),
+            CompressionAlgorithm::Delta => self.decompress_delta(data),
+            CompressionAlgorithm::RunLength => self.decompress_run_length(data),
+            CompressionAlgorithm::Bitmap => self.decompress_bitmap(data),
         }
     }
 
@@ -266,6 +264,113 @@ impl UnifiedCompression {
     fn decompress_snappy(&self, data: &[u8]) -> Result<Vec<u8>> {
         oxiarc_snappy::decompress(data)
             .map_err(|e| TdbError::Other(format!("Snappy decompression failed: {}", e)))
+    }
+
+    /// Prefix compression, routed to the dedicated
+    /// [`crate::compression::prefix::PrefixCompressor`] (RDF URI namespace
+    /// prefix extraction, splitting at the last `#` or `/`).
+    ///
+    /// `PrefixCompressor` is designed to amortize a *shared* prefix
+    /// dictionary across many strings compressed with the same `&mut self`
+    /// instance; `UnifiedCompression::compress_with` takes `&self` and
+    /// compresses one opaque byte buffer per call, so there is no dictionary
+    /// to share across calls here. A fresh compressor is used for each call
+    /// and the discovered prefix text (not just its call-local numeric id)
+    /// is written into the output so `decompress_prefix` is fully
+    /// self-contained: `[prefix_len: u32 LE][prefix bytes][suffix bytes]`.
+    fn compress_prefix(&self, data: &[u8]) -> Result<Vec<u8>> {
+        let s = std::str::from_utf8(data).map_err(|e| {
+            TdbError::Other(format!(
+                "Prefix compression requires valid UTF-8 (URI/string) input: {e}"
+            ))
+        })?;
+
+        let mut compressor = crate::compression::prefix::PrefixCompressor::new(4);
+        let compressed = compressor
+            .compress(s)
+            .map_err(|e| TdbError::Other(format!("Prefix compression failed: {e}")))?;
+
+        let prefix_text: &str = if compressed.prefix_id == 0 {
+            ""
+        } else {
+            compressor
+                .get_prefix(compressed.prefix_id)
+                .map(|s| s.as_str())
+                .ok_or_else(|| {
+                    TdbError::Other(
+                        "Prefix compression produced an unresolvable prefix id".to_string(),
+                    )
+                })?
+        };
+
+        let prefix_bytes = prefix_text.as_bytes();
+        let suffix_bytes = compressed.suffix.as_bytes();
+        let mut out = Vec::with_capacity(4 + prefix_bytes.len() + suffix_bytes.len());
+        out.extend_from_slice(&(prefix_bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(prefix_bytes);
+        out.extend_from_slice(suffix_bytes);
+        Ok(out)
+    }
+
+    fn decompress_prefix(&self, data: &[u8]) -> Result<Vec<u8>> {
+        if data.len() < 4 {
+            return Err(TdbError::Other(
+                "Prefix-compressed data truncated: missing length header".to_string(),
+            ));
+        }
+        let prefix_len = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
+        let suffix_start = 4usize.checked_add(prefix_len).ok_or_else(|| {
+            TdbError::Other("Prefix-compressed data: length overflow".to_string())
+        })?;
+        if data.len() < suffix_start {
+            return Err(TdbError::Other(
+                "Prefix-compressed data truncated: prefix shorter than declared length".to_string(),
+            ));
+        }
+
+        let mut out = Vec::with_capacity(data.len() - 4);
+        out.extend_from_slice(&data[4..suffix_start]);
+        out.extend_from_slice(&data[suffix_start..]);
+        Ok(out)
+    }
+
+    /// Delta encoding, routed to the dedicated
+    /// [`crate::compression::delta::DeltaEncoder`] byte-sequence codec
+    /// (good for slowly-varying sorted numeric/byte data).
+    fn compress_delta(&self, data: &[u8]) -> Result<Vec<u8>> {
+        crate::compression::delta::DeltaEncoder::encode_byte_sequence(data)
+            .map_err(|e| TdbError::Other(format!("Delta compression failed: {e}")))
+    }
+
+    fn decompress_delta(&self, data: &[u8]) -> Result<Vec<u8>> {
+        crate::compression::delta::DeltaEncoder::decode_byte_sequence(data)
+            .map_err(|e| TdbError::Other(format!("Delta decompression failed: {e}")))
+    }
+
+    /// Run-length encoding, routed to the dedicated
+    /// [`crate::compression::run_length::RunLengthEncoder`] (good for data
+    /// with long runs of repeated bytes).
+    fn compress_run_length(&self, data: &[u8]) -> Result<Vec<u8>> {
+        crate::compression::run_length::RunLengthEncoder::encode(data)
+            .map_err(|e| TdbError::Other(format!("Run-length compression failed: {e}")))
+    }
+
+    fn decompress_run_length(&self, data: &[u8]) -> Result<Vec<u8>> {
+        crate::compression::run_length::RunLengthEncoder::decode(data)
+            .map_err(|e| TdbError::Other(format!("Run-length decompression failed: {e}")))
+    }
+
+    /// Bitmap encoding, routed to the dedicated
+    /// [`crate::compression::bitmap::BitmapWAHEncoder`] (Word-Aligned
+    /// Hybrid; good for sparse boolean/bitmap data).
+    fn compress_bitmap(&self, data: &[u8]) -> Result<Vec<u8>> {
+        crate::compression::bitmap::BitmapWAHEncoder::encode(data)
+            .map_err(|e| TdbError::Other(format!("Bitmap compression failed: {e}")))
+    }
+
+    fn decompress_bitmap(&self, data: &[u8]) -> Result<Vec<u8>> {
+        crate::compression::bitmap::BitmapWAHEncoder::decode(data)
+            .map_err(|e| TdbError::Other(format!("Bitmap decompression failed: {e}")))
     }
 
     /// Benchmark all algorithms on sample data
@@ -473,6 +578,98 @@ mod tests {
             .decompress(&compressed, CompressionAlgorithm::None)
             .unwrap();
 
+        assert_eq!(decompressed, data);
+    }
+
+    /// Regression test: `compress_with`/`decompress` used to return
+    /// `TdbError::Other("Algorithm ... not yet implemented")` for
+    /// Prefix/Delta/RunLength/Bitmap even though dedicated codecs exist for
+    /// all four. They must now actually round-trip through those codecs.
+    #[test]
+    fn test_prefix_algorithm_round_trips() {
+        let compression = UnifiedCompression::new();
+        let data = b"http://example.org/ontology#Person";
+
+        let compressed = compression
+            .compress_with(
+                data,
+                CompressionAlgorithm::Prefix,
+                CompressionLevel::DEFAULT,
+            )
+            .expect("prefix compression should now be implemented");
+        let decompressed = compression
+            .decompress(&compressed, CompressionAlgorithm::Prefix)
+            .expect("prefix decompression should now be implemented");
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_prefix_algorithm_rejects_non_utf8() {
+        let compression = UnifiedCompression::new();
+        let data: &[u8] = &[0xFF, 0xFE, 0xFD];
+
+        let result = compression.compress_with(
+            data,
+            CompressionAlgorithm::Prefix,
+            CompressionLevel::DEFAULT,
+        );
+        assert!(
+            result.is_err(),
+            "non-UTF-8 input must be a clear error, not silently mangled"
+        );
+    }
+
+    #[test]
+    fn test_delta_algorithm_round_trips() {
+        let compression = UnifiedCompression::new();
+        let data: Vec<u8> = (0..=255u8).collect();
+
+        let compressed = compression
+            .compress_with(
+                &data,
+                CompressionAlgorithm::Delta,
+                CompressionLevel::DEFAULT,
+            )
+            .expect("delta compression should now be implemented");
+        let decompressed = compression
+            .decompress(&compressed, CompressionAlgorithm::Delta)
+            .expect("delta decompression should now be implemented");
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_run_length_algorithm_round_trips() {
+        let compression = UnifiedCompression::new();
+        let data: Vec<u8> = b"aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd".to_vec();
+
+        let compressed = compression
+            .compress_with(
+                &data,
+                CompressionAlgorithm::RunLength,
+                CompressionLevel::DEFAULT,
+            )
+            .expect("run-length compression should now be implemented");
+        let decompressed = compression
+            .decompress(&compressed, CompressionAlgorithm::RunLength)
+            .expect("run-length decompression should now be implemented");
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_bitmap_algorithm_round_trips() {
+        let compression = UnifiedCompression::new();
+        let data: Vec<u8> = vec![0u8, 0, 0, 0xFF, 0, 0, 0, 0xFF, 0, 0];
+
+        let compressed = compression
+            .compress_with(
+                &data,
+                CompressionAlgorithm::Bitmap,
+                CompressionLevel::DEFAULT,
+            )
+            .expect("bitmap compression should now be implemented");
+        let decompressed = compression
+            .decompress(&compressed, CompressionAlgorithm::Bitmap)
+            .expect("bitmap decompression should now be implemented");
         assert_eq!(decompressed, data);
     }
 }

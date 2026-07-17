@@ -1015,6 +1015,20 @@ impl VectorIndex for PQIndex {
         // Would need to decode, but that returns an approximation
         None
     }
+
+    fn iter_vectors(&self) -> Vec<(String, Vector)> {
+        // Reconstruct (approximate, lossy) vectors by decoding the stored PQ
+        // codes. This is real data derived from what was actually indexed
+        // (not a placeholder) so it is safe to use for persistence.
+        self.codes
+            .iter()
+            .filter_map(|(uri, codes)| self.decode_codes(codes).ok().map(|v| (uri.clone(), v)))
+            .collect()
+    }
+
+    fn supports_enumeration(&self) -> bool {
+        true
+    }
 }
 
 impl PQIndex {

@@ -5,7 +5,7 @@ use super::term::Term;
 use crate::btree::BTree;
 use crate::compression::prefix::PrefixCompressor;
 use crate::error::Result;
-use crate::storage::BufferPool;
+use crate::storage::{BufferPool, PageId};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -53,6 +53,46 @@ impl NodeTable {
             prefix_compressor: RwLock::new(PrefixCompressor::new(15)), // Minimum 15 chars for compression
             compression_enabled,
         }
+    }
+
+    /// Reconstruct a NodeTable from persisted B+Tree roots and the next id to
+    /// hand out (used when reopening a store from its superblock).
+    pub fn from_roots(
+        buffer_pool: Arc<BufferPool>,
+        term_to_id_root: Option<PageId>,
+        id_to_term_root: Option<PageId>,
+        next_id: NodeId,
+    ) -> Self {
+        let term_to_id = match term_to_id_root {
+            Some(page) => BTree::from_root(buffer_pool.clone(), page),
+            None => BTree::new(buffer_pool.clone()),
+        };
+        let id_to_term = match id_to_term_root {
+            Some(page) => BTree::from_root(buffer_pool.clone(), page),
+            None => BTree::new(buffer_pool),
+        };
+        NodeTable {
+            term_to_id: RwLock::new(term_to_id),
+            id_to_term: RwLock::new(id_to_term),
+            next_id: RwLock::new(next_id),
+            prefix_compressor: RwLock::new(PrefixCompressor::new(15)),
+            compression_enabled: true,
+        }
+    }
+
+    /// Current root page of the `term_to_id` B+Tree (for superblock persistence).
+    pub fn term_to_id_root(&self) -> Option<PageId> {
+        self.term_to_id.read().root_page()
+    }
+
+    /// Current root page of the `id_to_term` B+Tree (for superblock persistence).
+    pub fn id_to_term_root(&self) -> Option<PageId> {
+        self.id_to_term.read().root_page()
+    }
+
+    /// Next dictionary [`NodeId`] to be allocated (for superblock persistence).
+    pub fn next_id_value(&self) -> NodeId {
+        *self.next_id.read()
     }
 
     /// Get prefix compression statistics
@@ -143,7 +183,7 @@ impl NodeTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{Allocator, FileManager};
+    use crate::storage::FileManager;
     use tempfile::TempDir;
 
     fn create_test_node_table() -> (TempDir, NodeTable) {

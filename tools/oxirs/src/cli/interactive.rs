@@ -480,7 +480,16 @@ impl InteractiveMode {
         let graph = args.get(3).map(|s| s.to_string());
 
         // Integrate with actual import (resume not supported in interactive mode)
-        crate::commands::import::run(dataset.to_string(), file, format, graph, false).await?;
+        crate::commands::import::run(
+            dataset.to_string(),
+            file,
+            format,
+            graph,
+            false,
+            None,
+            "memory".to_string(),
+        )
+        .await?;
 
         Ok(())
     }
@@ -799,9 +808,11 @@ impl InteractiveMode {
             crate::commands::import::run(
                 dataset.to_string(),
                 file.clone(),
-                None,  // Auto-detect format
-                None,  // Default graph
-                false, // Resume not supported in interactive mode
+                None,               // Auto-detect format
+                None,               // Default graph
+                false,              // Resume not supported in interactive mode
+                None,               // Use default max file size
+                "tdb2".to_string(), // tdbloader always targets the on-disk tdb2 backend
             )
             .await?;
         }

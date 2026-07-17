@@ -492,8 +492,11 @@ pub mod window_function;
 // SPARQL 1.1 VALUES clause (inline data) (v1.1.0 round 9)
 pub mod values_clause;
 
-// SPARQL 1.1 SERVICE clause for federated queries (v1.1.0 round 10)
-pub mod service_clause;
+// Real HTTP SPARQL-protocol federation for SERVICE clauses and LOAD.
+// (The former `service_clause` module was a synthetic-data simulator that was
+// never wired into query execution; it has been removed in favor of this
+// single, real implementation — see `service_federation::execute_service_clause`.)
+pub mod service_federation;
 
 // SPARQL subquery (SELECT within SELECT) support (v1.1.0 round 11)
 pub mod subquery;

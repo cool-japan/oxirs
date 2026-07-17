@@ -35,6 +35,27 @@ impl QueryExecutor {
                 .ok_or_else(|| anyhow::anyhow!("Unbound variable: {}", var)),
             Expression::Literal(lit) => Ok(crate::algebra::Term::Literal(lit.clone())),
             Expression::Iri(iri) => Ok(crate::algebra::Term::Iri(iri.clone())),
+            Expression::Binary { op, left, right }
+                if matches!(
+                    op,
+                    crate::algebra::BinaryOperator::In | crate::algebra::BinaryOperator::NotIn
+                ) =>
+            {
+                // FILTER ?x IN (a, b, c) / NOT IN (...): membership over a list.
+                let left_val = self.evaluate_expression(left, binding)?;
+                let candidates = self.collect_in_list(right, binding)?;
+                let is_member = candidates
+                    .iter()
+                    .any(|candidate| self.terms_equal(&left_val, candidate));
+                let result = matches!(op, crate::algebra::BinaryOperator::In) == is_member;
+                Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
             Expression::Binary { op, left, right } => {
                 let left_val = self.evaluate_expression(left, binding)?;
                 let right_val = self.evaluate_expression(right, binding)?;
@@ -330,6 +351,30 @@ impl QueryExecutor {
         }
     }
     /// Evaluate binary operations
+    /// Collect the candidate list for an `IN` / `NOT IN` right operand.
+    ///
+    /// A list is encoded as a `list(...)`/`in(...)` function call; any other
+    /// expression is treated as a single-element list.
+    pub(super) fn collect_in_list(
+        &self,
+        expr: &crate::algebra::Expression,
+        binding: &crate::algebra::Binding,
+    ) -> Result<Vec<crate::algebra::Term>> {
+        use crate::algebra::Expression;
+        match expr {
+            Expression::Function { name, args }
+                if name.eq_ignore_ascii_case("list") || name.eq_ignore_ascii_case("in") =>
+            {
+                let mut out = Vec::with_capacity(args.len());
+                for arg in args {
+                    out.push(self.evaluate_expression(arg, binding)?);
+                }
+                Ok(out)
+            }
+            _ => Ok(vec![self.evaluate_expression(expr, binding)?]),
+        }
+    }
+
     pub(super) fn evaluate_binary_operation(
         &self,
         op: &crate::algebra::BinaryOperator,
@@ -488,10 +533,29 @@ impl QueryExecutor {
                     datatype: Some(oxirs_core::model::NamedNode::new_unchecked(datatype)),
                 }))
             }
-            _ => Err(anyhow::anyhow!(
-                "Binary operator {:?} not yet implemented",
-                op
-            )),
+            BinaryOperator::In => {
+                // Single-term membership: `left IN (right)`. Multi-element list
+                // membership is handled in `evaluate_expression`, which has the
+                // un-evaluated right operand available.
+                let result = self.terms_equal(left, right);
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
+            BinaryOperator::NotIn => {
+                let result = !self.terms_equal(left, right);
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result.to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                }))
+            }
         }
     }
     /// Evaluate unary operations

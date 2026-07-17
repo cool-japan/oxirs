@@ -93,6 +93,14 @@ pub struct UserRecommendationResults {
     pub ndcg_scores: HashMap<usize, f64>,
     /// Personalization score
     pub personalization_score: f64,
+    /// Full ranked list of recommended item IDs (highest-scored first), kept
+    /// so aggregate metrics needing the whole ranking (MAP, MRR) and
+    /// catalog-level statistics (coverage, diversity, novelty) can be
+    /// computed for real instead of guessed at.
+    pub recommended_items: Vec<String>,
+    /// Ground-truth relevant item IDs for this user (from held-out test
+    /// interactions), used alongside `recommended_items` for MAP/MRR.
+    pub ground_truth: HashSet<String>,
 }
 
 /// Coverage statistics
@@ -329,6 +337,11 @@ impl RecommendationEvaluator {
             recall_scores,
             ndcg_scores,
             personalization_score,
+            recommended_items: recommendations
+                .iter()
+                .map(|(item_id, _)| item_id.clone())
+                .collect(),
+            ground_truth,
         })
     }
 
@@ -560,44 +573,322 @@ impl RecommendationEvaluator {
                     .collect();
                 Ok(scores.iter().sum::<f64>() / scores.len() as f64)
             }
-            RecommendationMetric::Coverage => {
-                // Calculate as placeholder - would need to be computed differently
-                Ok(0.7)
+            RecommendationMetric::F1AtK(k) => {
+                let scores: Vec<f64> = per_user_results
+                    .values()
+                    .filter_map(|r| {
+                        let precision = *r.precision_scores.get(k)?;
+                        let recall = *r.recall_scores.get(k)?;
+                        Some(if precision + recall > 0.0 {
+                            2.0 * precision * recall / (precision + recall)
+                        } else {
+                            0.0
+                        })
+                    })
+                    .collect();
+                if scores.is_empty() {
+                    return Err(anyhow!(
+                        "No precision/recall@{k} scores available to compute F1@{k}"
+                    ));
+                }
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
             }
-            RecommendationMetric::Diversity => {
-                // Calculate as placeholder
-                Ok(0.6)
+            RecommendationMetric::MAP => {
+                let scores: Vec<f64> = per_user_results
+                    .values()
+                    .map(|r| Self::average_precision(&r.recommended_items, &r.ground_truth))
+                    .collect();
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
             }
-            _ => Ok(0.5), // Placeholder for other metrics
+            RecommendationMetric::MRR => {
+                let scores: Vec<f64> = per_user_results
+                    .values()
+                    .map(|r| Self::reciprocal_rank(&r.recommended_items, &r.ground_truth))
+                    .collect();
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
+            }
+            RecommendationMetric::Coverage => Ok(self
+                .calculate_coverage_stats(per_user_results)?
+                .catalog_coverage),
+            RecommendationMetric::Diversity => Ok(self
+                .calculate_diversity_analysis(per_user_results)?
+                .intra_list_diversity),
+            RecommendationMetric::Novelty => {
+                let scores: Vec<f64> = per_user_results
+                    .values()
+                    .map(|r| self.novelty_for_items(&r.recommended_items))
+                    .collect();
+                if scores.is_empty() {
+                    return Ok(0.0);
+                }
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
+            }
+            RecommendationMetric::Serendipity => {
+                // Simplified but real serendipity: the fraction of
+                // recommended items that are both relevant (in the user's
+                // ground truth) and unpopular (below the catalog's median
+                // popularity) — i.e. "pleasant surprises" rather than
+                // popularity-driven hits.
+                let median_popularity = self.median_catalog_popularity();
+                let scores: Vec<f64> = per_user_results
+                    .values()
+                    .filter(|r| !r.recommended_items.is_empty())
+                    .map(|r| {
+                        let surprising_hits = r
+                            .recommended_items
+                            .iter()
+                            .filter(|item_id| {
+                                r.ground_truth.contains(*item_id)
+                                    && self
+                                        .item_catalog
+                                        .get(*item_id)
+                                        .is_some_and(|item| item.popularity < median_popularity)
+                            })
+                            .count();
+                        surprising_hits as f64 / r.recommended_items.len() as f64
+                    })
+                    .collect();
+                if scores.is_empty() {
+                    return Ok(0.0);
+                }
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
+            }
         }
     }
 
-    /// Calculate coverage statistics
+    /// Average precision of a ranked recommendation list against a
+    /// user's ground-truth relevant items.
+    fn average_precision(recommended_items: &[String], ground_truth: &HashSet<String>) -> f64 {
+        if ground_truth.is_empty() {
+            return 0.0;
+        }
+        let mut hits = 0usize;
+        let mut precision_sum = 0.0;
+        for (rank, item_id) in recommended_items.iter().enumerate() {
+            if ground_truth.contains(item_id) {
+                hits += 1;
+                precision_sum += hits as f64 / (rank + 1) as f64;
+            }
+        }
+        precision_sum / ground_truth.len() as f64
+    }
+
+    /// Reciprocal rank of the first relevant item in a ranked recommendation
+    /// list (0.0 if none of the recommended items are relevant).
+    fn reciprocal_rank(recommended_items: &[String], ground_truth: &HashSet<String>) -> f64 {
+        recommended_items
+            .iter()
+            .position(|item_id| ground_truth.contains(item_id))
+            .map(|rank| 1.0 / (rank + 1) as f64)
+            .unwrap_or(0.0)
+    }
+
+    /// Novelty of a recommendation list: the average "unpopularity"
+    /// (`1 - popularity`) of its items, using the catalog's recorded
+    /// popularity scores. Unknown items are skipped.
+    fn novelty_for_items(&self, recommended_items: &[String]) -> f64 {
+        let popularities: Vec<f64> = recommended_items
+            .iter()
+            .filter_map(|item_id| self.item_catalog.get(item_id))
+            .map(|item| item.popularity.clamp(0.0, 1.0))
+            .collect();
+        if popularities.is_empty() {
+            return 0.0;
+        }
+        1.0 - popularities.iter().sum::<f64>() / popularities.len() as f64
+    }
+
+    /// Median popularity across the whole item catalog, used as the
+    /// "unpopular" threshold for serendipity.
+    fn median_catalog_popularity(&self) -> f64 {
+        let mut popularities: Vec<f64> = self
+            .item_catalog
+            .values()
+            .map(|item| item.popularity)
+            .collect();
+        if popularities.is_empty() {
+            return 0.0;
+        }
+        popularities.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mid = popularities.len() / 2;
+        if popularities.len() % 2 == 0 {
+            (popularities[mid - 1] + popularities[mid]) / 2.0
+        } else {
+            popularities[mid]
+        }
+    }
+
+    /// Calculate catalog coverage statistics from the items actually
+    /// recommended across all evaluated users.
     fn calculate_coverage_stats(
         &self,
-        _per_user_results: &HashMap<String, UserRecommendationResults>,
+        per_user_results: &HashMap<String, UserRecommendationResults>,
     ) -> Result<CoverageStats> {
-        // Simplified implementation
+        let total_catalog_items = self.item_catalog.len();
+
+        let recommended_item_set: HashSet<&str> = per_user_results
+            .values()
+            .flat_map(|r| r.recommended_items.iter().map(String::as_str))
+            .collect();
+        let unique_items_recommended = recommended_item_set.len();
+
+        let catalog_coverage = if total_catalog_items > 0 {
+            unique_items_recommended as f64 / total_catalog_items as f64
+        } else {
+            0.0
+        };
+
+        // Long-tail items: those in the catalog's bottom-half by popularity.
+        let median_popularity = self.median_catalog_popularity();
+        let long_tail_items: HashSet<&str> = self
+            .item_catalog
+            .values()
+            .filter(|item| item.popularity < median_popularity)
+            .map(|item| item.item_id.as_str())
+            .collect();
+        let long_tail_coverage = if !long_tail_items.is_empty() {
+            recommended_item_set.intersection(&long_tail_items).count() as f64
+                / long_tail_items.len() as f64
+        } else {
+            0.0
+        };
+
         Ok(CoverageStats {
-            catalog_coverage: 0.65,
-            unique_items_recommended: 450,
-            total_catalog_items: 1000,
-            long_tail_coverage: 0.25,
+            catalog_coverage,
+            unique_items_recommended,
+            total_catalog_items,
+            long_tail_coverage,
         })
     }
 
-    /// Calculate diversity analysis
+    /// Calculate diversity analysis from the items actually recommended
+    /// across all evaluated users, using catalog category/feature metadata
+    /// (and item embeddings when available) as the similarity signal.
     fn calculate_diversity_analysis(
         &self,
-        _per_user_results: &HashMap<String, UserRecommendationResults>,
+        per_user_results: &HashMap<String, UserRecommendationResults>,
     ) -> Result<DiversityAnalysis> {
-        // Simplified implementation
+        let non_empty_users: Vec<&UserRecommendationResults> = per_user_results
+            .values()
+            .filter(|r| !r.recommended_items.is_empty())
+            .collect();
+
+        if non_empty_users.is_empty() {
+            return Ok(DiversityAnalysis {
+                intra_list_diversity: 0.0,
+                inter_user_diversity: 0.0,
+                category_diversity: 0.0,
+                feature_diversity: 0.0,
+            });
+        }
+
+        // Intra-list diversity: mean pairwise dissimilarity between items
+        // within each user's own recommendation list, using item embeddings
+        // when available and falling back to "different category" otherwise.
+        let mut intra_scores = Vec::new();
+        // Category diversity: fraction of a user's list that is distinct
+        // categories.
+        let mut category_scores = Vec::new();
+        // Feature diversity: fraction of a user's list that is distinct
+        // (key, value) feature pairs, aggregated across the list.
+        let mut feature_scores = Vec::new();
+
+        for result in &non_empty_users {
+            let items: Vec<&ItemMetadata> = result
+                .recommended_items
+                .iter()
+                .filter_map(|item_id| self.item_catalog.get(item_id))
+                .collect();
+            if items.is_empty() {
+                continue;
+            }
+
+            let mut pair_count = 0usize;
+            let mut dissimilarity_sum = 0.0;
+            for i in 0..items.len() {
+                for j in (i + 1)..items.len() {
+                    let dissimilarity = match (&items[i].embedding, &items[j].embedding) {
+                        (Some(a), Some(b)) => 1.0 - Self::cosine_similarity_slices(a, b),
+                        _ => {
+                            if items[i].category == items[j].category {
+                                0.0
+                            } else {
+                                1.0
+                            }
+                        }
+                    };
+                    dissimilarity_sum += dissimilarity;
+                    pair_count += 1;
+                }
+            }
+            if pair_count > 0 {
+                intra_scores.push(dissimilarity_sum / pair_count as f64);
+            }
+
+            let distinct_categories: HashSet<&str> =
+                items.iter().map(|item| item.category.as_str()).collect();
+            category_scores.push(distinct_categories.len() as f64 / items.len() as f64);
+
+            let distinct_features: HashSet<(&str, &str)> = items
+                .iter()
+                .flat_map(|item| item.features.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+                .collect();
+            let total_feature_pairs: usize = items.iter().map(|item| item.features.len()).sum();
+            if total_feature_pairs > 0 {
+                feature_scores.push(distinct_features.len() as f64 / total_feature_pairs as f64);
+            }
+        }
+
+        // Inter-user diversity: mean pairwise Jaccard *dissimilarity*
+        // between different users' recommended-item sets.
+        let user_item_sets: Vec<HashSet<&str>> = non_empty_users
+            .iter()
+            .map(|r| r.recommended_items.iter().map(String::as_str).collect())
+            .collect();
+        let mut inter_pair_count = 0usize;
+        let mut inter_dissimilarity_sum = 0.0;
+        for i in 0..user_item_sets.len() {
+            for j in (i + 1)..user_item_sets.len() {
+                let union = user_item_sets[i].union(&user_item_sets[j]).count();
+                if union == 0 {
+                    continue;
+                }
+                let intersection = user_item_sets[i].intersection(&user_item_sets[j]).count();
+                let jaccard = intersection as f64 / union as f64;
+                inter_dissimilarity_sum += 1.0 - jaccard;
+                inter_pair_count += 1;
+            }
+        }
+
         Ok(DiversityAnalysis {
-            intra_list_diversity: 0.7,
-            inter_user_diversity: 0.8,
-            category_diversity: 0.6,
-            feature_diversity: 0.65,
+            intra_list_diversity: Self::mean(&intra_scores),
+            inter_user_diversity: if inter_pair_count > 0 {
+                inter_dissimilarity_sum / inter_pair_count as f64
+            } else {
+                0.0
+            },
+            category_diversity: Self::mean(&category_scores),
+            feature_diversity: Self::mean(&feature_scores),
         })
+    }
+
+    fn mean(values: &[f64]) -> f64 {
+        if values.is_empty() {
+            0.0
+        } else {
+            values.iter().sum::<f64>() / values.len() as f64
+        }
+    }
+
+    fn cosine_similarity_slices(a: &[f32], b: &[f32]) -> f64 {
+        let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if norm_a > 0.0 && norm_b > 0.0 {
+            (dot / (norm_a * norm_b)) as f64
+        } else {
+            0.0
+        }
     }
 
     /// Simulate user satisfaction scores
@@ -624,5 +915,131 @@ impl RecommendationEvaluator {
 impl Default for RecommendationEvaluator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_item(id: &str, category: &str, popularity: f64) -> ItemMetadata {
+        ItemMetadata {
+            item_id: id.to_string(),
+            category: category.to_string(),
+            features: HashMap::new(),
+            popularity,
+            embedding: None,
+        }
+    }
+
+    fn make_user_result(recommended: &[&str], ground_truth: &[&str]) -> UserRecommendationResults {
+        UserRecommendationResults {
+            user_id: "u1".to_string(),
+            precision_scores: HashMap::new(),
+            recall_scores: HashMap::new(),
+            ndcg_scores: HashMap::new(),
+            personalization_score: 0.0,
+            recommended_items: recommended.iter().map(|s| s.to_string()).collect(),
+            ground_truth: ground_truth.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    /// Regression test for the P3 finding: MAP/MRR must be computed for
+    /// real from the ranked `recommended_items` list against
+    /// `ground_truth`, instead of a hardcoded 0.5.
+    #[test]
+    fn test_calculate_metric_map_and_mrr_are_real() -> Result<()> {
+        let evaluator = RecommendationEvaluator::new();
+        let mut per_user = HashMap::new();
+        per_user.insert(
+            "u1".to_string(),
+            make_user_result(&["i1", "i2", "i3"], &["i2"]),
+        );
+
+        // i2 (the only relevant item) is at rank 2: AP = (1/2) / 1 = 0.5;
+        // RR = 1/2 = 0.5.
+        let map = evaluator.calculate_metric(&RecommendationMetric::MAP, &per_user)?;
+        assert!((map - 0.5).abs() < 1e-9, "map = {map}");
+
+        let mrr = evaluator.calculate_metric(&RecommendationMetric::MRR, &per_user)?;
+        assert!((mrr - 0.5).abs() < 1e-9, "mrr = {mrr}");
+
+        Ok(())
+    }
+
+    /// Regression test: catalog coverage must be computed from the actual
+    /// items recommended vs. the real catalog size, instead of the
+    /// hardcoded (0.65, 450, 1000, 0.25) placeholder tuple.
+    #[test]
+    fn test_calculate_coverage_stats_reflects_real_catalog() {
+        let mut evaluator = RecommendationEvaluator::new();
+        evaluator.add_item(make_item("i1", "books", 0.9));
+        evaluator.add_item(make_item("i2", "books", 0.1));
+        evaluator.add_item(make_item("i3", "toys", 0.5));
+
+        let mut per_user = HashMap::new();
+        per_user.insert("u1".to_string(), make_user_result(&["i1"], &[]));
+
+        let stats = evaluator
+            .calculate_coverage_stats(&per_user)
+            .expect("should succeed");
+        assert_eq!(stats.total_catalog_items, 3);
+        assert_eq!(stats.unique_items_recommended, 1);
+        assert!(
+            (stats.catalog_coverage - (1.0 / 3.0)).abs() < 1e-9,
+            "catalog_coverage = {}",
+            stats.catalog_coverage
+        );
+    }
+
+    /// Regression test: novelty must be derived from the catalog's actual
+    /// popularity scores instead of being a constant.
+    #[test]
+    fn test_novelty_for_items_uses_real_popularity() {
+        let mut evaluator = RecommendationEvaluator::new();
+        evaluator.add_item(make_item("popular", "x", 1.0));
+        evaluator.add_item(make_item("obscure", "x", 0.0));
+
+        let popular_novelty = evaluator.novelty_for_items(&["popular".to_string()]);
+        let obscure_novelty = evaluator.novelty_for_items(&["obscure".to_string()]);
+
+        assert!(
+            (popular_novelty - 0.0).abs() < 1e-9,
+            "popular_novelty = {popular_novelty}"
+        );
+        assert!(
+            (obscure_novelty - 1.0).abs() < 1e-9,
+            "obscure_novelty = {obscure_novelty}"
+        );
+    }
+
+    /// Regression test: diversity analysis must genuinely differ between a
+    /// single-category recommendation list and a multi-category one,
+    /// instead of the hardcoded (0.7, 0.8, 0.6, 0.65) placeholder tuple.
+    #[test]
+    fn test_calculate_diversity_analysis_varies_with_categories() {
+        let mut evaluator = RecommendationEvaluator::new();
+        evaluator.add_item(make_item("i1", "books", 0.5));
+        evaluator.add_item(make_item("i2", "books", 0.5));
+        evaluator.add_item(make_item("i3", "toys", 0.5));
+
+        let mut same_category = HashMap::new();
+        same_category.insert("u1".to_string(), make_user_result(&["i1", "i2"], &[]));
+        let same_category_diversity = evaluator
+            .calculate_diversity_analysis(&same_category)
+            .expect("should succeed");
+
+        let mut mixed_category = HashMap::new();
+        mixed_category.insert("u1".to_string(), make_user_result(&["i1", "i3"], &[]));
+        let mixed_category_diversity = evaluator
+            .calculate_diversity_analysis(&mixed_category)
+            .expect("should succeed");
+
+        assert_eq!(same_category_diversity.category_diversity, 0.5);
+        assert_eq!(mixed_category_diversity.category_diversity, 1.0);
+        assert!(
+            mixed_category_diversity.intra_list_diversity
+                > same_category_diversity.intra_list_diversity
+        );
     }
 }

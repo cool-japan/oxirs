@@ -48,7 +48,7 @@ use tracing::{debug, info};
 
 use crate::model::{StarTerm, StarTriple};
 use crate::store::StarStore;
-use crate::StarResult;
+use crate::{StarError, StarResult};
 
 /// SHACL-star validator for RDF-star data
 #[derive(Debug, Clone)]
@@ -305,7 +305,7 @@ impl ShaclStarValidator {
             debug!("Validating shape: {}", shape_id);
 
             for triple in &triples {
-                let shape_results = self.validate_triple_against_shape(triple, shape)?;
+                let shape_results = self.validate_triple_against_shape(triple, shape, &triples)?;
 
                 for result in shape_results {
                     match result.severity {
@@ -352,11 +352,12 @@ impl ShaclStarValidator {
         &self,
         triple: &StarTriple,
         shape: &ShaclStarShape,
+        all_triples: &[StarTriple],
     ) -> StarResult<Vec<ValidationResult>> {
         let mut results = Vec::new();
 
         for constraint in &shape.constraints {
-            if let Some(result) = self.check_constraint(triple, constraint, shape)? {
+            if let Some(result) = self.check_constraint(triple, constraint, shape, all_triples)? {
                 // Check severity before moving result
                 let is_violation = result.severity == SeveritLevel::Violation;
                 results.push(result);
@@ -377,6 +378,7 @@ impl ShaclStarValidator {
         triple: &StarTriple,
         constraint: &ConstraintType,
         shape: &ShaclStarShape,
+        all_triples: &[StarTriple],
     ) -> StarResult<Option<ValidationResult>> {
         match constraint {
             ConstraintType::MaxNestingDepth(max_depth) => {
@@ -499,20 +501,52 @@ impl ShaclStarValidator {
                 }
             }
 
-            ConstraintType::Cardinality {
-                min: _,
-                max: _,
-                property: _,
-            } => {
-                // This would require counting occurrences, which needs store access
-                // For now, we'll skip this constraint type in triple-level validation
-                debug!("Cardinality constraint requires store-level validation");
+            ConstraintType::Cardinality { min, max, property } => {
+                // Count how many triples share this triple's subject as their
+                // focus node and carry the constrained property, then compare
+                // the real occurrence count against the configured bounds.
+                let actual_count = all_triples
+                    .iter()
+                    .filter(|t| {
+                        t.subject == triple.subject && self.triple_has_predicate(t, property)
+                    })
+                    .count();
+
+                let violates_min = min.is_some_and(|m| actual_count < m);
+                let violates_max = max.is_some_and(|m| actual_count > m);
+
+                if violates_min || violates_max {
+                    let expected = match (min, max) {
+                        (Some(min), Some(max)) => format!("between {min} and {max}"),
+                        (Some(min), None) => format!("at least {min}"),
+                        (None, Some(max)) => format!("at most {max}"),
+                        (None, None) => "any count".to_string(),
+                    };
+
+                    return Ok(Some(ValidationResult {
+                        shape_id: shape.id.clone(),
+                        severity: shape.severity,
+                        message: format!(
+                            "Property <{property}> occurs {actual_count} time(s) for this focus node, expected {expected}"
+                        ),
+                        focus_triple: Some(format!("{}", triple)),
+                        path: Some(property.clone()),
+                        value: Some(actual_count.to_string()),
+                        suggestions: vec![format!(
+                            "Adjust the number of <{property}> triples for this subject to satisfy the cardinality constraint"
+                        )],
+                    }));
+                }
             }
 
             ConstraintType::Custom(validator_name) => {
-                if self.config.enable_custom_validators {
-                    debug!("Custom validator '{}' not implemented yet", validator_name);
-                }
+                // No custom-validator callback registry exists yet: fail loudly
+                // instead of silently reporting the constraint as satisfied.
+                return Err(StarError::query_error(format!(
+                    "Custom constraint '{validator_name}' cannot be validated: no custom \
+                     validator callback is registered. Custom constraints are rejected \
+                     until callback support is implemented."
+                )));
             }
         }
 
@@ -672,9 +706,21 @@ impl ShaclStarShape {
         self
     }
 
-    /// Add a constraint
-    pub fn add_constraint(&mut self, constraint: ConstraintType) {
+    /// Add a constraint.
+    ///
+    /// `ConstraintType::Custom` constraints are rejected at shape-build time
+    /// with a clear error: no custom-validator callback registry exists yet,
+    /// so silently accepting them would let a shape claim to check something
+    /// it never actually validates.
+    pub fn add_constraint(&mut self, constraint: ConstraintType) -> StarResult<()> {
+        if let ConstraintType::Custom(validator_name) = &constraint {
+            return Err(StarError::query_error(format!(
+                "Cannot add custom constraint '{validator_name}': no custom validator \
+                 callback registry exists yet. Use a built-in ConstraintType instead."
+            )));
+        }
         self.constraints.push(constraint);
+        Ok(())
     }
 }
 
@@ -689,7 +735,7 @@ mod tests {
         let mut validator = ShaclStarValidator::new();
 
         let mut shape = ShaclStarShape::new("MaxDepthShape");
-        shape.add_constraint(ConstraintType::MaxNestingDepth(2));
+        shape.add_constraint(ConstraintType::MaxNestingDepth(2))?;
         validator.add_shape(shape);
 
         let store = StarStore::new();
@@ -735,7 +781,7 @@ mod tests {
         let mut shape = ShaclStarShape::new("RequiredPredShape");
         shape.add_constraint(ConstraintType::RequiredPredicate(
             "http://example.org/required".to_string(),
-        ));
+        ))?;
         validator.add_shape(shape);
 
         let store = StarStore::new();
@@ -764,7 +810,7 @@ mod tests {
             subject_pattern: Some(TermPattern::IriPrefix("http://example.org/".to_string())),
             predicate_pattern: Some(TermPattern::AnyIri),
             object_pattern: Some(TermPattern::AnyLiteral),
-        });
+        })?;
         validator.add_shape(shape);
 
         let store = StarStore::new();
@@ -780,6 +826,110 @@ mod tests {
 
         let report = validator.validate(&store)?;
         assert!(report.conforms);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cardinality_constraint_violation() -> StarResult<()> {
+        // Regression test: Cardinality constraints must actually be checked
+        // against the store (previously they were silently skipped and
+        // validate() would report PASS regardless of the real data).
+        let mut validator = ShaclStarValidator::new();
+
+        let mut shape = ShaclStarShape::new("CardinalityShape");
+        shape.add_constraint(ConstraintType::Cardinality {
+            min: Some(1),
+            max: Some(1),
+            property: "http://example.org/name".to_string(),
+        })?;
+        validator.add_shape(shape);
+
+        let store = StarStore::new();
+
+        // Subject with two "name" triples: violates max=1.
+        let subject = StarTerm::iri("http://example.org/alice")?;
+        store.insert(&StarTriple::new(
+            subject.clone(),
+            StarTerm::iri("http://example.org/name")?,
+            StarTerm::literal("Alice")?,
+        ))?;
+        store.insert(&StarTriple::new(
+            subject,
+            StarTerm::iri("http://example.org/name")?,
+            StarTerm::literal("Alicia")?,
+        ))?;
+
+        let report = validator.validate(&store)?;
+        assert!(!report.conforms);
+        assert!(report.summary.violations_count >= 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cardinality_constraint_satisfied() -> StarResult<()> {
+        let mut validator = ShaclStarValidator::new();
+
+        let mut shape = ShaclStarShape::new("CardinalityShape");
+        shape.add_constraint(ConstraintType::Cardinality {
+            min: Some(1),
+            max: Some(1),
+            property: "http://example.org/name".to_string(),
+        })?;
+        validator.add_shape(shape);
+
+        let store = StarStore::new();
+
+        // Exactly one "name" triple: satisfies min=1/max=1.
+        let triple = StarTriple::new(
+            StarTerm::iri("http://example.org/bob")?,
+            StarTerm::iri("http://example.org/name")?,
+            StarTerm::literal("Bob")?,
+        );
+        store.insert(&triple)?;
+
+        let report = validator.validate(&store)?;
+        assert!(report.conforms);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_constraint_rejected_at_add_time() -> StarResult<()> {
+        // Regression test: Custom constraints must be rejected loudly (no
+        // callback registry exists yet) rather than silently accepted and
+        // then silently skipped during validation.
+        let mut shape = ShaclStarShape::new("CustomShape");
+        let result = shape.add_constraint(ConstraintType::Custom("some_validator".to_string()));
+        assert!(result.is_err());
+        assert!(shape.constraints.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_custom_constraint_rejected_during_validation() -> StarResult<()> {
+        // Even if a Custom constraint is injected directly into the shape's
+        // (pub) constraints vector, bypassing add_constraint, validation must
+        // still fail loudly instead of silently reporting PASS.
+        let mut validator = ShaclStarValidator::new();
+
+        let mut shape = ShaclStarShape::new("CustomShape");
+        shape
+            .constraints
+            .push(ConstraintType::Custom("bogus".to_string()));
+        validator.add_shape(shape);
+
+        let store = StarStore::new();
+        store.insert(&StarTriple::new(
+            StarTerm::iri("http://example.org/s")?,
+            StarTerm::iri("http://example.org/p")?,
+            StarTerm::literal("o")?,
+        ))?;
+
+        let result = validator.validate(&store);
+        assert!(result.is_err());
 
         Ok(())
     }

@@ -111,9 +111,18 @@ impl IndexedGraph {
 
     /// Insert an already interned triple
     fn insert_interned(&self, triple: InternedTriple) -> bool {
-        let mut spo = self.spo_index.write().expect("spo_index lock poisoned");
-        let mut pos = self.pos_index.write().expect("pos_index lock poisoned");
-        let mut osp = self.osp_index.write().expect("osp_index lock poisoned");
+        let mut spo = self
+            .spo_index
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut pos = self
+            .pos_index
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut osp = self
+            .osp_index
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         // Check if triple already exists in SPO index
         if let Some(po_map) = spo.get(&triple.subject_id) {
@@ -149,10 +158,10 @@ impl IndexedGraph {
         *self
             .triple_count
             .write()
-            .expect("triple_count lock poisoned") += 1;
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) += 1;
         self.stats
             .write()
-            .expect("stats lock poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .total_insertions += 1;
 
         true
@@ -171,14 +180,26 @@ impl IndexedGraph {
             .collect();
 
         // Batch insert with single lock acquisition
-        let mut spo = self.spo_index.write().expect("spo_index lock poisoned");
-        let mut pos = self.pos_index.write().expect("pos_index lock poisoned");
-        let mut osp = self.osp_index.write().expect("osp_index lock poisoned");
+        let mut spo = self
+            .spo_index
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut pos = self
+            .pos_index
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut osp = self
+            .osp_index
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut count = self
             .triple_count
             .write()
-            .expect("triple_count lock poisoned");
-        let mut stats = self.stats.write().expect("stats lock poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut stats = self
+            .stats
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         let mut results = Vec::with_capacity(triples.len());
         let mut inserted_count = 0;
@@ -244,9 +265,18 @@ impl IndexedGraph {
 
     /// Remove an interned triple
     fn remove_interned(&self, s_id: u32, p_id: u32, o_id: u32) -> bool {
-        let mut spo = self.spo_index.write().expect("spo_index lock poisoned");
-        let mut pos = self.pos_index.write().expect("pos_index lock poisoned");
-        let mut osp = self.osp_index.write().expect("osp_index lock poisoned");
+        let mut spo = self
+            .spo_index
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut pos = self
+            .pos_index
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut osp = self
+            .osp_index
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         let mut removed = false;
 
@@ -293,10 +323,10 @@ impl IndexedGraph {
             *self
                 .triple_count
                 .write()
-                .expect("triple_count lock poisoned") -= 1;
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) -= 1;
             self.stats
                 .write()
-                .expect("stats lock poisoned")
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .total_deletions += 1;
         }
 
@@ -316,9 +346,24 @@ impl IndexedGraph {
 
         // Update stats
         match index_type {
-            IndexType::SPO => self.stats.write().expect("stats lock poisoned").spo_lookups += 1,
-            IndexType::POS => self.stats.write().expect("stats lock poisoned").pos_lookups += 1,
-            IndexType::OSP => self.stats.write().expect("stats lock poisoned").osp_lookups += 1,
+            IndexType::SPO => {
+                self.stats
+                    .write()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .spo_lookups += 1
+            }
+            IndexType::POS => {
+                self.stats
+                    .write()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .pos_lookups += 1
+            }
+            IndexType::OSP => {
+                self.stats
+                    .write()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .osp_lookups += 1
+            }
         }
 
         // Convert terms to IDs if provided
@@ -368,7 +413,10 @@ impl IndexedGraph {
         p_id: Option<u32>,
         o_id: Option<u32>,
     ) -> Vec<InternedTriple> {
-        let spo = self.spo_index.read().expect("spo_index lock poisoned");
+        let spo = self
+            .spo_index
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut results = Vec::new();
 
         match (s_id, p_id, o_id) {
@@ -461,7 +509,10 @@ impl IndexedGraph {
         o_id: Option<u32>,
         s_id: Option<u32>,
     ) -> Vec<InternedTriple> {
-        let pos = self.pos_index.read().expect("pos_index lock poisoned");
+        let pos = self
+            .pos_index
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut results = Vec::new();
 
         match (p_id, o_id) {
@@ -513,7 +564,10 @@ impl IndexedGraph {
         s_id: Option<u32>,
         p_id: Option<u32>,
     ) -> Vec<InternedTriple> {
-        let osp = self.osp_index.read().expect("osp_index lock poisoned");
+        let osp = self
+            .osp_index
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut results = Vec::new();
 
         match (o_id, s_id) {
@@ -571,7 +625,7 @@ impl IndexedGraph {
         *self
             .triple_count
             .read()
-            .expect("triple_count lock poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Check if the graph is empty
@@ -581,9 +635,18 @@ impl IndexedGraph {
 
     /// Get memory usage statistics
     pub fn memory_usage(&self) -> MemoryUsage {
-        let spo = self.spo_index.read().expect("spo_index lock poisoned");
-        let pos = self.pos_index.read().expect("pos_index lock poisoned");
-        let osp = self.osp_index.read().expect("osp_index lock poisoned");
+        let spo = self
+            .spo_index
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let pos = self
+            .pos_index
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let osp = self
+            .osp_index
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         let spo_entries = count_index_entries(&spo);
         let pos_entries = count_index_entries(&pos);
@@ -601,27 +664,30 @@ impl IndexedGraph {
 
     /// Get index statistics
     pub fn index_stats(&self) -> IndexStats {
-        self.stats.read().expect("stats lock poisoned").clone()
+        self.stats
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     /// Clear all data from the graph
     pub fn clear(&self) {
         self.spo_index
             .write()
-            .expect("spo_index lock poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clear();
         self.pos_index
             .write()
-            .expect("pos_index lock poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clear();
         self.osp_index
             .write()
-            .expect("osp_index lock poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clear();
         *self
             .triple_count
             .write()
-            .expect("triple_count lock poisoned") = 0;
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = 0;
         self.interner.clear();
     }
 
@@ -843,6 +909,34 @@ mod tests {
             NamedNode::new(p).expect("valid IRI"),
             Literal::new(o),
         )
+    }
+
+    #[test]
+    fn test_indexed_graph_survives_lock_poisoning() {
+        // Regression test: a panic while holding one of the index locks
+        // from another thread must not permanently disable the graph -
+        // insert/query/remove/stats should recover via into_inner()
+        // rather than propagating the poison via `.expect()`.
+        let graph = Arc::new(IndexedGraph::new());
+
+        let poisoning_graph = graph.clone();
+        let handle = std::thread::spawn(move || {
+            let _guard = poisoning_graph.stats.write().unwrap();
+            panic!("intentionally poison the stats lock");
+        });
+        let _ = handle.join();
+
+        let triple = create_test_triple(
+            "http://example.org/after-poison-s",
+            "http://example.org/after-poison-p",
+            "after-poison-o",
+        );
+        assert!(graph.insert(&triple));
+        assert_eq!(graph.len(), 1);
+        let results = graph.query(Some(triple.subject()), None, None);
+        assert_eq!(results, vec![triple.clone()]);
+        assert!(graph.remove(&triple));
+        let _ = graph.index_stats();
     }
 
     #[test]

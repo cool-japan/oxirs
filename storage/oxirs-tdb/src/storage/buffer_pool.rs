@@ -7,12 +7,20 @@ use crate::error::{Result, TdbError};
 use crate::storage::file_manager::FileManager;
 use crate::storage::page::{Page, PageId, PageType};
 use dashmap::DashMap;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 /// Frame ID within the buffer pool
 pub type FrameId = usize;
+
+/// Where the contents of a freshly-loaded frame come from.
+enum LoadSource {
+    /// Read an existing page from disk.
+    Disk,
+    /// Initialise a brand-new (just-allocated) page in memory.
+    New(PageType),
+}
 
 /// A buffer frame holding a cached page
 struct BufferFrame {
@@ -31,10 +39,6 @@ impl BufferFrame {
             access_count: AtomicU64::new(0),
             pin_count: AtomicU64::new(0),
         }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.page.read().is_none()
     }
 
     fn is_pinned(&self) -> bool {
@@ -72,6 +76,11 @@ pub struct BufferPool {
     file_manager: Arc<FileManager>,
     /// Next victim for eviction (clock hand)
     clock_hand: AtomicU64,
+    /// Serializes the miss path (victim selection + eviction + load) so two
+    /// concurrent misses can never select and evict the same frame — the root
+    /// cause of the previous cross-page corruption (a TOCTOU between victim
+    /// selection and pinning). Cache hits do not take this lock.
+    load_lock: Mutex<()>,
     /// Statistics
     stats: BufferPoolStats,
 }
@@ -149,67 +158,41 @@ impl BufferPool {
             page_table: DashMap::new(),
             file_manager,
             clock_hand: AtomicU64::new(0),
+            load_lock: Mutex::new(()),
             stats: BufferPoolStats::default(),
         }
+    }
+
+    /// Access the underlying file manager (used by the store to persist the
+    /// superblock directly, outside the cached page space).
+    pub fn file_manager(&self) -> &Arc<FileManager> {
+        &self.file_manager
     }
 
     /// Fetch a page (from cache or disk)
     pub fn fetch_page(&self, page_id: PageId) -> Result<PageGuard<'_>> {
         self.stats.total_fetches.fetch_add(1, Ordering::Relaxed);
 
-        // Check if page is already in buffer pool
-        if let Some(frame_entry) = self.page_table.get(&page_id) {
-            let frame_id = *frame_entry;
-            let frame = &self.frames[frame_id];
-            frame.pin();
-            frame.access();
+        // Fast path: page already cached. `try_hit` validates the frame's
+        // identity under its latch and pins it, so it cannot return a guard to
+        // a frame that a concurrent eviction has re-assigned.
+        if let Some(guard) = self.try_hit(page_id) {
             self.stats.cache_hits.fetch_add(1, Ordering::Relaxed);
-            return Ok(PageGuard {
-                frame_id,
-                page_id,
-                buffer_pool: self,
-            });
+            return Ok(guard);
         }
 
-        // Cache miss - need to load from disk
+        // Miss: serialize the load so two misses never race on the same victim.
+        let _load = self.load_lock.lock();
+
+        // Double-check under the load lock — another thread may have loaded the
+        // page while we waited.
+        if let Some(guard) = self.try_hit(page_id) {
+            self.stats.cache_hits.fetch_add(1, Ordering::Relaxed);
+            return Ok(guard);
+        }
+
         self.stats.cache_misses.fetch_add(1, Ordering::Relaxed);
-
-        // Find a free or evictable frame
-        let frame_id = self.find_victim_frame()?;
-        let frame = &self.frames[frame_id];
-
-        // Evict old page if frame is occupied
-        {
-            let mut page_guard = frame.page.write();
-            if let Some(old_page) = page_guard.take() {
-                // Write dirty page back to disk
-                if old_page.is_dirty() {
-                    let old_page_id = old_page.page_id();
-                    self.page_table.remove(&old_page_id);
-                    drop(page_guard); // Release lock before I/O
-
-                    let mut write_page = old_page;
-                    self.file_manager.write_page(&mut write_page)?;
-                    self.stats.writes.fetch_add(1, Ordering::Relaxed);
-
-                    page_guard = frame.page.write();
-                } else {
-                    let old_page_id = old_page.page_id();
-                    self.page_table.remove(&old_page_id);
-                }
-                self.stats.evictions.fetch_add(1, Ordering::Relaxed);
-            }
-
-            // Load new page from disk
-            let page = self.file_manager.read_page(page_id)?;
-            *page_guard = Some(page);
-        }
-
-        // Update page table
-        self.page_table.insert(page_id, frame_id);
-        frame.pin();
-        frame.access();
-
+        let frame_id = self.evict_and_load(page_id, LoadSource::Disk)?;
         Ok(PageGuard {
             frame_id,
             page_id,
@@ -219,48 +202,125 @@ impl BufferPool {
 
     /// Create a new page
     pub fn new_page(&self, page_type: PageType) -> Result<PageGuard<'_>> {
-        // Allocate new page on disk
+        // Serialize with the miss path: allocation + frame claiming must be
+        // atomic with respect to concurrent evictions.
+        let _load = self.load_lock.lock();
         let page_id = self.file_manager.allocate_page()?;
-
-        // Find a free frame
-        let frame_id = self.find_victim_frame()?;
-        let frame = &self.frames[frame_id];
-
-        // Evict old page if needed
-        {
-            let mut page_guard = frame.page.write();
-            if let Some(old_page) = page_guard.take() {
-                if old_page.is_dirty() {
-                    let old_page_id = old_page.page_id();
-                    self.page_table.remove(&old_page_id);
-                    drop(page_guard);
-
-                    let mut write_page = old_page;
-                    self.file_manager.write_page(&mut write_page)?;
-                    self.stats.writes.fetch_add(1, Ordering::Relaxed);
-
-                    page_guard = frame.page.write();
-                } else {
-                    let old_page_id = old_page.page_id();
-                    self.page_table.remove(&old_page_id);
-                }
-                self.stats.evictions.fetch_add(1, Ordering::Relaxed);
-            }
-
-            // Create new page
-            let page = Page::new(page_id, page_type);
-            *page_guard = Some(page);
-        }
-
-        self.page_table.insert(page_id, frame_id);
-        frame.pin();
-        frame.access();
-
+        let frame_id = self.evict_and_load(page_id, LoadSource::New(page_type))?;
         Ok(PageGuard {
             frame_id,
             page_id,
             buffer_pool: self,
         })
+    }
+
+    /// Fast cache-hit path.
+    ///
+    /// Returns a pinned [`PageGuard`] only if `page_id` is resident and the
+    /// frame still holds it. The pin is taken while holding the frame's read
+    /// latch, which is mutually exclusive with the write latch that
+    /// [`Self::evict_and_load`] holds across an eviction, so a hit can never be
+    /// granted on a frame mid-reassignment.
+    fn try_hit(&self, page_id: PageId) -> Option<PageGuard<'_>> {
+        let frame_id = *self.page_table.get(&page_id)?;
+        let frame = &self.frames[frame_id];
+
+        // Latch the frame's identity, then verify it before pinning.
+        let read = frame.page.read();
+        let holds_page = read.as_ref().map(|p| p.page_id()) == Some(page_id);
+        let still_mapped = self.page_table.get(&page_id).map(|e| *e) == Some(frame_id);
+        if holds_page && still_mapped {
+            frame.pin();
+            frame.access();
+            drop(read);
+            Some(PageGuard {
+                frame_id,
+                page_id,
+                buffer_pool: self,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Select a victim frame, evict its resident page (writing it back if
+    /// dirty), load `page_id` into it, register it in the page table, and pin
+    /// it — all while holding the frame's write latch so the frame's identity
+    /// change is atomic. Returns the pinned frame id.
+    ///
+    /// Must be called with `load_lock` held.
+    fn evict_and_load(&self, page_id: PageId, source: LoadSource) -> Result<FrameId> {
+        let pool_size = self.frames.len();
+        let mut checked = 0usize;
+        let max_checks = pool_size * 4; // enough sweeps to give every frame a second chance
+
+        loop {
+            if checked >= max_checks {
+                return Err(TdbError::BufferPoolFull);
+            }
+
+            let hand = self.clock_hand.fetch_add(1, Ordering::AcqRel) as usize % pool_size;
+            let frame = &self.frames[hand];
+
+            // Cheap pre-check: skip pinned frames without latching.
+            if frame.is_pinned() {
+                checked += 1;
+                continue;
+            }
+
+            // Latch the frame exclusively; this excludes `try_hit` readers.
+            let mut page_guard = frame.page.write();
+
+            // A concurrent hit may have pinned the frame between the pre-check
+            // and acquiring the latch — re-check under the latch.
+            if frame.is_pinned() {
+                drop(page_guard);
+                checked += 1;
+                continue;
+            }
+
+            if page_guard.is_some() {
+                // Second-chance: skip recently-accessed occupied frames.
+                if frame.get_access_count() > 0 {
+                    frame.access_count.fetch_sub(1, Ordering::AcqRel);
+                    drop(page_guard);
+                    checked += 1;
+                    continue;
+                }
+
+                // Evict the resident page.
+                let is_dirty = page_guard.as_ref().map(|p| p.is_dirty()).unwrap_or(false);
+                let old_id = page_guard.as_ref().map(|p| p.page_id());
+                if is_dirty {
+                    if let Some(mut old_page) = page_guard.take() {
+                        self.file_manager.write_page(&mut old_page)?;
+                        self.stats.writes.fetch_add(1, Ordering::Relaxed);
+                    }
+                } else {
+                    *page_guard = None;
+                }
+                if let Some(old_id) = old_id {
+                    self.page_table.remove(&old_id);
+                }
+                self.stats.evictions.fetch_add(1, Ordering::Relaxed);
+            }
+
+            // Install the new page content.
+            let new_page = match source {
+                LoadSource::Disk => self.file_manager.read_page(page_id)?,
+                LoadSource::New(page_type) => Page::new(page_id, page_type),
+            };
+            *page_guard = Some(new_page);
+
+            // Register + pin BEFORE releasing the latch so no concurrent
+            // eviction or hit can observe an inconsistent (mapped-but-unpinned
+            // or reassigned) state.
+            self.page_table.insert(page_id, hand);
+            frame.pin();
+            frame.access();
+            drop(page_guard);
+            return Ok(hand);
+        }
     }
 
     /// Flush a specific page to disk
@@ -303,44 +363,6 @@ impl BufferPool {
         self.frames[frame_id].unpin();
     }
 
-    /// Find a victim frame for eviction (Clock algorithm)
-    fn find_victim_frame(&self) -> Result<FrameId> {
-        let pool_size = self.frames.len();
-        let mut iterations = 0;
-        let max_iterations = pool_size * 2; // Two full sweeps
-
-        loop {
-            if iterations >= max_iterations {
-                return Err(TdbError::BufferPoolFull);
-            }
-
-            let hand = self.clock_hand.fetch_add(1, Ordering::AcqRel) as usize % pool_size;
-            let frame = &self.frames[hand];
-
-            // Skip pinned frames
-            if frame.is_pinned() {
-                iterations += 1;
-                continue;
-            }
-
-            // Check if frame is empty
-            if frame.is_empty() {
-                return Ok(hand);
-            }
-
-            // LRU-based eviction: check access count
-            let access_count = frame.get_access_count();
-            if access_count == 0 {
-                // Frame hasn't been accessed recently, evict it
-                return Ok(hand);
-            }
-
-            // Decrement access count (second chance)
-            frame.access_count.fetch_sub(1, Ordering::AcqRel);
-            iterations += 1;
-        }
-    }
-
     /// Get buffer pool statistics
     pub fn stats(&self) -> BufferPoolStats {
         self.stats.snapshot()
@@ -367,14 +389,64 @@ pub struct PageGuard<'a> {
 }
 
 impl<'a> PageGuard<'a> {
-    /// Get immutable reference to the page
+    /// Get immutable reference to the page.
+    ///
+    /// In debug builds this asserts the frame still holds the page this guard
+    /// was created for; for a fallible, always-on identity check use
+    /// [`PageGuard::page_checked`] (which the B+Tree hot path uses).
     pub fn page(&self) -> parking_lot::RwLockReadGuard<'_, Option<Page>> {
-        self.buffer_pool.frames[self.frame_id].page.read()
+        let guard = self.buffer_pool.frames[self.frame_id].page.read();
+        debug_assert!(
+            guard.as_ref().map(|p| p.page_id()) == Some(self.page_id),
+            "PageGuard identity mismatch on frame {}: expected page {}",
+            self.frame_id,
+            self.page_id
+        );
+        guard
     }
 
-    /// Get mutable reference to the page
+    /// Get mutable reference to the page (see [`PageGuard::page`]).
     pub fn page_mut(&self) -> parking_lot::RwLockWriteGuard<'_, Option<Page>> {
-        self.buffer_pool.frames[self.frame_id].page.write()
+        let guard = self.buffer_pool.frames[self.frame_id].page.write();
+        debug_assert!(
+            guard.as_ref().map(|p| p.page_id()) == Some(self.page_id),
+            "PageGuard identity mismatch on frame {}: expected page {}",
+            self.frame_id,
+            self.page_id
+        );
+        guard
+    }
+
+    /// Get an immutable reference to the page, verifying that the frame still
+    /// holds the expected page id.
+    ///
+    /// Returns [`TdbError::PageIdMismatch`] if the buffer frame has been
+    /// re-assigned to a different page, turning what would otherwise be a
+    /// silent wrong-page read into a detectable error.
+    pub fn page_checked(&self) -> Result<parking_lot::RwLockReadGuard<'_, Option<Page>>> {
+        let guard = self.buffer_pool.frames[self.frame_id].page.read();
+        match guard.as_ref().map(|p| p.page_id()) {
+            Some(actual) if actual == self.page_id => Ok(guard),
+            Some(actual) => Err(TdbError::PageIdMismatch {
+                expected: self.page_id,
+                actual,
+            }),
+            None => Err(TdbError::PageNotFound(self.page_id)),
+        }
+    }
+
+    /// Get a mutable reference to the page, verifying that the frame still
+    /// holds the expected page id (see [`PageGuard::page_checked`]).
+    pub fn page_mut_checked(&self) -> Result<parking_lot::RwLockWriteGuard<'_, Option<Page>>> {
+        let guard = self.buffer_pool.frames[self.frame_id].page.write();
+        match guard.as_ref().map(|p| p.page_id()) {
+            Some(actual) if actual == self.page_id => Ok(guard),
+            Some(actual) => Err(TdbError::PageIdMismatch {
+                expected: self.page_id,
+                actual,
+            }),
+            None => Err(TdbError::PageNotFound(self.page_id)),
+        }
     }
 
     /// Get page ID
@@ -545,5 +617,69 @@ mod tests {
 
         // g1 should still be cached
         assert!(bp.page_table.contains_key(&page_id1));
+    }
+
+    #[test]
+    fn test_page_guard_checked_matches_identity() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let fm = Arc::new(FileManager::open(temp_file.path(), false).unwrap());
+        let bp = BufferPool::new(10, fm);
+
+        let guard = bp.new_page(PageType::BTreeLeaf).unwrap();
+        // A guard over a resident, correctly-mapped frame validates cleanly.
+        // Each temporary guard is dropped at the end of its statement, so the
+        // read latch is released before the write latch is requested.
+        assert!(guard.page_checked().is_ok());
+        assert!(guard.page_mut_checked().is_ok());
+    }
+
+    #[test]
+    fn test_buffer_pool_concurrent_no_cross_page_corruption() {
+        use std::thread;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let fm = Arc::new(FileManager::open(temp_file.path(), false).unwrap());
+        // Deliberately tiny pool vs. page count to force heavy eviction and
+        // exercise the miss/eviction race that previously corrupted frames.
+        let bp = Arc::new(BufferPool::new(8, fm));
+        let num_pages: u64 = 64;
+
+        // Stamp each page's own id into its first 8 bytes.
+        for _ in 0..num_pages {
+            let guard = bp.new_page(PageType::BTreeLeaf).unwrap();
+            let pid = guard.page_id();
+            {
+                let mut page = guard.page_mut();
+                page.as_mut()
+                    .unwrap()
+                    .write_at(0, &pid.to_le_bytes())
+                    .unwrap();
+            }
+        }
+        bp.flush_all().unwrap();
+
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let bp = bp.clone();
+            handles.push(thread::spawn(move || {
+                for i in 0..1000u64 {
+                    let pid = i % num_pages;
+                    let guard = bp.fetch_page(pid).expect("fetch");
+                    let page_lock = guard.page_checked().expect("frame identity");
+                    let page = page_lock.as_ref().expect("resident");
+                    let bytes = page.read_at(0, 8).expect("read");
+                    let mut arr = [0u8; 8];
+                    arr.copy_from_slice(bytes);
+                    assert_eq!(
+                        u64::from_le_bytes(arr),
+                        pid,
+                        "buffer frame returned bytes belonging to a different page"
+                    );
+                }
+            }));
+        }
+        for h in handles {
+            h.join().expect("thread panicked (corruption detected)");
+        }
     }
 }

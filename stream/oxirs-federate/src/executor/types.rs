@@ -653,13 +653,29 @@ impl EnhancedPerformanceMonitor {
     }
 }
 
-/// Local resource monitor for tracking system resources
-#[derive(Debug)]
+/// Local resource monitor for tracking system resources.
+///
+/// Backed by a real [`sysinfo::System`] snapshot: [`Self::refresh`] pulls
+/// genuine system-wide memory and CPU utilization so
+/// resource-aware strategy selection in the adaptive executor reacts to
+/// actual load instead of an always-zero placeholder.
 pub struct LocalResourceMonitor {
+    system: sysinfo::System,
     current_memory_usage: u64,
     current_cpu_usage: f64,
     peak_memory_usage: u64,
     peak_cpu_usage: f64,
+}
+
+impl fmt::Debug for LocalResourceMonitor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LocalResourceMonitor")
+            .field("current_memory_usage", &self.current_memory_usage)
+            .field("current_cpu_usage", &self.current_cpu_usage)
+            .field("peak_memory_usage", &self.peak_memory_usage)
+            .field("peak_cpu_usage", &self.peak_cpu_usage)
+            .finish()
+    }
 }
 
 impl Default for LocalResourceMonitor {
@@ -670,7 +686,12 @@ impl Default for LocalResourceMonitor {
 
 impl LocalResourceMonitor {
     pub fn new() -> Self {
+        // `new_all()` performs an initial refresh so the very first
+        // `refresh()` call already has a prior CPU sample to diff against
+        // (sysinfo needs two samples spaced apart to report a meaningful
+        // CPU percentage; without this, the first real reading would be 0).
         Self {
+            system: sysinfo::System::new_all(),
             current_memory_usage: 0,
             current_cpu_usage: 0.0,
             peak_memory_usage: 0,
@@ -678,13 +699,27 @@ impl LocalResourceMonitor {
         }
     }
 
+    /// Re-sample real system memory and CPU utilization and fold the
+    /// results into the current/peak readings. Memory is reported in bytes
+    /// (used system memory), CPU as a 0.0..=1.0 fraction of total capacity
+    /// (averaged across all cores), matching the units `LocalAdaptiveConfig`
+    /// thresholds are expressed in.
+    pub fn refresh(&mut self) {
+        self.system.refresh_memory();
+        self.system.refresh_cpu_usage();
+
+        let memory_usage = self.system.used_memory();
+        let cpu_usage = (self.system.global_cpu_usage() / 100.0) as f64;
+
+        self.update_memory_usage(memory_usage);
+        self.update_cpu_usage(cpu_usage);
+    }
+
     pub fn get_memory_usage(&self) -> u64 {
-        // In practice, this would query actual system memory usage
         self.current_memory_usage
     }
 
     pub fn get_cpu_usage(&self) -> f64 {
-        // In practice, this would query actual CPU usage
         self.current_cpu_usage
     }
 
@@ -700,6 +735,34 @@ impl LocalResourceMonitor {
         if usage > self.peak_cpu_usage {
             self.peak_cpu_usage = usage;
         }
+    }
+}
+
+#[cfg(test)]
+mod local_resource_monitor_tests {
+    use super::*;
+
+    /// Regression test for adaptive_execution.rs:351 — `LocalResourceMonitor`
+    /// used to always report 0 memory/CPU because nothing ever fed it real
+    /// readings. `refresh()` must pull genuine non-placeholder system memory
+    /// usage (a running test process's machine always has > 0 bytes used).
+    #[test]
+    fn test_refresh_reports_real_memory_usage() {
+        let mut monitor = LocalResourceMonitor::new();
+        assert_eq!(monitor.get_memory_usage(), 0, "starts at the zero baseline");
+
+        monitor.refresh();
+
+        assert!(
+            monitor.get_memory_usage() > 0,
+            "refresh() must populate a real (non-zero) system memory reading, \
+             not leave the always-0 placeholder"
+        );
+        assert!(
+            monitor.get_cpu_usage() >= 0.0 && monitor.get_cpu_usage() <= 1.0,
+            "CPU usage must be reported as a 0.0..=1.0 fraction, got {}",
+            monitor.get_cpu_usage()
+        );
     }
 }
 

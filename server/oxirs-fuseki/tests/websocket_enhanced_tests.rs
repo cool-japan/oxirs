@@ -5,36 +5,10 @@ use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 
 use oxirs_fuseki::handlers::websocket::{
-    ChangeDetector, ChangeNotification, ConnectionMetrics, EnhancedSubscriptionFilters,
-    LiveQuerySubscription, SubscriptionFilters, SubscriptionManager, SubscriptionMetrics,
-    SubscriptionStatus, WebSocketConnection, WebSocketConnectionManager,
+    ChangeNotification, EnhancedSubscriptionFilters, SubscriptionFilters, SubscriptionManager,
 };
 
 // Helper functions and structs for testing
-struct MockStore {
-    graphs: HashMap<String, u64>, // graph_name -> checksum
-}
-
-fn create_mock_store() -> MockStore {
-    MockStore {
-        graphs: HashMap::new(),
-    }
-}
-
-async fn detect_mock_store_changes(
-    _store: &MockStore,
-    _detector: &mut ChangeDetector,
-) -> Result<Vec<ChangeNotification>, String> {
-    let now = Utc::now();
-    let changes = vec![ChangeNotification {
-        change_type: "MOCK_CHANGE".to_string(),
-        affected_graphs: vec!["http://mock.org/graph".to_string()],
-        timestamp: now,
-        change_count: 1,
-    }];
-
-    Ok(changes)
-}
 
 fn batch_and_deduplicate_changes(changes: Vec<ChangeNotification>) -> Vec<ChangeNotification> {
     let mut batched: HashMap<String, ChangeNotification> = HashMap::new();
@@ -63,25 +37,6 @@ fn batch_and_deduplicate_changes(changes: Vec<ChangeNotification>) -> Vec<Change
 #[cfg(test)]
 mod enhanced_websocket_tests {
     use super::*;
-
-    #[tokio::test]
-    async fn test_enhanced_change_detection() {
-        let mut detector = ChangeDetector::new();
-
-        // Simulate store (this would be the actual store in real implementation)
-        let mock_store = create_mock_store();
-
-        // Test change detection logic
-        let changes = detect_mock_store_changes(&mock_store, &mut detector).await;
-        assert!(changes.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_websocket_connection_management() {
-        // Skip test - would require implementing methods for external types
-        // which is not allowed in Rust
-        // Placeholder test - skip test as noted above
-    }
 
     #[tokio::test]
     async fn test_subscription_lifecycle() {

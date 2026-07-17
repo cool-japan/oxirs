@@ -3,7 +3,6 @@
 //! Modern RESTful API with OpenAPI 3.0 specification.
 //! Provides comprehensive CRUD operations for datasets, queries, and administration.
 
-use crate::config::DatasetConfig;
 use crate::server::AppState;
 use crate::store_ext::StoreExt;
 use anyhow::{Context, Result};
@@ -507,22 +506,21 @@ pub async fn create_dataset(
         )));
     }
 
-    let config = crate::config::DatasetConfig {
-        name: request.name.clone(),
-        location: format!("./data/{}", request.name),
-        read_only: false,
-        text_index: None,
-        shacl_shapes: Vec::new(),
-        services: Vec::new(),
-        access_control: None,
-        backup: None,
-    };
+    // Select the backend by the requested storage type. An unknown type is a
+    // client error (fail loud) rather than a silent fall-back to volatile memory.
+    let store_type = crate::store::StoreFactory::store_type_from_str(&request.storage_type)
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let location = format!("./data/{}", request.name);
 
     store
-        .create_dataset(&request.name, config)
+        .create_dataset_with_type(&request.name, &location, &store_type)
         .map_err(|e| ApiError::InternalError(e.into()))?;
 
-    info!("Created dataset: {}", request.name);
+    info!(
+        "Created dataset '{}' with backend '{}'",
+        request.name,
+        store_type.label()
+    );
 
     Ok((
         StatusCode::CREATED,

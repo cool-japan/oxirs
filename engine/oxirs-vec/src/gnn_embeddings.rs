@@ -320,14 +320,19 @@ impl KGEmbeddingModel for GCN {
     }
 
     fn get_entity_embeddings(&self) -> HashMap<String, Vector> {
-        // This is a bit tricky because we store DVector but need to return HashMap<String, Vector>
-        // For now, we'll return an empty HashMap - this should be refactored
-        HashMap::new()
+        self.entity_embeddings
+            .iter()
+            .map(|(entity, embedding)| (entity.clone(), Vector::new(embedding.as_slice().to_vec())))
+            .collect()
     }
 
     fn get_relation_embeddings(&self) -> HashMap<String, Vector> {
-        // Same issue as above
-        HashMap::new()
+        self.relation_embeddings
+            .iter()
+            .map(|(relation, embedding)| {
+                (relation.clone(), Vector::new(embedding.as_slice().to_vec()))
+            })
+            .collect()
     }
 }
 
@@ -786,11 +791,19 @@ impl KGEmbeddingModel for GraphSAGE {
     }
 
     fn get_entity_embeddings(&self) -> HashMap<String, Vector> {
-        HashMap::new()
+        self.entity_embeddings
+            .iter()
+            .map(|(entity, embedding)| (entity.clone(), Vector::new(embedding.as_slice().to_vec())))
+            .collect()
     }
 
     fn get_relation_embeddings(&self) -> HashMap<String, Vector> {
-        HashMap::new()
+        self.relation_embeddings
+            .iter()
+            .map(|(relation, embedding)| {
+                (relation.clone(), Vector::new(embedding.as_slice().to_vec()))
+            })
+            .collect()
     }
 }
 

@@ -219,7 +219,33 @@ impl QueryExecutor {
                 path,
                 object,
             } => self.execute_property_path(subject, path, object, dataset),
-            _ => Ok(Solution::new()),
+            Algebra::Graph { graph, pattern } => {
+                // GRAPH scoping requires named-graph access on the dataset, which
+                // the `Dataset` trait does not yet expose; mirror the parallel
+                // executor by evaluating the inner pattern. When `graph` is a
+                // variable it is left unbound (consistent with the parallel path).
+                let _ = graph;
+                self.execute_serial(pattern, dataset)
+            }
+            Algebra::Having { pattern, condition } => {
+                // HAVING is a post-aggregation FILTER over the grouped solution.
+                let grouped = self.execute_serial(pattern, dataset)?;
+                self.apply_filter_with_dataset(grouped, condition, dataset)
+            }
+            Algebra::Service {
+                endpoint,
+                pattern,
+                silent,
+            } => crate::service_federation::execute_service_clause(endpoint, pattern, *silent),
+            // Unit table (join identity): one solution with no bindings. This is
+            // the left operand produced by the parser for leading BIND/OPTIONAL,
+            // so it MUST yield a single empty row, not zero rows.
+            Algebra::Table => {
+                let solution: Solution = vec![crate::algebra::Binding::new()];
+                Ok(solution)
+            }
+            // Zero / Empty are genuinely empty result sets.
+            Algebra::Zero | Algebra::Empty => Ok(Solution::new()),
         }
     }
     /// Execute using streaming strategy
@@ -311,44 +337,32 @@ impl QueryExecutor {
             }
         }
     }
-    /// Execute algebra in serial mode for update operations
+    /// Execute algebra in serial mode for update operations.
+    ///
+    /// This helper has no access to a dataset, so it cannot evaluate a BGP (or
+    /// any pattern that reads the store) against real data. Rather than
+    /// fabricate bindings — which previously mapped every subject/object
+    /// variable to hardcoded `http://example.org/...` constants and silently
+    /// corrupted DELETE/INSERT WHERE — it fails loudly. Callers that need to
+    /// evaluate WHERE clauses must run [`QueryExecutor::execute`] against a real
+    /// [`Dataset`] (see `update::UpdateExecutor::evaluate_pattern`).
     pub(super) fn execute_serial_algebra(
         &self,
         algebra: &Algebra,
         _context: &mut crate::algebra::EvaluationContext,
     ) -> Result<Solution> {
         match algebra {
-            Algebra::Bgp(patterns) => {
-                let mut solution = Solution::new();
-                if !patterns.is_empty() {
-                    let mut binding = crate::algebra::Binding::new();
-                    for pattern in patterns {
-                        if let crate::algebra::Term::Variable(var) = &pattern.subject {
-                            binding.insert(
-                                var.clone(),
-                                crate::algebra::Term::Iri(
-                                    oxirs_core::model::NamedNode::new("http://example.org/subject")
-                                        .expect("hardcoded IRI should be valid"),
-                                ),
-                            );
-                        }
-                        if let crate::algebra::Term::Variable(var) = &pattern.object {
-                            binding.insert(
-                                var.clone(),
-                                crate::algebra::Term::Iri(
-                                    oxirs_core::model::NamedNode::new("http://example.org/object")
-                                        .expect("hardcoded IRI should be valid"),
-                                ),
-                            );
-                        }
-                    }
-                    if !binding.is_empty() {
-                        solution.push(binding);
-                    }
-                }
+            // An empty/unit table is representable without a dataset.
+            Algebra::Table => {
+                let solution: Solution = vec![crate::algebra::Binding::new()];
                 Ok(solution)
             }
-            _ => Ok(Solution::new()),
+            Algebra::Zero | Algebra::Empty => Ok(Solution::new()),
+            other => Err(anyhow::anyhow!(
+                "execute_serial_algebra cannot evaluate {:?} without a dataset; \
+                 use QueryExecutor::execute against a real Dataset instead",
+                std::mem::discriminant(other)
+            )),
         }
     }
     /// Execute BGP with index-aware optimizations
@@ -754,5 +768,148 @@ impl QueryExecutor {
         });
 
         result
+    }
+}
+
+#[cfg(test)]
+mod serial_executor_tests {
+    use crate::algebra::{Algebra, BinaryOperator, Expression, Term, TriplePattern, Variable};
+    use crate::executor::dataset::InMemoryDataset;
+    use crate::executor::QueryExecutor;
+    use oxirs_core::model::NamedNode;
+
+    fn v(name: &str) -> Term {
+        Term::Variable(Variable::new_unchecked(name))
+    }
+
+    fn iri(s: &str) -> Term {
+        Term::Iri(NamedNode::new_unchecked(s))
+    }
+
+    fn sample_dataset() -> InMemoryDataset {
+        InMemoryDataset::from_triples(vec![
+            (iri("http://ex/s1"), iri("http://ex/p"), iri("http://ex/o1")),
+            (iri("http://ex/s2"), iri("http://ex/p"), iri("http://ex/o2")),
+        ])
+    }
+
+    fn bgp_s_p_o() -> Algebra {
+        Algebra::Bgp(vec![TriplePattern {
+            subject: v("s"),
+            predicate: iri("http://ex/p"),
+            object: v("o"),
+        }])
+    }
+
+    #[test]
+    fn execute_serial_graph_evaluates_inner_pattern() {
+        let exec = QueryExecutor::new();
+        let ds = sample_dataset();
+        let algebra = Algebra::Graph {
+            graph: iri("http://ex/g"),
+            pattern: Box::new(bgp_s_p_o()),
+        };
+        // Previously the catch-all silently returned an empty solution.
+        let sol = exec.execute_serial(&algebra, &ds).expect("graph serial");
+        assert_eq!(
+            sol.len(),
+            2,
+            "GRAPH must evaluate, not silently drop to empty"
+        );
+    }
+
+    #[test]
+    fn execute_serial_having_filters_grouped_solution() {
+        let exec = QueryExecutor::new();
+        let ds = sample_dataset();
+        let condition = Expression::Binary {
+            op: BinaryOperator::Equal,
+            left: Box::new(Expression::Variable(Variable::new_unchecked("o"))),
+            right: Box::new(Expression::Iri(NamedNode::new_unchecked("http://ex/o1"))),
+        };
+        let algebra = Algebra::Having {
+            pattern: Box::new(bgp_s_p_o()),
+            condition,
+        };
+        let sol = exec.execute_serial(&algebra, &ds).expect("having serial");
+        assert_eq!(
+            sol.len(),
+            1,
+            "HAVING must filter, not silently drop to empty"
+        );
+    }
+
+    #[test]
+    fn execute_serial_table_is_join_identity() {
+        let exec = QueryExecutor::new();
+        let ds = InMemoryDataset::new();
+        let sol = exec
+            .execute_serial(&Algebra::Table, &ds)
+            .expect("table serial");
+        assert_eq!(sol.len(), 1, "unit table must yield one empty binding");
+        assert!(sol[0].is_empty());
+    }
+
+    #[test]
+    fn execute_serial_filter_in_and_not_in() {
+        let exec = QueryExecutor::new();
+        let ds = sample_dataset();
+
+        // FILTER(?o IN (<o1>, <o2>)) keeps both rows.
+        let in_list = Expression::Function {
+            name: "list".to_string(),
+            args: vec![
+                Expression::Iri(NamedNode::new_unchecked("http://ex/o1")),
+                Expression::Iri(NamedNode::new_unchecked("http://ex/o2")),
+            ],
+        };
+        let in_filter = Algebra::Filter {
+            pattern: Box::new(bgp_s_p_o()),
+            condition: Expression::Binary {
+                op: BinaryOperator::In,
+                left: Box::new(Expression::Variable(Variable::new_unchecked("o"))),
+                right: Box::new(in_list),
+            },
+        };
+        let sol = exec.execute_serial(&in_filter, &ds).expect("filter in");
+        assert_eq!(sol.len(), 2, "IN over both objects must keep both rows");
+
+        // FILTER(?o NOT IN (<o1>)) keeps only the o2 row.
+        let not_in_filter = Algebra::Filter {
+            pattern: Box::new(bgp_s_p_o()),
+            condition: Expression::Binary {
+                op: BinaryOperator::NotIn,
+                left: Box::new(Expression::Variable(Variable::new_unchecked("o"))),
+                right: Box::new(Expression::Iri(NamedNode::new_unchecked("http://ex/o1"))),
+            },
+        };
+        let sol2 = exec
+            .execute_serial(&not_in_filter, &ds)
+            .expect("filter not in");
+        assert_eq!(sol2.len(), 1, "NOT IN must exclude only the listed value");
+    }
+
+    #[test]
+    fn execution_budget_aborts_scan_over_triple_limit() {
+        use crate::query_governor::{ExecutionBudget, ResourceBudget};
+
+        let ds = InMemoryDataset::from_triples(vec![
+            (iri("http://ex/s1"), iri("http://ex/p"), iri("http://ex/o1")),
+            (iri("http://ex/s2"), iri("http://ex/p"), iri("http://ex/o2")),
+            (iri("http://ex/s3"), iri("http://ex/p"), iri("http://ex/o3")),
+        ]);
+        let budget = ExecutionBudget::new(ResourceBudget {
+            max_wall_time: None,
+            max_result_rows: None,
+            max_triples_scanned: Some(1),
+        });
+        let exec = QueryExecutor::new().with_budget(budget);
+        // Scanning 3 triples under a 1-triple budget must abort in the scan hot
+        // path (record_triple_scan wired into execute_single_pattern).
+        let result = exec.execute_serial(&bgp_s_p_o(), &ds);
+        assert!(
+            result.is_err(),
+            "triple-scan budget must be enforced during the BGP scan"
+        );
     }
 }

@@ -1072,14 +1072,73 @@ impl OrganizationalKGEmbedder {
         }
     }
 
+    /// Estimate how adequately a project is staffed: the fraction of its
+    /// required skills for which at least one team member's recorded
+    /// experience level meets or exceeds the requirement, blended with the
+    /// raw ratio of team size to distinct skills required (since a handful
+    /// of people rarely cover many specialised skill areas well even if each
+    /// skill nominally has *a* match).
     fn calculate_resource_adequacy(&self, project_id: &str) -> f64 {
-        // Simplified resource adequacy calculation
-        0.75 // Placeholder
+        let Some(project) = self.project_graph.projects.get(project_id) else {
+            return 0.0;
+        };
+
+        if project.required_skills.is_empty() {
+            return if project.team_members.is_empty() {
+                0.0
+            } else {
+                1.0
+            };
+        }
+
+        let adequately_staffed = project
+            .required_skills
+            .iter()
+            .filter(|(skill, required_level)| {
+                project.team_members.iter().any(|member| {
+                    self.employee_skills
+                        .get(member)
+                        .and_then(|profile| profile.experience_levels.get(*skill))
+                        .is_some_and(|level| level >= *required_level)
+                })
+            })
+            .count();
+        let skill_adequacy = adequately_staffed as f64 / project.required_skills.len() as f64;
+
+        let staffing_ratio = (project.team_members.len() as f64
+            / project.required_skills.len() as f64)
+            .min(1.0);
+
+        (skill_adequacy * 0.7 + staffing_ratio * 0.3).clamp(0.0, 1.0)
     }
 
+    /// Estimate whether a project's planned timeline is feasible, by
+    /// comparing the planned duration (`end_date - start_date`) against a
+    /// rough minimum runway derived from the number of distinct skill areas
+    /// the project requires, divided among its team members to account for
+    /// parallelisation.
     fn calculate_timeline_feasibility(&self, project: &Project) -> f64 {
-        // Simplified timeline feasibility calculation
-        0.80 // Placeholder
+        /// Rough minimum ramp-up + delivery time per required skill area, in
+        /// days, before dividing by team size to account for parallel work.
+        const MIN_DAYS_PER_SKILL_AREA: f64 = 14.0;
+        /// Floor on the estimated minimum runway so very small projects are
+        /// not penalised down to an unrealistically tiny denominator.
+        const MIN_PROJECT_DAYS: f64 = 7.0;
+
+        let Some(end_date) = project.end_date else {
+            // Open-ended projects have no deadline to assess feasibility
+            // against, so treat them as maximally feasible rather than
+            // penalising the absence of a target date.
+            return 1.0;
+        };
+
+        let planned_days = (end_date - project.start_date).num_days().max(0) as f64;
+        let skill_count = project.required_skills.len().max(1) as f64;
+        let team_size = project.team_members.len().max(1) as f64;
+        let estimated_min_days =
+            (skill_count * MIN_DAYS_PER_SKILL_AREA / team_size).max(MIN_PROJECT_DAYS);
+
+        (planned_days / estimated_min_days).clamp(0.0, 1.0)
     }
 
     /// Analyze department collaboration patterns
@@ -1428,5 +1487,89 @@ mod tests {
         
         let similarity = embedder.calculate_skill_similarity(&profile1, &profile2);
         assert_eq!(similarity, 1.0); // Identical skill vectors
+    }
+
+    /// Regression test for the P2 finding: resource adequacy must be
+    /// computed from actual team-member experience levels vs. required
+    /// skills, instead of a hardcoded 0.75.
+    #[test]
+    fn test_calculate_resource_adequacy_uses_real_team_skills() {
+        let mut embedder = OrganizationalKGEmbedder::new();
+
+        let mut profile = EmployeeProfile::new("emp1");
+        profile.experience_levels.insert("rust".to_string(), 0.9);
+        embedder.employee_skills.insert("emp1".to_string(), profile);
+
+        let mut required_skills = HashMap::new();
+        required_skills.insert("rust".to_string(), 0.5);
+
+        let project = Project {
+            project_id: "proj1".to_string(),
+            name: "Test Project".to_string(),
+            description: String::new(),
+            required_skills,
+            team_members: vec!["emp1".to_string()],
+            status: ProjectStatus::InProgress,
+            start_date: Utc::now(),
+            end_date: Some(Utc::now() + chrono::Duration::days(30)),
+            budget: 1000.0,
+        };
+        embedder
+            .project_graph
+            .projects
+            .insert("proj1".to_string(), project);
+
+        let adequacy = embedder.calculate_resource_adequacy("proj1");
+        assert!((adequacy - 1.0).abs() < 1e-9, "adequacy = {adequacy}");
+
+        // Unknown project: no data to compute adequacy from.
+        assert_eq!(embedder.calculate_resource_adequacy("nonexistent"), 0.0);
+    }
+
+    /// Regression test for the P2 finding: timeline feasibility must be
+    /// computed from the project's actual start/end dates and required
+    /// skill count, instead of a hardcoded 0.80.
+    #[test]
+    fn test_calculate_timeline_feasibility_uses_real_dates() {
+        let embedder = OrganizationalKGEmbedder::new();
+
+        let mut required_skills = HashMap::new();
+        required_skills.insert("rust".to_string(), 0.5);
+
+        let generous_project = Project {
+            project_id: "proj1".to_string(),
+            name: "Test".to_string(),
+            description: String::new(),
+            required_skills: required_skills.clone(),
+            team_members: vec!["e1".to_string(), "e2".to_string()],
+            status: ProjectStatus::Planning,
+            start_date: Utc::now(),
+            end_date: Some(Utc::now() + chrono::Duration::days(365)),
+            budget: 1000.0,
+        };
+        let tight_project = Project {
+            project_id: "proj2".to_string(),
+            name: "Test".to_string(),
+            description: String::new(),
+            required_skills,
+            team_members: vec!["e1".to_string()],
+            status: ProjectStatus::Planning,
+            start_date: Utc::now(),
+            end_date: Some(Utc::now() + chrono::Duration::days(1)),
+            budget: 1000.0,
+        };
+
+        let generous_feasibility = embedder.calculate_timeline_feasibility(&generous_project);
+        let tight_feasibility = embedder.calculate_timeline_feasibility(&tight_project);
+        assert!(
+            generous_feasibility > tight_feasibility,
+            "generous = {generous_feasibility}, tight = {tight_feasibility}"
+        );
+
+        let open_ended = Project {
+            end_date: None,
+            ..generous_project.clone()
+        };
+        assert_eq!(embedder.calculate_timeline_feasibility(&open_ended), 1.0);
     }
 }

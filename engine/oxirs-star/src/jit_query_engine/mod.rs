@@ -1,21 +1,35 @@
 //! # JIT-Compiled SPARQL-star Query Engine
 //!
-//! Just-In-Time compilation of SPARQL-star queries for 5-20x performance improvement
-//! on frequently executed queries.
+//! Adaptive execution engine for SPARQL-star queries: a real interpreted
+//! execution path today, with hot-path detection and a native-code
+//! compilation pipeline that is architecturally wired but **not yet
+//! functional end-to-end** (see the "Compiled Mode" caveat below).
 //!
 //! This module provides:
-//! - **JIT Compilation**: Compile SPARQL-star queries to native code
-//! - **Query Plan Caching**: Cache compiled plans with smart invalidation
-//! - **Adaptive Compilation**: Interpret first, compile hot paths
-//! - **Hot Path Detection**: Profile-guided optimization
-//! - **Incremental Compilation**: Background compilation of hot queries
+//! - **Interpreted Execution**: Real BGP-based SPARQL-star execution
+//!   (parses the query text and runs it against the store's indices).
+//! - **Query Plan Caching**: Cache query plans with smart invalidation.
+//! - **Hot Path Detection**: Track per-query execution counts and flag hot
+//!   queries as compilation candidates.
+//! - **JIT Compilation Pipeline**: Parse → IR → `scirs2_core::jit`
+//!   kernel compilation (kernel IDs are produced and cached).
 //!
 //! ## Overview
 //!
-//! The JIT query engine operates in three modes:
-//! 1. **Interpreted Mode**: Fast startup, lower throughput (first few executions)
-//! 2. **Warm-up Mode**: Profile collection and hot path detection
-//! 3. **Compiled Mode**: Native code execution with maximum throughput
+//! The JIT query engine operates in two functional modes plus one pending
+//! mode:
+//! 1. **Interpreted Mode**: Real execution via the crate's BGP query
+//!    executor. This is the mode every query actually runs in today.
+//! 2. **Warm-up Mode**: Profile collection and hot path detection (feeds
+//!    into background compilation attempts).
+//! 3. **Compiled Mode (not yet functional)**: Hot queries are compiled to a
+//!    cached kernel ID via `scirs2_core::jit`, but there is currently no
+//!    integration with `scirs2_core::jit::execute_kernel` to actually run
+//!    that kernel — [`compiler::SparqlJitCompiler::execute_compiled`]
+//!    always returns a typed error, and [`JitQueryEngine::execute`]
+//!    transparently falls back to interpreted execution when this happens.
+//!    Do not rely on this mode for a throughput improvement until the
+//!    kernel-execution integration lands.
 //!
 //! ## Example
 //!
@@ -30,18 +44,19 @@
 //! // Set adaptive compilation threshold
 //! engine.set_compilation_threshold(10); // Compile after 10 executions
 //!
-//! // Execute query (interpreted mode first time)
-//! let query = "SELECT * WHERE { << ?s ?p ?o >> ?meta ?value }";
+//! // Execute query (real interpreted BGP execution).
+//! let query = "SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}";
 //! let results1 = engine.execute(query, &store).await?;
 //!
-//! // Execute again (still interpreted, building profile)
+//! // Execute again (still interpreted, building profile).
 //! for _ in 0..10 {
 //!     engine.execute(query, &store).await?;
 //! }
 //!
-//! // Next execution will be JIT-compiled
-//! let results_jit = engine.execute(query, &store).await?;
-//! // ^^ This execution is 5-20x faster!
+//! // A background compilation attempt may be triggered once the query is
+//! // "hot", but execution itself still runs interpreted today: compiled
+//! // kernel execution is not yet wired up (see module docs above).
+//! let results_still_interpreted = engine.execute(query, &store).await?;
 //!
 //! # Ok(())
 //! # }
@@ -286,23 +301,39 @@ impl JitQueryEngine {
             let plan = compiled_query.plan.clone();
             drop(compiled); // Release read lock
 
-            let result = self.execute_compiled(&plan, store).await?;
-            let execution_time = start.elapsed();
+            match self.execute_compiled(&plan, store).await {
+                Ok(result) => {
+                    let execution_time = start.elapsed();
 
-            // Update stats
-            let mut stats = self.stats.write().await;
-            stats.compiled_count += 1;
-            stats.cache_hits += 1;
-            stats.avg_compiled_time = if stats.compiled_count == 1 {
-                execution_time
-            } else {
-                (stats.avg_compiled_time * (stats.compiled_count - 1) as u32 + execution_time)
-                    / stats.compiled_count as u32
-            };
+                    // Update stats
+                    let mut stats = self.stats.write().await;
+                    stats.compiled_count += 1;
+                    stats.cache_hits += 1;
+                    stats.avg_compiled_time = if stats.compiled_count == 1 {
+                        execution_time
+                    } else {
+                        (stats.avg_compiled_time * (stats.compiled_count - 1) as u32
+                            + execution_time)
+                            / stats.compiled_count as u32
+                    };
 
-            return Ok(result);
+                    return Ok(result);
+                }
+                Err(e) => {
+                    // Compiled kernel execution is not yet integrated with
+                    // scirs2_core::jit::execute_kernel (see module docs): fall
+                    // back to the real interpreted executor below instead of
+                    // permanently failing every future execution of a query
+                    // that merely happened to become "hot" enough to compile.
+                    debug!(
+                        "Compiled execution unavailable for query hash {hash} ({e}); \
+                         falling back to interpreted mode"
+                    );
+                }
+            }
+        } else {
+            drop(compiled);
         }
-        drop(compiled);
 
         // Check plan cache
         let mut plan_cache = self.plan_cache.write().await;
@@ -380,18 +411,36 @@ impl JitQueryEngine {
         Ok(result)
     }
 
-    /// Execute query in interpreted mode
+    /// Execute query in interpreted mode.
+    ///
+    /// Parses `query` as a SPARQL-star `SELECT ... WHERE { ... }` text
+    /// (via [`crate::query::QueryParser`]) into a basic graph pattern, then
+    /// runs it through the crate's real BGP-based query executor
+    /// ([`crate::query::QueryExecutor`]) against `store`, returning the
+    /// concrete triples that satisfy the WHERE-clause patterns for each
+    /// variable binding found. This replaces the previous placeholder that
+    /// ignored `query` entirely and returned the whole store.
     async fn execute_interpreted(
         &self,
         query: &str,
         store: &StarStore,
     ) -> StarResult<Vec<StarTriple>> {
-        // Simplified interpreter - in production would use full SPARQL parser
         debug!("Executing query in interpreted mode: {}", query);
 
-        // For now, return all triples (placeholder implementation)
-        // In production, this would parse and execute the SPARQL query
-        Ok(store.all_triples())
+        let (_select_vars, bgp) = crate::query::QueryParser::parse_simple_select(query)?;
+
+        if bgp.patterns().is_empty() {
+            return Err(crate::StarError::query_error(format!(
+                "Interpreted JIT execution could not extract any WHERE-clause \
+                 triple pattern from query: {query}"
+            )));
+        }
+
+        let mut executor = crate::query::QueryExecutor::new(store.clone());
+        let construct_patterns = bgp.patterns().to_vec();
+        let constructed = executor.execute_construct(&bgp, &construct_patterns)?;
+
+        Ok(constructed.triples().to_vec())
     }
 
     /// Execute compiled query using JIT-compiled native code
@@ -565,7 +614,7 @@ mod tests {
 
     #[test]
     fn test_query_plan_creation() {
-        let plan = QueryPlan::new("SELECT * WHERE { ?s ?p ?o }".to_string());
+        let plan = QueryPlan::new("SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}".to_string());
         assert_eq!(plan.execution_count, 0);
         assert_eq!(plan.mode, ExecutionMode::Interpreted);
         assert!(plan.compiled_at.is_none());
@@ -573,7 +622,7 @@ mod tests {
 
     #[test]
     fn test_query_plan_stats_update() {
-        let mut plan = QueryPlan::new("SELECT * WHERE { ?s ?p ?o }".to_string());
+        let mut plan = QueryPlan::new("SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}".to_string());
         plan.update_stats(Duration::from_millis(100));
         assert_eq!(plan.execution_count, 1);
         assert_eq!(plan.avg_execution_time, Duration::from_millis(100));
@@ -585,7 +634,7 @@ mod tests {
 
     #[test]
     fn test_query_plan_is_hot() {
-        let mut plan = QueryPlan::new("SELECT * WHERE { ?s ?p ?o }".to_string());
+        let mut plan = QueryPlan::new("SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}".to_string());
         assert!(!plan.is_hot(10));
 
         for _ in 0..10 {
@@ -614,16 +663,62 @@ mod tests {
         let store = StarStore::new();
 
         let result = engine
-            .execute("SELECT * WHERE { ?s ?p ?o }", &store)
+            .execute("SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}", &store)
             .await
             .unwrap();
 
-        // Should execute successfully (returns empty for now)
+        // Empty store, so the (now real) WHERE-clause match is empty too.
         assert!(result.is_empty());
 
         let stats = engine.stats().await;
         assert_eq!(stats.total_queries, 1);
         assert_eq!(stats.interpreted_count, 1);
+    }
+
+    /// Regression test for the P1 stub fix: interpreted execution must
+    /// actually honor the query text (via the real BGP executor) instead of
+    /// ignoring it and returning the entire store.
+    #[tokio::test]
+    async fn test_jit_engine_execute_interpreted_uses_query_pattern() {
+        use crate::model::{StarTerm, StarTriple};
+
+        let engine = JitQueryEngine::new();
+        let store = StarStore::new();
+
+        let matching = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/knows").unwrap(),
+            StarTerm::iri("http://example.org/bob").unwrap(),
+        );
+        let non_matching = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/likes").unwrap(),
+            StarTerm::iri("http://example.org/cake").unwrap(),
+        );
+        store.insert(&matching).unwrap();
+        store.insert(&non_matching).unwrap();
+
+        // Query bound to the "knows" predicate only.
+        let query = "SELECT ?s ?o\nWHERE {\n?s <http://example.org/knows> ?o .\n}";
+        let result = engine.execute(query, &store).await.unwrap();
+
+        assert_eq!(
+            result,
+            vec![matching],
+            "interpreted execution must return only triples matching the query's WHERE clause"
+        );
+    }
+
+    /// Regression test: a query whose WHERE clause cannot be parsed into any
+    /// triple pattern must fail loudly instead of silently returning
+    /// unrelated data.
+    #[tokio::test]
+    async fn test_jit_engine_execute_interpreted_unparseable_query_errors() {
+        let engine = JitQueryEngine::new();
+        let store = StarStore::new();
+
+        let result = engine.execute("not a sparql query at all", &store).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -641,7 +736,7 @@ mod tests {
 
         // Execute a query to populate cache
         engine
-            .execute("SELECT * WHERE { ?s ?p ?o }", &store)
+            .execute("SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}", &store)
             .await
             .unwrap();
 
@@ -664,7 +759,7 @@ mod tests {
         // Execute same query multiple times
         for _ in 0..15 {
             engine
-                .execute("SELECT * WHERE { ?s ?p ?o }", &store)
+                .execute("SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}", &store)
                 .await
                 .unwrap();
         }
@@ -682,7 +777,7 @@ mod tests {
         // Execute query below threshold
         for _ in 0..9 {
             engine
-                .execute("SELECT * WHERE { ?s ?p ?o }", &store)
+                .execute("SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}", &store)
                 .await
                 .unwrap();
         }
@@ -692,7 +787,7 @@ mod tests {
 
         // Execute one more time to cross threshold
         engine
-            .execute("SELECT * WHERE { ?s ?p ?o }", &store)
+            .execute("SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}", &store)
             .await
             .unwrap();
 
@@ -705,7 +800,7 @@ mod tests {
         let engine = JitQueryEngine::new();
         let store = StarStore::new();
 
-        let query = "SELECT * WHERE { ?s ?p ?o }";
+        let query = "SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}";
         engine.execute(query, &store).await.unwrap();
 
         let (plan_count, _) = engine.cache_stats().await;
@@ -715,5 +810,31 @@ mod tests {
 
         let (plan_count, _) = engine.cache_stats().await;
         assert_eq!(plan_count, 0);
+    }
+
+    /// Regression test: once a query has been "compiled" (a kernel ID is
+    /// cached), `execute()` must not permanently fail for that query just
+    /// because compiled kernel execution is not yet implemented — it must
+    /// fall back to the real interpreted executor instead.
+    #[tokio::test]
+    async fn test_jit_engine_execute_falls_back_when_compiled_execution_unavailable() {
+        let engine = JitQueryEngine::new();
+        let store = StarStore::new();
+        let query = "SELECT ?s ?p ?o\nWHERE {\n?s ?p ?o .\n}";
+
+        // Force the query into the compiled cache directly, without waiting
+        // for the background hot-path trigger.
+        engine.precompile(query).await.unwrap();
+        let (_plan_count, compiled_count) = engine.cache_stats().await;
+        assert_eq!(compiled_count, 1);
+
+        // Compiled kernel execution (SparqlJitCompiler::execute_compiled)
+        // always errors today; execute() must still succeed by falling back
+        // to interpreted execution instead of surfacing that error.
+        let result = engine.execute(query, &store).await;
+        assert!(
+            result.is_ok(),
+            "execute() should fall back to interpreted mode instead of erroring: {result:?}"
+        );
     }
 }

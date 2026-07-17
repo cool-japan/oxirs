@@ -1,7 +1,7 @@
 //! Implement oxirs_core::Store trait for fuseki Store
 
 use crate::store::Store;
-use oxirs_core::model::{GraphName, Quad, Triple};
+use oxirs_core::model::{GraphName, Object, Predicate, Quad, Subject, Triple};
 use oxirs_core::rdf_store::{OxirsQueryResults, PreparedQuery};
 use oxirs_core::{OxirsError, Result};
 
@@ -70,5 +70,35 @@ impl oxirs_core::Store for Store {
             .read()
             .map_err(|e| OxirsError::Store(format!("Lock error: {}", e)))?;
         store.prepare_query(sparql)
+    }
+
+    /// Delegate the batch-ingest to the backend so durable backends (RdfStore's
+    /// persistent mode, the TDB2 adapter) take a single write lock and a single
+    /// fsync for the whole batch instead of a per-quad fsync loop.
+    fn bulk_insert_quads(&self, quads: Vec<Quad>) -> Result<usize> {
+        let store = self
+            .default_store
+            .write()
+            .map_err(|e| OxirsError::Store(format!("Lock error: {}", e)))?;
+        store.bulk_insert_quads(quads)
+    }
+
+    /// Delegate the streaming scan to the backend so large graph scans (GSP
+    /// downloads) pull quads one at a time from the backend's native iterator
+    /// instead of materializing the whole graph. The backend's read lock is
+    /// held for the scan's duration, yielding a consistent snapshot.
+    fn for_each_quad(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+        graph_name: Option<&GraphName>,
+        f: &mut dyn FnMut(Quad),
+    ) -> Result<()> {
+        let store = self
+            .default_store
+            .read()
+            .map_err(|e| OxirsError::Store(format!("Lock error: {}", e)))?;
+        store.for_each_quad(subject, predicate, object, graph_name, f)
     }
 }

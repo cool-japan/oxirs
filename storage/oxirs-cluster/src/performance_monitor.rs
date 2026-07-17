@@ -234,7 +234,7 @@ impl PerformanceMonitor {
 
         // Update global metrics
         {
-            let mut metrics = self.metrics.write().expect("lock should not be poisoned");
+            let mut metrics = self.metrics.write().unwrap_or_else(|e| e.into_inner());
             metrics.node_metrics = node_metrics_map;
             // Calculate cluster-wide metrics
             metrics.cluster_metrics = self.calculate_cluster_metrics(&metrics.node_metrics);
@@ -351,7 +351,7 @@ impl PerformanceMonitor {
 
     /// Analyze metrics and generate alerts
     async fn analyze_and_alert(&self) {
-        let metrics = self.metrics.read().expect("lock should not be poisoned");
+        let metrics = self.metrics.read().unwrap_or_else(|e| e.into_inner());
 
         // Check cluster-wide thresholds
         if metrics.cluster_metrics.average_latency > self.thresholds.max_consensus_latency {
@@ -444,7 +444,7 @@ impl PerformanceMonitor {
         }
 
         // Store alert in metrics
-        let mut metrics = self.metrics.write().expect("lock should not be poisoned");
+        let mut metrics = self.metrics.write().unwrap_or_else(|e| e.into_inner());
         metrics.alerts.push(alert);
 
         // Limit alert history
@@ -456,7 +456,7 @@ impl PerformanceMonitor {
 
     /// Update historical metrics data
     async fn update_historical_data(&self) {
-        let mut metrics = self.metrics.write().expect("lock should not be poisoned");
+        let mut metrics = self.metrics.write().unwrap_or_else(|e| e.into_inner());
 
         let current_slice = TimeSliceMetrics {
             timestamp: SystemTime::now(),
@@ -512,13 +512,13 @@ impl PerformanceMonitor {
     pub fn get_metrics(&self) -> ClusterMetrics {
         self.metrics
             .read()
-            .expect("lock should not be poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
 
     /// Get performance summary
     pub fn get_performance_summary(&self) -> PerformanceSummary {
-        let metrics = self.metrics.read().expect("lock should not be poisoned");
+        let metrics = self.metrics.read().unwrap_or_else(|e| e.into_inner());
 
         PerformanceSummary {
             cluster_health: metrics.cluster_metrics.cluster_health,
@@ -653,5 +653,33 @@ mod tests {
         assert_eq!(cluster_metrics.active_nodes, 3);
         assert_eq!(cluster_metrics.total_ops_per_second, 300.0);
         assert!(cluster_metrics.cluster_health > 0.9);
+    }
+
+    /// Regression test for the lock-poisoning panic epidemic: previously
+    /// every accessor used `.expect("lock should not be poisoned")`, so a
+    /// single panic while the metrics lock was held write-locked poisoned
+    /// it permanently and every future call panicked too. We now recover
+    /// from the poison instead, so calls after a poisoning event must
+    /// succeed rather than panic.
+    #[test]
+    fn get_metrics_survives_poisoned_lock() {
+        let thresholds = PerformanceThresholds::default();
+        let (monitor, _alert_receiver) = PerformanceMonitor::new(thresholds);
+
+        let metrics_lock = Arc::clone(&monitor.metrics);
+        let join_result = std::thread::spawn(move || {
+            let _guard = metrics_lock.write().unwrap_or_else(|e| e.into_inner());
+            panic!("intentional poison for regression test");
+        })
+        .join();
+        assert!(join_result.is_err(), "spawned thread should have panicked");
+        assert!(
+            monitor.metrics.is_poisoned(),
+            "lock should be poisoned after the panic"
+        );
+
+        // These must not panic even though the lock is now poisoned.
+        let _ = monitor.get_metrics();
+        let _ = monitor.get_performance_summary();
     }
 }

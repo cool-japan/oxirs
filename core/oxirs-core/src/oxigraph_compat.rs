@@ -464,7 +464,28 @@ impl Store {
         // Commit the transaction if the function succeeded
         match result {
             Ok(value) => {
+                // Snapshot the pending operations before `commit` consumes the
+                // transaction, so they can be applied to the visible store.
+                let inserts = transaction.pending_inserts().to_vec();
+                let deletes = transaction.pending_deletes().to_vec();
+
+                // Durability first: write and fsync the WAL commit record.
                 transaction.commit().map_err(E::from)?;
+
+                // Redo the committed changes into the backing store. The WAL
+                // commit record is already durable, so a crash here is
+                // recoverable by replaying the log on the next open.
+                let store = self.inner.write().map_err(|e| {
+                    E::from(OxirsError::Store(format!(
+                        "Failed to acquire write lock: {e}"
+                    )))
+                })?;
+                for quad in &deletes {
+                    store.remove_quad(quad).map_err(E::from)?;
+                }
+                for quad in inserts {
+                    store.insert_quad(quad).map_err(E::from)?;
+                }
                 Ok(value)
             }
             Err(error) => {
@@ -486,8 +507,10 @@ impl Store {
             let wal_dir = if let Some(ref wal_path) = self.wal_dir {
                 wal_path.clone()
             } else {
-                // Use temporary directory for in-memory stores
-                std::env::temp_dir().join("oxirs_wal")
+                // In-memory stores get a unique per-instance WAL directory so
+                // that concurrent Store instances in the same process (or on
+                // the same host) never interleave writes into a shared log.
+                std::env::temp_dir().join(format!("oxirs_wal_{}", uuid::Uuid::new_v4()))
             };
 
             // Create the transaction manager
@@ -499,8 +522,24 @@ impl Store {
     }
 
     /// Validates the store integrity
+    ///
+    /// Performs a consistency check between the store's reported quad count and
+    /// the number of quads materialized from its indexes. A mismatch indicates
+    /// index/data corruption and is surfaced as an error.
     pub fn validate(&self) -> Result<()> {
-        // OxiRS doesn't have explicit validation yet
+        let store = self
+            .inner
+            .read()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
+
+        let reported = OxirsStoreTrait::len(&*store)?;
+        let materialized = OxirsStoreTrait::quads(&*store)?.len();
+        if reported != materialized {
+            return Err(OxirsError::Store(format!(
+                "Store consistency check failed: len() reports {reported} quads but {materialized} were found in the indexes"
+            )));
+        }
+
         Ok(())
     }
 

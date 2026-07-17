@@ -182,9 +182,11 @@ impl UnifiedTermPattern {
             AlgebraTermPattern::BlankNode(bn) => UnifiedTermPattern::BlankNode(bn.clone()),
             AlgebraTermPattern::Literal(lit) => UnifiedTermPattern::Literal(lit.clone()),
             AlgebraTermPattern::Variable(var) => UnifiedTermPattern::Variable(var.clone()),
-            AlgebraTermPattern::QuotedTriple(_) => {
-                panic!("RDF-star quoted triples not yet supported in pattern unification")
-            }
+            // Quoted-triple patterns are represented as wildcards at the unified
+            // level (matching the `from_model_subject`/`from_model_object`
+            // handling below); fine-grained inner-triple matching is handled by
+            // the RDF-star evaluator. This avoids panicking on RDF-star input.
+            AlgebraTermPattern::QuotedTriple(_) => UnifiedTermPattern::Wildcard,
         }
     }
 

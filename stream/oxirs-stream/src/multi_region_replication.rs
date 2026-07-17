@@ -540,11 +540,15 @@ impl MultiRegionReplicationManager {
         Ok(None)
     }
 
-    /// Handle a detected conflict
+    /// Handle a detected conflict.
+    ///
+    /// Every strategy either produces a `resolution_result` or explicitly
+    /// queues the conflict for manual resolution — a conflict must never be
+    /// silently dropped on the floor.
     async fn handle_conflict(&self, mut conflict_info: ConflictInfo) -> Result<()> {
         match &self.config.conflict_resolution {
             ConflictResolution::LastWriteWins => {
-                // Resolve by timestamp
+                // Resolve by latest timestamp
                 conflict_info.resolution_result = Some(
                     conflict_info
                         .conflicting_events
@@ -558,16 +562,67 @@ impl MultiRegionReplicationManager {
                     .conflicts_resolved
                     .fetch_add(1, Ordering::Relaxed);
             }
+            ConflictResolution::FirstWriteWins => {
+                // Resolve by earliest timestamp
+                conflict_info.resolution_result = Some(
+                    conflict_info
+                        .conflicting_events
+                        .iter()
+                        .min_by_key(|e| e.metadata().timestamp)
+                        .expect("conflicting_events should not be empty")
+                        .clone(),
+                );
+                conflict_info.resolved_at = Some(Utc::now());
+                self.stats
+                    .conflicts_resolved
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            ConflictResolution::RegionPriority { priority_order } => {
+                // Pick the event whose originating region (carried in
+                // `EventMetadata::source`) ranks earliest in `priority_order`.
+                // Events from regions not listed are treated as lowest
+                // priority; ties (including "not listed" ties) are broken by
+                // latest timestamp (Last-Write-Wins as a secondary rule).
+                let rank = |event: &StreamEvent| -> usize {
+                    let source = &event.metadata().source;
+                    priority_order
+                        .iter()
+                        .position(|region| region == source)
+                        .unwrap_or(priority_order.len())
+                };
+                let resolved = conflict_info
+                    .conflicting_events
+                    .iter()
+                    .min_by(|a, b| {
+                        rank(a)
+                            .cmp(&rank(b))
+                            .then_with(|| b.metadata().timestamp.cmp(&a.metadata().timestamp))
+                    })
+                    .expect("conflicting_events should not be empty")
+                    .clone();
+                conflict_info.resolution_result = Some(resolved);
+                conflict_info.resolved_at = Some(Utc::now());
+                self.stats
+                    .conflicts_resolved
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            ConflictResolution::Custom { resolver_name } => {
+                // No pluggable custom-resolver mechanism exists yet. Rather
+                // than silently discarding the conflict, route it into the
+                // same manual-resolution queue as `Manual` and warn loudly
+                // so operators know a resolver they configured isn't wired up.
+                warn!(
+                    "Custom conflict resolver '{}' is not implemented; routing conflict {:?} to \
+                     the manual resolution queue instead of discarding it",
+                    resolver_name, conflict_info.conflict_type
+                );
+                let mut queue = self.conflict_queue.lock().await;
+                queue.push_back(conflict_info);
+            }
             ConflictResolution::Manual => {
                 // Queue for manual resolution
                 let mut queue = self.conflict_queue.lock().await;
                 queue.push_back(conflict_info);
-            }
-            _ => {
-                warn!(
-                    "Conflict resolution strategy not implemented: {:?}",
-                    self.config.conflict_resolution
-                );
             }
         }
 
@@ -974,5 +1029,135 @@ mod tests {
             }
             _ => panic!("Wrong strategy type"),
         }
+    }
+
+    fn make_replication_config(conflict_resolution: ConflictResolution) -> ReplicationConfig {
+        ReplicationConfig {
+            strategy: ReplicationStrategy::FullReplication,
+            conflict_resolution,
+            max_lag_ms: 1000,
+            replication_timeout: Duration::from_secs(30),
+            enable_compression: true,
+            batch_size: 100,
+            health_check_interval: Duration::from_secs(60),
+            failover_timeout: Duration::from_secs(300),
+        }
+    }
+
+    fn event_with(source: &str, timestamp: DateTime<Utc>) -> StreamEvent {
+        let mut event = create_test_event();
+        if let StreamEvent::TripleAdded { metadata, .. } = &mut event {
+            metadata.source = source.to_string();
+            metadata.timestamp = timestamp;
+        }
+        event
+    }
+
+    /// Regression test for multi_region_replication.rs:561 — `FirstWriteWins`
+    /// used to fall into the catch-all `_ => warn!(...)` arm and never
+    /// resolve or count the conflict at all. It must now actually resolve
+    /// (reflected by `conflicts_resolved`) instead of being silently dropped.
+    #[tokio::test]
+    async fn test_handle_conflict_first_write_wins_resolves() {
+        let manager = MultiRegionReplicationManager::new(
+            make_replication_config(ConflictResolution::FirstWriteWins),
+            "us-west-1".to_string(),
+        );
+
+        let now = Utc::now();
+        let conflict = ConflictInfo {
+            conflict_type: ConflictType::WriteWrite,
+            conflicting_events: vec![
+                event_with("us-east-1", now),
+                event_with("us-west-1", now - chrono::Duration::seconds(10)),
+            ],
+            resolution_strategy: ConflictResolution::FirstWriteWins,
+            resolved_at: None,
+            resolution_result: None,
+        };
+
+        manager.handle_conflict(conflict).await.unwrap();
+
+        assert_eq!(
+            manager.stats.conflicts_resolved.load(Ordering::Relaxed),
+            1,
+            "FirstWriteWins must actually resolve the conflict, not silently drop it"
+        );
+        assert!(
+            manager.get_pending_conflicts().await.is_empty(),
+            "a resolved conflict must not also sit in the manual-resolution queue"
+        );
+    }
+
+    /// Regression test for multi_region_replication.rs:561 — `RegionPriority`
+    /// used to be silently dropped by the same catch-all arm. It must now
+    /// pick the event from the highest-priority listed region and count as
+    /// resolved.
+    #[tokio::test]
+    async fn test_handle_conflict_region_priority_resolves() {
+        let manager = MultiRegionReplicationManager::new(
+            make_replication_config(ConflictResolution::RegionPriority {
+                priority_order: vec!["us-west-1".to_string(), "us-east-1".to_string()],
+            }),
+            "us-west-1".to_string(),
+        );
+
+        let now = Utc::now();
+        // The lower-priority region's event is newer, so a naive
+        // Last-Write-Wins fallback would pick it; RegionPriority must still
+        // prefer "us-west-1" because it's first in `priority_order`.
+        let conflict = ConflictInfo {
+            conflict_type: ConflictType::WriteWrite,
+            conflicting_events: vec![
+                event_with("us-east-1", now),
+                event_with("us-west-1", now - chrono::Duration::seconds(10)),
+            ],
+            resolution_strategy: ConflictResolution::RegionPriority {
+                priority_order: vec!["us-west-1".to_string(), "us-east-1".to_string()],
+            },
+            resolved_at: None,
+            resolution_result: None,
+        };
+
+        manager.handle_conflict(conflict).await.unwrap();
+
+        assert_eq!(
+            manager.stats.conflicts_resolved.load(Ordering::Relaxed),
+            1,
+            "RegionPriority must actually resolve the conflict, not silently drop it"
+        );
+    }
+
+    /// Regression test for multi_region_replication.rs:561 — `Custom` used to
+    /// be silently dropped (no queueing, no resolution). It must now be
+    /// routed into the manual-resolution queue instead of being discarded.
+    #[tokio::test]
+    async fn test_handle_conflict_custom_routes_to_manual_queue() {
+        let manager = MultiRegionReplicationManager::new(
+            make_replication_config(ConflictResolution::Custom {
+                resolver_name: "not-yet-implemented".to_string(),
+            }),
+            "us-west-1".to_string(),
+        );
+
+        let conflict = ConflictInfo {
+            conflict_type: ConflictType::WriteWrite,
+            conflicting_events: vec![event_with("us-east-1", Utc::now())],
+            resolution_strategy: ConflictResolution::Custom {
+                resolver_name: "not-yet-implemented".to_string(),
+            },
+            resolved_at: None,
+            resolution_result: None,
+        };
+
+        manager.handle_conflict(conflict).await.unwrap();
+
+        let pending = manager.get_pending_conflicts().await;
+        assert_eq!(
+            pending.len(),
+            1,
+            "an unimplemented Custom resolver must route the conflict to the manual queue, \
+             not discard it"
+        );
     }
 }

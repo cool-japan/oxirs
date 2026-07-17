@@ -60,13 +60,15 @@ impl ColumnarStore {
         let index_path = base_path.join("index.json");
         let index = Arc::new(SeriesIndex::with_file(index_path)?);
 
+        let cache_capacity = std::num::NonZeroUsize::new(cache_size).ok_or_else(|| {
+            TsdbError::Config("ColumnarStore cache_size must be greater than 0".to_string())
+        })?;
+
         Ok(Self {
             base_path,
             index,
             chunk_duration,
-            chunk_cache: Arc::new(RwLock::new(lru::LruCache::new(
-                std::num::NonZeroUsize::new(cache_size).expect("construction should succeed"),
-            ))),
+            chunk_cache: Arc::new(RwLock::new(lru::LruCache::new(cache_capacity))),
             fsync_enabled: true,
         })
     }
@@ -335,6 +337,20 @@ mod tests {
         }
 
         TimeChunk::new(series_id, start_time, Duration::hours(2), points)
+    }
+
+    /// Regression test: a zero `cache_size` must return a config error
+    /// instead of panicking. See P2 bug finding on `ColumnarStore::new`.
+    #[test]
+    fn test_columnar_store_zero_cache_size_returns_error() {
+        let temp_dir = env::temp_dir().join("tsdb_columnar_zero_cache_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let result = ColumnarStore::new(&temp_dir, Duration::hours(2), 0);
+        assert!(result.is_err(), "cache_size == 0 must be rejected");
+        assert!(matches!(result, Err(TsdbError::Config(_))));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[test]

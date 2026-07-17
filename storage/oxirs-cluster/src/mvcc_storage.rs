@@ -19,8 +19,9 @@ use oxirs_core::vocab::xsd;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Index key type for efficient lookups
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,6 +169,88 @@ impl MVCCIndex {
         }
 
         results
+    }
+
+    /// Compact per-index-key version history according to `strategy`,
+    /// pruning old `timestamp -> triple keys` entries from the
+    /// multi-version index. Every call to [`MVCCIndex::index_triple`]
+    /// appends a new timestamped entry and nothing ever removed them
+    /// before this method existed, so this directly addresses the
+    /// unbounded growth of the version history that backs pattern
+    /// queries.
+    ///
+    /// Returns `(versions_removed, keys_processed)`.
+    pub fn compact(&self, strategy: CompactionStrategy, now: HLCTimestamp) -> (usize, usize) {
+        let mut versions_removed = 0usize;
+        let mut keys_processed = 0usize;
+
+        for mut entry in self.primary_index.iter_mut() {
+            keys_processed += 1;
+            let versions_map = entry.value_mut();
+            let before = versions_map.len();
+
+            match strategy {
+                CompactionStrategy::None => {}
+                CompactionStrategy::KeepLatest(max_versions) => {
+                    Self::retain_latest(versions_map, max_versions);
+                }
+                CompactionStrategy::TimeBasedRetention(retention) => {
+                    Self::retain_within(versions_map, now, retention);
+                }
+                CompactionStrategy::Hybrid {
+                    max_versions,
+                    retention_period,
+                } => {
+                    // Keep an entry if it is among the newest `max_versions`
+                    // OR it falls within `retention_period` of `now`;
+                    // otherwise it is eligible for removal.
+                    let cutoff = now
+                        .physical
+                        .saturating_sub(retention_period.as_millis() as u64);
+                    let keep_from_index = versions_map.len().saturating_sub(max_versions);
+                    let timestamps: Vec<HLCTimestamp> = versions_map.keys().copied().collect();
+
+                    for (position, ts) in timestamps.iter().enumerate() {
+                        let within_count_budget = position >= keep_from_index;
+                        let within_time_budget = ts.physical >= cutoff;
+                        if !within_count_budget && !within_time_budget {
+                            versions_map.remove(ts);
+                        }
+                    }
+                }
+            }
+
+            versions_removed += before - versions_map.len();
+        }
+
+        (versions_removed, keys_processed)
+    }
+
+    /// Keep only the `max_versions` most recent entries in `versions_map`.
+    fn retain_latest(
+        versions_map: &mut BTreeMap<HLCTimestamp, HashSet<String>>,
+        max_versions: usize,
+    ) {
+        if versions_map.len() > max_versions {
+            let to_remove: Vec<HLCTimestamp> = versions_map
+                .keys()
+                .take(versions_map.len() - max_versions)
+                .copied()
+                .collect();
+            for ts in to_remove {
+                versions_map.remove(&ts);
+            }
+        }
+    }
+
+    /// Remove entries older than `retention` relative to `now`.
+    fn retain_within(
+        versions_map: &mut BTreeMap<HLCTimestamp, HashSet<String>>,
+        now: HLCTimestamp,
+        retention: Duration,
+    ) {
+        let cutoff = now.physical.saturating_sub(retention.as_millis() as u64);
+        versions_map.retain(|ts, _| ts.physical >= cutoff);
     }
 
     /// Get index statistics
@@ -379,38 +462,39 @@ impl MVCCStorage {
         Ok(())
     }
 
-    /// Run compaction based on configured strategy
+    /// Run compaction based on the configured strategy.
+    ///
+    /// This prunes stale entries from the storage's own multi-version
+    /// index (see [`MVCCIndex::compact`]), which is what actually grows
+    /// without bound as [`MVCCStorage::insert_triple`] and
+    /// [`StorageBackend::insert_triple_to_shard`] call `index_triple` on
+    /// every write. `versions_removed`/`keys_processed` in the returned
+    /// [`CompactionResult`] are real counts of index entries pruned, not
+    /// fabricated zeros.
+    ///
+    /// Note: the underlying [`MVCCManager`]'s own version store runs its
+    /// own independent, automatic background garbage collection (started
+    /// by `MVCCManager::start`, governed by `MVCCConfig`); it does not
+    /// currently expose a public "compact now" API for this method to
+    /// drive directly.
     pub async fn compact(&self) -> Result<CompactionResult> {
         let start_time = std::time::Instant::now();
-        let versions_removed = 0;
-        let keys_processed = 0;
 
-        match self.compaction_strategy {
-            CompactionStrategy::None => {
-                // No compaction
-                return Ok(CompactionResult {
-                    duration: start_time.elapsed(),
-                    versions_removed: 0,
-                    keys_processed: 0,
-                });
-            }
-            CompactionStrategy::KeepLatest(_n) => {
-                // Keep only the latest N versions
-                // This would be implemented by calling MVCC manager's internal methods
-                warn!("KeepLatest compaction not yet implemented");
-            }
-            CompactionStrategy::TimeBasedRetention(_retention) => {
-                // Remove versions older than retention period
-                warn!("TimeBasedRetention compaction not yet implemented");
-            }
-            CompactionStrategy::Hybrid {
-                max_versions: _,
-                retention_period: _,
-            } => {
-                // Hybrid compaction
-                warn!("Hybrid compaction not yet implemented");
-            }
+        if matches!(self.compaction_strategy, CompactionStrategy::None) {
+            return Ok(CompactionResult {
+                duration: start_time.elapsed(),
+                versions_removed: 0,
+                keys_processed: 0,
+            });
         }
+
+        let now = self.mvcc.current_timestamp();
+        let (versions_removed, keys_processed) = self.index.compact(self.compaction_strategy, now);
+
+        info!(
+            "MVCC index compaction ({:?}): removed {} version entries across {} index keys",
+            self.compaction_strategy, versions_removed, keys_processed
+        );
 
         Ok(CompactionResult {
             duration: start_time.elapsed(),
@@ -820,5 +904,162 @@ mod tests {
             }
             _ => panic!("Expected hybrid strategy"),
         }
+    }
+
+    fn indexed_triple_at(index: &MVCCIndex, physical: u64, triple_key: &str) {
+        let triple = Triple::new(
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            Literal::new_typed_literal("value", xsd::STRING.clone()),
+        );
+        let ts = HLCTimestamp {
+            physical,
+            logical: 0,
+            node_id: 1,
+        };
+        index.index_triple(&triple, ts, triple_key);
+    }
+
+    /// Regression test: `KeepLatest(n)` compaction must actually shrink the
+    /// per-key version history to `n` entries, not report a fabricated
+    /// success while leaving every version in place.
+    #[test]
+    fn test_compaction_keep_latest_reduces_version_count() {
+        let index = MVCCIndex::new();
+        for i in 0..5u64 {
+            indexed_triple_at(&index, 1_000 + i, &format!("key-{i}"));
+        }
+
+        let subject_key = IndexKey::Subject("http://example.org/s".to_string());
+        let before = index
+            .primary_index
+            .get(&subject_key)
+            .map(|v| v.len())
+            .unwrap_or(0);
+        assert_eq!(
+            before, 5,
+            "test setup should have indexed 5 distinct versions"
+        );
+
+        let now = HLCTimestamp {
+            physical: 1_100,
+            logical: 0,
+            node_id: 1,
+        };
+        let (removed, processed) = index.compact(CompactionStrategy::KeepLatest(2), now);
+
+        assert!(
+            processed > 0,
+            "compaction should visit at least one index key"
+        );
+        assert!(removed > 0, "compaction must remove stale version entries");
+
+        let after = index
+            .primary_index
+            .get(&subject_key)
+            .map(|v| v.len())
+            .unwrap_or(0);
+        assert_eq!(
+            after, 2,
+            "KeepLatest(2) must leave exactly 2 version entries for this key"
+        );
+    }
+
+    /// Regression test: `TimeBasedRetention` compaction must remove
+    /// entries older than the retention window while keeping newer ones.
+    #[test]
+    fn test_compaction_time_based_retention_removes_old_versions() {
+        let index = MVCCIndex::new();
+        // Two old versions (far before `now`), two recent ones.
+        indexed_triple_at(&index, 1_000, "old-1");
+        indexed_triple_at(&index, 1_001, "old-2");
+        indexed_triple_at(&index, 9_000, "recent-1");
+        indexed_triple_at(&index, 9_001, "recent-2");
+
+        let subject_key = IndexKey::Subject("http://example.org/s".to_string());
+        assert_eq!(
+            index.primary_index.get(&subject_key).map(|v| v.len()),
+            Some(4)
+        );
+
+        let now = HLCTimestamp {
+            physical: 9_100,
+            logical: 0,
+            node_id: 1,
+        };
+        // Retain only entries within 1000ms of `now` (9_100 - 1000 = 8_100 cutoff).
+        let (removed, _processed) = index.compact(
+            CompactionStrategy::TimeBasedRetention(Duration::from_millis(1_000)),
+            now,
+        );
+        assert!(removed >= 2, "the two old versions should be removed");
+
+        let after = index
+            .primary_index
+            .get(&subject_key)
+            .map(|v| v.len())
+            .unwrap_or(0);
+        assert_eq!(after, 2, "only the two recent versions should remain");
+    }
+
+    /// `compact()` on `MVCCStorage` (the public API) must report real,
+    /// nonzero removed-version counts when the index has accumulated more
+    /// versions than the configured strategy allows — never a fabricated
+    /// success while versions grow unbounded.
+    #[tokio::test]
+    async fn test_storage_compact_reports_real_removed_versions() {
+        let base_dir = tempfile::tempdir().expect("tempdir");
+        let storage = MVCCStorage::new(
+            1,
+            base_dir.path().to_string_lossy().into_owned(),
+            CompactionStrategy::KeepLatest(2),
+        );
+        storage.start().await.unwrap();
+
+        let triple = Triple::new(
+            NamedNode::new("http://example.org/s").unwrap(),
+            NamedNode::new("http://example.org/p").unwrap(),
+            Literal::new_typed_literal("value", xsd::STRING.clone()),
+        );
+
+        // Insert the same logical triple several times across separate
+        // transactions so the index accumulates multiple timestamped
+        // version entries under the same index keys.
+        for i in 0..5 {
+            let tx_id = format!("tx-{i}");
+            storage
+                .begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+                .await
+                .unwrap();
+            storage.insert_triple(&tx_id, triple.clone()).await.unwrap();
+            storage.commit_transaction(&tx_id).await.unwrap();
+        }
+
+        let result = storage.compact().await.unwrap();
+        assert!(
+            result.versions_removed > 0,
+            "compaction must actually remove stale version entries, not report a fabricated zero"
+        );
+        assert!(result.keys_processed > 0);
+
+        storage.stop().await.unwrap();
+    }
+
+    /// `CompactionStrategy::None` must remain a genuine, honest no-op.
+    #[tokio::test]
+    async fn test_storage_compact_none_strategy_is_a_true_no_op() {
+        let base_dir = tempfile::tempdir().expect("tempdir");
+        let storage = MVCCStorage::new(
+            1,
+            base_dir.path().to_string_lossy().into_owned(),
+            CompactionStrategy::None,
+        );
+        storage.start().await.unwrap();
+
+        let result = storage.compact().await.unwrap();
+        assert_eq!(result.versions_removed, 0);
+        assert_eq!(result.keys_processed, 0);
+
+        storage.stop().await.unwrap();
     }
 }

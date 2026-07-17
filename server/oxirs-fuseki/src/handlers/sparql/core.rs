@@ -7,7 +7,6 @@
 use crate::{
     auth::{AuthUser, Permission},
     error::{FusekiError, FusekiResult},
-    federated_query_optimizer::FederatedQueryOptimizer,
     server::AppState,
 };
 use axum::{
@@ -770,44 +769,24 @@ fn count_update_operations(update: &str) -> usize {
     }
 }
 
-/// Apply various query optimizations
+/// Apply various query optimizations.
+///
+/// SERVICE-clause federation is intentionally NOT pre-processed here. A prior
+/// implementation issued a real remote federation request via the metrics
+/// service and then discarded the results, executing the original query
+/// unchanged — a wasted network round-trip that also risked leaking the query
+/// to a remote endpoint with no effect on the response. SERVICE clauses are
+/// now handled where they belong: by the SPARQL engine behind
+/// `state.store.query(...)` (see the caller), which owns SERVICE execution.
+/// This function only performs query-text rewrites that are actually applied.
 async fn apply_query_optimizations(
     query: &str,
-    context: &QueryContext,
-    state: &Arc<AppState>,
+    _context: &QueryContext,
+    _state: &Arc<AppState>,
 ) -> FusekiResult<String> {
-    let optimized_query = query.to_string();
-
-    // Apply federation optimization if enabled
-    if context.enable_federation {
-        if let Some(metrics_service) = &state.metrics_service {
-            let federation_optimizer = FederatedQueryOptimizer::new(metrics_service.clone());
-            // Check if query contains SERVICE clauses for federation
-            if query.to_uppercase().contains("SERVICE") {
-                let timeout_ms = context
-                    .timeout
-                    .unwrap_or(Duration::from_secs(30))
-                    .as_millis() as u64;
-                match federation_optimizer
-                    .process_federated_query(query, timeout_ms)
-                    .await
-                {
-                    Ok(_federated_results) => {
-                        // For now, continue with original query until we integrate federated results
-                        // TODO: Integrate federated query results into response
-                    }
-                    Err(e) => {
-                        warn!("Federated query processing failed: {}", e);
-                        // Continue with original query as fallback
-                    }
-                }
-            }
-        }
-    }
-
-    // Apply other optimizations...
-
-    Ok(optimized_query)
+    // No text-level rewrites are currently applied; the query is executed as-is
+    // by the store's SPARQL engine (which handles SERVICE/federation).
+    Ok(query.to_string())
 }
 
 /// Negotiate the preferred SPARQL response format from an Accept header.

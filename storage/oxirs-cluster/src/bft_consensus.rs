@@ -16,8 +16,13 @@ use ed25519_dalek::VerifyingKey;
 use scirs2_core::random::rng; // Used in tests
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::time::Duration;
+use tokio::sync::{oneshot, RwLock};
 use tracing::info;
+
+/// Maximum time to wait for a BFT request to reach a 2f+1 commit quorum before
+/// surfacing a timeout error to the caller.
+const BFT_COMMIT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// BFT consensus state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +51,10 @@ pub struct BftConsensusManager {
     status: Arc<RwLock<BftState>>,
     /// Peer information
     peers: Arc<RwLock<HashMap<String, PeerInfo>>>,
+    /// In-flight client requests awaiting a 2f+1 commit quorum, keyed by request
+    /// id. The completion channel is fired by [`notify_request_committed`] only
+    /// when the BFT engine has observed a real matching-commit quorum.
+    pending: Arc<RwLock<HashMap<String, oneshot::Sender<RdfResponse>>>>,
 }
 
 /// Peer information for BFT consensus
@@ -95,6 +104,7 @@ impl BftConsensusManager {
             storage,
             status: Arc::new(RwLock::new(BftState::Follower)),
             peers: Arc::new(RwLock::new(HashMap::new())),
+            pending: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -156,11 +166,27 @@ impl BftConsensusManager {
         Ok(())
     }
 
-    /// Process a client request through BFT consensus
+    /// Process a client request through BFT consensus.
+    ///
+    /// The request is submitted to the consensus engine and then this call
+    /// blocks until the engine confirms a real 2f+1 matching-commit quorum
+    /// (signaled via [`BftConsensusManager::notify_request_committed`]) or the
+    /// commit timeout elapses. It never returns a fabricated success after a
+    /// fixed sleep: without a confirmed quorum the caller receives an explicit
+    /// timeout error.
     pub async fn process_request(&self, command: RdfCommand) -> Result<RdfResponse> {
         // Serialize command
         let operation =
             serde_json::to_vec(&command).map_err(|e| ClusterError::Serialize(e.to_string()))?;
+
+        // Assign a unique id and register a completion waiter *before* submitting
+        // so we cannot miss an early commit signal.
+        let request_id = uuid::Uuid::new_v4().to_string();
+        let (tx, rx) = oneshot::channel::<RdfResponse>();
+        {
+            let mut pending = self.pending.write().await;
+            pending.insert(request_id.clone(), tx);
+        }
 
         // Create BFT request
         let request = BftMessage::Request {
@@ -168,34 +194,55 @@ impl BftConsensusManager {
             operation,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .expect("SystemTime should be after UNIX_EPOCH")
+                .map_err(|e| ClusterError::Runtime(format!("system clock before epoch: {e}")))?
                 .as_secs(),
             signature: None,
         };
 
-        // Process through consensus
-        self.consensus.process_request(request)?;
+        // Submit to the consensus engine; roll back the waiter on failure.
+        if let Err(e) = self.consensus.process_request(request) {
+            self.pending.write().await.remove(&request_id);
+            return Err(e);
+        }
 
-        // Wait for consensus to complete
-        // In a full implementation, this would:
-        // 1. Track the request with a unique ID
-        // 2. Wait on a channel/future for the consensus result
-        // 3. Return the actual execution result from the replicated state machine
-        // 4. Handle timeouts and consensus failures
-        //
-        // For now, we return success immediately after submitting to consensus.
-        // The actual result would come from a reply channel that the consensus
-        // engine would signal when 2f+1 nodes have committed the operation.
+        // Wait for a real 2f+1 commit signal, or fail loudly on timeout. The
+        // signal is fired by notify_request_committed() only after the engine
+        // has observed a matching-commit quorum for this request.
+        match tokio::time::timeout(BFT_COMMIT_TIMEOUT, rx).await {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(_canceled)) => {
+                self.pending.write().await.remove(&request_id);
+                Err(ClusterError::Consensus(format!(
+                    "BFT completion channel for request {request_id} was dropped before a \
+                     2f+1 commit quorum was reached"
+                )))
+            }
+            Err(_elapsed) => {
+                self.pending.write().await.remove(&request_id);
+                Err(ClusterError::Consensus(format!(
+                    "BFT consensus did not reach a 2f+1 commit quorum for request \
+                     {request_id} within {BFT_COMMIT_TIMEOUT:?}"
+                )))
+            }
+        }
+    }
 
-        // Simulate a small delay for consensus to complete
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-        // In production, check if consensus was achieved:
-        // - If the operation received 2f+1 commit messages, return the result
-        // - If timeout occurred, return timeout error
-        // - If view change happened, retry or return error
-
-        Ok(RdfResponse::Success)
+    /// Signal that the BFT engine has observed a real 2f+1 matching-commit
+    /// quorum for `request_id`, delivering the replicated execution result to
+    /// the waiting [`process_request`] call.
+    ///
+    /// Returns `true` if a waiter was found and notified, `false` otherwise
+    /// (e.g. the request already timed out). This is the hook the BFT
+    /// commit/reply path calls once `is_committed` holds for the request.
+    pub async fn notify_request_committed(&self, request_id: &str, response: RdfResponse) -> bool {
+        let sender = {
+            let mut pending = self.pending.write().await;
+            pending.remove(request_id)
+        };
+        match sender {
+            Some(tx) => tx.send(response).is_ok(),
+            None => false,
+        }
     }
 
     /// Get current consensus status
@@ -226,6 +273,26 @@ mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
     use scirs2_core::RngExt;
+
+    #[cfg(feature = "bft")]
+    #[tokio::test]
+    async fn test_notify_unknown_request_returns_false() {
+        use crate::network::NetworkConfig;
+        use crate::storage::mock::MockStorageBackend;
+
+        let storage = Arc::new(MockStorageBackend::new());
+        let mgr =
+            BftConsensusManager::new("1".to_string(), vec![], storage, NetworkConfig::default())
+                .await
+                .expect("failed to build BFT consensus manager");
+
+        // No request with this id is pending, so the completion hook must report
+        // that nothing was notified (it never fabricates a commit).
+        assert!(
+            !mgr.notify_request_committed("no-such-request", RdfResponse::Success)
+                .await
+        );
+    }
 
     #[test]
     fn test_peer_info() {

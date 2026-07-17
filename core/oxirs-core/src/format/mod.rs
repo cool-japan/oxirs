@@ -26,7 +26,12 @@ pub mod serializer;
 pub mod toolkit;
 pub mod trig;
 pub mod turtle;
-pub mod turtle_grammar;
+// `turtle_grammar` is an unfinished, dead-code recognizer (all entry points
+// used to silently return empty results instead of parsing). It is kept
+// crate-private and made to fail loudly (see turtle_grammar.rs) rather than
+// being part of the public API; use `format::turtle::TurtleParser` or
+// `crate::parser::Parser` (RdfFormat::Turtle) for real Turtle parsing.
+pub(crate) mod turtle_grammar;
 pub mod w3c_tests;
 
 // Re-export key types

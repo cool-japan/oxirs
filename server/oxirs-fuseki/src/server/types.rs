@@ -37,7 +37,7 @@ use crate::{
     websocket::{SubscriptionManager, WebSocketConfig},
 };
 use axum::{
-    extract::{Path, Query, Request, State},
+    extract::{DefaultBodyLimit, Path, Query, Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Json, Response},
@@ -47,6 +47,7 @@ use axum::{
 #[cfg(feature = "rate-limit")]
 use governor::{Quota, RateLimiter};
 use oxirs_core::audit::InMemoryAuditLogger;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 #[cfg(feature = "rate-limit")]
 use std::num::NonZeroU32;
@@ -73,6 +74,7 @@ pub struct Runtime {
     batch_executor: Option<Arc<BatchExecutor>>,
     stream_manager: Option<Arc<StreamManager>>,
     dataset_manager: Option<Arc<DatasetManager>>,
+    api_key_service: Option<Arc<crate::handlers::api_keys::ApiKeyService>>,
     security_auditor: Option<Arc<SecurityAuditManager>>,
     ddos_protector: Option<Arc<DDoSProtectionManager>>,
     load_balancer: Option<Arc<LoadBalancer>>,
@@ -115,6 +117,7 @@ impl Runtime {
             batch_executor: None,
             stream_manager: None,
             dataset_manager: None,
+            api_key_service: None,
             security_auditor: None,
             ddos_protector: None,
             load_balancer: None,
@@ -148,8 +151,7 @@ impl Runtime {
             self.auth_service = Some(auth_service);
         }
         info!("Initializing ReBAC manager");
-        let rebac_manager = Arc::new(crate::auth::rebac::InMemoryRebacManager::new());
-        self.rebac_manager = Some(rebac_manager as Arc<dyn crate::auth::rebac::RebacEvaluator>);
+        self.rebac_manager = Some(build_rebac_manager(&self.config, self.store.clone()));
         if self.config.monitoring.metrics.enabled {
             info!("Initializing metrics service");
             let metrics_service = MetricsService::new(self.config.monitoring.clone())?;
@@ -282,6 +284,19 @@ impl Runtime {
         };
         let dataset_manager = DatasetManager::new(dataset_config).await?;
         self.dataset_manager = Some(dataset_manager);
+        info!("Initializing persistent API key service");
+        match crate::handlers::api_keys::ApiKeyService::open(
+            crate::handlers::api_keys::default_api_key_store_path(),
+        )
+        .await
+        {
+            Ok(service) => self.api_key_service = Some(Arc::new(service)),
+            Err(e) => warn!(
+                "Failed to initialize API key service ({}); /$/api-keys endpoints will report 503 \
+                 rather than silently accepting keys that can never be persisted",
+                e
+            ),
+        }
         info!("Beta.2 Performance & Scalability modules initialized successfully");
         info!("Initializing RC.1 Security Auditor");
         let audit_config = SecurityAuditConfig {
@@ -443,6 +458,56 @@ impl Runtime {
                             info!("Configuration hot-reload is now active");
                             self.config_reload_manager =
                                 Some(Arc::new(parking_lot::Mutex::new(manager)));
+                            // `shared_config` is the mutation target ConfigReloadManager
+                            // writes into on every file-watch-triggered reload, but
+                            // AppState::config is an immutable per-request snapshot
+                            // (see its docs) that most handlers read directly, so a
+                            // full live swap is out of scope here. What *is* safely
+                            // reconcilable without touching handler-visible config
+                            // reads is the dataset registry: `dataset_manager` is
+                            // already a real, shared, mutable store (see
+                            // `handlers::admin::reload_config` for the equivalent
+                            // logic on the `/$/reload` HTTP path). Poll for dataset
+                            // additions/removals so `shared_config` is not simply
+                            // logged as "reloaded" and then discarded.
+                            if let Some(dataset_manager) = self.dataset_manager.clone() {
+                                let watched_config = shared_config.clone();
+                                let mut known_datasets: std::collections::HashSet<String> =
+                                    self.config.datasets.keys().cloned().collect();
+                                tokio::spawn(async move {
+                                    let mut interval =
+                                        tokio::time::interval(Duration::from_secs(2));
+                                    loop {
+                                        interval.tick().await;
+                                        let current: std::collections::HashSet<String> =
+                                            watched_config
+                                                .read()
+                                                .await
+                                                .datasets
+                                                .keys()
+                                                .cloned()
+                                                .collect();
+                                        for name in current.difference(&known_datasets) {
+                                            if dataset_manager.get_dataset(name).await.is_err() {
+                                                match dataset_manager
+                                                    .create_dataset(name.clone(), None)
+                                                    .await
+                                                {
+                                                    Ok(_) => info!(
+                                                        "Hot-reload: applied new dataset '{}' from config file",
+                                                        name
+                                                    ),
+                                                    Err(e) => warn!(
+                                                        "Hot-reload: failed to create dataset '{}': {}",
+                                                        name, e
+                                                    ),
+                                                }
+                                            }
+                                        }
+                                        known_datasets = current;
+                                    }
+                                });
+                            }
                         }
                     }
                     Err(e) => {
@@ -487,6 +552,7 @@ impl Runtime {
             batch_executor: self.batch_executor.clone(),
             stream_manager: self.stream_manager.clone(),
             dataset_manager: self.dataset_manager.clone(),
+            api_key_service: self.api_key_service.clone(),
             security_auditor: self.security_auditor.clone(),
             ddos_protector: self.ddos_protector.clone(),
             load_balancer: self.load_balancer.clone(),
@@ -869,9 +935,13 @@ impl Runtime {
                     get(handlers::performance::database_statistics_handler),
                 );
         }
+        // Routed to the store/auth-integrated `crate::websocket::websocket_handler`
+        // (which owns the shared `AppState::subscription_manager`), not the
+        // quarantined `handlers::websocket::websocket_handler` — see that
+        // module's docs for why it must not be used here.
         app = app
-            .route("/$/ws", get(handlers::websocket_handler))
-            .route("/$/subscribe", get(handlers::websocket_handler));
+            .route("/$/ws", get(crate::websocket::websocket_handler))
+            .route("/$/subscribe", get(crate::websocket::websocket_handler));
         info!("Enabling GraphQL API routes");
         app = app
             .route(
@@ -1028,6 +1098,23 @@ impl Runtime {
         } else {
             debug!("RBAC middleware disabled - authentication not required");
         }
+        // axum defaults every whole-body-buffering extractor (`Bytes`, `String`,
+        // `Json<T>`, ...) to a 2MiB request body cap. `/upload`, `/update`, and
+        // Graph Store Protocol PUT/POST all buffer the full body, so without an
+        // explicit override any bulk RDF load or SPARQL Update bigger than 2MiB
+        // is silently rejected. Default to a generous 1GiB, overridable via
+        // `OXIRS_MAX_BODY_BYTES` for deployments that need a stricter (or even
+        // larger) cap without a code change.
+        let max_body_bytes: usize = std::env::var("OXIRS_MAX_BODY_BYTES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|&n: &usize| n > 0)
+            .unwrap_or(1024 * 1024 * 1024);
+        info!(
+            "Request body size limit: {} bytes (override with OXIRS_MAX_BODY_BYTES)",
+            max_body_bytes
+        );
+        app = app.layer(DefaultBodyLimit::max(max_body_bytes));
         app = app.layer(SetRequestIdLayer::x_request_id(RequestIdGenerator));
         app = app.layer(TraceLayer::new_for_http());
         app = app.layer(TimeoutLayer::with_status_code(
@@ -1137,6 +1224,48 @@ impl Runtime {
         warn!("Graceful shutdown timeout reached, forcing exit");
     }
 }
+/// Decide whether at least one configured dataset has a non-empty on-disk
+/// `location`, i.e. whether this deployment persists data across restarts.
+///
+/// Extracted as a standalone, side-effect-free function so the ReBAC backend
+/// selection below is unit testable without spinning up a full `Runtime`.
+fn has_persistent_dataset_location(datasets: &HashMap<String, DatasetConfigAlias>) -> bool {
+    datasets.values().any(|d| !d.location.trim().is_empty())
+}
+
+/// Alias avoiding ambiguity between `crate::config::DatasetConfig` (used by
+/// `ServerConfig::datasets`) and `crate::dataset_management::DatasetConfig`
+/// (imported above as `DatasetConfig`) in this module.
+type DatasetConfigAlias = crate::config::DatasetConfig;
+
+/// Build the ReBAC backend for `Runtime::initialize_services`.
+///
+/// When at least one configured dataset has a persistent (on-disk) location,
+/// relationship/ACL grants are stored durably in the RDF store itself via
+/// [`crate::auth::rdf_rebac::RdfRebacManagerProduction`] (SPARQL ASK/INSERT/
+/// DELETE against a dedicated `urn:oxirs:auth:relationships` graph), so they
+/// survive process restarts. Pure in-memory (ephemeral) deployments keep the
+/// lightweight `InMemoryRebacManager`, since there is no durable location to
+/// write to and paying the SPARQL round-trip cost would be pure overhead.
+fn build_rebac_manager(
+    config: &ServerConfig,
+    store: Store,
+) -> Arc<dyn crate::auth::rebac::RebacEvaluator> {
+    if has_persistent_dataset_location(&config.datasets) {
+        info!(
+            "Persistent dataset location configured; using SPARQL-store-backed \
+             RdfRebacManagerProduction so ReBAC grants survive restarts"
+        );
+        Arc::new(crate::auth::rdf_rebac::RdfRebacManager::with_store(store))
+    } else {
+        info!(
+            "No persistent dataset location configured; using in-memory ReBAC \
+             manager (relationship/ACL grants will not survive a restart)"
+        );
+        Arc::new(crate::auth::rebac::InMemoryRebacManager::new())
+    }
+}
+
 /// Request UUID generator for request IDs
 #[derive(Clone)]
 pub struct RequestIdGenerator;
@@ -1144,6 +1273,17 @@ pub struct RequestIdGenerator;
 #[derive(Clone)]
 pub struct AppState {
     pub store: Store,
+    /// Immutable snapshot of the server configuration taken at startup (or at
+    /// the last full server restart). Most handlers read this field directly
+    /// as plain data, so it is intentionally **not** wrapped in a lock —
+    /// making it live-mutable would require auditing every handler in the
+    /// crate for read consistency, which is out of scope for the current
+    /// hot-reload work. The one config subset that *is* safely hot-reloadable
+    /// today is the dataset registry, via the separately-shared, genuinely
+    /// mutable `dataset_manager` (see `handlers::admin::reload_config` and
+    /// the `#[cfg(feature = "hot-reload")]` file-watcher in
+    /// `Runtime::initialize_services`, both of which reconcile dataset
+    /// add/remove against this same `dataset_manager` instance).
     pub config: ServerConfig,
     pub auth_service: Option<AuthService>,
     pub metrics_service: Option<Arc<MetricsService>>,
@@ -1157,6 +1297,8 @@ pub struct AppState {
     pub batch_executor: Option<Arc<BatchExecutor>>,
     pub stream_manager: Option<Arc<StreamManager>>,
     pub dataset_manager: Option<Arc<DatasetManager>>,
+    /// Persistent JSON-backed API key store (see [`crate::handlers::api_keys::ApiKeyService`]).
+    pub api_key_service: Option<Arc<crate::handlers::api_keys::ApiKeyService>>,
     pub security_auditor: Option<Arc<SecurityAuditManager>>,
     pub ddos_protector: Option<Arc<DDoSProtectionManager>>,
     pub load_balancer: Option<Arc<LoadBalancer>>,
@@ -1180,4 +1322,67 @@ pub struct AppState {
     pub audit_logger: Arc<InMemoryAuditLogger>,
     #[cfg(feature = "rate-limit")]
     pub rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
+}
+
+#[cfg(test)]
+mod rebac_and_config_tests {
+    use super::*;
+
+    fn dataset_config(location: &str) -> crate::config::DatasetConfig {
+        crate::config::DatasetConfig {
+            name: "ds".to_string(),
+            location: location.to_string(),
+            read_only: false,
+            text_index: None,
+            shacl_shapes: vec![],
+            services: vec![],
+            access_control: None,
+            backup: None,
+        }
+    }
+
+    #[test]
+    fn test_has_persistent_dataset_location_empty_map_is_false() {
+        assert!(!has_persistent_dataset_location(&HashMap::new()));
+    }
+
+    #[test]
+    fn test_has_persistent_dataset_location_all_in_memory_is_false() {
+        let mut datasets = HashMap::new();
+        datasets.insert("a".to_string(), dataset_config(""));
+        datasets.insert("b".to_string(), dataset_config("   "));
+        assert!(!has_persistent_dataset_location(&datasets));
+    }
+
+    /// Regression: `Runtime::initialize_services` previously always
+    /// constructed `InMemoryRebacManager`, even when a dataset declared a
+    /// real on-disk location. ReBAC grants for such a deployment must be
+    /// backed by the durable, SPARQL-store-based manager instead.
+    #[test]
+    fn test_has_persistent_dataset_location_detects_one_persistent_dataset() {
+        let mut datasets = HashMap::new();
+        datasets.insert("mem".to_string(), dataset_config(""));
+        datasets.insert("disk".to_string(), dataset_config("./data/disk-ds"));
+        assert!(has_persistent_dataset_location(&datasets));
+    }
+
+    #[test]
+    fn test_build_rebac_manager_selects_backend_by_persistence() {
+        let store = crate::store::Store::new().expect("in-memory store");
+
+        let mut ephemeral_config = ServerConfig::default();
+        ephemeral_config
+            .datasets
+            .insert("mem".to_string(), dataset_config(""));
+        // Both branches must at least construct without panicking; the
+        // concrete backend choice is exercised via `has_persistent_dataset_location`
+        // above (the evaluator trait object does not expose its concrete type).
+        let _ = build_rebac_manager(&ephemeral_config, store.clone());
+
+        let mut persistent_config = ServerConfig::default();
+        persistent_config
+            .datasets
+            .insert("disk".to_string(), dataset_config("./data/disk-ds"));
+        let _ = build_rebac_manager(&persistent_config, store);
+    }
 }

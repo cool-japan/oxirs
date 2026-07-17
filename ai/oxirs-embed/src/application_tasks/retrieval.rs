@@ -5,7 +5,7 @@
 
 use super::ApplicationEvalConfig;
 use crate::EmbeddingModel;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -331,8 +331,81 @@ impl RetrievalEvaluator {
                     .collect();
                 Ok(scores.iter().sum::<f64>() / scores.len() as f64)
             }
-            _ => Ok(0.5), // Placeholder for other metrics
+            RetrievalMetric::F1AtK(k) => {
+                let scores: Vec<f64> = per_query_results
+                    .values()
+                    .filter_map(|r| {
+                        let precision = *r.precision_at_k.get(k)?;
+                        let recall = *r.recall_at_k.get(k)?;
+                        Some(if precision + recall > 0.0 {
+                            2.0 * precision * recall / (precision + recall)
+                        } else {
+                            0.0
+                        })
+                    })
+                    .collect();
+                if scores.is_empty() {
+                    return Err(anyhow!(
+                        "No precision/recall@{k} scores available to compute F1@{k}"
+                    ));
+                }
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
+            }
+            RetrievalMetric::MAP => {
+                let scores: Vec<f64> = per_query_results
+                    .iter()
+                    .map(|(query_id, result)| self.average_precision_for_query(query_id, result))
+                    .collect();
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
+            }
+            RetrievalMetric::MRR => {
+                let scores: Vec<f64> = per_query_results
+                    .iter()
+                    .map(|(query_id, result)| self.reciprocal_rank_for_query(query_id, result))
+                    .collect();
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
+            }
         }
+    }
+
+    /// Ground-truth relevant document IDs for a query, looked up by ID from
+    /// the evaluator's registered queries.
+    fn relevant_docs_for(&self, query_id: &str) -> std::collections::HashSet<String> {
+        self.queries
+            .iter()
+            .find(|q| q.query_id == query_id)
+            .map(|q| q.relevant_docs.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Average precision for a single query's full ranked result list,
+    /// against its ground-truth relevant documents.
+    fn average_precision_for_query(&self, query_id: &str, result: &QueryRetrievalResults) -> f64 {
+        let relevant = self.relevant_docs_for(query_id);
+        if relevant.is_empty() {
+            return 0.0;
+        }
+        let mut hits = 0usize;
+        let mut precision_sum = 0.0;
+        for (rank, (doc_id, _)) in result.retrieved_docs.iter().enumerate() {
+            if relevant.contains(doc_id) {
+                hits += 1;
+                precision_sum += hits as f64 / (rank + 1) as f64;
+            }
+        }
+        precision_sum / relevant.len() as f64
+    }
+
+    /// Reciprocal rank of the first relevant document in a query's ranked
+    /// result list (0.0 if none of the retrieved documents are relevant).
+    fn reciprocal_rank_for_query(&self, query_id: &str, result: &QueryRetrievalResults) -> f64 {
+        let relevant = self.relevant_docs_for(query_id);
+        result
+            .retrieved_docs
+            .iter()
+            .position(|(doc_id, _)| relevant.contains(doc_id))
+            .map(|rank| 1.0 / (rank + 1) as f64)
+            .unwrap_or(0.0)
     }
 
     /// Analyze retrieval performance
@@ -384,5 +457,80 @@ impl RetrievalEvaluator {
 impl Default for RetrievalEvaluator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn evaluator_with_query() -> RetrievalEvaluator {
+        let mut evaluator = RetrievalEvaluator::new();
+        evaluator.add_query(RetrievalQuery {
+            query_id: "q1".to_string(),
+            query_text: "test".to_string(),
+            relevant_docs: vec!["d2".to_string(), "d4".to_string()],
+            query_type: "test".to_string(),
+        });
+        evaluator
+    }
+
+    fn query_result_with_docs(docs: &[&str]) -> QueryRetrievalResults {
+        QueryRetrievalResults {
+            query_id: "q1".to_string(),
+            retrieved_docs: docs.iter().map(|d| (d.to_string(), 1.0)).collect(),
+            precision_at_k: [(2usize, 0.5)].into_iter().collect(),
+            recall_at_k: [(2usize, 0.5)].into_iter().collect(),
+            ndcg_scores: HashMap::new(),
+            response_time: 0.0,
+        }
+    }
+
+    /// Regression test: MAP/MRR must be computed for real from the full
+    /// ranked `retrieved_docs` list against ground-truth relevant docs,
+    /// instead of a hardcoded 0.5.
+    #[test]
+    fn test_calculate_retrieval_metric_map_and_mrr_are_real() -> Result<()> {
+        let evaluator = evaluator_with_query();
+        let mut per_query = HashMap::new();
+        // d2 (relevant) at rank 2, d4 (relevant) at rank 4:
+        // AP = (1/2 + 2/4) / 2 = 0.5; RR = 1/2 = 0.5
+        per_query.insert(
+            "q1".to_string(),
+            query_result_with_docs(&["d1", "d2", "d3", "d4"]),
+        );
+
+        let map = evaluator.calculate_retrieval_metric(&RetrievalMetric::MAP, &per_query)?;
+        assert!((map - 0.5).abs() < 1e-9, "map = {map}");
+
+        let mrr = evaluator.calculate_retrieval_metric(&RetrievalMetric::MRR, &per_query)?;
+        assert!((mrr - 0.5).abs() < 1e-9, "mrr = {mrr}");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_retrieval_metric_f1_at_k_is_real() -> Result<()> {
+        let evaluator = evaluator_with_query();
+        let mut per_query = HashMap::new();
+        per_query.insert("q1".to_string(), query_result_with_docs(&["d1", "d2"]));
+
+        // precision@2 = recall@2 = 0.5 => F1 = 0.5
+        let f1 = evaluator.calculate_retrieval_metric(&RetrievalMetric::F1AtK(2), &per_query)?;
+        assert!((f1 - 0.5).abs() < 1e-9, "f1 = {f1}");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_retrieval_metric_mrr_no_relevant_hit_is_zero() -> Result<()> {
+        let evaluator = evaluator_with_query();
+        let mut per_query = HashMap::new();
+        per_query.insert("q1".to_string(), query_result_with_docs(&["d1", "d3"]));
+
+        let mrr = evaluator.calculate_retrieval_metric(&RetrievalMetric::MRR, &per_query)?;
+        assert_eq!(mrr, 0.0);
+
+        Ok(())
     }
 }

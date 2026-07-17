@@ -746,24 +746,84 @@ impl TimeTravelEngine {
         Ok(index.find_events_by_time_range(start_time, end_time))
     }
 
-    /// Find events without using index (sequential scan)
+    /// Find events without using index (sequential scan).
+    ///
+    /// Used whenever `enable_temporal_indexing` is off (or as a correctness
+    /// baseline): scans the full event stream and applies the same time-range
+    /// (and, if present, single-aggregate) filtering that
+    /// [`Self::find_events_with_index`] gets "for free" from `TemporalIndex`,
+    /// so results are consistent between the indexed and non-indexed paths.
     async fn find_events_without_index(
         &self,
-        _query: &TemporalQuery,
-        _start_time: DateTime<Utc>,
-        _end_time: DateTime<Utc>,
+        query: &TemporalQuery,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
     ) -> Result<Vec<Uuid>> {
-        // This would scan all events in the time range
-        // For now, return empty set as this requires event store iteration
-        warn!("Sequential scan not implemented, returning empty result");
-        Ok(Vec::new())
+        let stored_events = self
+            .event_stream
+            .read_events_from_position(0, usize::MAX)
+            .await?;
+
+        let aggregate_filter = query.filter.aggregate_ids.as_ref();
+
+        let mut event_ids = Vec::new();
+        for stored in &stored_events {
+            let metadata = stored.event_data.metadata();
+
+            if metadata.timestamp < start_time || metadata.timestamp > end_time {
+                continue;
+            }
+
+            if let Some(aggregate_ids) = aggregate_filter {
+                let matches = metadata
+                    .context
+                    .as_ref()
+                    .is_some_and(|ctx| aggregate_ids.contains(ctx));
+                if !matches {
+                    continue;
+                }
+            }
+
+            event_ids.push(Self::event_uuid(stored));
+        }
+
+        debug!(
+            "Sequential scan found {} candidate event(s) in range {}..{}",
+            event_ids.len(),
+            start_time,
+            end_time
+        );
+
+        Ok(event_ids)
     }
 
-    /// Load a specific event by ID
-    async fn load_event(&self, _event_id: Uuid) -> Result<Option<StreamEvent>> {
-        // This would load from event store by ID
-        // For now, return None as this requires event store lookup by ID
-        Ok(None)
+    /// Resolve the stable UUID identity used to reference a stored event
+    /// throughout `TimeTravelEngine` (matches the derivation in
+    /// [`TemporalIndex::add_event`]): parsed from `metadata.event_id` when
+    /// that's a valid UUID, falling back to the event store's own
+    /// `StoredEvent::event_id` otherwise (unlike the index's random fallback,
+    /// this is deterministic, which is required for `load_event` to be able
+    /// to look events back up by the ID `find_events_without_index` returned).
+    fn event_uuid(stored: &crate::event_sourcing::StoredEvent) -> Uuid {
+        Uuid::parse_str(&stored.event_data.metadata().event_id).unwrap_or(stored.event_id)
+    }
+
+    /// Load a specific event by ID.
+    ///
+    /// The event store trait has no direct get-by-ID lookup, so this scans
+    /// the event stream (same source [`Self::find_events_without_index`] and
+    /// [`Self::build_temporal_index`] use) and returns the first event whose
+    /// resolved UUID identity (see [`Self::event_uuid`]) matches.
+    async fn load_event(&self, event_id: Uuid) -> Result<Option<StreamEvent>> {
+        let stored_events = self
+            .event_stream
+            .read_events_from_position(0, usize::MAX)
+            .await?;
+
+        Ok(stored_events
+            .into_iter()
+            .find(|stored| Self::event_uuid(stored) == event_id)
+            .map(|stored| stored.event_data))
     }
 
     /// Check if event matches filter
@@ -1166,6 +1226,204 @@ pub struct TimeTravelMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::event_sourcing::{EventQuery, EventSnapshot, StoredEvent};
+    use crate::EventMetadata;
+
+    /// Minimal in-memory `EventStream` used only to exercise
+    /// `find_events_without_index` / `load_event` against real (if
+    /// synthetic) stored events, since no production `EventStream`
+    /// implementor exists to construct a `TimeTravelEngine` against.
+    struct MockEventStream {
+        events: Vec<StoredEvent>,
+    }
+
+    #[async_trait::async_trait]
+    impl EventStream for MockEventStream {
+        async fn next_event(&mut self) -> Option<StoredEvent> {
+            None
+        }
+
+        async fn has_events(&self) -> bool {
+            !self.events.is_empty()
+        }
+
+        async fn read_events_from_position(
+            &self,
+            position: u64,
+            max_events: usize,
+        ) -> Result<Vec<StoredEvent>> {
+            Ok(self
+                .events
+                .iter()
+                .skip(position as usize)
+                .take(max_events)
+                .cloned()
+                .collect())
+        }
+    }
+
+    /// `EventStoreTrait` is required to construct a `TimeTravelEngine` but
+    /// is untouched by the methods under test here, so every method is a
+    /// harmless stub.
+    struct MockEventStore;
+
+    #[async_trait::async_trait]
+    impl EventStoreTrait for MockEventStore {
+        async fn store_event(&self, stream_id: String, event: StreamEvent) -> Result<StoredEvent> {
+            Ok(test_stored_event(&stream_id, event))
+        }
+
+        async fn query_events(&self, _query: EventQuery) -> Result<Vec<StoredEvent>> {
+            Ok(Vec::new())
+        }
+
+        async fn get_stream_events(
+            &self,
+            _stream_id: &str,
+            _from_version: Option<u64>,
+        ) -> Result<Vec<StoredEvent>> {
+            Ok(Vec::new())
+        }
+
+        async fn replay_from_timestamp(
+            &self,
+            _timestamp: DateTime<Utc>,
+        ) -> Result<Vec<StoredEvent>> {
+            Ok(Vec::new())
+        }
+
+        async fn get_latest_snapshot(&self, _stream_id: &str) -> Result<Option<EventSnapshot>> {
+            Ok(None)
+        }
+
+        async fn rebuild_stream_state(&self, _stream_id: &str) -> Result<Vec<u8>> {
+            Ok(Vec::new())
+        }
+
+        async fn append_events(
+            &self,
+            _aggregate_id: &str,
+            _events: &[StreamEvent],
+            _expected_version: Option<u64>,
+        ) -> Result<u64> {
+            Ok(0)
+        }
+    }
+
+    fn test_event(source: &str, timestamp: DateTime<Utc>) -> StreamEvent {
+        StreamEvent::TripleAdded {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "\"o\"".to_string(),
+            graph: None,
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4().to_string(),
+                timestamp,
+                source: source.to_string(),
+                user: None,
+                context: None,
+                caused_by: None,
+                version: "1".to_string(),
+                properties: HashMap::new(),
+                checksum: None,
+            },
+        }
+    }
+
+    fn test_stored_event(stream_id: &str, event_data: StreamEvent) -> StoredEvent {
+        let event_id =
+            Uuid::parse_str(&event_data.metadata().event_id).unwrap_or_else(|_| Uuid::new_v4());
+        StoredEvent {
+            event_id,
+            sequence_number: 0,
+            stream_id: stream_id.to_string(),
+            stream_version: 0,
+            event_data,
+            stored_at: Utc::now(),
+            storage_metadata: crate::event_sourcing::StorageMetadata {
+                checksum: String::new(),
+                compressed_size: None,
+                original_size: 0,
+                storage_location: "test".to_string(),
+                persistence_status: crate::event_sourcing::PersistenceStatus::Persisted,
+            },
+        }
+    }
+
+    fn make_engine(events: Vec<StreamEvent>) -> TimeTravelEngine {
+        let stored: Vec<StoredEvent> = events
+            .into_iter()
+            .map(|e| test_stored_event("test-stream", e))
+            .collect();
+        TimeTravelEngine::new(
+            TimeTravelConfig::default(),
+            Arc::new(MockEventStore),
+            Arc::new(MockEventStream { events: stored }),
+        )
+    }
+
+    /// Regression test for time_travel.rs:750 — `find_events_without_index`
+    /// used to unconditionally `warn!` and return an empty `Vec`, regardless
+    /// of what was actually in the event store. It must now genuinely scan
+    /// the event stream and return events whose timestamp falls in range.
+    #[tokio::test]
+    async fn test_find_events_without_index_scans_real_events() {
+        let now = Utc::now();
+        let in_range = test_event("svc-a", now);
+        let out_of_range = test_event("svc-a", now - ChronoDuration::days(30));
+        let engine = make_engine(vec![in_range.clone(), out_of_range]);
+
+        let query = TemporalQuery::new();
+        let start = now - ChronoDuration::hours(1);
+        let end = now + ChronoDuration::hours(1);
+
+        let found = engine
+            .find_events_without_index(&query, start, end)
+            .await
+            .expect("sequential scan must not error");
+
+        assert_eq!(
+            found.len(),
+            1,
+            "sequential scan must find exactly the in-range event, not silently return empty"
+        );
+    }
+
+    /// Regression test for time_travel.rs:763 — `load_event` used to always
+    /// return `Ok(None)` regardless of the requested ID, breaking
+    /// `TimePoint::EventId` resolution. It must now actually locate and
+    /// return the matching event from the event store.
+    #[tokio::test]
+    async fn test_load_event_finds_real_event() {
+        let now = Utc::now();
+        let event = test_event("svc-a", now);
+        let event_id =
+            Uuid::parse_str(&event.metadata().event_id).expect("test event_id is a valid UUID");
+        let engine = make_engine(vec![event]);
+
+        let loaded = engine
+            .load_event(event_id)
+            .await
+            .expect("load_event must not error");
+
+        assert!(
+            loaded.is_some(),
+            "load_event must find a previously stored event by ID, not always return None"
+        );
+        assert_eq!(
+            Uuid::parse_str(&loaded.expect("checked above").metadata().event_id)
+                .expect("stored event_id is a valid UUID"),
+            event_id
+        );
+
+        // A random, never-stored ID must still resolve to `None` (correct
+        // "not found", not a fabricated hit).
+        let missing = engine
+            .load_event(Uuid::new_v4())
+            .await
+            .expect("load_event must not error for a missing ID");
+        assert!(missing.is_none());
+    }
 
     #[tokio::test]
     async fn test_time_travel_config_defaults() {

@@ -770,6 +770,10 @@ pub enum UpdateScheduler {
     TriggerBased,        // Update when triggered by external events
 }
 
+/// Average cosine-distance threshold above which an incremental update's
+/// effect on touched entity embeddings is flagged as model drift.
+const DRIFT_COSINE_DISTANCE_THRESHOLD: f32 = 0.15;
+
 impl OnlineLearningManager {
     pub fn new(config: OnlineLearningConfig) -> Self {
         Self {
@@ -862,26 +866,135 @@ impl OnlineLearningManager {
         Ok(())
     }
 
+    /// Score how well the model currently predicts the observed feedback in
+    /// `batch`, as `1 - mean_absolute_error` between the model's own
+    /// `score_triple` output and the feedback's recorded `score`, clamped to
+    /// `[0, 1]`. Data points the model cannot score (e.g. unknown entities)
+    /// are skipped rather than counted as zero error.
+    fn evaluate_batch_performance<M: EmbeddingModel>(model: &M, batch: &[OnlineDataPoint]) -> f32 {
+        let mut total_error = 0.0f32;
+        let mut scored = 0usize;
+        for point in batch {
+            if let Ok(predicted) =
+                model.score_triple(&point.entity1, &point.relation, &point.entity2)
+            {
+                total_error += (predicted as f32 - point.score).abs();
+                scored += 1;
+            }
+        }
+        if scored == 0 {
+            return 0.0;
+        }
+        (1.0 - (total_error / scored as f32)).clamp(0.0, 1.0)
+    }
+
+    /// Snapshot the entity embeddings touched by `batch`, keyed by entity IRI,
+    /// for later drift comparison. Entities the model does not yet know about
+    /// are skipped.
+    fn snapshot_embeddings<M: EmbeddingModel>(
+        model: &M,
+        batch: &[OnlineDataPoint],
+    ) -> HashMap<String, Vec<f32>> {
+        let mut snapshot = HashMap::new();
+        for point in batch {
+            for entity in [&point.entity1, &point.entity2] {
+                if snapshot.contains_key(entity) {
+                    continue;
+                }
+                if let Ok(embedding) = model.get_entity_embedding(entity) {
+                    snapshot.insert(entity.clone(), embedding.values);
+                }
+            }
+        }
+        snapshot
+    }
+
+    /// Detect model drift by comparing entity embeddings before and after the
+    /// incremental update: if the average cosine distance for entities present
+    /// in both snapshots exceeds [`DRIFT_COSINE_DISTANCE_THRESHOLD`], the
+    /// update moved the representation more than expected for a small
+    /// incremental batch, which we flag as drift.
+    fn detect_embedding_drift(
+        before: &HashMap<String, Vec<f32>>,
+        after: &HashMap<String, Vec<f32>>,
+    ) -> bool {
+        let mut total_distance = 0.0f32;
+        let mut compared = 0usize;
+
+        for (entity, before_vec) in before {
+            let Some(after_vec) = after.get(entity) else {
+                continue;
+            };
+            if before_vec.len() != after_vec.len() || before_vec.is_empty() {
+                continue;
+            }
+            let dot: f32 = before_vec
+                .iter()
+                .zip(after_vec.iter())
+                .map(|(a, b)| a * b)
+                .sum();
+            let norm_before = before_vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+            let norm_after = after_vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+            if norm_before <= f32::EPSILON || norm_after <= f32::EPSILON {
+                continue;
+            }
+            let cosine_similarity = (dot / (norm_before * norm_after)).clamp(-1.0, 1.0);
+            total_distance += 1.0 - cosine_similarity;
+            compared += 1;
+        }
+
+        if compared == 0 {
+            return false;
+        }
+        (total_distance / compared as f32) > DRIFT_COSINE_DISTANCE_THRESHOLD
+    }
+
     async fn update_model_incremental<M: EmbeddingModel>(
         &self,
-        _model: &mut M,
-        _batch_data: &[OnlineDataPoint],
+        model: &mut M,
+        batch_data: &[OnlineDataPoint],
     ) -> Result<IncrementalUpdateStats> {
-        // Perform incremental model update
-        // This is a simplified implementation
+        if batch_data.is_empty() {
+            return Ok(IncrementalUpdateStats {
+                performance_improvement: 0.0,
+                memory_usage: 0.0,
+                drift_detected: false,
+            });
+        }
 
-        let performance_before = 0.7; // Placeholder
+        // Measure predictive performance before the update against the model's
+        // current parameters.
+        let performance_before = Self::evaluate_batch_performance(model, batch_data);
+        let embeddings_before = Self::snapshot_embeddings(model, batch_data);
 
-        // Simulate incremental training
-        sleep(Duration::from_millis(100)).await;
+        // Feed the new observations into the model and retrain incrementally.
+        for point in batch_data {
+            let subject = crate::NamedNode::new(&point.entity1)?;
+            let predicate = crate::NamedNode::new(&point.relation)?;
+            let object = crate::NamedNode::new(&point.entity2)?;
+            model.add_triple(crate::Triple::new(subject, predicate, object))?;
+        }
 
-        let mut random = Random::default();
-        let performance_after = performance_before + random.random::<f32>() * 0.05;
+        // A single incremental epoch over the freshly added batch, keeping the
+        // update cheap enough to run on every scheduled trigger.
+        model.train(Some(1)).await?;
+
+        let performance_after = Self::evaluate_batch_performance(model, batch_data);
+        let embeddings_after = Self::snapshot_embeddings(model, batch_data);
+        let drift_detected = Self::detect_embedding_drift(&embeddings_before, &embeddings_after);
+
+        // Estimate the model's resident embedding memory footprint (KB) from
+        // its actual entity/relation counts and dimensionality.
+        let stats = model.get_stats();
+        let memory_usage = ((stats.num_entities + stats.num_relations)
+            * stats.dimensions
+            * std::mem::size_of::<f32>()) as f32
+            / 1024.0;
 
         Ok(IncrementalUpdateStats {
             performance_improvement: performance_after - performance_before,
-            memory_usage: 1024.0,
-            drift_detected: random.random::<f32>() < 0.1,
+            memory_usage,
+            drift_detected,
         })
     }
 }
@@ -1395,5 +1508,91 @@ impl RealTimeOptimizer {
     /// Get optimization summary
     pub fn get_optimization_summary(&self) -> OptimizationSummary {
         self.optimization_history.get_optimization_summary()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::TransE;
+    use crate::ModelConfig;
+
+    fn sample_config() -> OnlineLearningConfig {
+        OnlineLearningConfig {
+            buffer_size: 100,
+            update_frequency: 10,
+            online_lr_decay: 0.99,
+            enable_ewc: false,
+            replay_buffer_size: 50,
+        }
+    }
+
+    fn sample_data_point(entity1: &str, entity2: &str) -> OnlineDataPoint {
+        OnlineDataPoint {
+            timestamp: chrono::Utc::now(),
+            entity1: entity1.to_string(),
+            entity2: entity2.to_string(),
+            relation: "knows".to_string(),
+            score: 0.8,
+            source: "test".to_string(),
+        }
+    }
+
+    /// Regression test for the P1 finding: `update_model_incremental` (via
+    /// `perform_online_update`) must actually train the model and compute
+    /// real performance/drift signals, instead of sleeping and returning
+    /// fabricated random numbers.
+    #[tokio::test]
+    async fn test_perform_online_update_trains_model_and_reports_real_stats() {
+        let mut model = TransE::new(ModelConfig::default().with_dimensions(8));
+        model
+            .add_triple(crate::Triple::new(
+                crate::NamedNode::new("alice").expect("valid"),
+                crate::NamedNode::new("knows").expect("valid"),
+                crate::NamedNode::new("bob").expect("valid"),
+            ))
+            .expect("add_triple should succeed");
+        model
+            .train(Some(1))
+            .await
+            .expect("initial train should succeed");
+
+        let mut manager = OnlineLearningManager::new(sample_config());
+        manager
+            .add_data_point(sample_data_point("alice", "bob"))
+            .await
+            .expect("add_data_point should succeed");
+
+        let result = manager
+            .perform_online_update(&mut model)
+            .await
+            .expect("online update should succeed");
+
+        assert_eq!(result.samples_processed, 1);
+        // The model must have actually learned the new triple.
+        assert!(model.get_entities().contains(&"alice".to_string()));
+        assert!(model.get_entities().contains(&"bob".to_string()));
+        // memory_usage is derived from real model stats (entities/relations ×
+        // dimensions), so it must be positive once the model has content.
+        assert!(
+            result.memory_usage > 0.0,
+            "memory_usage = {}",
+            result.memory_usage
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_model_incremental_empty_batch_is_a_real_no_op() {
+        let mut model = TransE::new(ModelConfig::default().with_dimensions(8));
+        let manager = OnlineLearningManager::new(sample_config());
+
+        let stats = manager
+            .update_model_incremental(&mut model, &[])
+            .await
+            .expect("empty batch should succeed as a no-op");
+
+        assert_eq!(stats.performance_improvement, 0.0);
+        assert_eq!(stats.memory_usage, 0.0);
+        assert!(!stats.drift_detected);
     }
 }

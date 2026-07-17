@@ -507,7 +507,16 @@ impl TfIdfEmbeddingGenerator {
         let total_docs = documents.len() as f32;
         for word in self.vocabulary.keys() {
             let doc_freq = doc_counts.get(word).unwrap_or(&0);
-            let idf = (total_docs / (*doc_freq as f32 + 1.0)).ln();
+            // Smoothed IDF (as used by scikit-learn's `TfidfVectorizer` with
+            // `smooth_idf=True`): `ln((1 + N) / (1 + df)) + 1`. The `+1`
+            // inside the log and the trailing `+1` guarantee `idf >= 1` for
+            // every vocabulary word, even when a term appears in every
+            // document (df == N) or in all-but-one document. The previous
+            // unsmoothed `ln(N / (df + 1))` collapses to exactly `0.0`
+            // whenever `df == N - 1` (e.g. a 2-document corpus where each
+            // term appears in exactly one document), which silently zeroed
+            // out every TF-IDF weight and produced an all-zero embedding.
+            let idf = ((1.0 + total_docs) / (1.0 + *doc_freq as f32)).ln() + 1.0;
             self.idf_scores.insert(word.clone(), idf);
         }
         Ok(())

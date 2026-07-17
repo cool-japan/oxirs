@@ -28,6 +28,9 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 oxiarc-zstd = { workspace = true }
+oxiarc-lz4 = { workspace = true }
+oxiarc-brotli = { workspace = true }
+oxiarc-deflate = { workspace = true }
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 # rand_distr functionality now provided by scirs2-core (use scirs2_core::random::distributions)
 half = "2.7"

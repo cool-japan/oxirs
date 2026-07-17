@@ -375,26 +375,23 @@ impl ParallelQueryExecutor {
         self.perform_parallel_minus(left_solution, right_solution)
     }
 
-    /// Execute service in parallel (federation)
+    /// Execute a SERVICE clause via real HTTP SPARQL-protocol federation.
+    ///
+    /// The pattern is serialized to a SPARQL query and sent to the remote
+    /// endpoint IRI; the JSON results are parsed back into a solution. The
+    /// `SILENT` modifier is honoured (empty solution on failure) — local data
+    /// is never substituted for a federated result.
     pub(crate) fn execute_parallel_service(
         &self,
-        _endpoint: &AlgebraTerm,
+        endpoint: &AlgebraTerm,
         pattern: &Algebra,
         silent: bool,
-        dataset: &dyn Dataset,
-        context: &ExecutionContext,
+        _dataset: &dyn Dataset,
+        _context: &ExecutionContext,
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
-        // For service operations, we typically can't parallelize across the network boundary
-        // but we can execute the pattern preparation in parallel
-        if silent {
-            // In silent mode, return empty solution on failure
-            Ok(self
-                .execute_parallel_internal(pattern, dataset, context, stats)
-                .unwrap_or_else(|_| vec![]))
-        } else {
-            self.execute_parallel_internal(pattern, dataset, context, stats)
-        }
+        stats.service_calls += 1;
+        crate::service_federation::execute_service_clause(endpoint, pattern, silent)
     }
 
     /// Execute graph pattern in parallel

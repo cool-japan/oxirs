@@ -1,23 +1,30 @@
-//! Native FAISS Integration with Real Bindings
+//! Native FAISS Integration — UNAVAILABLE under the Pure Rust policy
 //!
-//! This module provides actual integration with Facebook's FAISS library through
-//! native bindings, enabling high-performance vector search with full FAISS capabilities.
+//! This module's types describe what a native FAISS integration (via FFI
+//! bindings to Facebook's C++ FAISS library) *would* look like, but no such
+//! integration is actually wired up: the COOLJAPAN Pure Rust Policy forbids
+//! adding new C/C++ FFI dependencies to this crate's default build, and no
+//! `oxirs-vec-adapter-faiss` quarantine crate exists (unlike, e.g.,
+//! `oxirs-vec-adapter-cuda` for CUDA).
 //!
-//! Features:
-//! - Real FAISS index import/export
-//! - Native FAISS performance optimization
-//! - GPU acceleration integration
-//! - Memory-efficient batch processing
-//! - Performance benchmarking against FAISS
+//! [`NativeFaissIndex::new`] therefore always returns an explicit error
+//! instead of fabricating a working index behind fake numeric handles. Use
+//! this crate's Pure Rust indexes instead (`HnswIndex`, `IvfIndex`,
+//! `PQIndex`, ...), or the byte-compatible (import/export only, no live FFI)
+//! [`crate::faiss_compatibility`] module.
+//!
+//! The struct/field definitions below are kept only so that a *future* real
+//! `oxirs-vec-adapter-faiss` crate has a documented shape to implement
+//! against; none of the "simulated" logic they describe (GPU context,
+//! memory pool, benchmark numbers) executes in production.
 
 use crate::{
-    faiss_compatibility::{FaissIndexMetadata, FaissIndexType, FaissMetricType},
+    faiss_compatibility::FaissIndexMetadata,
     faiss_integration::{FaissConfig, FaissSearchParams, FaissStatistics},
     index::VectorIndex,
 };
 use anyhow::{Error as AnyhowError, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use tracing::{debug, info, span, Level};
@@ -302,190 +309,20 @@ pub struct AllocationStats {
 }
 
 impl NativeFaissIndex {
-    /// Create a new native FAISS index
-    pub fn new(config: NativeFaissConfig, faiss_config: FaissConfig) -> Result<Self> {
-        let span = span!(Level::INFO, "native_faiss_index_new");
-        let _enter = span.enter();
-
-        // Initialize FAISS library
-        Self::initialize_faiss_library(&config)?;
-
-        // Create metadata
-        let metadata = FaissIndexMetadata {
-            index_type: match faiss_config.index_type {
-                crate::faiss_integration::FaissIndexType::FlatL2 => FaissIndexType::IndexFlatL2,
-                crate::faiss_integration::FaissIndexType::FlatIP => FaissIndexType::IndexFlatIP,
-                crate::faiss_integration::FaissIndexType::IvfFlat => FaissIndexType::IndexIVFFlat,
-                crate::faiss_integration::FaissIndexType::IvfPq => FaissIndexType::IndexIVFPQ,
-                crate::faiss_integration::FaissIndexType::HnswFlat => FaissIndexType::IndexHNSWFlat,
-                crate::faiss_integration::FaissIndexType::Lsh => FaissIndexType::IndexLSH,
-                _ => FaissIndexType::IndexHNSWFlat,
-            },
-            dimension: faiss_config.dimension,
-            num_vectors: 0,
-            metric_type: FaissMetricType::L2,
-            parameters: HashMap::new(),
-            version: "native-1.0".to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-        };
-
-        // Initialize GPU context if enabled
-        let gpu_context = if config.enable_gpu {
-            Some(Self::initialize_gpu_context(&config)?)
-        } else {
-            None
-        };
-
-        // Initialize memory pool
-        let memory_pool =
-            MemoryPool::new(config.performance_tuning.memory_pool_size_mb * 1024 * 1024);
-
-        let index = Self {
-            config: config.clone(),
-            index_handle: Arc::new(Mutex::new(None)),
-            metadata: Arc::new(RwLock::new(metadata)),
-            stats: Arc::new(RwLock::new(NativeFaissStatistics::default())),
-            gpu_context: Arc::new(Mutex::new(gpu_context)),
-            memory_pool: Arc::new(Mutex::new(memory_pool)),
-        };
-
-        // Create native FAISS index
-        index.create_native_index(&faiss_config)?;
-
-        info!(
-            "Created native FAISS index with GPU support: {}",
-            config.enable_gpu
-        );
-        Ok(index)
-    }
-
-    /// Initialize FAISS library
-    fn initialize_faiss_library(config: &NativeFaissConfig) -> Result<()> {
-        let span = span!(Level::DEBUG, "initialize_faiss_library");
-        let _enter = span.enter();
-
-        // In a real implementation, this would:
-        // 1. Load FAISS dynamic library
-        // 2. Initialize FAISS runtime
-        // 3. Set thread count
-        // 4. Configure logging
-        // 5. Initialize GPU support if enabled
-
-        // Simulated initialization
-        debug!("Initializing FAISS library with config: {:?}", config);
-
-        // Set thread count
-        if config.thread_count > 0 {
-            debug!("Setting FAISS thread count to: {}", config.thread_count);
-            // faiss_set_num_threads(config.thread_count);
-        }
-
-        // Initialize GPU support
-        if config.enable_gpu {
-            debug!(
-                "Initializing FAISS GPU support for devices: {:?}",
-                config.gpu_devices
-            );
-            // Initialize CUDA context and GPU resources
-        }
-
-        // Configure performance optimizations
-        if config.performance_tuning.enable_simd {
-            debug!("Enabling FAISS SIMD optimizations");
-            // Enable SIMD instructions
-        }
-
-        info!("FAISS library initialized successfully");
-        Ok(())
-    }
-
-    /// Initialize GPU context
-    fn initialize_gpu_context(config: &NativeFaissConfig) -> Result<GpuContext> {
-        let span = span!(Level::DEBUG, "initialize_gpu_context");
-        let _enter = span.enter();
-
-        let mut resources = Vec::new();
-        let total_memory = 1024 * 1024 * 1024; // 1GB per device
-
-        for (i, &device_id) in config.gpu_devices.iter().enumerate() {
-            let resource = GpuResource {
-                id: i,
-                resource_type: "CUDA".to_string(),
-                memory_size: total_memory / config.gpu_devices.len(),
-                device_id,
-            };
-            resources.push(resource);
-        }
-
-        let context = GpuContext {
-            device_ids: config.gpu_devices.clone(),
-            allocated_memory: total_memory,
-            cuda_context: 12345, // Simulated handle
-            resources,
-        };
-
-        debug!(
-            "Initialized GPU context for {} devices",
-            config.gpu_devices.len()
-        );
-        Ok(context)
-    }
-
-    /// Create native FAISS index
-    fn create_native_index(&self, faiss_config: &FaissConfig) -> Result<()> {
-        let span = span!(Level::DEBUG, "create_native_index");
-        let _enter = span.enter();
-
-        // In a real implementation, this would call FAISS index factory
-        let index_string = self.build_faiss_index_string(faiss_config)?;
-        debug!("Creating FAISS index: {}", index_string);
-
-        // Simulate index creation
-        let index_handle = 98765; // Simulated FAISS index handle
-
-        {
-            let mut handle = self
-                .index_handle
-                .lock()
-                .map_err(|_| AnyhowError::msg("Failed to acquire index handle lock"))?;
-            *handle = Some(index_handle);
-        }
-
-        // Update statistics
-        {
-            let mut stats = self
-                .stats
-                .write()
-                .map_err(|_| AnyhowError::msg("Failed to acquire stats lock"))?;
-            stats.native_metrics.faiss_version = "1.7.4".to_string();
-            stats.native_metrics.index_build_time_ms = 50; // Simulated
-        }
-
-        info!("Native FAISS index created successfully");
-        Ok(())
-    }
-
-    /// Build FAISS index string
-    fn build_faiss_index_string(&self, config: &FaissConfig) -> Result<String> {
-        let index_string = match &config.index_type {
-            crate::faiss_integration::FaissIndexType::FlatL2 => "Flat".to_string(),
-            crate::faiss_integration::FaissIndexType::FlatIP => "Flat".to_string(),
-            crate::faiss_integration::FaissIndexType::IvfFlat => {
-                let clusters = config.num_clusters.unwrap_or(1024);
-                format!("IVF{clusters},Flat")
-            }
-            crate::faiss_integration::FaissIndexType::IvfPq => {
-                let clusters = config.num_clusters.unwrap_or(1024);
-                let subq = config.num_subquantizers.unwrap_or(8);
-                let bits = config.bits_per_subquantizer.unwrap_or(8);
-                format!("IVF{clusters},PQ{subq}x{bits}")
-            }
-            crate::faiss_integration::FaissIndexType::HnswFlat => "HNSW32,Flat".to_string(),
-            crate::faiss_integration::FaissIndexType::Lsh => "LSH".to_string(),
-            _ => "HNSW32,Flat".to_string(),
-        };
-
-        Ok(index_string)
+    /// Attempt to create a native FAISS index.
+    ///
+    /// This always fails: FAISS interop requires native FFI bindings that
+    /// are unavailable under the COOLJAPAN Pure Rust Policy (no
+    /// `oxirs-vec-adapter-faiss` quarantine crate exists to provide them).
+    /// Use this crate's Pure Rust indexes (`HnswIndex`, `IvfIndex`,
+    /// `PQIndex`, ...) instead. See the module-level docs for details.
+    pub fn new(_config: NativeFaissConfig, _faiss_config: FaissConfig) -> Result<Self> {
+        Err(AnyhowError::msg(
+            "Native FAISS integration requires the (unavailable) native FAISS FFI adapter: \
+             the COOLJAPAN Pure Rust Policy forbids new C/C++ FFI dependencies in oxirs-vec's \
+             default build, and no `oxirs-vec-adapter-faiss` quarantine crate exists. Use the \
+             crate's Pure Rust indexes (HnswIndex, IvfIndex, PQIndex, ...) instead.",
+        ))
     }
 
     /// Add vectors to the native FAISS index with optimization
@@ -1162,16 +999,27 @@ impl FaissPerformanceComparison {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Vector;
     use anyhow::Result;
 
     #[test]
-    fn test_native_faiss_index_creation() {
+    fn test_native_faiss_index_creation_fails_loudly() {
+        // Regression test for the P1 finding: `NativeFaissIndex::new` used to
+        // fabricate a "successful" index behind fake numeric handles
+        // (cuda_context: 12345, index_handle: 98765). Native FAISS FFI is
+        // unavailable under the Pure Rust Policy, so it must now fail with a
+        // clear, honest error instead of pretending to succeed.
         let native_config = NativeFaissConfig::default();
         let faiss_config = FaissConfig::default();
 
         let result = NativeFaissIndex::new(native_config, faiss_config);
-        assert!(result.is_ok());
+        let message = match result {
+            Ok(_) => panic!("NativeFaissIndex::new must fail under the Pure Rust Policy"),
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            message.contains("Pure Rust") || message.contains("unavailable"),
+            "error message should honestly explain why native FAISS is unavailable, got: {message}"
+        );
     }
 
     #[test]
@@ -1186,44 +1034,10 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_performance_comparison_framework() -> Result<()> {
-        let native_config = NativeFaissConfig::default();
-        let faiss_config = FaissConfig::default();
-        let faiss_index = NativeFaissIndex::new(native_config, faiss_config)?;
-
-        // Create mock oxirs index
-        let oxirs_index: Box<dyn VectorIndex> = Box::new(MockVectorIndex::new());
-
-        let comparison = FaissPerformanceComparison::new(faiss_index, oxirs_index);
-        assert_eq!(comparison.benchmark_datasets.len(), 0);
-        Ok(())
-    }
-
-    // Mock vector index for testing
-    struct MockVectorIndex;
-
-    impl MockVectorIndex {
-        fn new() -> Self {
-            Self
-        }
-    }
-
-    impl VectorIndex for MockVectorIndex {
-        fn insert(&mut self, _uri: String, _vector: Vector) -> Result<()> {
-            Ok(())
-        }
-
-        fn search_knn(&self, _query: &Vector, _k: usize) -> Result<Vec<(String, f32)>> {
-            Ok(vec![("mock".to_string(), 0.9)])
-        }
-
-        fn search_threshold(&self, _query: &Vector, _threshold: f32) -> Result<Vec<(String, f32)>> {
-            Ok(vec![("mock".to_string(), 0.9)])
-        }
-
-        fn get_vector(&self, _uri: &str) -> Option<&Vector> {
-            None
-        }
-    }
+    // NOTE: `FaissPerformanceComparison` requires a `NativeFaissIndex`, which
+    // can no longer be constructed (see `test_native_faiss_index_creation_fails_loudly`
+    // above) now that native FAISS FFI is honestly reported as unavailable
+    // instead of simulated. There is therefore no way to exercise
+    // `FaissPerformanceComparison` until a real `oxirs-vec-adapter-faiss`
+    // crate exists to provide a genuine `NativeFaissIndex`.
 }

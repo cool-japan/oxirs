@@ -301,13 +301,22 @@ impl ModelGraph {
         let n = self.num_nodes();
         let m = self.num_edges();
 
-        // Compute density using scirs2-graph (DiGraph version)
-        let density = graph_density_digraph(&self.graph)
-            .map_err(|e| SammError::GraphError(format!("Failed to compute density: {}", e)))?;
+        // Compute density using scirs2-graph (DiGraph version). Density is
+        // undefined for graphs with fewer than two nodes (there are no
+        // possible edges to compare against), so we report 0.0 for those
+        // rather than propagating scirs2-graph's error — consistent with
+        // how `compute_diameter` treats the same degenerate case.
+        let density = if n < 2 {
+            0.0
+        } else {
+            graph_density_digraph(&self.graph)
+                .map_err(|e| SammError::GraphError(format!("Failed to compute density: {}", e)))?
+        };
 
-        // Diameter is not available for DiGraph in scirs2-graph
-        // We set it to 0 as a placeholder
-        let diameter_value = 0.0;
+        // scirs2-graph does not expose a direct `diameter()` function for
+        // DiGraph, so compute it directly via repeated Dijkstra
+        // shortest-path queries over all node pairs.
+        let diameter_value = self.compute_diameter()?;
 
         Ok(GraphMetrics {
             num_nodes: n,
@@ -315,6 +324,44 @@ impl ModelGraph {
             diameter: diameter_value,
             density,
         })
+    }
+
+    /// Compute the graph diameter: the longest weighted shortest path
+    /// between any pair of distinct, mutually reachable nodes.
+    ///
+    /// Returns `0.0` for graphs with fewer than two nodes, or if no pair of
+    /// distinct nodes is reachable from one another (e.g. a fully
+    /// disconnected graph) — there is no meaningful longest shortest path
+    /// in that case.
+    fn compute_diameter(&self) -> Result<f64> {
+        let mut diameter: f64 = 0.0;
+
+        for from in &self.nodes {
+            for to in &self.nodes {
+                if from == to {
+                    continue;
+                }
+
+                match dijkstra_path_digraph(&self.graph, from, to) {
+                    Ok(Some(path_data)) => {
+                        diameter = diameter.max(path_data.total_weight);
+                    }
+                    Ok(None) => {
+                        // `to` is not reachable from `from`; not part of the
+                        // diameter computation (undefined for disconnected
+                        // pairs, per the standard graph-diameter definition).
+                    }
+                    Err(e) => {
+                        return Err(SammError::GraphError(format!(
+                            "Failed to compute diameter: {}",
+                            e
+                        )));
+                    }
+                }
+            }
+        }
+
+        Ok(diameter)
     }
 
     /// Get strongly connected components
@@ -662,7 +709,9 @@ pub struct GraphMetrics {
     pub num_nodes: usize,
     /// Number of edges
     pub num_edges: usize,
-    /// Graph diameter (longest shortest path) - 0.0 for DiGraph (not available)
+    /// Graph diameter: the longest weighted shortest path between any pair
+    /// of distinct, mutually reachable nodes (0.0 if fewer than two nodes,
+    /// or if no pair of nodes is mutually reachable).
     pub diameter: f64,
     /// Graph density (0-1)
     pub density: f64,
@@ -875,6 +924,36 @@ mod tests {
         assert_eq!(metrics.num_edges, 6);
         assert!(metrics.density > 0.0);
         assert!(metrics.density <= 1.0);
+
+        // Regression test for the P2 stub fix: diameter must be a real
+        // computed value, not the hardcoded 0.0 placeholder. This test
+        // graph's longest shortest path is aspect -> propertyN -> charN,
+        // two unit-weight edges, so the diameter is exactly 2.0.
+        assert_eq!(metrics.diameter, 2.0);
+    }
+
+    #[test]
+    fn test_compute_diameter_directly() {
+        let aspect = create_test_aspect();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
+
+        let diameter = graph
+            .compute_diameter()
+            .expect("diameter computation should succeed");
+        assert_eq!(diameter, 2.0);
+    }
+
+    #[test]
+    fn test_compute_diameter_single_node_is_zero() {
+        // A graph built from an aspect with no properties has exactly one
+        // node (the aspect itself); with no pair of distinct nodes, the
+        // diameter is 0.0 (not an error).
+        let aspect = Aspect::new("urn:samm:test:1.0.0#SingleAspect".to_string());
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
+        assert_eq!(graph.num_nodes(), 1);
+
+        let metrics = graph.compute_metrics().expect("operation should succeed");
+        assert_eq!(metrics.diameter, 0.0);
     }
 
     #[test]

@@ -68,6 +68,13 @@ fn rdfs_validator() -> ReasoningValidator {
     ReasoningValidator::new(ReasoningConfig::default())
 }
 
+fn custom_validator(custom: CustomReasoning) -> ReasoningValidator {
+    ReasoningValidator::new(ReasoningConfig {
+        entailment_regime: EntailmentRegime::Custom(custom),
+        ..Default::default()
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Original config / type tests
 // ---------------------------------------------------------------------------
@@ -806,6 +813,129 @@ mod entailment {
         let _ = result;
     }
 
+    // ---- Custom entailment regime -----------------------------------------
+
+    #[test]
+    fn test_custom_entailment_transitive_actually_infers() {
+        // Regression test: `EntailmentRegime::Custom` with `transitive: true`
+        // must delegate to the same owl:TransitiveProperty-based closure
+        // OWL2RL uses, not silently report zero inferred triples.
+        let store = ConcreteStore::new().expect("store");
+        insert_triple(
+            &store,
+            &iri("http://ex/ancestorOf"),
+            RDF_TYPE,
+            iri(OWL_TRANSITIVE_PROPERTY),
+        );
+        insert_triple(
+            &store,
+            &iri("http://ex/A"),
+            "http://ex/ancestorOf",
+            iri("http://ex/B"),
+        );
+        insert_triple(
+            &store,
+            &iri("http://ex/B"),
+            "http://ex/ancestorOf",
+            iri("http://ex/C"),
+        );
+
+        let mut validator = custom_validator(CustomReasoning {
+            transitive: true,
+            symmetric: false,
+            inverse: false,
+            functional: false,
+        });
+        let result = validator
+            .validate_with_reasoning(&iri("http://ex/A"), &dummy_shape(), &store)
+            .expect("reasoning");
+        assert!(
+            result.inferred_triple_count >= 1,
+            "Custom(transitive=true) must infer the closure edge, not report zero"
+        );
+    }
+
+    #[test]
+    fn test_custom_entailment_symmetric_actually_infers() {
+        let store = ConcreteStore::new().expect("store");
+        insert_triple(
+            &store,
+            &iri("http://ex/relatedTo"),
+            RDF_TYPE,
+            iri(OWL_SYMMETRIC_PROPERTY),
+        );
+        insert_triple(
+            &store,
+            &iri("http://ex/A"),
+            "http://ex/relatedTo",
+            iri("http://ex/B"),
+        );
+
+        let mut validator = custom_validator(CustomReasoning {
+            transitive: false,
+            symmetric: true,
+            inverse: false,
+            functional: false,
+        });
+        let result = validator
+            .validate_with_reasoning(&iri("http://ex/A"), &dummy_shape(), &store)
+            .expect("reasoning");
+        assert!(
+            result.inferred_triple_count >= 1,
+            "Custom(symmetric=true) must infer the reverse edge, not report zero"
+        );
+    }
+
+    #[test]
+    fn test_custom_entailment_inverse_actually_infers() {
+        let store = ConcreteStore::new().expect("store");
+        insert_triple(
+            &store,
+            &iri("http://ex/parentOf"),
+            OWL_INVERSE_OF,
+            iri("http://ex/childOf"),
+        );
+        insert_triple(
+            &store,
+            &iri("http://ex/A"),
+            "http://ex/parentOf",
+            iri("http://ex/B"),
+        );
+
+        let mut validator = custom_validator(CustomReasoning {
+            transitive: false,
+            symmetric: false,
+            inverse: true,
+            functional: false,
+        });
+        let result = validator
+            .validate_with_reasoning(&iri("http://ex/A"), &dummy_shape(), &store)
+            .expect("reasoning");
+        assert!(
+            result.inferred_triple_count >= 1,
+            "Custom(inverse=true) must infer the owl:inverseOf edge, not report zero"
+        );
+    }
+
+    #[test]
+    fn test_custom_entailment_functional_fails_loud_not_fake_success() {
+        // Functional-property (owl:sameAs materialisation) inference is
+        // genuinely unimplemented; it must fail loudly rather than silently
+        // report zero inferred triples as if reasoning succeeded.
+        let store = ConcreteStore::new().expect("store");
+        let mut validator = custom_validator(CustomReasoning {
+            transitive: false,
+            symmetric: false,
+            inverse: false,
+            functional: true,
+        });
+        let result = validator.validate_with_reasoning(&iri("http://ex/A"), &dummy_shape(), &store);
+        assert!(
+            result.is_err(),
+            "unimplemented functional inference must error, not fake success"
+        );
+    }
+
     // ---- subproperty closure ---------------------------------------------
 
     #[test]
@@ -940,8 +1070,10 @@ mod entailment {
     // ---- OWL 2 QL/EL/Full honest stubs -----------------------------------
 
     #[test]
-    fn test_owl2_ql_el_full_stubs_return_empty() {
-        // The deferred profiles must honestly produce no inferences.
+    fn test_owl2_ql_el_full_regimes_fail_loudly() {
+        // The unimplemented OWL 2 QL/EL/Full profiles must fail loudly rather
+        // than silently produce zero inferences (which would let reasoning-aware
+        // validation trivially pass triples those regimes should have surfaced).
         let store = ConcreteStore::new().expect("store");
         insert_triple(
             &store,
@@ -959,12 +1091,11 @@ mod entailment {
                 entailment_regime: regime,
                 ..Default::default()
             });
-            let result = validator
-                .validate_with_reasoning(&iri("http://ex/A"), &dummy_shape(), &store)
-                .expect("reasoning");
-            assert_eq!(
-                result.inferred_triple_count, 0,
-                "{regime:?} is an honest stub and must infer nothing"
+            let result =
+                validator.validate_with_reasoning(&iri("http://ex/A"), &dummy_shape(), &store);
+            assert!(
+                result.is_err(),
+                "{regime:?} is unimplemented and must return an error, not a silent empty result"
             );
         }
     }

@@ -202,9 +202,21 @@ pub fn parse_dtdl_interface(json: &str) -> Result<Aspect, SammError> {
                 let operation = parse_command_content(&content, &interface.id)?;
                 aspect.add_operation(operation);
             }
-            _ => {
-                // Skip unsupported content types for now
-                // (Relationship, Component will be added in Phase 3)
+            other => {
+                // Relationship/Component (and any other DTDL content kind)
+                // are not yet mapped to a SAMM model element. Warn loudly
+                // instead of silently discarding the content item, so
+                // callers converting real DTDL interfaces notice the data
+                // loss instead of getting a silently incomplete Aspect.
+                tracing::warn!(
+                    content_name = %content.name,
+                    content_type = %other,
+                    interface_id = %interface.id,
+                    "Skipping unsupported DTDL content type '{}' for '{}' during DTDL->SAMM \
+                     conversion (Relationship/Component are not yet mapped to SAMM elements)",
+                    other,
+                    content.name
+                );
             }
         }
     }
@@ -620,6 +632,50 @@ mod tests {
         assert_eq!(op.name(), "emergencyStop");
         let display_name = op.metadata.get_preferred_name("en");
         assert_eq!(display_name, Some("Emergency Stop"));
+    }
+
+    /// Regression test for the P2 error-handling fix: DTDL content items of
+    /// an unsupported type (`Relationship`, `Component`, ...) must still be
+    /// safely skipped (not error out the whole conversion) while the
+    /// supported content items around them are still converted correctly.
+    /// The warning emitted for the skipped item cannot be asserted directly
+    /// without a tracing test-capture dependency, so this test focuses on
+    /// the functional contract: no data loss for supported content, no
+    /// panic/error for unsupported content.
+    #[test]
+    fn test_parse_interface_skips_unsupported_content_without_erroring() {
+        let dtdl = r#"{
+            "@context": "dtmi:dtdl:context;3",
+            "@id": "dtmi:com:example:Vehicle;1",
+            "@type": "Interface",
+            "displayName": "Vehicle",
+            "contents": [
+                {
+                    "@type": "Relationship",
+                    "name": "hasEngine"
+                },
+                {
+                    "@type": "Property",
+                    "name": "speed",
+                    "schema": "float"
+                },
+                {
+                    "@type": "Component",
+                    "name": "gpsModule"
+                }
+            ]
+        }"#;
+
+        let aspect = parse_dtdl_interface(dtdl).expect("DTDL parsing should succeed");
+
+        // The unsupported Relationship/Component content items are skipped
+        // (not mapped to properties or operations)...
+        assert_eq!(aspect.properties().len(), 1);
+        assert_eq!(aspect.operations().len(), 0);
+
+        // ...but the supported Property content between them is still
+        // converted correctly (skipping is per-item, not fatal).
+        assert_eq!(aspect.properties()[0].name(), "speed");
     }
 
     #[test]

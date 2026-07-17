@@ -4,7 +4,7 @@ use crate::{
     config::DatasetConfig,
     error::{FusekiError, FusekiResult},
     server::AppState,
-    store::Store,
+    store::{CoreRdfFormat, CoreStore, Serializer, Store},
 };
 use axum::{
     extract::{Path, Query, State},
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, warn};
 
 /// Dataset creation request
 #[derive(Debug, Deserialize)]
@@ -92,6 +92,11 @@ pub async fn ui_handler(State(state): State<Arc<AppState>>) -> Result<Html<Strin
 }
 
 /// List all datasets
+///
+/// Unions the statically configured datasets (`state.config.datasets`, from
+/// the server's config file) with any datasets registered at runtime through
+/// this API (tracked persistently by `state.dataset_manager`), so datasets
+/// created via `POST /$/datasets/:name` actually show up afterwards.
 #[instrument(skip(state))]
 pub async fn list_datasets(
     State(state): State<Arc<AppState>>,
@@ -100,11 +105,17 @@ pub async fn list_datasets(
     // Check permissions
     // check_admin_permission(&auth_user, &Permission::SystemMetrics)?;
 
-    let mut datasets = Vec::new();
+    let mut names: std::collections::BTreeSet<String> =
+        state.config.datasets.keys().cloned().collect();
+    if let Some(dataset_manager) = &state.dataset_manager {
+        for meta in dataset_manager.list_datasets().await {
+            names.insert(meta.name);
+        }
+    }
 
-    for (name, config) in &state.config.datasets {
-        let dataset_info = get_dataset_info(name, config, &state.store).await?;
-        datasets.push(dataset_info);
+    let mut datasets = Vec::with_capacity(names.len());
+    for name in names {
+        datasets.push(get_dataset_info(&state, &name).await?);
     }
 
     info!("Listed {} datasets", datasets.len());
@@ -121,18 +132,16 @@ pub async fn get_dataset(
     // Check permissions
     // check_dataset_permission(&auth_user, &dataset_name, &Permission::DatasetRead)?;
 
-    let config = state
-        .config
-        .datasets
-        .get(&dataset_name)
-        .ok_or_else(|| FusekiError::not_found(format!("Dataset '{dataset_name}' not found")))?;
-
-    let dataset_info = get_dataset_info(&dataset_name, config, &state.store).await?;
-
+    let dataset_info = get_dataset_info(&state, &dataset_name).await?;
     Ok(Json(dataset_info))
 }
 
 /// Create new dataset
+///
+/// Delegates to `state.dataset_manager` (real, disk-backed: creates
+/// `<base_path>/<name>/` plus `metadata.json`) so the dataset genuinely
+/// exists afterwards, then best-effort registers a distinct backing store on
+/// `state.store` so it is addressable for SPARQL query/update routing.
 #[instrument(skip(state))]
 pub async fn create_dataset(
     State(state): State<Arc<AppState>>,
@@ -145,20 +154,36 @@ pub async fn create_dataset(
     // Validate dataset name
     validate_dataset_name(&request.name)?;
 
-    // Check if dataset already exists
+    // Check if dataset already exists (statically configured or previously
+    // created through this API)
     if state.config.datasets.contains_key(&request.name) {
         return Err(FusekiError::conflict(format!(
             "Dataset '{}' already exists",
             request.name
         )));
     }
+    if let Some(dataset_manager) = &state.dataset_manager {
+        if dataset_manager.get_dataset(&request.name).await.is_ok() {
+            return Err(FusekiError::conflict(format!(
+                "Dataset '{}' already exists",
+                request.name
+            )));
+        }
+    }
+
+    let dataset_manager = state.dataset_manager.as_ref().ok_or_else(|| {
+        FusekiError::service_unavailable(
+            "Dataset manager not available; cannot durably create datasets",
+        )
+    })?;
+    dataset_manager
+        .create_dataset(request.name.clone(), request.description.clone())
+        .await?;
 
     // Create dataset configuration
     let dataset_config = DatasetConfig {
         name: request.name.clone(),
-        location: request
-            .location
-            .unwrap_or_else(|| format!("/data/{}", request.name)),
+        location: request.location.clone().unwrap_or_default(),
         read_only: request.read_only.unwrap_or(false),
         text_index: None,
         shacl_shapes: Vec::new(),
@@ -182,17 +207,36 @@ pub async fn create_dataset(
         backup: None,
     };
 
-    // Create dataset in store
-    create_dataset_in_store(&state.store, &request.name, &dataset_config).await?;
+    // Best-effort: also register a distinct backing store under `state.store`
+    // so the dataset is queryable via `Store::query_dataset`/`update_dataset`
+    // going forward. Not fatal on failure — the dataset manager registration
+    // above is the durable source of truth for "does this dataset exist".
+    if let Err(e) = state
+        .store
+        .create_dataset(&request.name, dataset_config.clone())
+    {
+        warn!(
+            "Dataset '{}' was created in the dataset manager but could not be \
+             registered as a live backing store: {}",
+            request.name, e
+        );
+    }
 
     // Generate dataset info
-    let dataset_info = get_dataset_info(&request.name, &dataset_config, &state.store).await?;
+    let dataset_info = get_dataset_info(&state, &request.name).await?;
 
     info!("Created dataset: {}", request.name);
     Ok(Json(dataset_info))
 }
 
 /// Delete dataset
+///
+/// Real deletion for datasets created through this API: removes the
+/// `dataset_manager`-tracked directory on disk and best-effort unregisters
+/// the backing store. Datasets that exist only in the static config file
+/// (never created through this API) have no manager-tracked storage this
+/// process can remove, so that case fails loudly instead of reporting a
+/// fake success.
 #[instrument(skip(state))]
 pub async fn delete_dataset(
     State(state): State<Arc<AppState>>,
@@ -202,18 +246,28 @@ pub async fn delete_dataset(
     // Check permissions
     // check_admin_permission(&auth_user, &Permission::SystemConfig)?;
 
-    // Check if dataset exists
-    if !state.config.datasets.contains_key(&dataset_name) {
-        return Err(FusekiError::not_found(format!(
-            "Dataset '{dataset_name}' not found"
+    if let Some(dataset_manager) = &state.dataset_manager {
+        if dataset_manager.get_dataset(&dataset_name).await.is_ok() {
+            dataset_manager.delete_dataset(&dataset_name).await?;
+            // Best-effort: also drop the live backing store registration, if any.
+            let _ = state.store.remove_dataset(&dataset_name);
+            info!("Deleted dataset: {}", dataset_name);
+            return Ok(StatusCode::NO_CONTENT);
+        }
+    }
+
+    if state.config.datasets.contains_key(&dataset_name) {
+        return Err(FusekiError::server_error(format!(
+            "Dataset '{dataset_name}' is declared in the static server configuration file \
+             and was never created through this API, so this process has no \
+             manager-tracked storage to delete for it. Remove it from the \
+             configuration file and restart the server instead."
         )));
     }
 
-    // Delete dataset from store
-    delete_dataset_from_store(&state.store, &dataset_name).await?;
-
-    info!("Deleted dataset: {}", dataset_name);
-    Ok(StatusCode::NO_CONTENT)
+    Err(FusekiError::not_found(format!(
+        "Dataset '{dataset_name}' not found"
+    )))
 }
 
 /// Get server information
@@ -297,7 +351,29 @@ pub async fn server_stats(
     Ok(Json(stats))
 }
 
+/// Returns `Ok(())` if `name` is a known dataset (statically configured or
+/// registered via `state.dataset_manager`), otherwise a 404.
+async fn ensure_dataset_known(state: &AppState, name: &str) -> FusekiResult<()> {
+    if state.config.datasets.contains_key(name) {
+        return Ok(());
+    }
+    if let Some(dataset_manager) = &state.dataset_manager {
+        if dataset_manager.get_dataset(name).await.is_ok() {
+            return Ok(());
+        }
+    }
+    Err(FusekiError::not_found(format!(
+        "Dataset '{name}' not found"
+    )))
+}
+
 /// Compact dataset
+///
+/// The `Store` abstraction exposes each dataset only as a `dyn Store` trait
+/// object with no compaction primitive (see `oxirs_core::rdf_store::Store`),
+/// so there is nothing to physically reclaim at this layer. Rather than
+/// fabricate a "space saved" figure, this reports the real, measured
+/// triple/byte size and is honest that no physical compaction ran.
 #[instrument(skip(state))]
 pub async fn compact_dataset(
     State(state): State<Arc<AppState>>,
@@ -308,12 +384,7 @@ pub async fn compact_dataset(
     // Check permissions
     // check_admin_permission(&auth_user, &Permission::SystemConfig)?;
 
-    // Check if dataset exists
-    if !state.config.datasets.contains_key(&dataset_name) {
-        return Err(FusekiError::not_found(format!(
-            "Dataset '{dataset_name}' not found"
-        )));
-    }
+    ensure_dataset_known(&state, &dataset_name).await?;
 
     let start_time = Instant::now();
 
@@ -325,9 +396,10 @@ pub async fn compact_dataset(
     let execution_time = start_time.elapsed();
 
     info!(
-        "Compacted dataset '{}' in {}ms",
+        "Compaction requested for dataset '{}' in {}ms: {}",
         dataset_name,
-        execution_time.as_millis()
+        execution_time.as_millis(),
+        result.message
     );
 
     Ok(Json(serde_json::json!({
@@ -336,12 +408,17 @@ pub async fn compact_dataset(
         "execution_time_ms": execution_time.as_millis(),
         "size_before_bytes": result.size_before,
         "size_after_bytes": result.size_after,
-        "space_saved_bytes": result.size_before - result.size_after,
-        "message": "Dataset compaction completed successfully"
+        "space_saved_bytes": result.size_before.saturating_sub(result.size_after),
+        "message": result.message,
     })))
 }
 
 /// Backup dataset
+///
+/// Serializes the dataset's actual quads (resolved from the live `Store`,
+/// falling back to the default backing store when no distinct named store
+/// was registered for `dataset_name`) in the requested RDF format, instead
+/// of returning fixed placeholder triples.
 #[instrument(skip(state))]
 pub async fn backup_dataset(
     State(state): State<Arc<AppState>>,
@@ -352,12 +429,7 @@ pub async fn backup_dataset(
     // Check permissions
     // check_admin_permission(&auth_user, &Permission::SystemConfig)?;
 
-    // Check if dataset exists
-    if !state.config.datasets.contains_key(&dataset_name) {
-        return Err(FusekiError::not_found(format!(
-            "Dataset '{dataset_name}' not found"
-        )));
-    }
+    ensure_dataset_known(&state, &dataset_name).await?;
 
     let format = params.format.as_deref().unwrap_or("turtle");
     let compress = params.compress.unwrap_or(false);
@@ -378,24 +450,35 @@ pub async fn backup_dataset(
     let execution_time = start_time.elapsed();
 
     info!(
-        "Created backup for dataset '{}' in {}ms",
+        "Created backup for dataset '{}' ({} bytes) in {}ms",
         dataset_name,
+        backup_data.len(),
         execution_time.as_millis()
     );
 
     // Determine content type and filename
-    let (content_type, filename) = match format {
+    let (content_type, mut filename) = match format {
         "turtle" => ("text/turtle", format!("{dataset_name}_backup.ttl")),
         "ntriples" => ("application/n-triples", format!("{dataset_name}_backup.nt")),
         "rdfxml" => ("application/rdf+xml", format!("{dataset_name}_backup.rdf")),
+        "nquads" => ("application/n-quads", format!("{dataset_name}_backup.nq")),
+        "trig" => ("application/trig", format!("{dataset_name}_backup.trig")),
         _ => ("text/turtle", format!("{dataset_name}_backup.ttl")),
+    };
+    if compress {
+        filename.push_str(".gz");
+    }
+    let content_type = if compress {
+        "application/gzip".to_string()
+    } else {
+        content_type.to_string()
     };
 
     let headers = [
         ("content-type", content_type),
         (
             "content-disposition",
-            &format!("attachment; filename=\"{filename}\""),
+            format!("attachment; filename=\"{filename}\""),
         ),
     ];
 
@@ -494,33 +577,74 @@ async fn generate_admin_ui_html(state: &AppState) -> FusekiResult<String> {
     Ok(html)
 }
 
-/// Get dataset information
-async fn get_dataset_info(
-    name: &str,
-    config: &DatasetConfig,
-    store: &Store,
-) -> FusekiResult<DatasetInfo> {
-    // Get dataset statistics from store
-    let stats = get_dataset_stats_from_store(store, name).await?;
+/// Get dataset information, merging the statically configured registry
+/// (`state.config.datasets`, name/location/read_only/services) with the
+/// dynamic registry (`state.dataset_manager`, description/created_at/
+/// modified_at for datasets created through this API) and real triple/byte
+/// counts read live from `state.store`.
+async fn get_dataset_info(state: &AppState, name: &str) -> FusekiResult<DatasetInfo> {
+    let config = state.config.datasets.get(name);
+    let dynamic_meta = match &state.dataset_manager {
+        Some(dataset_manager) => dataset_manager.get_dataset(name).await.ok(),
+        None => None,
+    };
+
+    if config.is_none() && dynamic_meta.is_none() {
+        return Err(FusekiError::not_found(format!(
+            "Dataset '{name}' not found"
+        )));
+    }
+
+    // Get real dataset statistics from the live store (never fabricated).
+    let stats = get_dataset_stats_from_store(&state.store, name).await?;
 
     let services = config
-        .services
-        .iter()
-        .map(|service| ServiceInfo {
-            name: service.name.clone(),
-            endpoint: service.endpoint.clone(),
-            service_type: format!("{:?}", service.service_type),
-            description: format!("{:?} service", service.service_type),
+        .map(|c| {
+            c.services
+                .iter()
+                .map(|service| ServiceInfo {
+                    name: service.name.clone(),
+                    endpoint: service.endpoint.clone(),
+                    service_type: format!("{:?}", service.service_type),
+                    description: format!("{:?} service", service.service_type),
+                })
+                .collect()
         })
-        .collect();
+        .unwrap_or_default();
+
+    let location = config
+        .map(|c| c.location.clone())
+        .filter(|l| !l.is_empty())
+        .or_else(|| {
+            dynamic_meta
+                .as_ref()
+                .map(|_| format!("./data/datasets/{name}"))
+        })
+        .unwrap_or_default();
+    let read_only = config.map(|c| c.read_only).unwrap_or(false);
+    let description = dynamic_meta.as_ref().and_then(|m| m.description.clone());
+
+    let (created_at, last_modified) = match &dynamic_meta {
+        Some(meta) => (
+            chrono::DateTime::<chrono::Utc>::from(meta.created_at).to_rfc3339(),
+            chrono::DateTime::<chrono::Utc>::from(meta.modified_at).to_rfc3339(),
+        ),
+        // No dynamic-registry record (statically configured dataset that was
+        // never created through this API): we genuinely don't know when it
+        // was created, so report "now" rather than fabricating a past date.
+        None => {
+            let now = chrono::Utc::now().to_rfc3339();
+            (now.clone(), now)
+        }
+    };
 
     Ok(DatasetInfo {
         name: name.to_string(),
-        location: config.location.clone(),
-        read_only: config.read_only,
-        description: None,                              // Could be added to config
-        created_at: chrono::Utc::now().to_rfc3339(),    // Mock data
-        last_modified: chrono::Utc::now().to_rfc3339(), // Mock data
+        location,
+        read_only,
+        description,
+        created_at,
+        last_modified,
         triple_count: stats.triple_count,
         size_bytes: stats.size_bytes,
         services,
@@ -559,7 +683,13 @@ fn validate_dataset_name(name: &str) -> FusekiResult<()> {
     Ok(())
 }
 
-// Mock store operations (to be replaced with actual implementations)
+// Store-backed operations. `resolve_dataset_store` implements the two-tier
+// lookup shared by stats/compact/backup: prefer a distinct named store
+// registered via `Store::create_dataset`, and fall back to the always-present
+// default backing store when no such distinct registration exists. This
+// matches the common single-dataset Fuseki deployment shape, where the
+// "dataset name" in the config file has no separate `Store::datasets` entry
+// and all data actually lives in the default store.
 
 struct DatasetStats {
     triple_count: u64,
@@ -569,74 +699,153 @@ struct DatasetStats {
 struct CompactionResult {
     size_before: u64,
     size_after: u64,
+    message: String,
 }
 
-async fn get_dataset_stats_from_store(_store: &Store, _name: &str) -> FusekiResult<DatasetStats> {
-    // Mock implementation
+/// Resolve `name` to a live backing store, real triples included.
+fn resolve_dataset_store(
+    store: &Store,
+    name: &str,
+) -> FusekiResult<Arc<std::sync::RwLock<dyn CoreStore>>> {
+    match store.get_dataset(Some(name)) {
+        Ok(dataset) => Ok(dataset),
+        Err(_) => store.get_dataset(None),
+    }
+}
+
+/// Real triple count and a real (serialized-size) byte estimate for
+/// `name`, read live from the store — never a fixed placeholder.
+async fn get_dataset_stats_from_store(store: &Store, name: &str) -> FusekiResult<DatasetStats> {
+    let dataset = resolve_dataset_store(store, name)?;
+    let quads = {
+        let guard = dataset
+            .read()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {e}")))?;
+        guard
+            .quads()
+            .map_err(|e| FusekiError::store(format!("Failed to enumerate quads: {e}")))?
+    };
+
+    let triple_count = quads.len() as u64;
+
+    // Byte size is estimated as the N-Quads-serialized length: a real,
+    // reproducible measurement of the dataset's content rather than a
+    // fabricated constant.
+    let serializer = Serializer::new(CoreRdfFormat::NQuads);
+    let mut size_bytes = 0u64;
+    for quad in &quads {
+        if let Ok(line) = serializer.serialize_quad_to_nquads(quad) {
+            size_bytes += line.len() as u64 + 1; // + newline
+        }
+    }
+
     Ok(DatasetStats {
-        triple_count: 1000, // Mock data
-        size_bytes: 50000,  // Mock data
+        triple_count,
+        size_bytes,
     })
 }
 
-async fn create_dataset_in_store(
-    _store: &Store,
-    name: &str,
-    config: &DatasetConfig,
-) -> FusekiResult<()> {
-    // Mock implementation
-    debug!(
-        "Creating dataset '{}' at location '{}'",
-        name, config.location
-    );
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    Ok(())
-}
-
-async fn delete_dataset_from_store(_store: &Store, name: &str) -> FusekiResult<()> {
-    // Mock implementation
-    debug!("Deleting dataset '{}'", name);
-    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-    Ok(())
-}
-
+/// Report the real, measured dataset size honestly rather than fabricate a
+/// "space saved" figure — see the `compact_dataset` handler docs for why no
+/// physical compaction is performed at this layer.
 async fn compact_dataset_in_store(
-    _store: &Store,
+    store: &Store,
     name: &str,
     force: bool,
 ) -> FusekiResult<CompactionResult> {
-    // Mock implementation
-    debug!("Compacting dataset '{}' (force: {})", name, force);
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
+    debug!(
+        "Compaction requested for dataset '{}' (force: {})",
+        name, force
+    );
+    let stats = get_dataset_stats_from_store(store, name).await?;
     Ok(CompactionResult {
-        size_before: 100000,
-        size_after: 75000,
+        size_before: stats.size_bytes,
+        size_after: stats.size_bytes,
+        message: format!(
+            "No physical compaction was performed: the current storage backend \
+             (dyn Store trait object) exposes no compaction primitive at this \
+             layer. Measured {} triples, {} bytes.",
+            stats.triple_count, stats.size_bytes
+        ),
     })
 }
 
+/// Serialize the dataset's real content (resolved via
+/// [`resolve_dataset_store`]) in the requested RDF format, optionally gzip
+/// compressed (Pure-Rust `oxiarc-deflate`).
 async fn create_dataset_backup(
-    _store: &Store,
+    store: &Store,
     name: &str,
     format: &str,
     compress: bool,
     include_metadata: bool,
-) -> FusekiResult<String> {
-    // Mock implementation
+) -> FusekiResult<Vec<u8>> {
     debug!(
         "Creating backup for dataset '{}' in format '{}' (compress: {}, metadata: {})",
         name, format, compress, include_metadata
     );
 
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let dataset = resolve_dataset_store(store, name)?;
+    let quads = {
+        let guard = dataset
+            .read()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {e}")))?;
+        guard
+            .quads()
+            .map_err(|e| FusekiError::store(format!("Failed to enumerate quads: {e}")))?
+    };
 
-    // Return mock backup data
-    match format {
-        "turtle" => Ok("@prefix ex: <http://example.org/> .\nex:subject ex:predicate \"backup data\" .".to_string()),
-        "ntriples" => Ok("<http://example.org/subject> <http://example.org/predicate> \"backup data\" .".to_string()),
-        "rdfxml" => Ok("<?xml version=\"1.0\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n</rdf:RDF>".to_string()),
-        _ => Ok("# Backup data\n".to_string()),
+    let rdf_format = match format {
+        "ntriples" => CoreRdfFormat::NTriples,
+        "rdfxml" => CoreRdfFormat::RdfXml,
+        "nquads" => CoreRdfFormat::NQuads,
+        "trig" => CoreRdfFormat::TriG,
+        _ => CoreRdfFormat::Turtle,
+    };
+    let serializer = Serializer::new(rdf_format);
+
+    let body = match rdf_format {
+        CoreRdfFormat::NQuads | CoreRdfFormat::TriG => {
+            let mut dataset_model = oxirs_core::model::Dataset::new();
+            for quad in &quads {
+                dataset_model.insert(quad.clone());
+            }
+            serializer.serialize_dataset(&dataset_model).map_err(|e| {
+                FusekiError::response_formatting(format!("Failed to serialize backup: {e}"))
+            })?
+        }
+        _ => {
+            let triples: Vec<_> = quads.iter().map(|q| q.to_triple()).collect();
+            let graph = oxirs_core::model::Graph::from_triples(triples);
+            serializer.serialize_graph(&graph).map_err(|e| {
+                FusekiError::response_formatting(format!("Failed to serialize backup: {e}"))
+            })?
+        }
+    };
+
+    let mut body = body.into_bytes();
+    // RDF/XML must start with its own XML declaration (inserted by the
+    // serializer); prepending any banner -- even an XML comment -- ahead of
+    // that declaration produces an unparseable document, so metadata is
+    // skipped for that format only. All other formats here (Turtle,
+    // N-Triples, N-Quads, TriG) support `#`-prefixed line comments.
+    if include_metadata && rdf_format != CoreRdfFormat::RdfXml {
+        let header = format!(
+            "# OxiRS backup of dataset '{name}' -- {} quad(s), generated {}\n",
+            quads.len(),
+            chrono::Utc::now().to_rfc3339()
+        );
+        let mut with_header = header.into_bytes();
+        with_header.extend_from_slice(&body);
+        body = with_header;
     }
+
+    if compress {
+        body = oxiarc_deflate::gzip_compress(&body, 6)
+            .map_err(|e| FusekiError::internal(format!("Failed to compress backup: {e}")))?;
+    }
+
+    Ok(body)
 }
 
 // ============================================================================
@@ -918,29 +1127,68 @@ pub async fn reload_config(
     // Detect changes between current and new configuration
     let mut changes = Vec::new();
 
-    // Check for dataset changes
+    // Dataset changes are the one category this handler can actually apply:
+    // `state.dataset_manager` is a real, mutable, shared registry (unlike
+    // `state.config`, which is an immutable per-request snapshot — see
+    // `AppState::config` docs). Everything else below is detected but
+    // honestly reported as requiring a restart, since this process has no
+    // safe way to mutate the rest of the live `ServerConfig` snapshot that
+    // every other handler already holds a copy of.
     let current_datasets: std::collections::HashSet<_> = state.config.datasets.keys().collect();
     let new_datasets: std::collections::HashSet<_> = new_config.datasets.keys().collect();
 
-    for name in new_datasets.difference(&current_datasets) {
-        changes.push(format!("New dataset added: {}", name));
-    }
+    if let Some(dataset_manager) = &state.dataset_manager {
+        for name in new_datasets.difference(&current_datasets) {
+            let name = name.as_str();
+            match dataset_manager.get_dataset(name).await {
+                Ok(_) => changes.push(format!(
+                    "Dataset '{name}' already present in the dataset manager (no-op)"
+                )),
+                Err(_) => match dataset_manager.create_dataset(name.to_string(), None).await {
+                    Ok(_) => changes.push(format!("Applied: created new dataset '{name}'")),
+                    Err(e) => changes.push(format!("Failed to create new dataset '{name}': {e}")),
+                },
+            }
+        }
 
-    for name in current_datasets.difference(&new_datasets) {
-        changes.push(format!("Dataset removed: {}", name));
+        for name in current_datasets.difference(&new_datasets) {
+            let name = name.as_str();
+            match dataset_manager.get_dataset(name).await {
+                Ok(_) => match dataset_manager.delete_dataset(name).await {
+                    Ok(_) => changes.push(format!("Applied: deleted dataset '{name}'")),
+                    Err(e) => changes.push(format!("Failed to delete dataset '{name}': {e}")),
+                },
+                Err(_) => changes.push(format!(
+                    "Dataset '{name}' removed from config but was never created through \
+                     the dataset manager (statically configured); not deleted -- restart \
+                     required to fully remove it"
+                )),
+            }
+        }
+    } else {
+        for name in new_datasets.difference(&current_datasets) {
+            changes.push(format!(
+                "New dataset detected: {name} (not applied -- dataset manager unavailable, requires restart)"
+            ));
+        }
+        for name in current_datasets.difference(&new_datasets) {
+            changes.push(format!(
+                "Dataset removed from config: {name} (not applied -- dataset manager unavailable, requires restart)"
+            ));
+        }
     }
 
     // Check for server config changes
     if state.config.server.port != new_config.server.port {
         changes.push(format!(
-            "Port changed: {} -> {} (requires restart)",
+            "Port changed: {} -> {} (not applied -- requires restart)",
             state.config.server.port, new_config.server.port
         ));
     }
 
     if state.config.server.host != new_config.server.host {
         changes.push(format!(
-            "Host changed: {} -> {} (requires restart)",
+            "Host changed: {} -> {} (not applied -- requires restart)",
             state.config.server.host, new_config.server.host
         ));
     }
@@ -948,7 +1196,7 @@ pub async fn reload_config(
     // Check security changes
     if state.config.security.authentication.enabled != new_config.security.authentication.enabled {
         changes.push(format!(
-            "Authentication: {} -> {}",
+            "Authentication: {} -> {} (not applied -- requires restart)",
             if state.config.security.authentication.enabled {
                 "enabled"
             } else {
@@ -965,7 +1213,7 @@ pub async fn reload_config(
     // Check monitoring changes
     if state.config.monitoring.metrics.enabled != new_config.monitoring.metrics.enabled {
         changes.push(format!(
-            "Metrics: {} -> {}",
+            "Metrics: {} -> {} (not applied -- requires restart)",
             if state.config.monitoring.metrics.enabled {
                 "enabled"
             } else {
@@ -979,16 +1227,16 @@ pub async fn reload_config(
         ));
     }
 
-    // Note: Actually applying the changes would require mutable access to the config
-    // In a real implementation, this would update a RwLock<Config> or similar
-    // For now, we report the changes that would be applied
-
+    let applied_count = changes.iter().filter(|c| c.starts_with("Applied:")).count();
     let message = if changes.is_empty() {
         "Configuration reloaded. No changes detected.".to_string()
     } else {
         format!(
-            "Configuration parsed successfully. {} change(s) detected. Some changes may require a server restart to take effect.",
-            changes.len()
+            "Configuration parsed successfully. {} change(s) detected, {} actually applied \
+             (dataset add/remove only). The rest require a server restart -- see `changes` \
+             for details.",
+            changes.len(),
+            applied_count
         )
     };
 
@@ -1151,5 +1399,331 @@ mod tests {
         assert!(json.contains("\"success\":true"));
         assert!(json.contains("\"message\":\"Configuration reloaded\""));
         assert!(json.contains("Port changed"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Real dataset CRUD / stats / backup / compact (regression coverage for
+    // the previously mocked implementations).
+    // -----------------------------------------------------------------------
+
+    async fn state_with_dataset_manager() -> Arc<AppState> {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let config = crate::config::ServerConfig::default();
+        let mut state = crate::server::build_minimal_app_state(store, config);
+
+        let base_path =
+            std::env::temp_dir().join(format!("oxirs_fuseki_admin_test_{}", uuid::Uuid::new_v4()));
+        let dm_config = crate::dataset_management::DatasetConfig {
+            base_path,
+            enable_versioning: false,
+            max_snapshots: 5,
+            auto_backup: false,
+            backup_interval_secs: 3600,
+            max_concurrent_ops: 2,
+        };
+        let dataset_manager = crate::dataset_management::DatasetManager::new(dm_config)
+            .await
+            .expect("dataset manager should initialize under a fresh temp dir");
+        state.dataset_manager = Some(dataset_manager);
+
+        Arc::new(state)
+    }
+
+    /// Regression: `create_dataset` previously never inserted into any
+    /// mutable registry, so a created dataset could never be listed or
+    /// fetched again. It must now be real and durable via `dataset_manager`.
+    #[tokio::test]
+    async fn test_create_then_get_dataset_roundtrip() {
+        let state = state_with_dataset_manager().await;
+
+        let created = create_dataset(
+            State(state.clone()),
+            Json(CreateDatasetRequest {
+                name: "roundtrip".to_string(),
+                location: None,
+                read_only: None,
+                description: Some("test dataset".to_string()),
+            }),
+        )
+        .await
+        .expect("create should succeed");
+        assert_eq!(created.name, "roundtrip");
+
+        let fetched = get_dataset(State(state.clone()), Path("roundtrip".to_string()))
+            .await
+            .expect("get should find the just-created dataset");
+        assert_eq!(fetched.name, "roundtrip");
+
+        let listed = list_datasets(State(state))
+            .await
+            .expect("list should succeed");
+        assert!(
+            listed.0.iter().any(|d| d.name == "roundtrip"),
+            "created dataset must appear in the list, not just at creation time"
+        );
+    }
+
+    /// Regression: `create_dataset` on a duplicate name must fail rather
+    /// than silently overwrite (this was mocked before and never checked
+    /// the real registry).
+    #[tokio::test]
+    async fn test_create_dataset_duplicate_rejected() {
+        let state = state_with_dataset_manager().await;
+
+        let request = || CreateDatasetRequest {
+            name: "dup".to_string(),
+            location: None,
+            read_only: None,
+            description: None,
+        };
+        let first = create_dataset(State(state.clone()), Json(request()))
+            .await
+            .expect("first create should succeed");
+        assert_eq!(first.name, "dup");
+        let second = create_dataset(State(state), Json(request())).await;
+        assert!(
+            second.is_err(),
+            "duplicate dataset creation must be rejected"
+        );
+    }
+
+    /// Regression: `delete_dataset` previously slept and returned `Ok(())`
+    /// unconditionally without touching any storage. It must now actually
+    /// remove the dataset from the durable registry.
+    #[tokio::test]
+    async fn test_delete_dataset_actually_removes_it() {
+        let state = state_with_dataset_manager().await;
+
+        let created = create_dataset(
+            State(state.clone()),
+            Json(CreateDatasetRequest {
+                name: "to_delete".to_string(),
+                location: None,
+                read_only: None,
+                description: None,
+            }),
+        )
+        .await
+        .expect("create should succeed");
+        assert_eq!(created.name, "to_delete");
+
+        delete_dataset(State(state.clone()), Path("to_delete".to_string()))
+            .await
+            .expect("delete should succeed for a manager-tracked dataset");
+
+        let after = get_dataset(State(state), Path("to_delete".to_string())).await;
+        assert!(
+            after.is_err(),
+            "dataset must actually be gone after DELETE, not just report success"
+        );
+    }
+
+    /// A dataset that exists only in the static config file (never created
+    /// through this API) has no manager-tracked storage to delete; DELETE
+    /// must fail loudly rather than report a fabricated success.
+    #[tokio::test]
+    async fn test_delete_dataset_config_only_fails_honestly() {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = crate::config::ServerConfig::default();
+        config.datasets.insert(
+            "static-ds".to_string(),
+            crate::config::DatasetConfig {
+                name: "static-ds".to_string(),
+                location: String::new(),
+                read_only: false,
+                text_index: None,
+                shacl_shapes: vec![],
+                services: vec![],
+                access_control: None,
+                backup: None,
+            },
+        );
+        let state = Arc::new(crate::server::build_minimal_app_state(store, config));
+
+        let result = delete_dataset(State(state), Path("static-ds".to_string())).await;
+        assert!(
+            result.is_err(),
+            "deleting a config-only dataset must fail loudly, not fake success"
+        );
+    }
+
+    /// Regression: dataset stats/backup previously returned fixed constants
+    /// (`triple_count: 1000`, `size_bytes: 50000`) for every dataset. They
+    /// must now reflect the real store content.
+    #[tokio::test]
+    async fn test_dataset_stats_and_backup_reflect_real_store_content() {
+        let state = state_with_dataset_manager().await;
+        let created = create_dataset(
+            State(state.clone()),
+            Json(CreateDatasetRequest {
+                name: "withdata".to_string(),
+                location: None,
+                read_only: None,
+                description: None,
+            }),
+        )
+        .await
+        .expect("create should succeed");
+        assert_eq!(created.name, "withdata");
+
+        state
+            .store
+            .update_dataset(
+                "INSERT DATA { <http://example.org/s> <http://example.org/p> \"real-value\" . }",
+                Some("withdata"),
+            )
+            .expect("insert should succeed against the newly created backing store");
+
+        let info = get_dataset(State(state.clone()), Path("withdata".to_string()))
+            .await
+            .expect("get should succeed");
+        assert_eq!(
+            info.triple_count, 1,
+            "must report the real triple count, not the old fake constant 1000"
+        );
+        assert_ne!(
+            info.size_bytes, 50000,
+            "must not report the old fake size constant"
+        );
+        assert!(info.size_bytes > 0);
+
+        let backup = backup_dataset(
+            State(state),
+            Path("withdata".to_string()),
+            Query(BackupParams {
+                format: Some("ntriples".to_string()),
+                compress: Some(false),
+                include_metadata: Some(false),
+            }),
+        )
+        .await
+        .expect("backup should succeed");
+        let body = axum::body::to_bytes(backup.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let text = String::from_utf8(body.to_vec()).expect("backup body should be UTF-8");
+        assert!(
+            text.contains("real-value"),
+            "backup must contain the dataset's actual inserted data, got: {text}"
+        );
+        assert!(
+            !text.contains("backup data"),
+            "backup must not contain the old hardcoded placeholder triple"
+        );
+    }
+
+    /// Regression: `compact_dataset` previously returned fixed
+    /// `size_before: 100000, size_after: 75000` for every call regardless of
+    /// the dataset's actual state. It must now report real, measured values.
+    #[tokio::test]
+    async fn test_compact_dataset_reports_real_measurements_not_fake_constants() {
+        let state = state_with_dataset_manager().await;
+        let created = create_dataset(
+            State(state.clone()),
+            Json(CreateDatasetRequest {
+                name: "compactme".to_string(),
+                location: None,
+                read_only: None,
+                description: None,
+            }),
+        )
+        .await
+        .expect("create should succeed");
+        assert_eq!(created.name, "compactme");
+
+        let response = compact_dataset(
+            State(state),
+            Path("compactme".to_string()),
+            Query(CompactParams { force: None }),
+        )
+        .await
+        .expect("compact should succeed");
+
+        let size_before = response.0["size_before_bytes"].as_u64().unwrap();
+        let size_after = response.0["size_after_bytes"].as_u64().unwrap();
+        assert_ne!(
+            size_before, 100000,
+            "must not report the old fake size_before constant"
+        );
+        assert_ne!(
+            size_after, 75000,
+            "must not report the old fake size_after constant"
+        );
+        // Empty freshly-created dataset: real measured size is 0 on both sides.
+        assert_eq!(size_before, 0);
+        assert_eq!(size_after, 0);
+    }
+
+    /// Regression: `/$/reload` previously computed a change list and threw it
+    /// away with a comment saying mutable config access would be needed. The
+    /// dataset-add/remove subset must now actually be applied to the shared
+    /// `dataset_manager`.
+    #[tokio::test]
+    async fn test_reload_config_actually_creates_new_dataset() {
+        let base_config = crate::config::ServerConfig::default();
+        let mut new_config = base_config.clone();
+        new_config.datasets.insert(
+            "reloaded".to_string(),
+            crate::config::DatasetConfig {
+                name: "reloaded".to_string(),
+                location: String::new(),
+                read_only: false,
+                text_index: None,
+                shacl_shapes: vec![],
+                services: vec![],
+                access_control: None,
+                backup: None,
+            },
+        );
+        let toml_content = toml::to_string(&new_config).expect("serialize new config");
+        let path = std::env::temp_dir().join(format!(
+            "oxirs_fuseki_reload_test_{}.toml",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(&path, toml_content).expect("write temp config file");
+
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = base_config;
+        config.server.config_file = Some(path.clone());
+        let mut state = crate::server::build_minimal_app_state(store, config);
+
+        let dm_base_path =
+            std::env::temp_dir().join(format!("oxirs_fuseki_reload_dm_{}", uuid::Uuid::new_v4()));
+        let dm_config = crate::dataset_management::DatasetConfig {
+            base_path: dm_base_path,
+            enable_versioning: false,
+            max_snapshots: 5,
+            auto_backup: false,
+            backup_interval_secs: 3600,
+            max_concurrent_ops: 2,
+        };
+        let dataset_manager = crate::dataset_management::DatasetManager::new(dm_config)
+            .await
+            .expect("dataset manager should initialize");
+        state.dataset_manager = Some(dataset_manager);
+        let state = Arc::new(state);
+
+        let response = reload_config(State(state.clone()))
+            .await
+            .expect("reload should succeed");
+        assert!(
+            response
+                .changes
+                .iter()
+                .any(|c| c.contains("Applied: created new dataset 'reloaded'")),
+            "expected an 'Applied: created' change, got: {:?}",
+            response.changes
+        );
+
+        let dataset_manager = state
+            .dataset_manager
+            .as_ref()
+            .expect("dataset manager should still be present");
+        assert!(
+            dataset_manager.get_dataset("reloaded").await.is_ok(),
+            "the dataset detected in the reloaded config must actually have been created"
+        );
+
+        let _ = std::fs::remove_file(&path);
     }
 }

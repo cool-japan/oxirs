@@ -1,11 +1,20 @@
 //! Core shape learning implementation
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tracing;
 
-use oxirs_core::{model::NamedNode, Store};
+use oxirs_core::{
+    model::{GraphName, NamedNode, Object, Predicate, RdfTerm, Subject},
+    Store,
+};
 
-use oxirs_shacl::{Constraint, ConstraintComponentId, Shape, ShapeId, Target};
+use oxirs_shacl::{
+    constraints::{
+        cardinality_constraints::{MaxCountConstraint, MinCountConstraint},
+        value_constraints::DatatypeConstraint,
+    },
+    Constraint, ConstraintComponentId, PropertyPath, Shape, ShapeId, Target,
+};
 
 use crate::{
     ml::reinforcement::{RLConfig, ReinforcementLearner},
@@ -18,6 +27,45 @@ use super::performance::{
     PatternStatistics,
 };
 use super::types::{LearningConfig, LearningQueryResult, LearningStatistics, ShapeTrainingData};
+
+/// The `rdf:type` predicate IRI used to discover classes and their instances.
+const RDF_TYPE_IRI: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+/// Build the `rdf:type` predicate, mapping construction failure to a crate error.
+fn rdf_type_predicate() -> Result<Predicate> {
+    NamedNode::new(RDF_TYPE_IRI)
+        .map(Predicate::NamedNode)
+        .map_err(|e| ShaclAiError::ShapeLearning(format!("invalid rdf:type IRI: {e}")))
+}
+
+/// Resolve an optional graph name string into an optional [`GraphName`] filter
+/// suitable for [`Store::find_quads`]. `None` means "search all graphs".
+fn resolve_graph_filter(graph_name: Option<&str>) -> Result<Option<GraphName>> {
+    match graph_name {
+        None => Ok(None),
+        Some(name) => NamedNode::new(name)
+            .map(|n| Some(GraphName::NamedNode(n)))
+            .map_err(|e| ShaclAiError::ShapeLearning(format!("invalid graph IRI '{name}': {e}"))),
+    }
+}
+
+/// Sanitize an IRI fragment for use inside a shape identifier.
+fn sanitize_iri_fragment(iri: &str) -> String {
+    iri.replace(['/', ':', '#'], "_")
+}
+
+/// Running per-property statistics accumulated while scanning class instances.
+#[derive(Debug, Default, Clone)]
+struct PropertyUsageStats {
+    /// Number of distinct instances that have at least one value for this property.
+    instance_count: usize,
+    /// Total number of triples observed for this property across sampled instances.
+    total_value_count: usize,
+    /// Maximum number of values observed for this property on a single instance.
+    max_value_count: usize,
+    /// Datatype IRI -> number of literal values observed with that datatype.
+    datatype_counts: HashMap<String, usize>,
+}
 
 /// Shape learning engine for automatic constraint discovery
 #[derive(Debug)]
@@ -89,8 +137,9 @@ impl ShapeLearner {
 
             // Learn shape for this class
             match self.learn_shape_for_class(store, &class, graph_name) {
-                Ok(shape) => {
+                Ok((shape, property_shapes)) => {
                     shapes.push(shape);
+                    shapes.extend(property_shapes);
                     self.stats.total_shapes_learned += 1;
                 }
                 Err(e) => {
@@ -173,8 +222,9 @@ impl ShapeLearner {
             }
 
             match self.learn_shape_for_class(store, &class, graph_name) {
-                Ok(shape) => {
+                Ok((shape, property_shapes)) => {
                     shapes.push(shape);
+                    shapes.extend(property_shapes);
                     successful_count += 1;
                 }
                 Err(e) => {
@@ -249,8 +299,9 @@ impl ShapeLearner {
                     // Use cached patterns if available
                     tracing::debug!("Using cached patterns for class {}", class.as_str());
                     match self.patterns_to_shape(&cached_patterns, class) {
-                        Ok(shape) => {
+                        Ok((shape, property_shapes)) => {
                             shapes.push(shape);
+                            shapes.extend(property_shapes);
                             successful_count += 1;
                         }
                         Err(e) => {
@@ -261,8 +312,9 @@ impl ShapeLearner {
                 } else {
                     // Learn shape for this class and cache patterns
                     match self.learn_shape_for_class_with_caching(store, class, graph_name) {
-                        Ok(shape) => {
+                        Ok((shape, property_shapes)) => {
                             shapes.push(shape);
+                            shapes.extend(property_shapes);
                             successful_count += 1;
                         }
                         Err(e) => {
@@ -598,46 +650,67 @@ impl ShapeLearner {
         Ok(shape)
     }
 
-    /// Learn a shape for a specific class
+    /// Learn a shape for a specific class.
+    ///
+    /// Discovers real usage patterns (properties, datatypes, cardinalities) by
+    /// scanning the instances of `class` in `store`, then attaches the derived
+    /// constraints to the returned node shape via generated property shapes.
+    /// Returns the node shape together with any generated `sh:property` shapes,
+    /// both of which must be included in the final shapes collection.
     fn learn_shape_for_class(
         &mut self,
         store: &dyn Store,
         class: &NamedNode,
         graph_name: Option<&str>,
-    ) -> Result<Shape> {
+    ) -> Result<(Shape, Vec<Shape>)> {
         tracing::debug!("Learning shape for class: {}", class.as_str());
 
-        // Create a node shape for this class
-        let shape_id = ShapeId::new(format!(
-            "{}Shape",
-            class.as_str().replace(['/', ':', '#'], "_")
-        ));
-        let mut shape = Shape::node_shape(shape_id.clone());
-
-        // Add class target
-        shape.add_target(Target::class(class.clone()));
+        let patterns = self.discover_patterns_for_class(store, class, graph_name)?;
+        let (shape, property_shapes) = self.patterns_to_shape(&patterns, class)?;
 
         self.stats.classes_analyzed += 1;
-        tracing::debug!("Learned shape for class: {}", shape_id.as_str());
+        tracing::debug!(
+            "Learned shape for class: {} with {} property shapes",
+            shape.id.as_str(),
+            property_shapes.len()
+        );
 
-        Ok(shape)
+        Ok((shape, property_shapes))
     }
 
-    /// Discover classes in the RDF store
+    /// Discover classes in the RDF store by scanning `rdf:type` usage.
+    ///
+    /// Returns the distinct classes that appear as the object of an `rdf:type`
+    /// triple, ordered by descending instance count so the most populous
+    /// (and thus most representative) classes are learned first.
     fn discover_classes(
         &self,
         store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<NamedNode>> {
-        // Placeholder implementation
-        let mut classes = Vec::new();
+        let type_predicate = rdf_type_predicate()?;
+        let graph_filter = resolve_graph_filter(graph_name)?;
 
-        // Add a default class for demonstration
-        if let Ok(default_class) = NamedNode::new("http://example.org/DefaultClass") {
-            classes.push(default_class);
+        let type_quads =
+            store.find_quads(None, Some(&type_predicate), None, graph_filter.as_ref())?;
+
+        let mut class_counts: HashMap<NamedNode, usize> = HashMap::new();
+        for quad in &type_quads {
+            if let Object::NamedNode(class_node) = quad.object() {
+                *class_counts.entry(class_node.clone()).or_insert(0) += 1;
+            }
         }
 
-        Ok(classes)
+        let mut classes: Vec<(NamedNode, usize)> = class_counts.into_iter().collect();
+        classes.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.as_str().cmp(b.0.as_str())));
+
+        tracing::debug!(
+            "discover_classes found {} distinct classes from {} rdf:type triples",
+            classes.len(),
+            type_quads.len()
+        );
+
+        Ok(classes.into_iter().map(|(class, _)| class).collect())
     }
 
     /// Evaluate constraint quality
@@ -658,8 +731,19 @@ impl ShapeLearner {
         (constraint_factor + instance_factor) / 2.0
     }
 
-    /// Convert multiple patterns to a single SHACL shape with enhanced analysis
-    fn patterns_to_shape(&mut self, patterns: &[Pattern], class: &NamedNode) -> Result<Shape> {
+    /// Convert multiple patterns to a single SHACL node shape with enhanced analysis.
+    ///
+    /// Property, datatype, and cardinality patterns are aggregated per property
+    /// and converted into real `sh:property` shapes carrying `sh:minCount`,
+    /// `sh:maxCount`, and `sh:datatype` constraints, which are linked into the
+    /// returned node shape's `property_shapes` list. The generated property
+    /// shapes are returned alongside the node shape and must be included in the
+    /// final shapes collection for the constraints to take effect.
+    fn patterns_to_shape(
+        &mut self,
+        patterns: &[Pattern],
+        class: &NamedNode,
+    ) -> Result<(Shape, Vec<Shape>)> {
         tracing::debug!(
             "Converting {} patterns to shape for class {}",
             patterns.len(),
@@ -676,69 +760,137 @@ impl ShapeLearner {
         // Add class target
         shape.add_target(Target::class(class.clone()));
 
-        // Process patterns to extract constraints
-        let mut property_constraints = HashMap::new();
-        let mut datatype_constraints = HashMap::new();
+        // Aggregate patterns per property IRI.
+        #[derive(Default)]
+        struct PropertyAggregate {
+            usage_count: u32,
+            dominant_datatype: Option<NamedNode>,
+            min_count: Option<u32>,
+            max_count: Option<u32>,
+        }
+
+        let mut aggregates: HashMap<String, PropertyAggregate> = HashMap::new();
 
         for pattern in patterns {
-            match pattern.pattern_type() {
-                PatternType::Usage => {
-                    // Extract property constraints from pattern
-                    if let Some(property_name) = self.extract_property_from_pattern(pattern) {
-                        let count = property_constraints.entry(property_name).or_insert(0);
-                        *count += 1;
-                    }
+            match pattern {
+                Pattern::PropertyUsage {
+                    property,
+                    usage_count,
+                    ..
+                } => {
+                    let entry = aggregates.entry(property.as_str().to_string()).or_default();
+                    entry.usage_count = entry.usage_count.max(*usage_count);
                 }
-                PatternType::Datatype => {
-                    // Extract datatype constraints
-                    if let Some(datatype_info) = self.extract_datatype_from_pattern(pattern) {
-                        datatype_constraints.insert(datatype_info.0, datatype_info.1);
+                Pattern::Datatype {
+                    property, datatype, ..
+                } => {
+                    let entry = aggregates.entry(property.as_str().to_string()).or_default();
+                    entry.dominant_datatype = Some(datatype.clone());
+                }
+                Pattern::Cardinality {
+                    property,
+                    min_count,
+                    max_count,
+                    ..
+                } => {
+                    let entry = aggregates.entry(property.as_str().to_string()).or_default();
+                    if let Some(min_count) = min_count {
+                        entry.min_count = Some(
+                            entry
+                                .min_count
+                                .map_or(*min_count, |cur| cur.max(*min_count)),
+                        );
+                    }
+                    if let Some(max_count) = max_count {
+                        entry.max_count = Some(
+                            entry
+                                .max_count
+                                .map_or(*max_count, |cur| cur.min(*max_count)),
+                        );
                     }
                 }
                 _ => {
-                    // Handle other pattern types
-                    tracing::debug!("Processing pattern type: {:?}", pattern.pattern_type());
+                    tracing::debug!(
+                        "Skipping unsupported pattern type: {:?}",
+                        pattern.pattern_type()
+                    );
                 }
             }
         }
 
-        // Calculate constraint counts before moving the HashMaps
-        let property_constraint_count = property_constraints.len();
-        let datatype_constraint_count = datatype_constraints.len();
+        let mut property_shapes = Vec::new();
+        let mut constraint_count = 0usize;
 
-        // Convert property counts to cardinality constraints
-        for (property, count) in property_constraints {
-            if count >= 2 {
-                // Only add constraints for properties that appear multiple times
-                // Add minimum cardinality constraint
-                tracing::debug!(
-                    "Adding cardinality constraint for property {} (count: {})",
-                    property,
-                    count
-                );
-                // Note: In real implementation, this would add actual SHACL constraints
-            }
-        }
+        for (property_iri, info) in &aggregates {
+            let property_node = match NamedNode::new(property_iri.as_str()) {
+                Ok(node) => node,
+                Err(e) => {
+                    tracing::warn!("Skipping invalid property IRI '{}': {}", property_iri, e);
+                    continue;
+                }
+            };
 
-        // Add datatype constraints
-        for (property, datatype) in datatype_constraints {
-            tracing::debug!(
-                "Adding datatype constraint for property {} -> {}",
-                property,
-                datatype
+            let prop_shape_id = ShapeId::new(format!(
+                "{}_{}",
+                shape_id.as_str(),
+                sanitize_iri_fragment(property_iri)
+            ));
+            let mut prop_shape = Shape::property_shape(
+                prop_shape_id.clone(),
+                PropertyPath::predicate(property_node),
             );
-            // Note: In real implementation, this would add actual SHACL datatype constraints
+
+            // Only add a minimum cardinality constraint when the property was
+            // observed on multiple instances (recurring, not incidental usage)
+            // or when pattern discovery derived an explicit min_count.
+            let effective_min_count =
+                info.min_count
+                    .or(if info.usage_count >= 2 { Some(1) } else { None });
+            if let Some(min_count) = effective_min_count {
+                let constraint = Constraint::MinCount(MinCountConstraint { min_count });
+                prop_shape.add_constraint(constraint.component_id(), constraint);
+                constraint_count += 1;
+            }
+
+            if let Some(max_count) = info.max_count {
+                let constraint = Constraint::MaxCount(MaxCountConstraint { max_count });
+                prop_shape.add_constraint(constraint.component_id(), constraint);
+                constraint_count += 1;
+            }
+
+            if let Some(datatype) = &info.dominant_datatype {
+                let constraint = Constraint::Datatype(DatatypeConstraint {
+                    datatype_iri: datatype.clone(),
+                });
+                prop_shape.add_constraint(constraint.component_id(), constraint);
+                constraint_count += 1;
+            }
+
+            if prop_shape.constraints.is_empty() {
+                // Insufficient evidence to justify a property shape for this property.
+                continue;
+            }
+
+            tracing::debug!(
+                "Generated property shape {} with {} constraints for property {}",
+                prop_shape_id.as_str(),
+                prop_shape.constraints.len(),
+                property_iri
+            );
+
+            shape.property_shapes.push(prop_shape_id);
+            property_shapes.push(prop_shape);
         }
 
-        self.stats.total_constraints_discovered +=
-            property_constraint_count + datatype_constraint_count;
+        self.stats.total_constraints_discovered += constraint_count;
 
         tracing::debug!(
-            "Created shape {} with {} property patterns",
+            "Created shape {} with {} property shapes from {} patterns",
             shape_id.as_str(),
+            property_shapes.len(),
             patterns.len()
         );
-        Ok(shape)
+        Ok((shape, property_shapes))
     }
 
     /// Learn shape for a class with enhanced caching capabilities
@@ -747,7 +899,7 @@ impl ShapeLearner {
         store: &dyn Store,
         class: &NamedNode,
         graph_name: Option<&str>,
-    ) -> Result<Shape> {
+    ) -> Result<(Shape, Vec<Shape>)> {
         tracing::debug!("Learning shape for class with caching: {}", class.as_str());
 
         // First, discover patterns for this class
@@ -761,7 +913,13 @@ impl ShapeLearner {
         self.patterns_to_shape(&patterns, class)
     }
 
-    /// Discover patterns specific to a class with enhanced analysis
+    /// Discover patterns specific to a class by scanning its instances in the store.
+    ///
+    /// For every instance of `class` (up to a bounded sample), this collects the
+    /// properties used, their observed datatypes, and per-instance value counts,
+    /// then derives `PropertyUsage`, `Datatype`, and `Cardinality` patterns from
+    /// the aggregated statistics. Properties observed on fewer than
+    /// `self.config.min_support` of the sampled instances are dropped.
     fn discover_patterns_for_class(
         &mut self,
         store: &dyn Store,
@@ -770,88 +928,314 @@ impl ShapeLearner {
     ) -> Result<Vec<Pattern>> {
         tracing::debug!("Discovering patterns for class: {}", class.as_str());
 
+        let type_predicate = rdf_type_predicate()?;
+        let graph_filter = resolve_graph_filter(graph_name)?;
+
+        let type_quads = store.find_quads(
+            None,
+            Some(&type_predicate),
+            Some(&Object::NamedNode(class.clone())),
+            graph_filter.as_ref(),
+        )?;
+        let instances: Vec<Subject> = type_quads
+            .into_iter()
+            .map(|q| q.subject().clone())
+            .collect();
+
+        if instances.is_empty() {
+            tracing::debug!("No instances found for class {}", class.as_str());
+            return Ok(Vec::new());
+        }
+
+        // Bound the number of instances scanned for constraint discovery so a
+        // single very large class cannot make shape learning unbounded.
+        let sample_limit = self
+            .config
+            .algorithm_params
+            .get("max_sample_instances")
+            .copied()
+            .map(|v| v.max(1.0) as usize)
+            .unwrap_or(2000);
+        let sample: &[Subject] = if instances.len() > sample_limit {
+            &instances[..sample_limit]
+        } else {
+            &instances[..]
+        };
+        let instance_total = sample.len();
+
+        let mut property_stats: HashMap<String, PropertyUsageStats> = HashMap::new();
+
+        for instance in sample {
+            let quads = store.find_quads(Some(instance), None, None, graph_filter.as_ref())?;
+            let mut seen_this_instance: HashSet<String> = HashSet::new();
+            let mut value_counts_this_instance: HashMap<String, usize> = HashMap::new();
+
+            for quad in &quads {
+                let Predicate::NamedNode(prop) = quad.predicate() else {
+                    continue;
+                };
+                if prop.as_str() == RDF_TYPE_IRI {
+                    continue;
+                }
+                let prop_iri = prop.as_str().to_string();
+                let stats = property_stats.entry(prop_iri.clone()).or_default();
+                stats.total_value_count += 1;
+                seen_this_instance.insert(prop_iri.clone());
+                *value_counts_this_instance
+                    .entry(prop_iri.clone())
+                    .or_insert(0) += 1;
+
+                if let Object::Literal(literal) = quad.object() {
+                    *stats
+                        .datatype_counts
+                        .entry(literal.datatype().as_str().to_string())
+                        .or_insert(0) += 1;
+                }
+            }
+
+            for prop_iri in seen_this_instance {
+                let stats = property_stats.entry(prop_iri.clone()).or_default();
+                stats.instance_count += 1;
+                let per_instance_count = value_counts_this_instance
+                    .get(&prop_iri)
+                    .copied()
+                    .unwrap_or(0);
+                stats.max_value_count = stats.max_value_count.max(per_instance_count);
+            }
+        }
+
         let mut patterns = Vec::new();
 
-        // Simulate pattern discovery by creating sample patterns
-        // In a real implementation, this would analyze the RDF data
+        for (property_iri, stats) in &property_stats {
+            let support = stats.instance_count as f64 / instance_total.max(1) as f64;
+            if support < self.config.min_support {
+                continue;
+            }
+            let property = match NamedNode::new(property_iri.as_str()) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!("Skipping invalid property IRI '{}': {}", property_iri, e);
+                    continue;
+                }
+            };
+            let avg_count = stats.total_value_count as f64 / stats.instance_count.max(1) as f64;
+            let confidence = support;
 
-        // Create a sample property for pattern creation
-        let sample_property = match NamedNode::new("http://example.org/property") {
-            Ok(prop) => prop,
-            Err(_) => return Ok(patterns), // Return empty if we can't create sample data
-        };
+            patterns.push(Pattern::PropertyUsage {
+                id: format!(
+                    "property_{}_{}",
+                    sanitize_iri_fragment(class.as_str()),
+                    sanitize_iri_fragment(property_iri)
+                ),
+                property: property.clone(),
+                usage_count: stats.instance_count as u32,
+                support,
+                confidence,
+                pattern_type: PatternType::Usage,
+            });
 
-        // Property usage pattern
-        let property_pattern = Pattern::PropertyUsage {
-            id: format!("property_{}", class.as_str()),
-            property: sample_property.clone(),
-            usage_count: 10,
-            support: 0.8,
-            confidence: 0.8,
-            pattern_type: PatternType::Usage,
-        };
-        patterns.push(property_pattern);
+            if let Some((dominant_datatype, dt_count)) = stats
+                .datatype_counts
+                .iter()
+                .max_by_key(|(_, count)| **count)
+            {
+                let dt_confidence = *dt_count as f64 / stats.total_value_count.max(1) as f64;
+                if dt_confidence >= self.config.min_confidence {
+                    if let Ok(datatype) = NamedNode::new(dominant_datatype.as_str()) {
+                        patterns.push(Pattern::Datatype {
+                            id: format!(
+                                "datatype_{}_{}",
+                                sanitize_iri_fragment(class.as_str()),
+                                sanitize_iri_fragment(property_iri)
+                            ),
+                            property: property.clone(),
+                            datatype,
+                            usage_count: *dt_count as u32,
+                            support,
+                            confidence: dt_confidence,
+                            pattern_type: PatternType::Datatype,
+                        });
+                    }
+                }
+            }
 
-        // Datatype pattern
-        let datatype = match NamedNode::new("http://www.w3.org/2001/XMLSchema#string") {
-            Ok(dt) => dt,
-            Err(_) => return Ok(patterns),
-        };
-        let datatype_pattern = Pattern::Datatype {
-            id: format!("datatype_{}", class.as_str()),
-            property: sample_property.clone(),
-            datatype,
-            usage_count: 8,
-            support: 0.7,
-            confidence: 0.7,
-            pattern_type: PatternType::Datatype,
-        };
-        patterns.push(datatype_pattern);
-
-        // Cardinality pattern
-        let cardinality_pattern = Pattern::Cardinality {
-            id: format!("cardinality_{}", class.as_str()),
-            property: sample_property,
-            cardinality_type: crate::patterns::CardinalityType::Required,
-            min_count: Some(1),
-            max_count: None,
-            avg_count: 1.5,
-            support: 0.6,
-            confidence: 0.6,
-            pattern_type: PatternType::Cardinality,
-        };
-        patterns.push(cardinality_pattern);
+            let is_universal = stats.instance_count == instance_total;
+            let is_functional = stats.max_value_count <= 1;
+            let cardinality_type = if is_universal && is_functional {
+                crate::patterns::CardinalityType::Functional
+            } else if is_universal {
+                crate::patterns::CardinalityType::Required
+            } else {
+                crate::patterns::CardinalityType::Optional
+            };
+            patterns.push(Pattern::Cardinality {
+                id: format!(
+                    "cardinality_{}_{}",
+                    sanitize_iri_fragment(class.as_str()),
+                    sanitize_iri_fragment(property_iri)
+                ),
+                property,
+                cardinality_type,
+                min_count: if is_universal { Some(1) } else { None },
+                max_count: if is_functional { Some(1) } else { None },
+                avg_count,
+                support,
+                confidence,
+                pattern_type: PatternType::Cardinality,
+            });
+        }
 
         self.stats.total_constraints_discovered += patterns.len();
 
         tracing::debug!(
-            "Discovered {} patterns for class {}",
+            "Discovered {} patterns for class {} from {} sampled instances",
             patterns.len(),
-            class.as_str()
+            class.as_str(),
+            instance_total
         );
         Ok(patterns)
-    }
-
-    /// Extract property name from a pattern with enhanced parsing
-    fn extract_property_from_pattern(&self, pattern: &Pattern) -> Option<String> {
-        // Simulate property extraction from pattern
-        // In real implementation, this would parse pattern structure
-        Some(format!("property_{}", pattern.id()))
-    }
-
-    /// Extract datatype information from a pattern with type analysis
-    fn extract_datatype_from_pattern(&self, pattern: &Pattern) -> Option<(String, String)> {
-        // Simulate datatype extraction from pattern
-        // Returns (property_name, datatype)
-        Some((
-            format!("property_{}", pattern.id()),
-            "xsd:string".to_string(), // Default datatype
-        ))
     }
 }
 
 impl Default for ShapeLearner {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxirs_core::model::{Literal, Quad};
+    use oxirs_core::ConcreteStore;
+
+    fn rdf_type() -> NamedNode {
+        NamedNode::new(RDF_TYPE_IRI).expect("rdf:type should be a valid IRI")
+    }
+
+    /// Regression test for the P0 finding: `discover_classes` must scan the
+    /// store for real `rdf:type` usage instead of returning a hardcoded
+    /// `http://example.org/DefaultClass`.
+    #[test]
+    fn test_discover_classes_scans_real_store() {
+        let store = ConcreteStore::new().expect("store should construct");
+        let person_class = NamedNode::new("http://example.org/Person").expect("valid IRI");
+        let org_class = NamedNode::new("http://example.org/Organization").expect("valid IRI");
+
+        for (subject_iri, class) in [
+            ("http://example.org/alice", &person_class),
+            ("http://example.org/bob", &person_class),
+            ("http://example.org/acme", &org_class),
+        ] {
+            let subject = NamedNode::new(subject_iri).expect("valid IRI");
+            store
+                .insert_quad(Quad::new_default_graph(subject, rdf_type(), class.clone()))
+                .expect("insert should succeed");
+        }
+
+        let learner = ShapeLearner::new();
+        let classes = learner
+            .discover_classes(&store, None)
+            .expect("discover_classes should succeed");
+
+        assert_eq!(classes.len(), 2, "classes = {:?}", classes);
+        // Person has 2 instances vs. Organization's 1, so it must be first
+        // (descending by instance count).
+        assert_eq!(classes[0].as_str(), person_class.as_str());
+        assert!(classes.iter().any(|c| c.as_str() == org_class.as_str()));
+    }
+
+    #[test]
+    fn test_discover_classes_empty_store_returns_empty() {
+        let store = ConcreteStore::new().expect("store should construct");
+        let learner = ShapeLearner::new();
+        let classes = learner
+            .discover_classes(&store, None)
+            .expect("discover_classes should succeed");
+        assert!(classes.is_empty(), "classes = {:?}", classes);
+    }
+
+    /// Regression test for the P1 findings: `learn_shape_for_class` /
+    /// `patterns_to_shape` must attach real, store-derived property/datatype/
+    /// cardinality constraints instead of only a bare class target.
+    #[test]
+    fn test_learn_shapes_from_store_attaches_real_constraints() {
+        let store = ConcreteStore::new().expect("store should construct");
+        let person_class = NamedNode::new("http://example.org/Person").expect("valid IRI");
+        let name_property = NamedNode::new("http://example.org/name").expect("valid IRI");
+
+        for (subject_iri, name_value) in [
+            ("http://example.org/alice", "Alice"),
+            ("http://example.org/bob", "Bob"),
+        ] {
+            let subject = NamedNode::new(subject_iri).expect("valid IRI");
+            store
+                .insert_quad(Quad::new_default_graph(
+                    subject.clone(),
+                    rdf_type(),
+                    person_class.clone(),
+                ))
+                .expect("insert should succeed");
+            store
+                .insert_quad(Quad::new_default_graph(
+                    subject,
+                    name_property.clone(),
+                    Literal::new(name_value),
+                ))
+                .expect("insert should succeed");
+        }
+
+        let mut learner = ShapeLearner::new();
+        let shapes = learner
+            .learn_shapes_from_store(&store, None)
+            .expect("learn_shapes_from_store should succeed");
+
+        // A node shape for Person, plus at least one generated property shape
+        // for `name` (present on every instance).
+        assert!(shapes.len() >= 2, "shapes.len() = {}", shapes.len());
+
+        let node_shape = shapes
+            .iter()
+            .find(|s| s.is_node_shape())
+            .expect("expected a node shape");
+        assert!(
+            !node_shape.property_shapes.is_empty(),
+            "expected the node shape to link generated property shapes"
+        );
+
+        let property_shape = shapes
+            .iter()
+            .find(|s| s.is_property_shape())
+            .expect("expected a generated property shape");
+        assert!(
+            !property_shape.constraints.is_empty(),
+            "expected real min/max-count and datatype constraints, not an empty property shape"
+        );
+    }
+
+    /// A class with no instances at all must not produce a shape with
+    /// fabricated constraints.
+    #[test]
+    fn test_learn_shapes_from_store_no_instances_still_learns_bare_class_shape() {
+        let store = ConcreteStore::new().expect("store should construct");
+        let empty_class = NamedNode::new("http://example.org/Ghost").expect("valid IRI");
+        // Insert exactly one triple so the class is discoverable, but with no
+        // other properties on the (single) instance.
+        store
+            .insert_quad(Quad::new_default_graph(
+                NamedNode::new("http://example.org/nobody").expect("valid IRI"),
+                rdf_type(),
+                empty_class.clone(),
+            ))
+            .expect("insert should succeed");
+
+        let mut learner = ShapeLearner::new();
+        let shapes = learner
+            .learn_shapes_from_store(&store, None)
+            .expect("learn_shapes_from_store should succeed");
+
+        assert_eq!(shapes.len(), 1, "shapes = {:?}", shapes.len());
+        assert!(shapes[0].is_node_shape());
+        assert!(shapes[0].property_shapes.is_empty());
     }
 }

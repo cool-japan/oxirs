@@ -30,6 +30,7 @@ pub mod filter;
 pub mod modifiers;
 pub mod parser;
 pub mod patterns;
+pub mod query_locator;
 
 // Re-export commonly used types
 pub use aggregates::{
@@ -54,4 +55,8 @@ pub use patterns::{
     apply_optional_patterns, extract_pattern_groups, extract_union_groups, find_matching_brace,
     has_union, parse_simple_pattern, parse_union_branch, PatternGroup, SimpleTriplePattern,
     UnionGroup,
+};
+pub use query_locator::{
+    detect_query_form, find_keyword, locate_where_brace, locate_where_group, matching_close_brace,
+    next_group_open_brace, select_projection_end, QueryForm,
 };

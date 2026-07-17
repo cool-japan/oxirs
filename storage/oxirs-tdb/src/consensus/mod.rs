@@ -19,7 +19,12 @@
 /// Paxos consensus algorithm
 pub mod paxos;
 
+/// Network transport abstraction shared by Paxos/2PC/3PC/Replication, plus
+/// the single-node `LoopbackSimulationTransport` used for tests.
+pub mod transport;
+
 pub use paxos::{
     PaxosAcceptor, PaxosAcceptorStats, PaxosLearner, PaxosProposer, PaxosProposerStats, Proposal,
     ProposalNumber, ProposalValue,
 };
+pub use transport::{LoopbackSimulationTransport, NetworkTransport};

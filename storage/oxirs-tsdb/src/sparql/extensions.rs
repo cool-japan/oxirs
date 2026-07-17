@@ -4,10 +4,13 @@
 
 use crate::config::AggregationFunction;
 use crate::error::{TsdbError, TsdbResult};
+use crate::query::aggregate::{Aggregation, Aggregator};
+use crate::query::interpolate::Interpolator;
 use crate::query::InterpolateMethod;
+use crate::series::DataPoint;
 use chrono::{DateTime, Duration, Utc};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex, RwLock};
 
 /// Temporal function registry for SPARQL integration
 ///
@@ -141,18 +144,39 @@ pub fn register_temporal_functions(registry: &TemporalFunctionRegistry) -> TsdbR
     Ok(())
 }
 
+/// Map a parsed [`AggregationFunction`] onto the query engine's
+/// [`Aggregation`] type used by [`Aggregator`].
+fn to_aggregation(function: AggregationFunction) -> Aggregation {
+    match function {
+        AggregationFunction::Average => Aggregation::Avg,
+        AggregationFunction::Min => Aggregation::Min,
+        AggregationFunction::Max => Aggregation::Max,
+        AggregationFunction::Sum => Aggregation::Sum,
+        AggregationFunction::First => Aggregation::First,
+        AggregationFunction::Last => Aggregation::Last,
+    }
+}
+
 /// Window aggregation function
 ///
 /// Usage: `ts:window(?value, ?window_size, "AVG")`
 ///
 /// Arguments:
 /// - `value` - The value to aggregate (Float)
-/// - `window_size` - Window size in seconds (Integer)
-/// - `aggregation` - Aggregation type: "AVG", "MIN", "MAX", "SUM", "COUNT" (String)
+/// - `window_size` - Number of most recent values to aggregate over (Integer)
+/// - `aggregation` - Aggregation type: "AVG", "MIN", "MAX", "SUM", "FIRST", "LAST" (String)
 ///
 /// Returns: Aggregated value (Float)
+///
+/// This maintains a real sliding window of the last `window_size` values
+/// seen by *this registered function instance* (SPARQL evaluates rows in
+/// order, so successive calls form a stream) and computes the requested
+/// aggregation over that window using the crate's [`Aggregator`] -- it does
+/// not simply echo the input value back unchanged.
 pub fn window_function() -> TemporalFunction {
-    Arc::new(|args: &[TemporalValue]| -> TsdbResult<TemporalValue> {
+    let window: Arc<Mutex<VecDeque<f64>>> = Arc::new(Mutex::new(VecDeque::new()));
+
+    Arc::new(move |args: &[TemporalValue]| -> TsdbResult<TemporalValue> {
         if args.len() != 3 {
             return Err(TsdbError::Query(format!(
                 "ts:window expects 3 arguments, got {}",
@@ -164,8 +188,14 @@ pub fn window_function() -> TemporalFunction {
         let window_size = args[1].as_integer()?;
         let aggregation_str = args[2].as_string()?;
 
+        if window_size <= 0 {
+            return Err(TsdbError::Query(format!(
+                "ts:window window_size must be positive, got {window_size}"
+            )));
+        }
+
         // Parse aggregation type
-        let _aggregation = match aggregation_str.to_uppercase().as_str() {
+        let aggregation = match aggregation_str.to_uppercase().as_str() {
             "AVG" | "AVERAGE" => AggregationFunction::Average,
             "MIN" => AggregationFunction::Min,
             "MAX" => AggregationFunction::Max,
@@ -179,12 +209,24 @@ pub fn window_function() -> TemporalFunction {
             }
         };
 
-        // For production use, this function should be called from oxirs-arq
-        // which has access to the full query context and data stream.
-        // This registry provides the function signature for SPARQL integration.
-        // Future: Direct integration with WindowFunction from query module for standalone use
-        let _ = window_size; // Suppress warning
-        Ok(TemporalValue::Float(value))
+        let mut buf = window
+            .lock()
+            .map_err(|e| TsdbError::Query(format!("Lock poisoned: {e}")))?;
+        buf.push_back(value);
+        while buf.len() > window_size as usize {
+            buf.pop_front();
+        }
+
+        // Aggregate the current window using the crate's real aggregation
+        // machinery instead of returning the raw input value.
+        let now = Utc::now();
+        let mut aggregator = Aggregator::new();
+        for (i, v) in buf.iter().enumerate() {
+            aggregator.add(&DataPoint::new(now + Duration::milliseconds(i as i64), *v));
+        }
+        let result = aggregator.result(to_aggregation(aggregation))?;
+
+        Ok(TemporalValue::Float(result))
     })
 }
 
@@ -219,6 +261,11 @@ pub fn resample_function() -> TemporalFunction {
     })
 }
 
+/// Maximum number of observed (non-null) points retained per registered
+/// `ts:interpolate` function instance to interpolate future null values
+/// against.
+const INTERPOLATE_HISTORY_CAPACITY: usize = 256;
+
 /// Interpolate function for missing values
 ///
 /// Usage: `ts:interpolate(?timestamp, ?value, "linear")`
@@ -226,11 +273,22 @@ pub fn resample_function() -> TemporalFunction {
 /// Arguments:
 /// - `timestamp` - The timestamp for interpolation (Timestamp)
 /// - `value` - The value to interpolate (Float, may be Null)
-/// - `method` - Interpolation method: "linear", "forward", "backward" (String)
+/// - `method` - Interpolation method: "linear", "forward", "backward", "nearest" (String)
 ///
 /// Returns: Interpolated value (Float)
+///
+/// SPARQL evaluates rows in order, so this registered function instance
+/// keeps a bounded history of observed (non-null) `(timestamp, value)`
+/// points. A non-null call records its point and is returned unchanged. A
+/// null call is interpolated against that history using the crate's real
+/// [`Interpolator`] for the requested method -- it no longer collapses to a
+/// hard-coded `0.0`. If no observations have been seen yet (or the method
+/// cannot be satisfied, e.g. `backward` with no later observation ever
+/// recorded), this returns an explicit error rather than fabricating data.
 pub fn interpolate_function() -> TemporalFunction {
-    Arc::new(|args: &[TemporalValue]| -> TsdbResult<TemporalValue> {
+    let history: Arc<Mutex<VecDeque<DataPoint>>> = Arc::new(Mutex::new(VecDeque::new()));
+
+    Arc::new(move |args: &[TemporalValue]| -> TsdbResult<TemporalValue> {
         if args.len() != 3 {
             return Err(TsdbError::Query(format!(
                 "ts:interpolate expects 3 arguments, got {}",
@@ -238,7 +296,7 @@ pub fn interpolate_function() -> TemporalFunction {
             )));
         }
 
-        let _timestamp = args[0].as_timestamp()?;
+        let timestamp = args[0].as_timestamp()?;
         let value = if matches!(args[1], TemporalValue::Null) {
             None
         } else {
@@ -247,7 +305,7 @@ pub fn interpolate_function() -> TemporalFunction {
         let method_str = args[2].as_string()?;
 
         // Parse interpolation method
-        let _method = match method_str.to_lowercase().as_str() {
+        let method = match method_str.to_lowercase().as_str() {
             "linear" => InterpolateMethod::Linear,
             "forward" => InterpolateMethod::ForwardFill,
             "backward" => InterpolateMethod::BackwardFill,
@@ -259,11 +317,32 @@ pub fn interpolate_function() -> TemporalFunction {
             }
         };
 
-        // For production use, this function should be called from oxirs-arq
-        // which has access to the full query context and data stream.
-        // This registry provides the function signature for SPARQL integration.
-        // Future: Direct integration with Interpolator from query module for standalone use
-        Ok(TemporalValue::Float(value.unwrap_or(0.0)))
+        let mut hist = history
+            .lock()
+            .map_err(|e| TsdbError::Query(format!("Lock poisoned: {e}")))?;
+
+        if let Some(v) = value {
+            let point = DataPoint::new(timestamp, v);
+            let insert_at = hist
+                .iter()
+                .position(|p| p.timestamp > timestamp)
+                .unwrap_or(hist.len());
+            hist.insert(insert_at, point);
+            if hist.len() > INTERPOLATE_HISTORY_CAPACITY {
+                hist.pop_front();
+            }
+            return Ok(TemporalValue::Float(v));
+        }
+
+        if hist.is_empty() {
+            return Err(TsdbError::Query(
+                "ts:interpolate: no observed values yet to interpolate from".to_string(),
+            ));
+        }
+
+        let points: Vec<DataPoint> = hist.iter().copied().collect();
+        let interpolated = Interpolator::new(method).interpolate_at(timestamp, &points)?;
+        Ok(TemporalValue::Float(interpolated))
     })
 }
 
@@ -330,10 +409,69 @@ mod tests {
             TemporalValue::String("AVG".to_string()),
         ])?;
 
-        // Placeholder implementation returns the value as-is
+        // A single call has a window of one value, so AVG-of-one == itself.
         assert_eq!(result, TemporalValue::Float(42.5));
 
         Ok(())
+    }
+
+    /// Regression test: `ts:window` must maintain a real sliding window and
+    /// actually aggregate, not just echo the latest input back. See P1 stub
+    /// finding on `sparql/extensions.rs`.
+    #[test]
+    fn test_window_function_sliding_average() -> TsdbResult<()> {
+        let window_fn = window_function();
+
+        window_fn(&[
+            TemporalValue::Float(10.0),
+            TemporalValue::Integer(2),
+            TemporalValue::String("AVG".to_string()),
+        ])?;
+        window_fn(&[
+            TemporalValue::Float(20.0),
+            TemporalValue::Integer(2),
+            TemporalValue::String("AVG".to_string()),
+        ])?;
+        // Window size 2: after the 3rd call the window holds [20.0, 30.0].
+        let result = window_fn(&[
+            TemporalValue::Float(30.0),
+            TemporalValue::Integer(2),
+            TemporalValue::String("AVG".to_string()),
+        ])?;
+
+        assert_eq!(result, TemporalValue::Float(25.0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_window_function_min_max_over_window() -> TsdbResult<()> {
+        let min_fn = window_function();
+        for v in [5.0, 1.0, 3.0] {
+            let _ = min_fn(&[
+                TemporalValue::Float(v),
+                TemporalValue::Integer(3),
+                TemporalValue::String("MIN".to_string()),
+            ])?;
+        }
+        let min_result = min_fn(&[
+            TemporalValue::Float(3.0),
+            TemporalValue::Integer(3),
+            TemporalValue::String("MIN".to_string()),
+        ])?;
+        // Window now holds the last 3 of [5,1,3,3] = [1,3,3]; MIN = 1.0
+        assert_eq!(min_result, TemporalValue::Float(1.0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_window_function_rejects_non_positive_window_size() {
+        let window_fn = window_function();
+        let result = window_fn(&[
+            TemporalValue::Float(1.0),
+            TemporalValue::Integer(0),
+            TemporalValue::String("AVG".to_string()),
+        ]);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -387,14 +525,17 @@ mod tests {
             TemporalValue::String("linear".to_string()),
         ])?;
 
-        // Placeholder implementation returns the value as-is
+        // A non-null observation is recorded and returned unchanged.
         assert_eq!(result, TemporalValue::Float(42.5));
 
         Ok(())
     }
 
+    /// Regression test: a `Null` value with no prior observations must fail
+    /// loudly instead of silently fabricating `0.0`. See P1 stub finding on
+    /// `sparql/extensions.rs`.
     #[test]
-    fn test_interpolate_null() -> TsdbResult<()> {
+    fn test_interpolate_null_without_history_errors() {
         let interpolate_fn = interpolate_function();
 
         let timestamp = DateTime::from_timestamp(1609459200, 0).expect("valid timestamp");
@@ -402,11 +543,72 @@ mod tests {
             TemporalValue::Timestamp(timestamp),
             TemporalValue::Null,
             TemporalValue::String("linear".to_string()),
+        ]);
+
+        assert!(
+            result.is_err(),
+            "interpolating a Null with no observed history must error, not return 0.0"
+        );
+    }
+
+    /// Regression test: `ts:interpolate` must use the real `Interpolator`
+    /// machinery over previously observed points instead of collapsing a
+    /// missing value to `0.0`.
+    #[test]
+    fn test_interpolate_forward_fill_uses_last_observed_value() -> TsdbResult<()> {
+        let interpolate_fn = interpolate_function();
+
+        let t0 = DateTime::from_timestamp(1609459200, 0).expect("valid timestamp");
+        let t1 = t0 + Duration::seconds(10);
+
+        // Observe a real value at t0.
+        interpolate_fn(&[
+            TemporalValue::Timestamp(t0),
+            TemporalValue::Float(42.5),
+            TemporalValue::String("forward".to_string()),
         ])?;
 
-        // Null should interpolate to 0.0 in placeholder implementation
-        assert_eq!(result, TemporalValue::Float(0.0));
+        // A missing value at t1 should be forward-filled from t0's
+        // observation, not zeroed out.
+        let result = interpolate_fn(&[
+            TemporalValue::Timestamp(t1),
+            TemporalValue::Null,
+            TemporalValue::String("forward".to_string()),
+        ])?;
 
+        assert_eq!(result, TemporalValue::Float(42.5));
+        Ok(())
+    }
+
+    #[test]
+    fn test_interpolate_linear_between_two_observations() -> TsdbResult<()> {
+        let interpolate_fn = interpolate_function();
+
+        let t0 = DateTime::from_timestamp(1609459200, 0).expect("valid timestamp");
+        let t1 = t0 + Duration::seconds(10);
+        let mid = t0 + Duration::seconds(5);
+
+        interpolate_fn(&[
+            TemporalValue::Timestamp(t0),
+            TemporalValue::Float(10.0),
+            TemporalValue::String("linear".to_string()),
+        ])?;
+        interpolate_fn(&[
+            TemporalValue::Timestamp(t1),
+            TemporalValue::Float(20.0),
+            TemporalValue::String("linear".to_string()),
+        ])?;
+
+        let result = interpolate_fn(&[
+            TemporalValue::Timestamp(mid),
+            TemporalValue::Null,
+            TemporalValue::String("linear".to_string()),
+        ])?;
+
+        match result {
+            TemporalValue::Float(v) => assert!((v - 15.0).abs() < 0.001),
+            other => panic!("expected float, got {other:?}"),
+        }
         Ok(())
     }
 

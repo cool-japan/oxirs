@@ -70,6 +70,8 @@ impl TestDataset {
                 format: Some("turtle".to_string()),
                 graph: None,
                 resume: false,
+                max_file_size: 0,
+                dataset_type: "memory".to_string(),
             },
             verbose: false,
             config: None,

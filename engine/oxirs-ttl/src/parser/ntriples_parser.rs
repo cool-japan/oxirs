@@ -301,34 +301,63 @@ fn parse_iri_term(s: &str, pos: &mut usize, line: usize) -> Result<RdfTerm, Pars
     parse_iri(s, pos, line)
 }
 
-/// Parse an IRI enclosed in `<…>`
+/// Parse an IRI enclosed in `<…>`.
+///
+/// Per the N-Triples/N-Quads `IRIREF` grammar, a backslash inside an IRI may
+/// only introduce a `UCHAR` escape (`\uXXXX` or `\UXXXXXXXX`); those are
+/// decoded here (reusing the same [`unescape_sequence`]/[`read_hex_digits`]
+/// helpers the string-literal parser uses) rather than being preserved as a
+/// raw, undecoded escape sequence in the resulting IRI value.
 fn parse_iri(s: &str, pos: &mut usize, line: usize) -> Result<RdfTerm, ParseError> {
     debug_assert_eq!(s.as_bytes()[*pos], b'<');
     *pos += 1; // skip '<'
 
-    let start = *pos;
+    let mut value = String::new();
     let bytes = s.as_bytes();
 
-    while *pos < bytes.len() {
+    loop {
+        if *pos >= bytes.len() {
+            return Err(ParseError::new(line, "unterminated IRI (missing '>')"));
+        }
         match bytes[*pos] {
             b'>' => {
-                let iri = &s[start..*pos];
                 *pos += 1; // skip '>'
-                return Ok(RdfTerm::iri(iri));
+                return Ok(RdfTerm::iri(value));
             }
             b'\\' => {
-                // IRI escape sequences (e.g. \uXXXX) — advance past the backslash;
-                // for simplicity we let the value contain the raw escape.
-                *pos += 1;
-                if *pos < bytes.len() {
-                    *pos += 1;
+                *pos += 1; // skip '\'
+                if *pos >= bytes.len() {
+                    return Err(ParseError::new(line, "unexpected end after '\\' in IRI"));
+                }
+                match bytes[*pos] {
+                    b'u' | b'U' => {
+                        let ch = unescape_sequence(bytes[*pos], s, pos, line)?;
+                        value.push(ch);
+                    }
+                    _ => {
+                        // Not a valid UCHAR escape (only \u/\U are permitted in an
+                        // IRIREF); preserve the raw, undecoded escape rather than
+                        // rejecting the whole IRI, matching prior lenient behavior.
+                        value.push('\\');
+                        let ch = s[*pos..]
+                            .chars()
+                            .next()
+                            .ok_or_else(|| ParseError::new(line, "invalid UTF-8 in IRI"))?;
+                        value.push(ch);
+                        *pos += ch.len_utf8();
+                    }
                 }
             }
-            _ => *pos += 1,
+            _ => {
+                let ch = s[*pos..]
+                    .chars()
+                    .next()
+                    .ok_or_else(|| ParseError::new(line, "invalid UTF-8 in IRI"))?;
+                value.push(ch);
+                *pos += ch.len_utf8();
+            }
         }
     }
-
-    Err(ParseError::new(line, "unterminated IRI (missing '>')"))
 }
 
 /// Parse a blank node `_:label`
@@ -576,6 +605,20 @@ mod tests {
             .expect("parse should succeed");
         assert_eq!(triples[0].2.term_type, TermType::BlankNode);
         assert_eq!(triples[0].2.value, "b1");
+    }
+
+    #[test]
+    fn test_ntriples_iri_decodes_uchar_escapes() {
+        // Regression test: \uXXXX / \UXXXXXXXX escapes inside an IRIREF must be
+        // decoded, not left as a raw, undecoded escape sequence in the value.
+        let mut p = NTriplesLiteParser::new();
+        let triples = p
+            .parse_str("<http://example.org/\\u00E9caf\\U0001F600> <http://p> <http://o> .")
+            .expect("parse should succeed");
+        assert_eq!(
+            triples[0].0.value,
+            "http://example.org/\u{00E9}caf\u{1F600}"
+        );
     }
 
     #[test]

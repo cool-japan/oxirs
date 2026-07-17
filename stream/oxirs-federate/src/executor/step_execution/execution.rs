@@ -168,12 +168,13 @@ pub async fn execute_service_query(step: &ExecutionStep) -> Result<QueryResultDa
         HeaderValue::from_static("application/sparql-results+json"),
     );
 
+    let client = Client::new();
+
     // Apply authentication if configured
     if let Some(auth) = &step.auth_config {
-        apply_auth_headers(&mut headers, auth)?;
+        apply_auth_headers(&client, &mut headers, auth).await?;
     }
 
-    let client = Client::new();
     let response = client
         .post(endpoint.as_str())
         .headers(headers)
@@ -225,12 +226,13 @@ pub async fn execute_graphql_query(step: &ExecutionStep) -> Result<QueryResultDa
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
+    let client = Client::new();
+
     // Apply authentication if configured
     if let Some(auth) = &step.auth_config {
-        apply_auth_headers(&mut headers, auth)?;
+        apply_auth_headers(&client, &mut headers, auth).await?;
     }
 
-    let client = Client::new();
     let response = client
         .post(endpoint.as_str())
         .headers(headers)
@@ -561,8 +563,115 @@ pub async fn execute_result_stitching(
     Ok(stitched_result)
 }
 
-/// Apply authentication headers based on auth configuration
-fn apply_auth_headers(
+/// A cached OAuth2 client-credentials access token.
+#[derive(Debug, Clone)]
+struct CachedOAuth2Token {
+    access_token: String,
+    /// Local monotonic deadline after which the token is no longer trusted
+    /// (already backed off from the server-reported expiry by a safety
+    /// margin, see [`fetch_oauth2_token`]).
+    expires_at: Instant,
+}
+
+/// Process-wide cache of OAuth2 tokens keyed by `"{token_url}|{client_id}"`,
+/// so repeated federated requests to the same service reuse a still-valid
+/// token instead of re-authenticating on every call.
+fn oauth2_token_cache() -> &'static dashmap::DashMap<String, CachedOAuth2Token> {
+    static CACHE: std::sync::OnceLock<dashmap::DashMap<String, CachedOAuth2Token>> =
+        std::sync::OnceLock::new();
+    CACHE.get_or_init(dashmap::DashMap::new)
+}
+
+/// Minimal shape of an OAuth2 token endpoint's client-credentials response
+/// (RFC 6749 section 4.4.3).
+#[derive(Debug, serde::Deserialize)]
+struct OAuth2TokenResponse {
+    access_token: String,
+    #[serde(default)]
+    expires_in: Option<u64>,
+}
+
+/// Fetch (and cache) an OAuth2 access token via the client-credentials grant.
+///
+/// On any failure (network error, non-2xx status, unparsable/empty body)
+/// this returns `Err` so the caller never falls back to sending an
+/// unauthenticated request.
+async fn fetch_oauth2_token(
+    client: &Client,
+    token_url: &str,
+    client_id: &str,
+    client_secret: &str,
+) -> Result<String> {
+    let cache_key = format!("{token_url}|{client_id}");
+    if let Some(cached) = oauth2_token_cache().get(&cache_key) {
+        if cached.expires_at > Instant::now() {
+            return Ok(cached.access_token.clone());
+        }
+    }
+
+    let params = [
+        ("grant_type", "client_credentials"),
+        ("client_id", client_id),
+        ("client_secret", client_secret),
+    ];
+
+    let response = client
+        .post(token_url)
+        .form(&params)
+        .send()
+        .await
+        .map_err(|e| anyhow!("OAuth2 token request to '{}' failed: {}", token_url, e))?;
+
+    if !response.status().is_success() {
+        return Err(anyhow!(
+            "OAuth2 token endpoint '{}' returned error status {}",
+            token_url,
+            response.status()
+        ));
+    }
+
+    let token_response: OAuth2TokenResponse = response.json().await.map_err(|e| {
+        anyhow!(
+            "Failed to parse OAuth2 token response from '{}': {}",
+            token_url,
+            e
+        )
+    })?;
+
+    if token_response.access_token.is_empty() {
+        return Err(anyhow!(
+            "OAuth2 token endpoint '{}' returned an empty access token",
+            token_url
+        ));
+    }
+
+    // Cache with a 30s safety margin ahead of the reported expiry, falling
+    // back to a conservative 5-minute TTL if the server doesn't report one.
+    let ttl_secs = token_response
+        .expires_in
+        .unwrap_or(300)
+        .saturating_sub(30)
+        .max(5);
+    oauth2_token_cache().insert(
+        cache_key,
+        CachedOAuth2Token {
+            access_token: token_response.access_token.clone(),
+            expires_at: Instant::now() + Duration::from_secs(ttl_secs),
+        },
+    );
+
+    Ok(token_response.access_token)
+}
+
+/// Apply authentication headers based on auth configuration.
+///
+/// For `AuthConfig::OAuth2` this performs (or reuses a cached) real
+/// client-credentials token exchange; if that fails, this returns `Err`
+/// rather than silently proceeding without an `Authorization` header, so a
+/// misconfigured OAuth2 service fails the request loudly instead of leaking
+/// an unauthenticated call.
+async fn apply_auth_headers(
+    client: &Client,
     headers: &mut HeaderMap,
     auth: &crate::service_registry::AuthConfig,
 ) -> Result<()> {
@@ -596,9 +705,18 @@ fn apply_auth_headers(
                 HeaderValue::from_str(key).map_err(|e| anyhow!("Invalid API key: {}", e))?,
             );
         }
-        AuthConfig::OAuth2 { .. } => {
-            warn!("OAuth2 authentication requires token exchange, using placeholder");
-            // In production, this would initiate OAuth2 flow
+        AuthConfig::OAuth2 {
+            token_url,
+            client_id,
+            client_secret,
+        } => {
+            let access_token =
+                fetch_oauth2_token(client, token_url, client_id, client_secret).await?;
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {}", access_token))
+                    .map_err(|e| anyhow!("Invalid OAuth2 token header value: {}", e))?,
+            );
         }
         AuthConfig::Custom {
             headers: custom_headers,
@@ -616,4 +734,96 @@ fn apply_auth_headers(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod oauth2_auth_tests {
+    use super::*;
+    use crate::service_registry::AuthConfig;
+    use serde_json::json;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// Regression test for executor/step_execution/execution.rs:599 — OAuth2
+    /// used to be a documented no-op (`warn!` + no header at all), so
+    /// federated requests to OAuth2-configured services silently went out
+    /// unauthenticated. This verifies a real client-credentials token
+    /// exchange happens and produces a genuine `Authorization: Bearer <token>`
+    /// header, and that the token is cached (the token endpoint is hit
+    /// exactly once across two calls).
+    #[tokio::test]
+    async fn test_oauth2_fetches_and_caches_token() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/oauth2/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "regression-test-access-token",
+                "token_type": "Bearer",
+                "expires_in": 3600
+            })))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let auth = AuthConfig::OAuth2 {
+            token_url: format!("{}/oauth2/token", mock_server.uri()),
+            client_id: "test-client".to_string(),
+            client_secret: "test-secret".to_string(),
+        };
+
+        let client = Client::new();
+
+        let mut headers = HeaderMap::new();
+        apply_auth_headers(&client, &mut headers, &auth)
+            .await
+            .expect("OAuth2 token exchange should succeed against the mock server");
+        assert_eq!(
+            headers.get(reqwest::header::AUTHORIZATION).unwrap(),
+            "Bearer regression-test-access-token"
+        );
+
+        // Second call must reuse the cached token rather than hitting the
+        // token endpoint again (enforced by `.expect(1)` above via the
+        // mock server's drop-time assertion).
+        let mut headers2 = HeaderMap::new();
+        apply_auth_headers(&client, &mut headers2, &auth)
+            .await
+            .expect("cached OAuth2 token reuse should succeed");
+        assert_eq!(
+            headers2.get(reqwest::header::AUTHORIZATION).unwrap(),
+            "Bearer regression-test-access-token"
+        );
+    }
+
+    /// Regression test: when the OAuth2 token endpoint fails, the request
+    /// must error out rather than silently proceeding without an
+    /// `Authorization` header.
+    #[tokio::test]
+    async fn test_oauth2_failure_does_not_send_unauthenticated_request() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/oauth2/token"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&mock_server)
+            .await;
+
+        let auth = AuthConfig::OAuth2 {
+            token_url: format!("{}/oauth2/token", mock_server.uri()),
+            client_id: "bad-client".to_string(),
+            client_secret: "bad-secret".to_string(),
+        };
+
+        let client = Client::new();
+        let mut headers = HeaderMap::new();
+        let result = apply_auth_headers(&client, &mut headers, &auth).await;
+
+        assert!(
+            result.is_err(),
+            "a failed OAuth2 token exchange must error out, not succeed silently"
+        );
+        assert!(
+            headers.get(reqwest::header::AUTHORIZATION).is_none(),
+            "no Authorization header must be set when the OAuth2 exchange fails"
+        );
+    }
 }
