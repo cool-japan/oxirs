@@ -382,7 +382,11 @@ impl QueryParser {
         } else if self.match_token(&Token::Reduced) {
             query.reduced = true;
         }
-        if self.match_token(&Token::Multiply) {
+        // `SELECT *`: the tokenizer emits `Token::Star` for `*`, so the legacy
+        // `Token::Multiply` check never matched and `SELECT *` failed to parse.
+        // Accept either. An empty `select_variables` means "project all
+        // in-scope variables".
+        if self.match_token(&Token::Star) || self.match_token(&Token::Multiply) {
         } else {
             while !self.is_at_end()
                 && !matches!(self.peek(), Some(Token::Where) | Some(Token::From))
@@ -430,34 +434,63 @@ impl QueryParser {
         if self.has_union_pattern() {
             return self.parse_graph_pattern_or_union();
         }
+        // Collect the group's basic patterns separately from its `FILTER` /
+        // `BIND` modifiers. `parse_filter_pattern` / `parse_bind_pattern`
+        // return `Filter { pattern: Table, .. }` / `Extend { pattern: Table, .. }`
+        // placeholders; a `FILTER`/`BIND` constrains/extends the *whole* group,
+        // so joining those placeholders with the BGPs (the previous behaviour)
+        // evaluated the condition over an empty binding and silently dropped
+        // every row. Instead, join the basic patterns and then wrap the result
+        // with each modifier, in query order.
         let mut patterns = Vec::new();
+        let mut modifiers = Vec::new();
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
             self.skip_whitespace_and_newlines();
             if self.is_at_end() || matches!(self.peek(), Some(Token::RightBrace)) {
                 break;
             }
             let pattern = self.parse_graph_pattern_or_union()?;
-            patterns.push(pattern);
+            match &pattern {
+                Algebra::Filter { pattern: inner, .. }
+                | Algebra::Extend { pattern: inner, .. }
+                    if matches!(**inner, Algebra::Table) =>
+                {
+                    modifiers.push(pattern);
+                }
+                _ => patterns.push(pattern),
+            }
             self.match_token(&Token::Dot);
             self.skip_whitespace_and_newlines();
         }
-        if patterns.is_empty() {
-            Ok(Algebra::Table)
-        } else if patterns.len() == 1 {
-            Ok(patterns
-                .into_iter()
-                .next()
-                .expect("collection validated to be non-empty"))
+        let mut result = if patterns.is_empty() {
+            Algebra::Table
         } else {
             let mut patterns_iter = patterns.into_iter();
-            let mut result = patterns_iter
+            let mut acc = patterns_iter
                 .next()
                 .expect("collection validated to be non-empty");
             for pattern in patterns_iter {
-                result = Algebra::join(result, pattern);
+                acc = Algebra::join(acc, pattern);
             }
-            Ok(result)
+            acc
+        };
+        for modifier in modifiers {
+            result = match modifier {
+                Algebra::Filter { condition, .. } => Algebra::Filter {
+                    pattern: Box::new(result),
+                    condition,
+                },
+                Algebra::Extend {
+                    variable, expr, ..
+                } => Algebra::Extend {
+                    pattern: Box::new(result),
+                    variable,
+                    expr,
+                },
+                other => Algebra::join(result, other),
+            };
         }
+        Ok(result)
     }
     pub(super) fn parse_graph_pattern_or_union(&mut self) -> Result<Algebra> {
         let left = self.parse_graph_pattern()?;
