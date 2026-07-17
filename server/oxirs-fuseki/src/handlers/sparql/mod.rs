@@ -4,6 +4,7 @@
 //! broken down into smaller, manageable components.
 
 pub mod aggregation_engine;
+pub mod arq_exec;
 pub mod bind_processor;
 pub mod content_types;
 pub mod core;

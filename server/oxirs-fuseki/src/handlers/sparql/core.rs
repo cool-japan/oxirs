@@ -279,9 +279,9 @@ pub async fn sparql_query(
 
             error!("SPARQL query execution failed: {}", e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                e.status_code(),
                 Json(serde_json::json!({
-                    "error": "query_execution_failed",
+                    "error": e.error_type(),
                     "message": e.to_string()
                 })),
             )
@@ -397,9 +397,9 @@ pub async fn sparql_query_post(
 
             error!("SPARQL query execution failed: {}", e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                e.status_code(),
                 Json(serde_json::json!({
-                    "error": "query_execution_failed",
+                    "error": e.error_type(),
                     "message": e.to_string()
                 })),
             )
@@ -506,7 +506,19 @@ pub async fn sparql_update(
     }
 }
 
-/// Execute SPARQL query with enhanced features
+/// Execute SPARQL query with enhanced features.
+///
+/// SELECT and ASK are routed to the real oxirs-arq engine
+/// ([`crate::handlers::sparql::arq_exec`]) so `FILTER`, `LIMIT`/`OFFSET`,
+/// `ORDER BY`, `DISTINCT`, joins and aggregation are actually evaluated, and a
+/// parse/execution failure returns an HTTP error (400/500) — the previous
+/// behaviour of answering `200 OK` with an empty result set (a silent wrong
+/// answer) is gone.
+///
+/// CONSTRUCT and DESCRIBE keep the legacy store-backed path below: arq's parser
+/// cannot yet handle valid forms such as `DESCRIBE <iri>` (no WHERE) or the
+/// `CONSTRUCT WHERE { … }` shorthand, so routing them through arq would reject
+/// valid queries. (This is a documented residual, not a silent wrong answer.)
 pub async fn execute_sparql_query(
     query: &str,
     context: QueryContext,
@@ -517,29 +529,28 @@ pub async fn execute_sparql_query(
         return Err(FusekiError::query_parsing("Empty query"));
     }
 
-    // Try to parse query, but provide fallback if parsing fails
+    // Route SELECT / ASK through the real arq engine.
+    let query_form = detect_query_type(query);
+    if query_form == "SELECT" || query_form == "ASK" {
+        return crate::handlers::sparql::arq_exec::execute_query(query, &state.store);
+    }
+
+    // CONSTRUCT / DESCRIBE keep the legacy store-backed path. arq's parser
+    // cannot handle valid forms like `DESCRIBE <iri>` (no WHERE) or the
+    // `CONSTRUCT WHERE { … }` shorthand, so a parse failure here falls back to
+    // an empty graph (HTTP 200) rather than rejecting a valid query. This
+    // preserves existing CONSTRUCT/DESCRIBE behaviour; correct CONSTRUCT/
+    // DESCRIBE evaluation is a documented residual pending arq parser support.
     let _parsed_query = match parse_query(query) {
         Ok(parsed) => Some(parsed),
         Err(e) => {
-            warn!("Query parsing failed, providing fallback response: {}", e);
+            warn!("CONSTRUCT/DESCRIBE parse via arq failed, using legacy path: {}", e);
             None
         }
     };
-
-    // If parsing failed, provide a simple fallback response for testing
     if _parsed_query.is_none() {
-        warn!("Providing fallback response due to parsing failure");
         let query_type = detect_query_type(query);
         let result = match query_type.as_str() {
-            "ASK" => QueryResult {
-                query_type,
-                execution_time_ms: 1,
-                result_count: Some(1),
-                bindings: None,
-                boolean: Some(false),
-                construct_graph: None,
-                describe_graph: None,
-            },
             "CONSTRUCT" => QueryResult {
                 query_type,
                 execution_time_ms: 1,
