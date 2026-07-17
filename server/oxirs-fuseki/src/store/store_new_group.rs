@@ -512,10 +512,18 @@ impl Store {
             Ok(oxirs_core::model::GraphName::NamedNode(named_node))
         }
     }
-    /// Parse data block into quads using simple N-Triples-like parsing
-    /// Handles both plain triples and GRAPH <iri> { triples } syntax
+    /// Parse data block into quads using N-Triples parsing.
+    /// Handles both plain triples and `GRAPH <iri> { triples }` syntax.
+    ///
+    /// The block is parsed as a **whole document**, not line by line. The old
+    /// line-by-line loop treated each source line as exactly one triple and
+    /// *silently discarded* (only `warn!`) every triple after the first on a
+    /// line — so `INSERT DATA { <a> <b> <c> . <d> <e> <f> . }` written on a
+    /// single line inserted zero (or one) triples with no error. Parsing the
+    /// entire block at once captures every `.`-terminated statement regardless
+    /// of line breaks, and a genuine parse failure is now surfaced as an error
+    /// instead of being swallowed.
     pub(super) fn parse_data_block(&self, data_block: &str) -> FusekiResult<Vec<Quad>> {
-        let mut quads = Vec::new();
         let data_block = data_block.trim();
         let data_upper = data_block.to_uppercase();
         if data_upper.starts_with("GRAPH") {
@@ -526,41 +534,25 @@ impl Store {
                         &after_graph[open_bracket + 1..open_bracket + 1 + close_bracket];
                     if let Some(open_brace) = after_graph.find('{') {
                         if let Some(close_brace) = after_graph.rfind('}') {
-                            let triples_block = &after_graph[open_brace + 1..close_brace].trim();
+                            let triples_block = after_graph[open_brace + 1..close_brace].trim();
                             let graph_name =
                                 oxirs_core::model::NamedNode::new(graph_iri).map_err(|e| {
                                     FusekiError::update_execution(format!("Invalid graph IRI: {e}"))
                                 })?;
                             let graph_name_obj =
                                 oxirs_core::model::GraphName::NamedNode(graph_name);
-                            let parser = Parser::new(CoreRdfFormat::NTriples);
-                            for line in triples_block.lines() {
-                                let line = line.trim();
-                                if line.is_empty() || line.starts_with('#') {
-                                    continue;
-                                }
-                                let line_with_period = if line.ends_with('.') {
-                                    line.to_string()
-                                } else {
-                                    format!("{line}.")
-                                };
-                                match parser.parse_str_to_quads(&line_with_period) {
-                                    Ok(parsed_quads) => {
-                                        for quad in parsed_quads {
-                                            let new_quad = oxirs_core::model::Quad::new(
-                                                quad.subject().clone(),
-                                                quad.predicate().clone(),
-                                                quad.object().clone(),
-                                                graph_name_obj.clone(),
-                                            );
-                                            quads.push(new_quad);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        warn!("Failed to parse line '{}': {}", line, e);
-                                    }
-                                }
-                            }
+                            let parsed = Self::parse_ntriples_document(triples_block)?;
+                            let quads = parsed
+                                .into_iter()
+                                .map(|quad| {
+                                    oxirs_core::model::Quad::new(
+                                        quad.subject().clone(),
+                                        quad.predicate().clone(),
+                                        quad.object().clone(),
+                                        graph_name_obj.clone(),
+                                    )
+                                })
+                                .collect();
                             return Ok(quads);
                         }
                     }
@@ -570,27 +562,104 @@ impl Store {
                 "Invalid GRAPH syntax in data block".to_string(),
             ));
         }
+        Self::parse_ntriples_document(data_block)
+    }
+
+    /// Parse an N-Triples data block (multiple `.`-terminated statements,
+    /// possibly several per physical line, with `#` comments) into quads.
+    ///
+    /// The block is first split into individual triple statements on top-level
+    /// `.` terminators, then each statement is parsed on its own. This is
+    /// required because the underlying N-Triples parser accepts only **one
+    /// triple per call** (it rejects `<a> <p> <b> . <c> <p> <d> .` with
+    /// "Expected 3 tokens, found 7"); the previous line-by-line loop therefore
+    /// silently dropped every triple after the first on a shared line. Any
+    /// statement that fails to parse aborts the whole block with an error rather
+    /// than being discarded, so a bad payload can never appear as a silent
+    /// zero-row success.
+    fn parse_ntriples_document(block: &str) -> FusekiResult<Vec<Quad>> {
+        let block = block.trim();
+        if block.is_empty() {
+            return Ok(Vec::new());
+        }
         let parser = Parser::new(CoreRdfFormat::NTriples);
-        for line in data_block.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            let line_with_period = if line.ends_with('.') {
-                line.to_string()
-            } else {
-                format!("{line}.")
-            };
-            match parser.parse_str_to_quads(&line_with_period) {
-                Ok(parsed_quads) => {
-                    quads.extend(parsed_quads);
-                }
-                Err(e) => {
-                    warn!("Failed to parse line '{}': {}", line, e);
-                }
-            }
+        let mut quads = Vec::new();
+        for stmt in Self::split_ntriples_statements(block) {
+            let line = format!("{stmt} .");
+            let parsed = parser.parse_str_to_quads(&line).map_err(|e| {
+                FusekiError::update_execution(format!(
+                    "Failed to parse triple '{stmt}' in data block (no triples were applied): {e}"
+                ))
+            })?;
+            quads.extend(parsed);
         }
         Ok(quads)
+    }
+
+    /// Split an N-Triples data block into individual triple statements on
+    /// top-level `.` terminators — a `.` that is not inside an `<IRI>`, a quoted
+    /// literal (`"…"` / `'…'`, honouring `\` escapes), or a `#` comment. This is
+    /// what lets several `.`-separated triples share one physical line. The
+    /// returned statements are trimmed and do not include the terminating `.`.
+    fn split_ntriples_statements(block: &str) -> Vec<String> {
+        let mut statements = Vec::new();
+        let mut current = String::new();
+        let mut in_iri = false;
+        let mut in_dquote = false;
+        let mut in_squote = false;
+        let mut escaped = false;
+        let mut in_comment = false;
+        for ch in block.chars() {
+            if in_comment {
+                if ch == '\n' {
+                    in_comment = false;
+                }
+                continue;
+            }
+            if escaped {
+                current.push(ch);
+                escaped = false;
+                continue;
+            }
+            match ch {
+                '\\' if in_dquote || in_squote => {
+                    current.push(ch);
+                    escaped = true;
+                }
+                '#' if !in_iri && !in_dquote && !in_squote => {
+                    in_comment = true;
+                }
+                '"' if !in_squote && !in_iri => {
+                    in_dquote = !in_dquote;
+                    current.push(ch);
+                }
+                '\'' if !in_dquote && !in_iri => {
+                    in_squote = !in_squote;
+                    current.push(ch);
+                }
+                '<' if !in_dquote && !in_squote && !in_iri => {
+                    in_iri = true;
+                    current.push(ch);
+                }
+                '>' if in_iri => {
+                    in_iri = false;
+                    current.push(ch);
+                }
+                '.' if !in_iri && !in_dquote && !in_squote => {
+                    let trimmed = current.trim();
+                    if !trimmed.is_empty() {
+                        statements.push(trimmed.to_string());
+                    }
+                    current.clear();
+                }
+                _ => current.push(ch),
+            }
+        }
+        let trimmed = current.trim();
+        if !trimmed.is_empty() {
+            statements.push(trimmed.to_string());
+        }
+        statements
     }
 }
 
