@@ -23,6 +23,7 @@ use crate::error::{Result, TdbError};
 use crate::index::{Quad, QuadScan, Triple, TripleScan};
 use crate::store::store_impl::TdbStore;
 use crate::store::store_stream::decode_triple_terms;
+use crate::store::store_wal::StoreOp;
 
 /// The graph a decoded quad belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -192,12 +193,22 @@ impl TdbStore {
                 let p_id = self.dictionary.encode(predicate)?;
                 let o_id = self.dictionary.encode(object)?;
                 let quad = Quad::new(g_id, s_id, p_id, o_id);
-                let quad_indexes = self.quad_indexes.as_mut().ok_or_else(|| {
-                    TdbError::Unsupported("quad indexes are not initialized".to_string())
-                })?;
-                let is_new = quad_indexes.insert(quad)?;
+                let is_new = {
+                    let quad_indexes = self.quad_indexes.as_mut().ok_or_else(|| {
+                        TdbError::Unsupported("quad indexes are not initialized".to_string())
+                    })?;
+                    quad_indexes.insert(quad)?
+                };
                 if is_new {
                     self.quad_count += 1;
+                    // Log the committed named-graph insert so it survives a crash
+                    // before the next checkpoint.
+                    self.wal_log_op(StoreOp::InsertQuad {
+                        graph: graph_term.clone(),
+                        subject: subject.clone(),
+                        predicate: predicate.clone(),
+                        object: object.clone(),
+                    })?;
                 }
                 Ok(is_new)
             }
@@ -222,6 +233,13 @@ impl TdbStore {
         }
         if is_new {
             self.triple_count += 1;
+            // A default-graph quad is a triple: log it as a triple insert (the
+            // triple indexes back both the triple API and the default graph).
+            self.wal_log_op(StoreOp::InsertTriple {
+                subject: subject.clone(),
+                predicate: predicate.clone(),
+                object: object.clone(),
+            })?;
         }
         // The default graph changed, so cached triple-query results are stale.
         self.query_cache.clear();
@@ -251,6 +269,12 @@ impl TdbStore {
                 if deleted {
                     self.triple_count = self.triple_count.saturating_sub(1);
                     self.query_cache.clear();
+                    // A default-graph quad delete is a triple delete.
+                    self.wal_log_op(StoreOp::DeleteTriple {
+                        subject: subject.clone(),
+                        predicate: predicate.clone(),
+                        object: object.clone(),
+                    })?;
                 }
                 Ok(deleted)
             }
@@ -270,12 +294,21 @@ impl TdbStore {
                     None => return Ok(false),
                 };
                 let quad = Quad::new(g_id, s_id, p_id, o_id);
-                let quad_indexes = self.quad_indexes.as_mut().ok_or_else(|| {
-                    TdbError::Unsupported("quad indexes are not initialized".to_string())
-                })?;
-                let deleted = quad_indexes.delete(quad)?;
+                let deleted = {
+                    let quad_indexes = self.quad_indexes.as_mut().ok_or_else(|| {
+                        TdbError::Unsupported("quad indexes are not initialized".to_string())
+                    })?;
+                    quad_indexes.delete(quad)?
+                };
                 if deleted {
                     self.quad_count = self.quad_count.saturating_sub(1);
+                    // Log the committed named-graph delete.
+                    self.wal_log_op(StoreOp::DeleteQuad {
+                        graph: graph_term.clone(),
+                        subject: subject.clone(),
+                        predicate: predicate.clone(),
+                        object: object.clone(),
+                    })?;
                 }
                 Ok(deleted)
             }

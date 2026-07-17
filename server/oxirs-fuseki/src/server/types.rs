@@ -537,6 +537,7 @@ impl Runtime {
         self.initialize_services().await?;
         let addr = self.addr;
         let config = self.config.clone();
+        warn_on_read_only_dataset_config(&config);
         let app_state = AppState {
             store: self.store.clone(),
             config: config.clone(),
@@ -604,8 +605,15 @@ impl Runtime {
         info!("Server shutdown complete");
         Ok(())
     }
-    /// Build the application with all routes and middleware
-    async fn build_app(&self, state: Arc<AppState>) -> FusekiResult<Router> {
+    /// Build the application with all routes and middleware.
+    ///
+    /// `pub(crate)` (rather than private) so the real production router can
+    /// be exercised directly by regression tests (see
+    /// `production_router_tests` below) instead of only through a
+    /// hand-maintained parallel mock router — a revert that breaks route
+    /// registration (e.g. a re-introduced duplicate path+method pair, which
+    /// axum 0.8 panics on) would otherwise pass the whole test suite.
+    pub(crate) async fn build_app(&self, state: Arc<AppState>) -> FusekiResult<Router> {
         let mut app = Router::new();
         app = app.route(
             "/sparql",
@@ -790,8 +798,18 @@ impl Runtime {
         app = app
             .route("/$/ping", get(ping_handler))
             .route("/$/server", get(handlers::admin::server_info))
-            // AUDIT-LOCAL: duplicate of GET /$/stats registered at line ~588 (stats_server_handler);
-            // axum 0.8 panics on overlapping method routes.
+            // NOTE: `GET /$/stats` is registered once, above via
+            // `.route("/$/stats", get(stats_server_handler))`.
+            // A second `GET /$/stats -> handlers::admin::server_stats`
+            // registration used to live here too; axum 0.8 panics on
+            // overlapping method+path routes, so the duplicate was removed
+            // rather than merged, which silently dropped
+            // `server_stats`'s uptime/requests/memory/cpu/connections
+            // fields from the response. `stats_server_handler` now calls
+            // `handlers::admin::collect_runtime_stats` itself and nests the
+            // result under a `"runtime"` key, so both shapes are present in
+            // the one surviving response — see `stats_server_handler` in
+            // `server/functions.rs`.
             .route("/$/compact/{name}", post(handlers::admin::compact_dataset))
             .route("/$/backup/{name}", post(handlers::admin::backup_dataset))
             .route("/$/backups-list", get(handlers::list_backups))
@@ -884,9 +902,10 @@ impl Runtime {
         if state.metrics_service.is_some() {
             app = app.route("/metrics", get(handlers::production::metrics_handler));
         }
-        // AUDIT-LOCAL: /$/performance/{memory,concurrency,health} and the profiler trio
-        // are already registered unconditionally above (~line 592-623); axum 0.8 panics
-        // on overlapping method routes. Keep only the paths not registered earlier.
+        // NOTE: /$/performance/{stats,memory,concurrency,memory/gc,health} (lines
+        // 658-677) and the /$/profiler/{report,query-stats,reset} trio (lines
+        // 679-690) are already registered unconditionally above; axum 0.8 panics
+        // on overlapping method+path routes. Keep only the paths not registered earlier.
         app = app
             .route(
                 "/$/performance",
@@ -1215,6 +1234,74 @@ fn has_persistent_dataset_location(datasets: &HashMap<String, DatasetConfigAlias
 /// (imported above as `DatasetConfig`) in this module.
 type DatasetConfigAlias = crate::config::DatasetConfig;
 
+/// Startup diagnostics for `read_only` dataset configuration versus what
+/// [`AppState::is_dataset_read_only`] can actually resolve.
+///
+/// [`AppState::is_dataset_read_only`] special-cases the single-dataset
+/// deployment: with exactly one configured dataset, any name a guard queries
+/// resolves to that one entry, so `read_only` is always honored regardless
+/// of naming. Once a *second* dataset is configured, resolution reverts to
+/// an exact per-key lookup — and most write guards in this crate (Graph
+/// Store Protocol, `/upload`, `/patch`, and the mutating `/$/...` admin
+/// endpoints that are not scoped to a single path-parameter dataset name)
+/// key that lookup on the literal string `"default"`. A `read_only = true`
+/// dataset configured under any other name in a multi-dataset deployment is
+/// therefore invisible to those guards. This function cannot fix that at
+/// runtime (each guard would need real per-request dataset routing, which is
+/// a larger change), but it makes the situation loud instead of silent:
+/// a WARN every time multiple datasets are configured with at least one
+/// `read_only`, escalating to ERROR when the specific "declared read_only
+/// but named such that the default-keyed guards can never see it"
+/// misconfiguration is detected.
+fn warn_on_read_only_dataset_config(config: &ServerConfig) {
+    if config.datasets.len() <= 1 {
+        // Zero or one dataset: `AppState::is_dataset_read_only` resolves any
+        // queried name to the sole entry (or to `false` when there is none),
+        // so every guard call site sees the correct effective flag no matter
+        // which literal key it happens to pass. Nothing to warn about.
+        return;
+    }
+
+    let mut read_only_datasets: Vec<&str> = config
+        .datasets
+        .iter()
+        .filter(|(_, cfg)| cfg.read_only)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    read_only_datasets.sort_unstable();
+
+    if read_only_datasets.is_empty() {
+        return;
+    }
+
+    warn!(
+        "{} datasets are configured and the following are marked read_only: {:?}. \
+         Write guards keyed on a specific request-provided dataset name (SPARQL \
+         UPDATE, and the `/$/datasets/{{name}}`, `/$/compact/{{name}}` admin \
+         endpoints) resolve correctly per-dataset, but the Graph Store Protocol, \
+         `/upload`, `/patch`, and `/$/reload` guards currently key their lookup on \
+         the literal string \"default\". Confirm every read_only dataset above that \
+         must be protected on those paths is reachable as \"default\"; otherwise \
+         writes to it via those specific endpoints are NOT blocked.",
+        config.datasets.len(),
+        read_only_datasets
+    );
+
+    if !read_only_datasets.contains(&"default") {
+        error!(
+            "Misconfiguration: dataset(s) {:?} are read_only, but none of them is \
+             named \"default\" and {} datasets are configured (multi-dataset mode). \
+             The Graph Store Protocol, `/upload`, `/patch`, and `/$/reload` write \
+             guards key their read_only lookup on the literal string \"default\" and \
+             will NEVER consult these datasets' read_only flag, leaving those write \
+             paths unprotected for them. Rename the intended read-only dataset to \
+             \"default\", or restrict write access to it through another mechanism.",
+            read_only_datasets,
+            config.datasets.len()
+        );
+    }
+}
+
 /// Build the ReBAC backend for `Runtime::initialize_services`.
 ///
 /// When at least one configured dataset has a persistent (on-disk) location,
@@ -1302,18 +1389,60 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Whether the named dataset is configured read-only (`datasets.<name>.read_only`).
+    /// Whether the effective dataset resolved for `dataset` is configured
+    /// read-only (`datasets.<name>.read_only`).
     ///
-    /// Returns `false` when the dataset is not present in the configuration
-    /// (an unconfigured/empty datasets map means "no write protection declared",
-    /// matching historical behaviour). SPARQL UPDATE handlers consult this to
-    /// reject writes with HTTP 403 on a read-only dataset.
+    /// Resolution rules:
+    /// - **Exactly one** dataset is configured: that single entry's
+    ///   `read_only` flag is used *regardless of the name being queried*.
+    ///   This is name-agnostic single-dataset semantics — an operator who
+    ///   names their only dataset `[datasets.mydata]` (instead of the
+    ///   conventional `[datasets.default]`) still gets full write
+    ///   protection, even though every write guard in this crate passes the
+    ///   literal string `"default"`. Without this rule such a deployment got
+    ///   *zero* write protection with no indication anything was wrong.
+    /// - **Zero or two-or-more** datasets are configured: exact per-key
+    ///   lookup, same as before. A missing key still resolves to `false`
+    ///   ("no write protection declared for that key"); see
+    ///   [`Runtime::run`]'s startup diagnostics for a loud warning/error when
+    ///   this combination looks like a misconfiguration (a `read_only`
+    ///   dataset exists that no guard's literal key will ever reach).
     pub fn is_dataset_read_only(&self, dataset: &str) -> bool {
+        if self.config.datasets.len() == 1 {
+            return self
+                .config
+                .datasets
+                .values()
+                .next()
+                .map(|d| d.read_only)
+                .unwrap_or(false);
+        }
         self.config
             .datasets
             .get(dataset)
             .map(|d| d.read_only)
             .unwrap_or(false)
+    }
+
+    /// Reject the request with HTTP 403 if the dataset resolved for `dataset`
+    /// (see [`Self::is_dataset_read_only`]) is configured read-only.
+    ///
+    /// `operation` names the write being attempted (e.g. `"bulk upload"`,
+    /// `"RDF Patch"`, `"dataset creation"`) and is folded into the error
+    /// message. This is the single shared implementation for the read_only
+    /// guard that every mutating handler (SPARQL UPDATE, Graph Store
+    /// Protocol, `/upload`, `/patch`, and the mutating `/$/...` admin
+    /// endpoints) must call before parsing the request body or touching the
+    /// store, so the check logic — and its Task-1 name-agnostic
+    /// single-dataset resolution — lives in exactly one place instead of
+    /// being copy-pasted (and drifting) at each call site.
+    pub fn reject_if_read_only(&self, dataset: &str, operation: &str) -> FusekiResult<()> {
+        if self.is_dataset_read_only(dataset) {
+            return Err(FusekiError::forbidden(format!(
+                "Dataset is read-only; {operation} is not permitted"
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -1377,5 +1506,157 @@ mod rebac_and_config_tests {
             .datasets
             .insert("disk".to_string(), dataset_config("./data/disk-ds"));
         let _ = build_rebac_manager(&persistent_config, store);
+    }
+
+    fn read_only_dataset_config(name: &str, read_only: bool) -> crate::config::DatasetConfig {
+        crate::config::DatasetConfig {
+            name: name.to_string(),
+            location: String::new(),
+            read_only,
+            text_index: None,
+            shacl_shapes: vec![],
+            services: vec![],
+            access_control: None,
+            backup: None,
+        }
+    }
+
+    /// Task 1(a) regression: a single configured dataset named anything
+    /// other than "default" must still fully protect writes, since every
+    /// write guard in this crate keys its lookup on the literal string
+    /// "default". Before the name-agnostic single-dataset resolution fix,
+    /// `is_dataset_read_only("default")` returned `false` here (fail-open)
+    /// because `"default"` was simply absent from `config.datasets`.
+    #[test]
+    fn test_is_dataset_read_only_single_non_default_dataset_rejects_writes() {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = ServerConfig::default();
+        config.datasets.insert(
+            "mydata".to_string(),
+            read_only_dataset_config("mydata", true),
+        );
+        let state = crate::server::test_app::build_minimal_app_state(store, config);
+
+        assert!(
+            state.is_dataset_read_only("default"),
+            "a single read_only dataset must protect writes reached via the \
+             \"default\" key, regardless of the dataset's configured name"
+        );
+        assert!(state.is_dataset_read_only("mydata"));
+        assert!(
+            state.is_dataset_read_only("anything-else"),
+            "single-dataset resolution must be name-agnostic for every queried key"
+        );
+        assert!(
+            state.reject_if_read_only("default", "test write").is_err(),
+            "reject_if_read_only must also honor single-dataset name-agnostic resolution"
+        );
+    }
+
+    /// Task 1 regression: the conventional single-dataset "default" naming
+    /// must keep working exactly as before.
+    #[test]
+    fn test_is_dataset_read_only_default_path_still_works() {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = ServerConfig::default();
+        config.datasets.insert(
+            "default".to_string(),
+            read_only_dataset_config("default", true),
+        );
+        let state = crate::server::test_app::build_minimal_app_state(store, config);
+
+        assert!(state.is_dataset_read_only("default"));
+        assert!(state.reject_if_read_only("default", "test write").is_err());
+    }
+
+    /// Task 1(b): once a *second* dataset is configured, resolution must
+    /// revert to an exact per-key lookup (no name-agnostic fallback),
+    /// matching pre-existing multi-dataset behaviour.
+    #[test]
+    fn test_is_dataset_read_only_multi_dataset_uses_per_key_lookup() {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = ServerConfig::default();
+        config.datasets.insert(
+            "default".to_string(),
+            read_only_dataset_config("default", true),
+        );
+        config.datasets.insert(
+            "scratch".to_string(),
+            read_only_dataset_config("scratch", false),
+        );
+        let state = crate::server::test_app::build_minimal_app_state(store, config);
+
+        assert!(state.is_dataset_read_only("default"));
+        assert!(!state.is_dataset_read_only("scratch"));
+        assert!(
+            !state.is_dataset_read_only("nonexistent"),
+            "an unconfigured key in multi-dataset mode declares no write protection"
+        );
+    }
+
+    /// Smoke test: the startup diagnostics helper must not panic across the
+    /// single-dataset, multi-dataset-consistent, and multi-dataset-misconfigured
+    /// (Task 1(c)) shapes.
+    #[test]
+    fn test_warn_on_read_only_dataset_config_does_not_panic() {
+        let mut single = ServerConfig::default();
+        single
+            .datasets
+            .insert("only".to_string(), read_only_dataset_config("only", true));
+        warn_on_read_only_dataset_config(&single);
+
+        let mut multi_default_named = ServerConfig::default();
+        multi_default_named.datasets.insert(
+            "default".to_string(),
+            read_only_dataset_config("default", true),
+        );
+        multi_default_named.datasets.insert(
+            "other".to_string(),
+            read_only_dataset_config("other", false),
+        );
+        warn_on_read_only_dataset_config(&multi_default_named);
+
+        let mut multi_misconfigured = ServerConfig::default();
+        multi_misconfigured.datasets.insert(
+            "mydata".to_string(),
+            read_only_dataset_config("mydata", true),
+        );
+        multi_misconfigured.datasets.insert(
+            "other".to_string(),
+            read_only_dataset_config("other", false),
+        );
+        warn_on_read_only_dataset_config(&multi_misconfigured);
+    }
+}
+
+#[cfg(test)]
+mod production_router_tests {
+    use super::*;
+
+    /// Task 4(a) regression: build the *real* production router
+    /// (`Runtime::build_app`) with a minimal `AppState`, not a
+    /// hand-maintained parallel mock router (see
+    /// `server::test_app::build_jena_router`, which only covers a Jena
+    /// HTTP-parity subset). A reverted or re-introduced duplicate
+    /// path+method route registration makes axum 0.8 panic at router
+    /// construction time; this test is what would have caught that before
+    /// it reached a running server (see commit 7b32c39f's fix for exactly
+    /// this class of bug).
+    #[tokio::test]
+    async fn test_build_app_production_router_does_not_panic() {
+        let addr: SocketAddr = "127.0.0.1:0".parse().expect("valid loopback addr");
+        let store = crate::store::Store::new().expect("in-memory store");
+        let config = ServerConfig::default();
+        let runtime = Runtime::new(addr, store.clone(), config.clone());
+        let state = Arc::new(crate::server::test_app::build_minimal_app_state(
+            store, config,
+        ));
+
+        let result = runtime.build_app(state).await;
+        assert!(
+            result.is_ok(),
+            "production build_app() must construct the real router without error: {:?}",
+            result.err().map(|e| e.to_string())
+        );
     }
 }

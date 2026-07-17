@@ -165,6 +165,36 @@ Content-Type: text/turtle
 <http://example.org/alice> foaf:name "Alice" .
 ```
 
+## Operational Contracts
+
+These are the behaviors an operator should rely on when running `oxirs-fuseki` in production. They reflect the actual code (`src/server/types.rs`, `src/main.rs`, `src/lib.rs`) as of v0.4.0, not aspirational design.
+
+### `read_only` dataset resolution
+
+`config.datasets.<name>.read_only` is enforced by `AppState::is_dataset_read_only()` / `AppState::reject_if_read_only()`, with HTTP 403 returned before any mutation runs. Resolution depends on how many datasets are configured:
+
+- **Exactly one dataset configured**: that dataset's `read_only` flag applies to every write guard **regardless of the name a given guard queries**. A single dataset named `[datasets.mydata]` (not `[datasets.default]`) still gets full write protection — every write path in this crate resolves to it.
+- **Two or more datasets configured**: resolution reverts to an exact per-key lookup. Guards that key on the request's own path parameter (SPARQL UPDATE's `{dataset}`, `/$/datasets/{name}`, `/$/compact/{name}`) resolve correctly per dataset. Guards that are **not** parameterized by dataset name — Graph Store Protocol (PUT/POST/DELETE), `/upload`, `/patch`, and `/$/reload` — key their lookup on the literal string `"default"`. A `read_only = true` dataset configured under any other name in a multi-dataset deployment is therefore invisible to those specific guards.
+- **Startup diagnostics**: when two or more datasets are configured and at least one is `read_only`, the server logs a WARN listing which write paths resolve per-dataset versus which key on `"default"`. If none of the `read_only` datasets is literally named `"default"`, that WARN escalates to an ERROR naming the exact misconfiguration (Graph Store Protocol / upload / patch / reload writes to that dataset are **not** blocked). There is no runtime auto-fix — rename the intended read-only dataset to `"default"`, or restrict access to it through another mechanism (auth/ACLs).
+
+Write paths that check `read_only` (→ HTTP 403 when set): SPARQL UPDATE, Graph Store Protocol writes (PUT/POST/DELETE), `/upload` (bulk RDF upload), `/patch` (RDF Patch), admin dataset **create**/**delete**/**compact**/**reload** (`/$/datasets`, `/$/datasets/{name}`, `/$/compact/{name}`, `/$/reload`), and the REST API v2 dataset/triple write endpoints (`POST /api/v2/datasets`, `DELETE /api/v2/datasets/{name}`, `POST`/`DELETE /api/v2/datasets/{name}/triples`) — the REST v2 write paths were an unguarded bypass around `read_only` prior to this hardening pass and are now covered by the same shared `reject_if_read_only()` helper as every other write path.
+
+### Store selection: `--dataset` vs. `--config`
+
+The server opens exactly one on-disk (or in-memory) store per process, chosen by `ServerBuilder::build()`:
+
+- `oxirs-fuseki --dataset <path>` opens a real store at `<path>` (`Store::open(path)`) and is what actually determines where data is read from and written to.
+- `config.datasets.<name>.location` in a `--config` file is validated at load time (must be non-empty) but is **not currently used to open a store**. It exists in the config schema but has no effect on which store the running server actually serves.
+- **Known operational gotcha**: `oxirs-fuseki --config fuseki.yaml` **without** `--dataset` starts the server against a fresh empty in-memory store (`Store::new()`), no matter what `datasets.<name>.location` says in the config file. Everything else in the config (security, `read_only` flags, services, etc.) is honored — only the store backend is not derived from `location`. Always pass `--dataset <path>` alongside `--config` when persistence is required; do not rely on `location` alone.
+
+### Fail-loud query contract
+
+SPARQL query execution never returns HTTP 200 with a silently-empty result on failure:
+
+- A query that fails to **parse** returns HTTP 400 with an error message.
+- A query that parses but fails during **execution** (unsupported construct, store error, federation failure, etc.) returns HTTP 500 with an error message.
+- `SELECT`, `ASK`, `CONSTRUCT`, and `DESCRIBE` all execute through the real oxirs-arq engine (`handlers/sparql/arq_exec.rs`) via a single parse-once dispatch — including `GRAPH`/`FROM`/`FROM NAMED` named-graph scoping, `SERVICE` HTTP federation, and aggregate/`HAVING` projections. There is no legacy "demo" fallback path left in the SELECT/ASK/CONSTRUCT/DESCRIBE handlers that could return 200 OK with an empty body on an unrecognized or unsupported query.
+
 ## Advanced Features
 
 ### Multi-Dataset Hosting

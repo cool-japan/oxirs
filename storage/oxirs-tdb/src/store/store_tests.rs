@@ -745,13 +745,15 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// Crash simulation: a drop with sync-on-drop disabled loses everything
-    /// written since the last successful sync, but nothing before it.
+    /// Crash simulation (F3, WAL default-on): committed writes made after the
+    /// last checkpoint survive a crash (drop with sync-on-drop disabled) via WAL
+    /// replay on reopen. This is the new durability contract — the pre-F3
+    /// behaviour lost everything written since the last `sync()`.
     #[test]
-    fn test_crash_without_sync_keeps_only_synced_data() {
+    fn test_crash_without_sync_replays_committed_writes() {
         let dir = unique_dir("oxirs_tdb_crash");
 
-        // Phase 1: insert 5 and sync durably.
+        // Phase 1: insert 5 and sync durably (checkpoint; WAL truncated).
         {
             let mut store = TdbStore::open(&dir).unwrap();
             for i in 0..5 {
@@ -766,7 +768,9 @@ mod tests {
             store.sync().unwrap();
         }
 
-        // Phase 2: add 3 more but simulate a crash (drop WITHOUT sync).
+        // Phase 2: add 3 more (committed to the WAL) but simulate a crash: drop
+        // WITHOUT a sync, so no checkpoint is written and the WAL keeps the 3
+        // committed operations.
         {
             let mut store = TdbStore::open(&dir).unwrap();
             assert_eq!(store.count(), 5);
@@ -784,12 +788,13 @@ mod tests {
             store.set_sync_on_drop(false);
         }
 
-        // Only the 5 synced triples survive; the 3 un-synced are gone.
+        // Reopen: all 8 committed triples survive — the 5 from the checkpoint
+        // plus the 3 replayed from the WAL.
         let store = TdbStore::open(&dir).unwrap();
         assert_eq!(
             store.count(),
-            5,
-            "un-synced writes must not survive a simulated crash"
+            8,
+            "committed writes must survive a crash via WAL replay"
         );
         assert!(store
             .contains(
@@ -798,15 +803,178 @@ mod tests {
                 "http://example.org/o0",
             )
             .unwrap());
-        // `contains` returns Err when the term was never persisted to the
-        // dictionary (crash lost it); treat both Err and Ok(false) as absent.
-        assert!(!store
+        assert!(
+            store
+                .contains(
+                    "http://example.org/s7",
+                    "http://example.org/p",
+                    "http://example.org/o7",
+                )
+                .unwrap(),
+            "post-checkpoint committed write must be replayed from the WAL"
+        );
+
+        drop(store);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// F3: committed data inserted without any `sync()` survives a reopen purely
+    /// via WAL replay (no checkpoint ever taken for this data), across triples
+    /// and named-graph quads.
+    #[test]
+    fn test_wal_replay_recovers_uncheckpointed_commits() {
+        let dir = unique_dir("oxirs_tdb_wal_replay");
+
+        let g = Term::iri("http://example.org/g");
+        let s = Term::iri("http://example.org/s");
+        let p = Term::iri("http://example.org/p");
+        let o = Term::literal_with_lang("hello", "en");
+
+        // Insert committed triples + a named-graph quad, then simulate a crash
+        // (drop without sync). Nothing is checkpointed.
+        {
+            let mut store = TdbStore::open(&dir).unwrap();
+            for i in 0..20 {
+                store
+                    .insert_triple(
+                        &Term::iri(format!("http://example.org/s{i}")),
+                        &p,
+                        &Term::iri(format!("http://example.org/o{i}")),
+                    )
+                    .unwrap();
+            }
+            store.insert_quad(Some(&g), &s, &p, &o).unwrap();
+            assert_eq!(store.count(), 20);
+            assert_eq!(store.quad_count(), 1);
+            store.set_sync_on_drop(false); // crash before any checkpoint
+        }
+
+        // Reopen: everything is recovered from the WAL, with term variants intact.
+        let store = TdbStore::open(&dir).unwrap();
+        assert_eq!(store.count(), 20, "triples must be recovered from the WAL");
+        assert_eq!(store.quad_count(), 1, "quad must be recovered from the WAL");
+        assert!(store.contains_quad(Some(&g), &s, &p, &o).unwrap());
+        // Language-tagged object preserved through the logical redo record.
+        let hits = store.query_triples(None, None, Some(&o)).unwrap();
+        assert!(
+            hits.is_empty(),
+            "the lang literal is only in the named graph"
+        );
+        assert!(store
             .contains(
-                "http://example.org/s7",
+                "http://example.org/s19",
                 "http://example.org/p",
-                "http://example.org/o7",
+                "http://example.org/o19",
             )
-            .unwrap_or(false));
+            .unwrap());
+
+        drop(store);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// F3: a torn/uncommitted transaction — `DataOp` records with no matching
+    /// `Commit` — must NOT be replayed, while a committed transaction in the same
+    /// WAL is. Proves the redo path keys off the `Commit` record, not merely the
+    /// presence of a `DataOp`.
+    #[test]
+    fn test_wal_torn_uncommitted_writes_are_not_replayed() {
+        use crate::store::store_wal::{encode_store_op, StoreOp};
+        use crate::transaction::wal::{LogRecord, TxnId, WriteAheadLog};
+
+        let dir = unique_dir("oxirs_tdb_wal_torn");
+
+        let committed = Term::iri("http://example.org/committed");
+        let torn = Term::iri("http://example.org/torn");
+        let p = Term::iri("http://example.org/p");
+        let o = Term::iri("http://example.org/o");
+
+        // Phase A: a store commits one triple, then "crashes" (drop, no sync), so
+        // the WAL holds a fully committed Begin/DataOp/Commit for it.
+        {
+            let mut store = TdbStore::open(&dir).unwrap();
+            store.insert_triple(&committed, &p, &o).unwrap();
+            store.set_sync_on_drop(false);
+        }
+
+        // Phase B: append a torn transaction directly to the WAL — Begin + a
+        // *valid* DataOp that would insert `torn`, but NO Commit record.
+        {
+            let wal = WriteAheadLog::open(&dir).unwrap();
+            let txn_id = TxnId::new(9_999);
+            wal.append(LogRecord::Begin { txn_id }).unwrap();
+            let payload = encode_store_op(&StoreOp::InsertTriple {
+                subject: torn.clone(),
+                predicate: p.clone(),
+                object: o.clone(),
+            })
+            .unwrap();
+            wal.append(LogRecord::DataOp { txn_id, payload }).unwrap();
+            // Deliberately NO Commit: this transaction is torn.
+            wal.flush().unwrap();
+        }
+
+        // Reopen: the committed triple is replayed; the torn one is skipped.
+        let store = TdbStore::open(&dir).unwrap();
+        assert_eq!(
+            store.count(),
+            1,
+            "only the committed transaction is replayed"
+        );
+        assert!(
+            store
+                .contains(
+                    "http://example.org/committed",
+                    "http://example.org/p",
+                    "http://example.org/o",
+                )
+                .unwrap(),
+            "committed write must be replayed"
+        );
+        assert!(
+            !store
+                .contains(
+                    "http://example.org/torn",
+                    "http://example.org/p",
+                    "http://example.org/o",
+                )
+                .unwrap_or(false),
+            "torn (uncommitted) write must NOT be replayed"
+        );
+
+        drop(store);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// F3: with WAL disabled, durability is checkpoint-only — a crash before
+    /// `sync()` loses the un-checkpointed writes (the pre-F3 contract), proving
+    /// the `enable_wal` flag actually gates the recovery path.
+    #[test]
+    fn test_wal_disabled_is_checkpoint_only() {
+        let dir = unique_dir("oxirs_tdb_wal_disabled");
+
+        let config = TdbConfig::new(&dir).with_wal(false);
+        {
+            let mut store = TdbStore::open_with_config(config.clone()).unwrap();
+            for i in 0..4 {
+                store
+                    .insert(
+                        &format!("http://example.org/s{i}"),
+                        "http://example.org/p",
+                        &format!("http://example.org/o{i}"),
+                    )
+                    .unwrap();
+            }
+            assert_eq!(store.count(), 4);
+            store.set_sync_on_drop(false); // crash before checkpoint
+        }
+
+        // No WAL and no checkpoint -> the writes are gone on reopen.
+        let store = TdbStore::open_with_config(config).unwrap();
+        assert_eq!(
+            store.count(),
+            0,
+            "with WAL disabled, un-checkpointed writes must not survive"
+        );
 
         drop(store);
         std::fs::remove_dir_all(&dir).ok();

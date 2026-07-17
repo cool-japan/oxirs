@@ -13,6 +13,11 @@ impl QueryParser {
         matches!(
             self.peek(),
             Some(Token::RightBrace)
+                // A `{` starts a new graph-pattern element (nested group,
+                // `GRAPH`, subquery, …); a triple block can never continue past
+                // it, so end the BGP here even after a separating `.` — e.g.
+                // `{ ?s ?p ?o . { FILTER(?o > 5) } }`.
+                | Some(Token::LeftBrace)
                 | Some(Token::Optional)
                 | Some(Token::Union)
                 | Some(Token::Minus)

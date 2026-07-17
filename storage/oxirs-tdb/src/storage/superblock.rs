@@ -37,7 +37,12 @@ pub const SUPERBLOCK_MAGIC: u64 = 0x4F58_4952_5354_4442;
 /// - Version 2: additionally persists the GSPO/GPOS/GOSP quad-index roots and
 ///   the named-graph quad count (F4). Version-1 files are rejected on open with
 ///   a clear migration error (see [`Superblock::read`]).
-pub const SUPERBLOCK_FORMAT_VERSION: u32 = 2;
+/// - Version 3: additionally persists the WAL checkpoint LSN (F3). At this LSN
+///   the superblock reflects every committed operation; the WAL is truncated up
+///   to it on `sync()`, so any WAL records that remain on the next open are
+///   post-checkpoint (or a crash-during-truncate remnant, replayed
+///   idempotently). Version-1/2 files are rejected on open.
+pub const SUPERBLOCK_FORMAT_VERSION: u32 = 3;
 
 /// The reserved page id of the superblock itself (always page 0).
 pub const SUPERBLOCK_PAGE_ID: PageId = 0;
@@ -85,6 +90,11 @@ pub struct Superblock {
     pub gosp_root: u64,
     /// Total number of named-graph quads currently stored. Added in version 2.
     pub quad_count: u64,
+    /// WAL checkpoint LSN: the next-LSN high-water mark at the moment this
+    /// superblock was written. Every WAL record with a lower LSN is already
+    /// reflected in the persisted catalog and is truncated from the WAL on
+    /// `sync()`. Added in version 3.
+    pub checkpoint_lsn: u64,
 }
 
 /// Leading, version-stable header of a [`Superblock`].
@@ -133,6 +143,7 @@ impl Superblock {
             gpos_root: NONE_PAGE,
             gosp_root: NONE_PAGE,
             quad_count: 0,
+            checkpoint_lsn: 0,
         }
     }
 
@@ -331,6 +342,7 @@ mod tests {
         sb.gpos_root = 13;
         sb.gosp_root = 14;
         sb.quad_count = 456;
+        sb.checkpoint_lsn = 789;
 
         sb.write(&fm).expect("write superblock");
         let read_back = Superblock::read(&fm)
@@ -343,6 +355,7 @@ mod tests {
         assert_eq!(read_back.gpos_root(), Some(13));
         assert_eq!(read_back.gosp_root(), Some(14));
         assert_eq!(read_back.quad_count, 456);
+        assert_eq!(read_back.checkpoint_lsn, 789);
         assert_eq!(read_back.format_version, SUPERBLOCK_FORMAT_VERSION);
 
         std::fs::remove_dir_all(&dir).ok();

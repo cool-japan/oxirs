@@ -42,7 +42,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.3.4"
+version = "0.4.0"
 authors = ["KitaSan <info@kitasan.io>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -73,47 +73,48 @@ unsafe_code = "warn"
 
 [workspace.dependencies]
 # Internal OxiRS crates (version inherited from workspace.package)
-oxirs-core = { version = "0.3.4", path = "core/oxirs-core" }
+oxirs-core = { version = "0.4.0", path = "core/oxirs-core" }
 # Quarantined NVML telemetry adapter (publish = false; no version — never published)
 oxirs-gpu-monitor = { path = "core/oxirs-gpu-monitor" }
-oxirs-fuseki = { version = "0.3.4", path = "server/oxirs-fuseki" }
-oxirs-arq = { version = "0.3.4", path = "engine/oxirs-arq" }
-oxirs-geosparql = { version = "0.3.4", path = "engine/oxirs-geosparql" }
+oxirs-fuseki = { version = "0.4.0", path = "server/oxirs-fuseki" }
+oxirs-arq = { version = "0.4.0", path = "engine/oxirs-arq" }
+oxirs-geosparql = { version = "0.4.0", path = "engine/oxirs-geosparql" }
 # Quarantined GEOS computational-geometry adapter (publish = false; no version —
 # never published). Holds the geos crate / geos-sys C FFI kept off
 # oxirs-geosparql's published Pure-Rust --all-features surface (Pure Rust Policy v2).
 oxirs-geosparql-adapter-geos = { path = "engine/oxirs-geosparql-adapter-geos" }
-oxirs-rule = { version = "0.3.4", path = "engine/oxirs-rule" }
-oxirs-samm = { version = "0.3.4", path = "engine/oxirs-samm" }
-oxirs-shacl = { version = "0.3.4", path = "engine/oxirs-shacl" }
-oxirs-star = { version = "0.3.4", path = "engine/oxirs-star" }
-oxirs-ttl = { version = "0.3.4", path = "engine/oxirs-ttl" }
-oxirs-vec = { version = "0.3.4", path = "engine/oxirs-vec" }
+oxirs-rule = { version = "0.4.0", path = "engine/oxirs-rule" }
+oxirs-samm = { version = "0.4.0", path = "engine/oxirs-samm" }
+oxirs-shacl = { version = "0.4.0", path = "engine/oxirs-shacl" }
+oxirs-star = { version = "0.4.0", path = "engine/oxirs-star" }
+oxirs-ttl = { version = "0.4.0", path = "engine/oxirs-ttl" }
+oxirs-vec = { version = "0.4.0", path = "engine/oxirs-vec" }
 # Quarantined CUDA GPU-acceleration adapter (publish = false; no version — never
 # published). Holds the cuda-runtime-sys C FFI kept off oxirs-vec's published
 # Pure-Rust --all-features surface (Pure Rust Policy v2).
 oxirs-vec-adapter-cuda = { path = "engine/oxirs-vec-adapter-cuda" }
-oxirs-tdb = { version = "0.3.4", path = "storage/oxirs-tdb" }
-oxirs-cluster = { version = "0.3.4", path = "storage/oxirs-cluster" }
-oxirs-stream = { version = "0.3.4", path = "stream/oxirs-stream" }
+oxirs-tdb = { version = "0.4.0", path = "storage/oxirs-tdb" }
+oxirs-cluster = { version = "0.4.0", path = "storage/oxirs-cluster" }
+oxirs-stream = { version = "0.4.0", path = "stream/oxirs-stream" }
 # Quarantined streaming backend adapters (publish = false; no version — never published).
 # They hold the C/FFI backends (rdkafka→rdkafka-sys/libz-sys, pulsar→native-tls/lz4-sys)
 # kept off oxirs-stream's published Pure-Rust surface (Pure Rust Policy v2).
 oxirs-stream-adapter-rdkafka = { path = "stream/oxirs-stream-adapter-rdkafka" }
 oxirs-stream-adapter-pulsar = { path = "stream/oxirs-stream-adapter-pulsar" }
-oxirs-federate = { version = "0.3.4", path = "stream/oxirs-federate" }
-oxirs-embed = { version = "0.3.4", path = "ai/oxirs-embed" }
-oxirs-shacl-ai = { version = "0.3.4", path = "ai/oxirs-shacl-ai" }
-oxirs-physics = { version = "0.3.4", path = "ai/oxirs-physics" }
-oxirs-graphrag = { version = "0.3.4", path = "ai/oxirs-graphrag" }
-oxirs-did = { version = "0.3.4", path = "security/oxirs-did" }
-oxirs-wasm = { version = "0.3.4", path = "platforms/oxirs-wasm" }
-oxirs-modbus = { version = "0.3.4", path = "stream/oxirs-modbus", default-features = false }
-oxirs-tsdb = { version = "0.3.4", path = "storage/oxirs-tsdb" }
+oxirs-federate = { version = "0.4.0", path = "stream/oxirs-federate" }
+oxirs-chat = { version = "0.4.0", path = "ai/oxirs-chat" }
+oxirs-embed = { version = "0.4.0", path = "ai/oxirs-embed" }
+oxirs-shacl-ai = { version = "0.4.0", path = "ai/oxirs-shacl-ai" }
+oxirs-physics = { version = "0.4.0", path = "ai/oxirs-physics" }
+oxirs-graphrag = { version = "0.4.0", path = "ai/oxirs-graphrag" }
+oxirs-did = { version = "0.4.0", path = "security/oxirs-did" }
+oxirs-wasm = { version = "0.4.0", path = "platforms/oxirs-wasm" }
+oxirs-modbus = { version = "0.4.0", path = "stream/oxirs-modbus", default-features = false }
+oxirs-tsdb = { version = "0.4.0", path = "storage/oxirs-tsdb" }
 # Quarantined DuckDB analytics-bridge adapter (publish = false; no version — never published).
 # Holds the libduckdb-sys C FFI kept off oxirs-tsdb's published Pure-Rust surface (Pure Rust Policy v2).
 oxirs-tsdb-adapter-duckdb = { path = "storage/oxirs-tsdb-adapter-duckdb" }
-oxirs-canbus = { version = "0.3.4", path = "stream/oxirs-canbus" }
+oxirs-canbus = { version = "0.4.0", path = "stream/oxirs-canbus" }
 
 # Core RDF and SPARQL functionality (native OxiRS implementations)
 # oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations
@@ -347,12 +348,12 @@ md5 = "0.8"
 hmac = "0.13.0"
 hex = "0.4.3"
 base64 = "0.22"
-oxicrypto-core = "0.2.0"  # Aead/Rng traits + CryptoError (OxiCrypto subcrate)
-oxicrypto-aead = "0.2.0"  # AES-256-GCM / ChaCha20-Poly1305 (OxiCrypto subcrate)
-oxicrypto-rand = "0.2.0"  # CSPRNG: random_bytes / random_nonce (OxiCrypto subcrate)
-oxicrypto-mac  = "0.2.0"  # HMAC-SHA256/384 (OxiCrypto subcrate)
-oxicrypto-hash = "0.2.0"  # SHA-256/384/512 incremental hashing (OxiCrypto subcrate)
-oxicrypto-kdf  = "0.2.0"  # PBKDF2-SHA256 (OxiCrypto subcrate)
+oxicrypto-core = "0.2.1"  # Aead/Rng traits + CryptoError (OxiCrypto subcrate)
+oxicrypto-aead = "0.2.1"  # AES-256-GCM / ChaCha20-Poly1305 (OxiCrypto subcrate)
+oxicrypto-rand = "0.2.1"  # CSPRNG: random_bytes / random_nonce (OxiCrypto subcrate)
+oxicrypto-mac  = "0.2.1"  # HMAC-SHA256/384 (OxiCrypto subcrate)
+oxicrypto-hash = "0.2.1"  # SHA-256/384/512 incremental hashing (OxiCrypto subcrate)
+oxicrypto-kdf  = "0.2.1"  # PBKDF2-SHA256 (OxiCrypto subcrate)
 oxitls         = { version = "0.2.0", features = ["pure", "webpki-roots"] }  # Pure Rust TLS facade
 oxitls-rcgen   = "0.2.0"  # Pure Rust certificate generation for OxiTLS
 jsonwebtoken = { version = "10.4", features = ["rust_crypto"] }

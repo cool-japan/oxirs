@@ -32,6 +32,30 @@ pub struct TdbConfig {
     /// indexes regardless of this flag. Mirrors
     /// [`StoreParams::enable_quad_indexes`](crate::store::StoreParams).
     pub enable_quad_indexes: bool,
+    /// Enable write-ahead logging (WAL) with crash-recovery replay (F3).
+    ///
+    /// When enabled (the default), every mutating operation (triple/quad insert
+    /// and delete, single and bulk) is bracketed in a WAL transaction
+    /// (`Begin -> DataOp -> Commit`) so that committed writes survive a crash
+    /// *before the next* [`sync`](crate::store::TdbStore::sync): on reopen the
+    /// committed operations are replayed on top of the last checkpoint. When
+    /// disabled, durability is checkpoint-only (data survives only a successful
+    /// `sync()`), matching the pre-F3 behaviour. Mirrors
+    /// [`StoreParams::enable_wal`](crate::store::StoreParams) so a `StoreParams`
+    /// caller can thread it through.
+    pub enable_wal: bool,
+    /// Whether each *single* mutating operation fsyncs the WAL at commit.
+    ///
+    /// The default is `false`: single-operation commits append to the WAL
+    /// without forcing an fsync, and durability is amortized to the next
+    /// [`sync`](crate::store::TdbStore::sync)/checkpoint (or process exit via
+    /// `Drop`). Buffered WAL appends already survive a process crash that is not
+    /// a hardware power loss (the bytes reach the OS on `write`), which is what
+    /// the crash-recovery contract simulates. Set to `true` for
+    /// power-loss-durable single-write semantics at the cost of an fsync per
+    /// operation. Bulk operations are always a single WAL transaction and never
+    /// fsync per element regardless of this flag.
+    pub wal_sync_on_commit: bool,
 }
 
 impl TdbConfig {
@@ -48,6 +72,8 @@ impl TdbConfig {
             enable_query_monitoring: true,
             enable_spatial_indexing: true,
             enable_quad_indexes: true,
+            enable_wal: true,
+            wal_sync_on_commit: false,
         }
     }
 
@@ -96,6 +122,18 @@ impl TdbConfig {
     /// Enable/disable named-graph (quad) indexes.
     pub fn with_quad_indexes(mut self, enable: bool) -> Self {
         self.enable_quad_indexes = enable;
+        self
+    }
+
+    /// Enable/disable write-ahead logging with crash-recovery replay.
+    pub fn with_wal(mut self, enable: bool) -> Self {
+        self.enable_wal = enable;
+        self
+    }
+
+    /// Set whether each single mutating operation fsyncs the WAL at commit.
+    pub fn with_wal_sync_on_commit(mut self, enable: bool) -> Self {
+        self.wal_sync_on_commit = enable;
         self
     }
 }

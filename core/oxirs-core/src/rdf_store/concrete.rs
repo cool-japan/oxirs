@@ -120,6 +120,18 @@ impl Store for ConcreteStore {
         inner.prepare_query(sparql)
     }
 
+    /// Delegate to `RdfStore`'s inherent `named_graphs` (via the same
+    /// inherent-method-priority resolution used by `len`/`is_empty`/`query`
+    /// above), which reads the interned graph-name index in O(graphs) instead
+    /// of the trait default's empty `Vec`.
+    fn named_graphs(&self) -> Result<Vec<NamedNode>> {
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+        inner.named_graphs()
+    }
+
     fn bulk_insert_quads(&self, quads: Vec<Quad>) -> Result<usize> {
         // RdfStore's Store impl inserts through interior mutability, so a shared
         // borrow of the inner store is enough to reach its single-lock,

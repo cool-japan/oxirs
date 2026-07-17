@@ -66,15 +66,6 @@ pub mod profiling;
 /// Compression support for RDF files
 pub mod compression;
 
-/// SPARQL benchmarking suite
-pub mod benchmark;
-
-/// Transaction support (BEGIN/COMMIT/ROLLBACK)
-pub mod transaction;
-
-/// Database migration tools (Jena, Virtuoso, RDF4J)
-pub mod migration;
-
 /// Tool execution statistics
 #[derive(Debug, Clone)]
 pub struct ToolStats {

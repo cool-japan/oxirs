@@ -1143,71 +1143,86 @@ impl<'a> QueryExecutor<'a> {
                 );
                 Ok(results_vec)
             }
-            StorageBackend::Memory(storage) => {
+            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
                 let storage = storage.read().expect("storage lock should not be poisoned");
-                let mut results = Vec::new();
 
-                for quad in &storage.quads {
-                    let mut matches = true;
+                // Narrow via the interned permutation indexes for every bound
+                // component that parses *faithfully* into a term (one whose
+                // `to_string()` round-trips to the pattern text). Passing such a
+                // term to `query_quads` picks the best permutation and, when the
+                // term is not interned at all, short-circuits to an empty result.
+                // A bound component that does not round-trip (e.g. a language- or
+                // datatype-tagged literal the simple parser cannot reconstruct)
+                // is left unbound for indexing and enforced only by the string
+                // filter below, so the overall result is byte-for-byte identical
+                // to the previous full-set string scan.
+                let subject_term =
+                    Self::bound_component(&pattern.subject).and_then(Self::faithful_subject);
+                let predicate_term =
+                    Self::bound_component(&pattern.predicate).and_then(Self::faithful_predicate);
+                let object_term =
+                    Self::bound_component(&pattern.object).and_then(Self::faithful_object);
 
-                    if let Some(s) = &pattern.subject {
-                        if !s.starts_with('?') && quad.subject().to_string() != *s {
-                            matches = false;
-                        }
-                    }
+                let candidates = storage.query_quads(
+                    subject_term.as_ref(),
+                    predicate_term.as_ref(),
+                    object_term.as_ref(),
+                    None,
+                );
 
-                    if let Some(p) = &pattern.predicate {
-                        if !p.starts_with('?') && quad.predicate().to_string() != *p {
-                            matches = false;
-                        }
-                    }
-
-                    if let Some(o) = &pattern.object {
-                        if !o.starts_with('?') && quad.object().to_string() != *o {
-                            matches = false;
-                        }
-                    }
-
-                    if matches {
-                        results.push(quad.clone());
-                    }
-                }
-
-                Ok(results)
-            }
-            StorageBackend::Persistent(storage, _) => {
-                let storage = storage.read().expect("storage lock should not be poisoned");
-                let mut results = Vec::new();
-
-                for quad in &storage.quads {
-                    let mut matches = true;
-
-                    if let Some(s) = &pattern.subject {
-                        if !s.starts_with('?') && quad.subject().to_string() != *s {
-                            matches = false;
-                        }
-                    }
-
-                    if let Some(p) = &pattern.predicate {
-                        if !p.starts_with('?') && quad.predicate().to_string() != *p {
-                            matches = false;
-                        }
-                    }
-
-                    if let Some(o) = &pattern.object {
-                        if !o.starts_with('?') && quad.object().to_string() != *o {
-                            matches = false;
-                        }
-                    }
-
-                    if matches {
-                        results.push(quad.clone());
-                    }
-                }
+                // Re-apply every bound component as an exact string match. This
+                // is redundant for faithfully-indexed columns (cheap) and is the
+                // sole enforcement for non-round-tripping ones. The graph is
+                // never constrained here, matching the prior behavior.
+                let string_matches = |bound: Option<&str>, actual: String| match bound {
+                    Some(text) => actual == text,
+                    None => true,
+                };
+                let results = candidates
+                    .into_iter()
+                    .filter(|quad| {
+                        string_matches(
+                            Self::bound_component(&pattern.subject),
+                            quad.subject().to_string(),
+                        ) && string_matches(
+                            Self::bound_component(&pattern.predicate),
+                            quad.predicate().to_string(),
+                        ) && string_matches(
+                            Self::bound_component(&pattern.object),
+                            quad.object().to_string(),
+                        )
+                    })
+                    .collect();
 
                 Ok(results)
             }
         }
+    }
+
+    /// A bound (non-variable) pattern component, or `None` when the component is
+    /// absent or a `?`-prefixed variable.
+    fn bound_component(component: &Option<String>) -> Option<&str> {
+        match component {
+            Some(value) if !value.starts_with('?') => Some(value.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Parse a bound subject into a term usable for index selection, but only if
+    /// it round-trips (`term.to_string() == text`). Non-round-tripping forms
+    /// return `None` so they are enforced purely by the string filter.
+    fn faithful_subject(text: &str) -> Option<Subject> {
+        Self::string_to_subject(text).filter(|term| term.to_string() == text)
+    }
+
+    /// Parse a bound predicate for index selection if it round-trips.
+    fn faithful_predicate(text: &str) -> Option<Predicate> {
+        Self::string_to_predicate(text).filter(|term| term.to_string() == text)
+    }
+
+    /// Parse a bound object for index selection if it round-trips.
+    fn faithful_object(text: &str) -> Option<Object> {
+        Self::string_to_object(text).filter(|term| term.to_string() == text)
     }
 
     pub(super) fn query_quads(

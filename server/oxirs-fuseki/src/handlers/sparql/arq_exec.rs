@@ -1,162 +1,342 @@
 //! SPARQL query execution wired to the real oxirs-arq engine.
 //!
-//! The legacy path executed queries through `oxirs_core::query::QueryEngine`, a
-//! deliberately simplified engine whose parser only extracts WHERE triple
-//! patterns — it silently drops `FILTER`, never parses `LIMIT`/`OFFSET`/`ORDER
-//! BY`/aggregates, and on any failure the fuseki handler returned `200 OK` with
-//! an empty result. That produced *silent wrong answers* (an existing triple's
-//! `ASK` returning `false`, `FILTER` ignored, `LIMIT` returning nothing).
+//! Every query form — SELECT, ASK, CONSTRUCT and DESCRIBE — is parsed by the
+//! oxirs-arq parser and evaluated by its algebra executor against the live
+//! store (via [`StoreRefDataset`], zero data copy). Joins, `FILTER`,
+//! `OPTIONAL`, `UNION`, `MINUS`, `BIND`, aggregation (`GROUP BY` / `HAVING`),
+//! `ORDER BY`, `DISTINCT` and `LIMIT`/`OFFSET` are all actually evaluated.
 //!
-//! This module runs SELECT/ASK queries through `oxirs-arq`'s real algebra
-//! executor against the live store (via [`StoreRefDataset`], zero data copy),
-//! so joins, `FILTER`, `OPTIONAL`, `UNION`, `BIND`, `DISTINCT`, `ORDER BY` and
-//! `LIMIT`/`OFFSET` are actually evaluated. Anything that cannot be executed
-//! correctly returns an HTTP error — never a silent empty result.
+//! The `FROM` / `FROM NAMED` dataset clause is honoured by wrapping the base
+//! dataset in a [`with_dataset_clause`] view before execution (an empty clause
+//! is a transparent passthrough), so named-graph (`GRAPH`) scoping and dataset
+//! construction produce correct answers rather than default-graph data.
 //!
-//! Scope / honest limitations (returned as errors, not wrong data):
-//! * `GRAPH` (named graphs) and `SERVICE` (federation) are rejected — the arq
-//!   `Dataset` abstraction reads only the default graph, so honouring them
-//!   would silently return default-graph data.
-//! * Aggregate projections (`SELECT (COUNT(*) AS ?n)`) are handled by
-//!   [`aggregate`](Self) below when present; other unsupported forms
-//!   (subqueries, property paths the store can't resolve) surface as errors.
-//! * CONSTRUCT/DESCRIBE are intentionally NOT routed here (see
-//!   `core::execute_sparql_query`) — arq's parser cannot yet handle valid forms
-//!   such as `DESCRIBE <iri>` (no WHERE) or `CONSTRUCT WHERE { … }` shorthand,
-//!   so they keep the legacy store path to avoid rejecting valid queries.
+//! There is no silent-empty fallback: a parse failure surfaces as HTTP 400, an
+//! execution failure as HTTP 500, and a genuinely unexecutable construct as an
+//! explicit typed error. `SERVICE` federation and `GRAPH` scoping are executed
+//! for real by the engine — they are no longer rejected, and the dataset no
+//! longer unions every named graph into a plain BGP.
 
 use crate::error::{FusekiError, FusekiResult};
-use crate::handlers::sparql::core::QueryResult;
+use crate::handlers::sparql::core::{serialize_triples_to_turtle, QueryResult};
 use crate::store::Store;
-use oxirs_arq::algebra::{Aggregate, Algebra, Expression, GroupCondition, Term as ArqTerm};
-use oxirs_arq::executor::{ExecutionStrategy, QueryExecutor, StoreRefDataset};
-use oxirs_arq::query::{parse_query, Query, QueryType};
-use oxirs_core::model::Variable;
-use std::collections::HashMap;
+use oxirs_arq::algebra::{
+    Aggregate, Algebra, Expression, Literal as ArqLiteral, Solution, Term as ArqTerm,
+    Triple as ArqTriple, Variable,
+};
+use oxirs_arq::executor::{with_dataset_clause, ExecutionStrategy, QueryExecutor, StoreRefDataset};
+use oxirs_arq::query::{
+    parse_query, DatasetClause, DescribeTarget, ProjectionItem, Query, QueryType,
+};
+use oxirs_arq::{describe, instantiate_construct};
+use oxirs_core::model::{
+    BlankNode, Literal as CoreLiteral, Object, Predicate, Subject, Triple as CoreTriple,
+};
+use std::collections::{HashMap, HashSet};
 
-/// Execute a SELECT or ASK query against the store's default graph via oxirs-arq.
+/// Parse a SPARQL query string and execute it against the store.
 ///
-/// Returns a fuseki [`QueryResult`] on success. A parse failure yields an HTTP
-/// 400 (`query_parsing`); an unsupported construct yields an explicit error; an
-/// execution failure yields an HTTP 500 (`query_execution`). It never returns a
-/// successful-but-empty result to paper over a failure.
+/// This is a convenience wrapper that parses once and dispatches on the parsed
+/// query form. The fuseki handler ([`crate::handlers::sparql::core`]) parses
+/// the query itself for routing and calls the form-specific entry points
+/// ([`execute_select_or_ask`], [`execute_construct`], [`execute_describe`])
+/// directly, so this wrapper is provided for standalone / test callers.
+///
+/// A parse failure yields HTTP 400 (`query_parsing`); an unsupported construct
+/// yields an explicit typed error; an execution failure yields HTTP 500
+/// (`query_execution`). It never returns a successful-but-empty result to paper
+/// over a failure.
 pub fn execute_query(query_str: &str, store: &Store) -> FusekiResult<QueryResult> {
-    // Aggregate projections (`SELECT (COUNT(*) AS ?n) …`) do not parse through
-    // arq's parser at all (it breaks on `(`), so detect and route them first.
-    if let Some(spec) = aggregate::detect(query_str) {
-        return aggregate::execute(query_str, store, spec);
-    }
-
     let parsed = parse_query(query_str)
         .map_err(|e| FusekiError::query_parsing(format!("SPARQL parse error: {e}")))?;
+    dispatch(&parsed, store)
+}
 
-    match parsed.query_type {
-        QueryType::Select | QueryType::Ask => {}
-        QueryType::Construct | QueryType::Describe => {
-            return Err(FusekiError::query_execution(
-                "CONSTRUCT/DESCRIBE are not routed through the arq executor",
-            ));
+/// Dispatch a parsed query to the form-specific executor.
+pub fn dispatch(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+    match query.query_type {
+        QueryType::Select | QueryType::Ask => execute_select_or_ask(query, store),
+        QueryType::Construct => execute_construct(query, store),
+        QueryType::Describe => execute_describe(query, store),
+    }
+}
+
+/// Execute a parsed SELECT or ASK query.
+///
+/// SELECT builds the full solution-modifier stack natively from the parsed
+/// query (grouping/aggregation, HAVING, projected expressions, ORDER BY,
+/// projection, DISTINCT and slicing); ASK reduces to "any match".
+pub fn execute_select_or_ask(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+    let algebra = build_select_algebra(query)?;
+    let solution = run(store, &query.dataset, &algebra)?;
+    match query.query_type {
+        QueryType::Ask => Ok(ask_result(!solution.is_empty())),
+        _ => select_result(solution),
+    }
+}
+
+/// Execute a parsed CONSTRUCT query.
+///
+/// Runs the WHERE pattern (with any ORDER BY / LIMIT / OFFSET applied to the
+/// solution sequence) and instantiates the CONSTRUCT template per row. An empty
+/// template — whether written explicitly (`CONSTRUCT {}`) or produced by an
+/// empty `CONSTRUCT WHERE {}` shorthand — is a 400, never a silent empty graph.
+pub fn execute_construct(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+    if query.construct_template.is_empty() {
+        return Err(FusekiError::query_parsing(
+            "CONSTRUCT template is empty: there is nothing to construct",
+        ));
+    }
+    let algebra = build_graph_where_algebra(query);
+    let solution = run(store, &query.dataset, &algebra)?;
+    // The oxirs-arq engine's `instantiate_construct` accepts path-encoded
+    // (length-one `PropertyPath::Iri`/`Variable`) template predicates natively,
+    // so the template is passed through unchanged — no caller-side normalization.
+    let triples = instantiate_construct(&query.construct_template, &solution).map_err(|e| {
+        FusekiError::query_execution(format!("CONSTRUCT instantiation failed: {e}"))
+    })?;
+    let graph = serialize_arq_graph(&triples);
+    Ok(construct_result(graph, triples.len()))
+}
+
+/// Execute a parsed DESCRIBE query.
+///
+/// Resolves the described-node set from the explicit `DESCRIBE` targets (IRIs
+/// and variables) plus, for `DESCRIBE *`, every variable in scope of the WHERE
+/// solution. `DESCRIBE <iri>` with no WHERE describes the IRIs directly against
+/// an empty solution (a plain CBD lookup); `DESCRIBE *` with no WHERE has
+/// nothing in scope and is a 400. The resulting Concise Bounded Description is
+/// serialized like CONSTRUCT.
+pub fn execute_describe(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+    // `Algebra::Zero` is the parser's default when no WHERE block is present;
+    // any real WHERE parses to a BGP/Table/... instead.
+    let has_where = !matches!(query.where_clause, Algebra::Zero);
+
+    if query.describe_all && !has_where {
+        return Err(FusekiError::query_parsing(
+            "DESCRIBE * requires a WHERE clause: there is nothing in scope to describe",
+        ));
+    }
+
+    // Split explicit targets into concrete IRI terms and variables.
+    let mut targets: Vec<ArqTerm> = Vec::new();
+    let mut target_vars: Vec<Variable> = Vec::new();
+    for target in &query.describe_targets {
+        match target {
+            DescribeTarget::Iri(iri) => targets.push(ArqTerm::Iri(iri.clone())),
+            DescribeTarget::Variable(var) => target_vars.push(var.clone()),
         }
     }
 
-    reject_unsupported(&parsed.where_clause)?;
-    let algebra = build_select_algebra(&parsed);
-
-    let solution = run(store, &algebra)?;
-
-    Ok(match parsed.query_type {
-        QueryType::Ask => ask_result(!solution.is_empty()),
-        _ => select_result(solution),
-    })
-}
-
-/// Acquire the default-graph store under a read guard and execute `algebra`
-/// synchronously via a `Serial`-strategy arq executor.
-///
-/// The read guard is held only for the duration of this synchronous call (no
-/// `.await` occurs while it is held). `Serial` is forced because the adaptive/
-/// parallel strategies do not reliably evaluate `Group` (aggregation).
-fn run(store: &Store, algebra: &Algebra) -> FusekiResult<oxirs_arq::algebra::Solution> {
+    // Hold the store guard for the whole synchronous describe: the executor and
+    // the CBD lookup both read through the same dataset view.
     let arc = store.get_dataset(None)?;
     let guard = arc
         .read()
         .map_err(|e| FusekiError::store(format!("failed to acquire store read lock: {e}")))?;
-    let dataset = StoreRefDataset::new(&*guard);
+    let base = StoreRefDataset::new(&*guard);
+    let view = with_dataset_clause(&base, &query.dataset);
+
+    let solution: Solution = if has_where {
+        let algebra = build_graph_where_algebra(query);
+        let mut executor = QueryExecutor::new();
+        executor.set_strategy(ExecutionStrategy::Serial);
+        let (solution, _stats) = executor
+            .execute(&algebra, &view)
+            .map_err(|e| FusekiError::query_execution(format!("DESCRIBE WHERE failed: {e}")))?;
+        solution
+    } else {
+        Vec::new()
+    };
+
+    // DESCRIBE * describes every variable bound anywhere in the solution.
+    if query.describe_all {
+        let mut seen: HashSet<Variable> = HashSet::new();
+        for row in &solution {
+            for var in row.keys() {
+                if seen.insert(var.clone()) {
+                    target_vars.push(var.clone());
+                }
+            }
+        }
+    }
+
+    let triples = describe(&targets, &target_vars, &solution, &view)
+        .map_err(|e| FusekiError::query_execution(format!("DESCRIBE failed: {e}")))?;
+    let graph = serialize_arq_graph(&triples);
+    Ok(describe_result(graph, triples.len()))
+}
+
+/// Build the dataset view for `clause` over the store's default dataset and
+/// execute `algebra` synchronously via a `Serial`-strategy arq executor.
+///
+/// The read guard is held only for the duration of this synchronous call (no
+/// `.await` occurs while it is held). `Serial` is forced because the adaptive/
+/// parallel strategies do not reliably evaluate `Group` (aggregation). An empty
+/// `clause` makes the view a transparent passthrough, so wrapping is always
+/// safe.
+fn run(store: &Store, clause: &DatasetClause, algebra: &Algebra) -> FusekiResult<Solution> {
+    let arc = store.get_dataset(None)?;
+    let guard = arc
+        .read()
+        .map_err(|e| FusekiError::store(format!("failed to acquire store read lock: {e}")))?;
+    let base = StoreRefDataset::new(&*guard);
+    let view = with_dataset_clause(&base, clause);
     let mut executor = QueryExecutor::new();
     executor.set_strategy(ExecutionStrategy::Serial);
     let (solution, _stats) = executor
-        .execute(algebra, &dataset)
+        .execute(algebra, &view)
         .map_err(|e| FusekiError::query_execution(format!("query execution failed: {e}")))?;
     Ok(solution)
 }
 
-/// Wrap a parsed SELECT query's WHERE algebra with its solution modifiers in
-/// SPARQL evaluation order: WHERE → ORDER BY → PROJECT → DISTINCT → SLICE.
+/// Build the full SELECT solution-modifier algebra natively from the parsed
+/// query.
 ///
-/// `ORDER BY` is applied before projection so it can reference variables that
-/// are not in the SELECT list; `SLICE` (LIMIT/OFFSET) is outermost.
-fn build_select_algebra(q: &Query) -> Algebra {
-    let mut alg = q.where_clause.clone();
-    if q.query_type == QueryType::Ask {
-        // ASK ignores projection/order/slice — the boolean is just "any match".
-        return alg;
+/// Evaluation order (SPARQL 1.1 §18.2.4): WHERE → Group (grouping/aggregation)
+/// → Having → Extend (projected `(expr AS ?v)`) → OrderBy → Project → Distinct
+/// → Slice. Grouping is introduced when the projection has aggregate items or
+/// the query has an explicit `GROUP BY`; an aggregate with no `GROUP BY` is the
+/// implicit single group (`variables: []`), and a `GROUP BY` with no aggregate
+/// is a plain grouping. ORDER BY is applied before projection so it may
+/// reference non-projected variables and aggregate results.
+///
+/// ASK ignores projection/order/slice — the boolean is just "any match".
+fn build_select_algebra(query: &Query) -> FusekiResult<Algebra> {
+    let mut alg = query.where_clause.clone();
+    if query.query_type == QueryType::Ask {
+        return Ok(alg);
     }
-    if !q.order_by.is_empty() {
+
+    // Collect aggregate projections `(AGG(...) AS ?alias)` in projection order.
+    let aggregates: Vec<(Variable, Aggregate)> = query
+        .projection_items
+        .iter()
+        .filter_map(|item| match item {
+            ProjectionItem::Aggregate { aggregate, alias } => {
+                Some((alias.clone(), aggregate.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+
+    // HAVING is passed through to the engine verbatim. The oxirs-arq
+    // `Algebra::Having` executor detects aggregate function calls inside the
+    // condition (`HAVING (COUNT(?s) > 1)`), hoists them into per-group
+    // aggregates evaluated alongside the declared ones, and rewrites the filter
+    // — so no caller-side rewrite (and its arity validation) is required here.
+    let having_condition = query.having.clone();
+
+    let has_grouping = !aggregates.is_empty() || !query.group_by.is_empty();
+
+    // In an aggregate query, every plain projected variable must be a grouping
+    // key; projecting a non-grouped, non-aggregated variable is a SPARQL error
+    // (fail loud rather than emit a silently-unbound column).
+    if has_grouping {
+        let grouped: HashSet<&Variable> = query
+            .group_by
+            .iter()
+            .filter_map(|gc| match &gc.expr {
+                Expression::Variable(v) => Some(v),
+                _ => None,
+            })
+            .chain(query.group_by.iter().filter_map(|gc| gc.alias.as_ref()))
+            .collect();
+        for item in &query.projection_items {
+            if let ProjectionItem::Variable(var) = item {
+                if !grouped.contains(var) {
+                    return Err(FusekiError::query_parsing(format!(
+                        "SELECT variable ?{} must be a GROUP BY key or wrapped in an aggregate \
+                         function",
+                        var.name()
+                    )));
+                }
+            }
+        }
+    }
+
+    if has_grouping {
+        alg = Algebra::Group {
+            pattern: Box::new(alg),
+            variables: query.group_by.clone(),
+            aggregates,
+        };
+    }
+
+    if let Some(condition) = having_condition {
+        alg = Algebra::Having {
+            pattern: Box::new(alg),
+            condition,
+        };
+    }
+
+    // Projected expressions become Extend nodes, in projection order, so a later
+    // `(expr AS ?v)` can reference an alias bound by an earlier one.
+    for item in &query.projection_items {
+        if let ProjectionItem::Expression { expr, alias } = item {
+            alg = Algebra::Extend {
+                pattern: Box::new(alg),
+                variable: alias.clone(),
+                expr: expr.clone(),
+            };
+        }
+    }
+
+    if !query.order_by.is_empty() {
         alg = Algebra::OrderBy {
             pattern: Box::new(alg),
-            conditions: q.order_by.clone(),
+            conditions: query.order_by.clone(),
         };
     }
-    if !q.select_variables.is_empty() {
-        // Empty select_variables == `SELECT *` (project nothing / keep all vars).
+
+    // `select_variables` carries the ordered output columns (aliases included).
+    // Empty == `SELECT *` (project nothing / keep every in-scope variable).
+    if !query.select_variables.is_empty() {
         alg = Algebra::Project {
             pattern: Box::new(alg),
-            variables: q.select_variables.clone(),
+            variables: query.select_variables.clone(),
         };
     }
-    if q.distinct {
+
+    if query.distinct {
         alg = Algebra::Distinct {
             pattern: Box::new(alg),
         };
     }
-    if q.limit.is_some() || q.offset.is_some() {
+
+    if query.limit.is_some() || query.offset.is_some() {
         alg = Algebra::Slice {
             pattern: Box::new(alg),
-            offset: q.offset,
-            limit: q.limit,
+            offset: query.offset,
+            limit: query.limit,
+        };
+    }
+
+    Ok(alg)
+}
+
+/// Build the WHERE algebra for a CONSTRUCT / DESCRIBE query, applying the
+/// solution-sequence modifiers that carry over (ORDER BY then LIMIT/OFFSET).
+///
+/// CONSTRUCT / DESCRIBE have no SELECT projection: every WHERE variable stays in
+/// scope so the template / describe step can reference it. LIMIT/OFFSET bound
+/// the number of WHERE solutions (SPARQL 1.1 §16.2), not the emitted triples.
+fn build_graph_where_algebra(query: &Query) -> Algebra {
+    let mut alg = query.where_clause.clone();
+    if !query.order_by.is_empty() {
+        alg = Algebra::OrderBy {
+            pattern: Box::new(alg),
+            conditions: query.order_by.clone(),
+        };
+    }
+    if query.limit.is_some() || query.offset.is_some() {
+        alg = Algebra::Slice {
+            pattern: Box::new(alg),
+            offset: query.offset,
+            limit: query.limit,
         };
     }
     alg
-}
-
-/// Reject algebra nodes the arq `Dataset` abstraction cannot honour, so they
-/// return an explicit error instead of silently reading the default graph.
-fn reject_unsupported(alg: &Algebra) -> FusekiResult<()> {
-    match alg {
-        Algebra::Graph { .. } => Err(FusekiError::query_parsing(
-            "Named-graph (GRAPH) queries are not supported by this endpoint",
-        )),
-        Algebra::Service { .. } => Err(FusekiError::query_parsing(
-            "SPARQL SERVICE (federation) is not supported by this endpoint",
-        )),
-        Algebra::Join { left, right }
-        | Algebra::LeftJoin { left, right, .. }
-        | Algebra::Union { left, right }
-        | Algebra::Minus { left, right } => {
-            reject_unsupported(left)?;
-            reject_unsupported(right)
-        }
-        Algebra::Filter { pattern, .. }
-        | Algebra::Extend { pattern, .. }
-        | Algebra::Project { pattern, .. }
-        | Algebra::Distinct { pattern }
-        | Algebra::Reduced { pattern }
-        | Algebra::Slice { pattern, .. }
-        | Algebra::OrderBy { pattern, .. }
-        | Algebra::Group { pattern, .. }
-        | Algebra::Having { pattern, .. } => reject_unsupported(pattern),
-        _ => Ok(()),
-    }
 }
 
 /// Build a fuseki `QueryResult` for an ASK boolean.
@@ -173,10 +353,16 @@ fn ask_result(value: bool) -> QueryResult {
 }
 
 /// Build a fuseki `QueryResult` for SELECT bindings.
-fn select_result(solution: oxirs_arq::algebra::Solution) -> QueryResult {
-    let bindings: Vec<HashMap<String, serde_json::Value>> =
-        solution.iter().map(binding_to_json).collect();
-    QueryResult {
+///
+/// Fallible because a solution term that cannot be a legitimate SPARQL results
+/// value (an `ArqTerm::PropertyPath`) is a 500 fail-loud rather than a fabricated
+/// binding — see [`term_to_json`].
+fn select_result(solution: Solution) -> FusekiResult<QueryResult> {
+    let bindings: Vec<HashMap<String, serde_json::Value>> = solution
+        .iter()
+        .map(binding_to_json)
+        .collect::<FusekiResult<_>>()?;
+    Ok(QueryResult {
         query_type: "SELECT".to_string(),
         execution_time_ms: 0,
         result_count: Some(bindings.len()),
@@ -184,21 +370,57 @@ fn select_result(solution: oxirs_arq::algebra::Solution) -> QueryResult {
         boolean: None,
         construct_graph: None,
         describe_graph: None,
+    })
+}
+
+/// Build a fuseki `QueryResult` carrying a CONSTRUCT graph (serialized RDF).
+fn construct_result(graph: String, triple_count: usize) -> QueryResult {
+    QueryResult {
+        query_type: "CONSTRUCT".to_string(),
+        execution_time_ms: 0,
+        result_count: Some(triple_count),
+        bindings: None,
+        boolean: None,
+        construct_graph: Some(graph),
+        describe_graph: None,
+    }
+}
+
+/// Build a fuseki `QueryResult` carrying a DESCRIBE graph (serialized RDF).
+fn describe_result(graph: String, triple_count: usize) -> QueryResult {
+    QueryResult {
+        query_type: "DESCRIBE".to_string(),
+        execution_time_ms: 0,
+        result_count: Some(triple_count),
+        bindings: None,
+        boolean: None,
+        construct_graph: None,
+        describe_graph: Some(graph),
     }
 }
 
 /// Convert one arq binding (`Variable -> Term`) to the SPARQL Results JSON row
 /// shape (`var name -> {type,value,...}`).
-fn binding_to_json(binding: &HashMap<Variable, ArqTerm>) -> HashMap<String, serde_json::Value> {
+fn binding_to_json(
+    binding: &HashMap<Variable, ArqTerm>,
+) -> FusekiResult<HashMap<String, serde_json::Value>> {
     binding
         .iter()
-        .map(|(var, term)| (var.name().to_string(), term_to_json(term)))
+        .map(|(var, term)| Ok((var.name().to_string(), term_to_json(term)?)))
         .collect()
 }
 
 /// Convert an arq `Term` to a SPARQL Query Results JSON term object.
-fn term_to_json(term: &ArqTerm) -> serde_json::Value {
-    match term {
+///
+/// The match is exhaustive over [`ArqTerm`] — there is no catch-all arm that
+/// would fabricate a plain literal from a Rust `Debug` string. A `QuotedTriple`
+/// is serialized per the RDF-star SPARQL results convention
+/// (`{"type":"triple","value":{"subject":…,"predicate":…,"object":…}}`),
+/// recursing into `term_to_json` for the three positions. A `PropertyPath` can
+/// never be a legitimate solution binding, so it is a 500 fail-loud error rather
+/// than an invented value.
+fn term_to_json(term: &ArqTerm) -> FusekiResult<serde_json::Value> {
+    Ok(match term {
         ArqTerm::Iri(iri) => serde_json::json!({"type": "uri", "value": iri.as_str()}),
         ArqTerm::BlankNode(b) => serde_json::json!({"type": "bnode", "value": b}),
         ArqTerm::Literal(literal) => {
@@ -215,306 +437,77 @@ fn term_to_json(term: &ArqTerm) -> serde_json::Value {
         ArqTerm::Variable(var) => {
             serde_json::json!({"type": "literal", "value": format!("?{}", var.name())})
         }
-        other => serde_json::json!({"type": "literal", "value": format!("{other:?}")}),
+        ArqTerm::QuotedTriple(triple) => serde_json::json!({
+            "type": "triple",
+            "value": {
+                "subject": term_to_json(&triple.subject)?,
+                "predicate": term_to_json(&triple.predicate)?,
+                "object": term_to_json(&triple.object)?,
+            }
+        }),
+        ArqTerm::PropertyPath(path) => {
+            return Err(FusekiError::query_execution(format!(
+                "property path term cannot be a SPARQL solution binding: {path}"
+            )));
+        }
+    })
+}
+
+/// Serialize a set of arq graph triples (CONSTRUCT / DESCRIBE output) to Turtle,
+/// reusing the shared core serializer after converting to oxirs-core triples.
+///
+/// Triples that cannot form a well-formed RDF triple in the core model (e.g. an
+/// RDF-star quoted-triple term the serializer does not render) are dropped, so
+/// the serialized graph never contains an ill-formed statement.
+fn serialize_arq_graph(triples: &[ArqTriple]) -> String {
+    let core: Vec<CoreTriple> = triples.iter().filter_map(arq_triple_to_core).collect();
+    serialize_triples_to_turtle(&core)
+}
+
+/// Convert an arq algebra `Triple` into an oxirs-core `Triple`, or `None` when a
+/// term is not valid in its position (dropping the triple).
+fn arq_triple_to_core(triple: &ArqTriple) -> Option<CoreTriple> {
+    let subject = arq_term_to_subject(&triple.subject)?;
+    let predicate = arq_term_to_predicate(&triple.predicate)?;
+    let object = arq_term_to_object(&triple.object)?;
+    Some(CoreTriple::new(subject, predicate, object))
+}
+
+/// Map an arq term to a core subject (IRI or blank node).
+fn arq_term_to_subject(term: &ArqTerm) -> Option<Subject> {
+    match term {
+        ArqTerm::Iri(iri) => Some(Subject::NamedNode(iri.clone())),
+        ArqTerm::BlankNode(id) => BlankNode::new(id).ok().map(Subject::BlankNode),
+        _ => None,
     }
 }
 
-/// Aggregate-projection handling.
-///
-/// arq's parser cannot parse `SELECT (COUNT(*) AS ?n) …` (it breaks on `(`), yet
-/// the executor fully evaluates `Algebra::Group`. This submodule extracts the
-/// aggregate projection from the raw query, re-parses a sanitized `SELECT *`
-/// form to obtain the WHERE pattern + GROUP BY / modifiers from arq, then
-/// assembles `Algebra::Group` by hand and executes it. Only the standard
-/// aggregate functions over `*` or a single variable are supported; anything
-/// else returns an explicit error rather than a wrong answer.
-mod aggregate {
-    use super::*;
-    use oxirs_arq::query::parse_query;
-
-    /// A parsed aggregate projection: the ordered projection (group vars and
-    /// aggregate result vars) plus the aggregate specs.
-    pub struct Spec {
-        /// Projected non-aggregate variables (must equal the GROUP BY keys).
-        pub group_vars: Vec<Variable>,
-        /// `(result_var, aggregate)` pairs, in projection order.
-        pub aggregates: Vec<(Variable, Aggregate)>,
-        /// Full projection order (group var names then aggregate result names).
-        pub projection: Vec<Variable>,
+/// Map an arq term to a core predicate (IRI only).
+fn arq_term_to_predicate(term: &ArqTerm) -> Option<Predicate> {
+    match term {
+        ArqTerm::Iri(iri) => Some(Predicate::NamedNode(iri.clone())),
+        _ => None,
     }
+}
 
-    /// Detect an aggregate projection and parse it. Returns `None` when the
-    /// SELECT projection contains no `(… AS ?v)` item (i.e. a plain query that
-    /// arq's parser can handle directly).
-    pub fn detect(query: &str) -> Option<Spec> {
-        let upper = query.to_uppercase();
-        if !upper.trim_start().starts_with("SELECT") {
-            return None;
-        }
-        // The projection is the text between SELECT and the first top-level WHERE.
-        let (proj_text, _rest) = split_select_projection(query)?;
-        if !proj_text.contains('(') {
-            return None;
-        }
-        parse_projection(proj_text)
+/// Map an arq term to a core object (IRI, literal or blank node).
+fn arq_term_to_object(term: &ArqTerm) -> Option<Object> {
+    match term {
+        ArqTerm::Iri(iri) => Some(Object::NamedNode(iri.clone())),
+        ArqTerm::BlankNode(id) => BlankNode::new(id).ok().map(Object::BlankNode),
+        ArqTerm::Literal(lit) => Some(Object::Literal(arq_literal_to_core(lit))),
+        _ => None,
     }
+}
 
-    /// Execute an aggregate query. `spec` is the parsed projection; the WHERE
-    /// pattern, GROUP BY keys and modifiers are obtained by re-parsing a
-    /// sanitized `SELECT *` form through arq.
-    pub fn execute(query: &str, store: &Store, spec: Spec) -> FusekiResult<QueryResult> {
-        let sanitized = sanitize_to_select_star(query).ok_or_else(|| {
-            FusekiError::query_parsing("Could not parse aggregate SELECT projection")
-        })?;
-        let parsed = parse_query(&sanitized).map_err(|e| {
-            FusekiError::query_parsing(format!("SPARQL parse error (aggregate query): {e}"))
-        })?;
-        super::reject_unsupported(&parsed.where_clause)?;
-
-        // GROUP BY keys come from arq's parse; if the query has explicit
-        // GROUP BY they must match the projected non-aggregate vars.
-        let group_conditions: Vec<GroupCondition> = if parsed.group_by.is_empty() {
-            spec.group_vars
-                .iter()
-                .map(|v| GroupCondition {
-                    expr: Expression::Variable(v.clone()),
-                    alias: None,
-                })
-                .collect()
-        } else {
-            parsed.group_by.clone()
-        };
-
-        let mut alg = Algebra::Group {
-            pattern: Box::new(parsed.where_clause.clone()),
-            variables: group_conditions,
-            aggregates: spec.aggregates.clone(),
-        };
-        if !parsed.order_by.is_empty() {
-            alg = Algebra::OrderBy {
-                pattern: Box::new(alg),
-                conditions: parsed.order_by.clone(),
-            };
-        }
-        alg = Algebra::Project {
-            pattern: Box::new(alg),
-            variables: spec.projection.clone(),
-        };
-        if parsed.distinct {
-            alg = Algebra::Distinct {
-                pattern: Box::new(alg),
-            };
-        }
-        if parsed.limit.is_some() || parsed.offset.is_some() {
-            alg = Algebra::Slice {
-                pattern: Box::new(alg),
-                offset: parsed.offset,
-                limit: parsed.limit,
-            };
-        }
-
-        let solution = super::run(store, &alg)?;
-        Ok(super::select_result(solution))
-    }
-
-    /// Return `(projection_text, rest_after_where)` splitting on the first
-    /// top-level `WHERE` keyword (case-insensitive). `None` if no `WHERE`.
-    fn split_select_projection(query: &str) -> Option<(&str, &str)> {
-        let trimmed = query.trim_start();
-        if trimmed.len() < 6 {
-            return None;
-        }
-        // Skip the leading "SELECT" keyword (6 bytes, ASCII).
-        let after_select = &trimmed[6..];
-        let where_rel = find_keyword_ci(after_select, "WHERE")?;
-        let proj = after_select[..where_rel].trim();
-        let rest = &after_select[where_rel + 5..];
-        Some((proj, rest))
-    }
-
-    /// Rewrite the SELECT projection to `*`, preserving a leading
-    /// `DISTINCT`/`REDUCED`. Everything else (WHERE, GROUP BY, modifiers) is
-    /// left intact so arq parses the pattern and modifiers faithfully.
-    fn sanitize_to_select_star(query: &str) -> Option<String> {
-        let trimmed = query.trim_start();
-        if trimmed.len() < 6 {
-            return None;
-        }
-        let after_select = &trimmed[6..];
-        let where_rel = find_keyword_ci(after_select, "WHERE")?;
-        let projection = &after_select[..where_rel];
-        let proj_upper = projection.trim_start().to_uppercase();
-        let modifier = if proj_upper.starts_with("DISTINCT") {
-            "DISTINCT "
-        } else if proj_upper.starts_with("REDUCED") {
-            "REDUCED "
-        } else {
-            ""
-        };
-        Some(format!("SELECT {modifier}* {}", &after_select[where_rel..]))
-    }
-
-    /// Parse an aggregate projection into a [`Spec`]. Supported item forms:
-    /// * a bare variable `?v` (a GROUP BY key), and
-    /// * `(AGG([DISTINCT] (*|?v)) AS ?result)` where `AGG` is one of the
-    ///   standard SPARQL aggregates.
-    ///
-    /// Returns `None` if any projection item is not one of those (caller then
-    /// treats the query as unsupported → explicit error).
-    fn parse_projection(proj_text: &str) -> Option<Spec> {
-        let items = split_projection_items(proj_text);
-        let mut group_vars = Vec::new();
-        let mut aggregates = Vec::new();
-        let mut projection = Vec::new();
-        for item in items {
-            let item = item.trim();
-            if item.is_empty() || item == "*" {
-                continue;
-            }
-            if let Some(var) = item.strip_prefix('?') {
-                let v = Variable::new(var).ok()?;
-                group_vars.push(v.clone());
-                projection.push(v);
-            } else if item.starts_with('(') {
-                let (result_var, agg) = parse_aggregate_item(item)?;
-                projection.push(result_var.clone());
-                aggregates.push((result_var, agg));
-            } else {
-                return None;
-            }
-        }
-        if aggregates.is_empty() {
-            return None;
-        }
-        Some(Spec {
-            group_vars,
-            aggregates,
-            projection,
-        })
-    }
-
-    /// Parse a single `(AGG([DISTINCT] arg) AS ?result)` projection item.
-    fn parse_aggregate_item(item: &str) -> Option<(Variable, Aggregate)> {
-        let inner = item.strip_prefix('(')?.strip_suffix(')')?.trim();
-        // Split on the top-level " AS " (case-insensitive).
-        let as_pos = find_keyword_ci(inner, "AS")?;
-        let (agg_text, alias_text) = (inner[..as_pos].trim(), inner[as_pos + 2..].trim());
-        let result_var = Variable::new(alias_text.strip_prefix('?')?).ok()?;
-
-        // agg_text = FUNC( [DISTINCT] arg )
-        let open = agg_text.find('(')?;
-        let func = agg_text[..open].trim().to_uppercase();
-        let args = agg_text[open + 1..].strip_suffix(')')?.trim();
-        let (distinct, arg) = match args.strip_prefix("DISTINCT ").or_else(|| {
-            let up = args.to_uppercase();
-            up.starts_with("DISTINCT ").then(|| &args[9..])
-        }) {
-            Some(rest) => (true, rest.trim()),
-            None => (false, args),
-        };
-
-        let expr = if arg == "*" {
-            None
-        } else {
-            // Only `*` or a single variable are supported as the aggregate arg;
-            // anything else (`strip_prefix` returns None) makes this unsupported.
-            let var = arg.strip_prefix('?')?;
-            Some(Expression::Variable(Variable::new(var).ok()?))
-        };
-
-        let agg = match func.as_str() {
-            "COUNT" => Aggregate::Count { distinct, expr },
-            "SUM" => Aggregate::Sum {
-                distinct,
-                expr: expr?,
-            },
-            "AVG" => Aggregate::Avg {
-                distinct,
-                expr: expr?,
-            },
-            "MIN" => Aggregate::Min {
-                distinct,
-                expr: expr?,
-            },
-            "MAX" => Aggregate::Max {
-                distinct,
-                expr: expr?,
-            },
-            "SAMPLE" => Aggregate::Sample {
-                distinct,
-                expr: expr?,
-            },
-            "GROUP_CONCAT" => Aggregate::GroupConcat {
-                distinct,
-                expr: expr?,
-                separator: None,
-            },
-            _ => return None,
-        };
-        Some((result_var, agg))
-    }
-
-    /// Split a SELECT projection into items, keeping `(… )` groups intact.
-    fn split_projection_items(proj: &str) -> Vec<String> {
-        let mut items = Vec::new();
-        let mut depth = 0i32;
-        let mut current = String::new();
-        for ch in proj.chars() {
-            match ch {
-                '(' => {
-                    depth += 1;
-                    current.push(ch);
-                }
-                ')' => {
-                    depth -= 1;
-                    current.push(ch);
-                }
-                c if c.is_whitespace() && depth == 0 => {
-                    if !current.trim().is_empty() {
-                        items.push(current.trim().to_string());
-                    }
-                    current.clear();
-                }
-                _ => current.push(ch),
-            }
-        }
-        if !current.trim().is_empty() {
-            items.push(current.trim().to_string());
-        }
-        items
-    }
-
-    /// Find the byte offset of a whitespace-delimited keyword (case-insensitive)
-    /// at top level (not inside `<…>` or quotes). Returns the offset of the
-    /// keyword start, or `None`.
-    fn find_keyword_ci(haystack: &str, keyword: &str) -> Option<usize> {
-        let kw_len = keyword.len();
-        let bytes = haystack.as_bytes();
-        let mut in_iri = false;
-        let mut in_dquote = false;
-        let mut in_squote = false;
-        // Iterate by char so `i` is always a valid char boundary (queries may
-        // contain multi-byte characters, e.g. in a malformed projection).
-        for (i, ch) in haystack.char_indices() {
-            match ch {
-                '<' if !in_dquote && !in_squote => in_iri = true,
-                '>' if in_iri => in_iri = false,
-                '"' if !in_squote && !in_iri => in_dquote = !in_dquote,
-                '\'' if !in_dquote && !in_iri => in_squote = !in_squote,
-                _ if !in_iri && !in_dquote && !in_squote && ch.is_ascii_alphabetic() => {
-                    let end = i + kw_len;
-                    if end <= bytes.len()
-                        && haystack.is_char_boundary(end)
-                        && haystack[i..end].eq_ignore_ascii_case(keyword)
-                        && (i == 0 || !bytes[i - 1].is_ascii_alphanumeric())
-                        && (end == bytes.len() || !bytes[end].is_ascii_alphanumeric())
-                    {
-                        return Some(i);
-                    }
-                }
-                _ => {}
-            }
-        }
-        None
+/// Build a core `Literal` from an arq `Literal`, preserving datatype/language.
+fn arq_literal_to_core(lit: &ArqLiteral) -> CoreLiteral {
+    if let Some(lang) = &lit.language {
+        CoreLiteral::new_language_tagged_literal(&lit.value, lang)
+            .unwrap_or_else(|_| CoreLiteral::new(&lit.value))
+    } else if let Some(dt) = &lit.datatype {
+        CoreLiteral::new_typed(&lit.value, dt.clone())
+    } else {
+        CoreLiteral::new(&lit.value)
     }
 }

@@ -384,14 +384,17 @@ impl DashboardServer {
             // API routes
             .route("/api/metrics", get(get_metrics))
             .route("/api/nodes", get(get_nodes))
-            .route("/api/nodes/:node_id", get(get_node))
+            .route("/api/nodes/{node_id}", get(get_node))
             .route("/api/alerts", get(get_alerts))
-            .route("/api/alerts/:alert_id/acknowledge", post(acknowledge_alert))
+            .route(
+                "/api/alerts/{alert_id}/acknowledge",
+                post(acknowledge_alert),
+            )
             .route("/api/health", get(health_check))
             .route("/api/topology", get(get_topology))
             .route("/api/queries", post(execute_query))
             // Management routes
-            .route("/api/nodes/:node_id", delete(delete_node))
+            .route("/api/nodes/{node_id}", delete(delete_node))
             .with_state(self.state.clone());
 
         // Add middleware
@@ -674,6 +677,26 @@ mod tests {
         let config = DashboardConfig::default();
         let server = DashboardServer::new(config).await;
         assert!(server.is_ok());
+    }
+
+    /// Regression test for axum 0.8 route syntax.
+    ///
+    /// `Router::route` panics at construction time (not at compile time) if a
+    /// path segment still uses the pre-0.8 `:param` / `*wildcard` syntax
+    /// instead of `{param}` / `{*wildcard}`. Calling the real router builder
+    /// here forces axum to parse every registered route path, so a
+    /// regression to the old syntax will re-panic this test immediately.
+    #[tokio::test]
+    async fn test_build_router_does_not_panic() {
+        let config = DashboardConfig::default();
+        let server = DashboardServer::new(config)
+            .await
+            .expect("dashboard server creation should succeed");
+
+        // build_router() calls Router::route(...) for every dashboard
+        // endpoint; axum 0.8 panics here if any path still uses the old
+        // `:param` / `*wildcard` syntax instead of `{param}` / `{*wildcard}`.
+        let _router = server.build_router();
     }
 
     #[tokio::test]

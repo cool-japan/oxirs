@@ -27,10 +27,7 @@ tracing.workspace = true
 anyhow.workspace = true
 oxirs-canbus.workspace = true
 oxirs-core.workspace = true
-# oxirs-chat is not part of [workspace.dependencies] (root Cargo.toml is owned
-# elsewhere); pin it to the same path/version pattern the workspace uses for
-# every other oxirs-* crate so this stays a single source of truth.
-oxirs-chat = { version = "0.3.3", path = "../../ai/oxirs-chat" }
+oxirs-chat.workspace = true
 
 [build-dependencies]
 tauri-build = { workspace = true }

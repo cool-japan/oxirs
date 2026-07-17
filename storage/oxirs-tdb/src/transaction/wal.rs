@@ -87,6 +87,24 @@ pub enum LogRecord {
         /// Active transaction IDs at checkpoint
         active_txns: Vec<TxnId>,
     },
+    /// Logical data operation (operation-level redo).
+    ///
+    /// Written by the store's WAL-integrated write path (see
+    /// [`crate::store`]). `payload` is an opaque, store-defined serialization of
+    /// the committed operation (an interned triple/quad insert or delete); the
+    /// store replays it on open by re-applying the operation to the
+    /// reconstructed catalog. Unlike [`LogRecord::Update`] (full-page *physical*
+    /// redo, used by the lower-level [`crate::recovery::RecoveryManager`]), this
+    /// is a compact operation-level redo record, so the WAL stays small and
+    /// bounded even under high write volume.
+    DataOp {
+        /// Transaction ID this operation belongs to. Only replayed if a matching
+        /// [`LogRecord::Commit`] for this `txn_id` is present (torn/uncommitted
+        /// operations are never replayed).
+        txn_id: TxnId,
+        /// Opaque, store-encoded redo payload.
+        payload: Vec<u8>,
+    },
 }
 
 /// WAL entry with LSN and record
@@ -176,6 +194,15 @@ impl WriteAheadLog {
         *last_flushed = Lsn::new(next_lsn.as_u64().saturating_sub(1));
 
         Ok(())
+    }
+
+    /// The next LSN that will be assigned by [`WriteAheadLog::append`].
+    ///
+    /// All records already written carry an LSN strictly less than this value,
+    /// so it is the natural high-water mark to record as a checkpoint LSN in the
+    /// superblock (see [`crate::store::TdbStore::sync`]).
+    pub fn next_lsn(&self) -> Lsn {
+        *self.next_lsn.read().expect("lock poisoned")
     }
 
     /// Get log entry by LSN

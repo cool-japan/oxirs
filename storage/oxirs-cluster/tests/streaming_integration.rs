@@ -54,7 +54,6 @@ async fn make_three_node_cluster() -> (ClusterNode, ClusterNode, ClusterNode) {
             peers,
             discovery: None,
             replication_strategy: None,
-            #[cfg(feature = "bft")]
             use_bft: false,
             region_config: None,
         }

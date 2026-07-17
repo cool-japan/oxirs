@@ -420,11 +420,8 @@ pub async fn handle_upload_server(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    if state.is_dataset_read_only("default") {
-        return crate::error::FusekiError::forbidden(
-            "Dataset is read-only; bulk upload is not permitted",
-        )
-        .into_response();
+    if let Err(e) = state.reject_if_read_only("default", "bulk upload") {
+        return e.into_response();
     }
     match handle_upload(
         Query(params),
@@ -445,11 +442,8 @@ pub async fn handle_multipart_upload_server(
     State(state): State<Arc<crate::server::AppState>>,
     multipart: Multipart,
 ) -> Response {
-    if state.is_dataset_read_only("default") {
-        return crate::error::FusekiError::forbidden(
-            "Dataset is read-only; bulk upload is not permitted",
-        )
-        .into_response();
+    if let Err(e) = state.reject_if_read_only("default", "bulk upload") {
+        return e.into_response();
     }
     match handle_multipart_upload(
         Query(params),

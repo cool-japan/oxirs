@@ -3,15 +3,25 @@
 //! This module provides Byzantine fault-tolerant consensus for untrusted environments,
 //! protecting against malicious nodes in the cluster.
 
+use crate::raft::{RdfCommand, RdfResponse};
+use crate::shard::ShardId;
+use crate::storage::StorageBackend;
 use crate::{ClusterError, Result};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 // Note: OsRng imported via fully qualified path to avoid scirs2-core re-export conflict
+use oxirs_core::model::{BlankNode, Literal, NamedNode, Object, Subject, Triple};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
+
+/// The single logical shard the BFT state machine applies committed
+/// [`RdfCommand`]s to. BFT clusters in this build operate over one shard; the
+/// value is fixed so every replica applies to the same partition.
+const BFT_DEFAULT_SHARD: ShardId = 0;
 
 /// Callback invoked once a client request reaches a real 2f+1 matching-commit
 /// quorum in [`BftConsensus::handle_commit`], carrying `(client_id,
@@ -181,6 +191,20 @@ pub struct BftConsensus {
     /// of it timing out -- see [`BftConsensus::set_commit_callback`] for the
     /// exact integration contract and its current limitation.
     commit_callback: Arc<RwLock<Option<Arc<CommitCallback>>>>,
+    /// Optional real state-machine backend. When present,
+    /// [`BftConsensus::execute_operation`] deserializes each committed
+    /// operation into an [`RdfCommand`] and applies it here exactly once
+    /// (guarded by the per-sequence completed marker in
+    /// [`BftConsensus::handle_commit`]). When absent the engine fails loud
+    /// rather than fabricating a commit result.
+    storage: Option<Arc<dyn StorageBackend>>,
+    /// Optional sync-callable broadcast sink. [`BftConsensus::broadcast_message`]
+    /// pushes protocol messages here; a task spawned by the wrapping manager
+    /// drains it and performs the authenticated network broadcast. Using an
+    /// unbounded sender keeps the synchronous PBFT path from blocking on async
+    /// network I/O and resolves the consensus<->network construction cycle via
+    /// a post-construction setter.
+    broadcaster: RwLock<Option<mpsc::UnboundedSender<BftMessage>>>,
 }
 
 /// Message log for consensus tracking
@@ -274,8 +298,33 @@ impl ByzantineTracker {
 }
 
 impl BftConsensus {
-    /// Create a new BFT consensus instance
+    /// Create a new BFT consensus instance without a state-machine backend.
+    ///
+    /// A consensus engine built this way reaches quorum and fires its commit
+    /// callback, but [`BftConsensus::execute_operation`] fails loud instead of
+    /// applying operations. Use [`BftConsensus::with_storage`] for a node that
+    /// must materialize committed writes.
     pub fn new(node_id: String, config: BftConfig) -> Result<Self> {
+        Self::build(node_id, config, None)
+    }
+
+    /// Create a new BFT consensus instance bound to a real state-machine
+    /// backend. Committed [`RdfCommand`]s are applied to `storage` exactly once
+    /// per sequence, mirroring how the Raft path applies commands to its state
+    /// machine.
+    pub fn with_storage(
+        node_id: String,
+        config: BftConfig,
+        storage: Arc<dyn StorageBackend>,
+    ) -> Result<Self> {
+        Self::build(node_id, config, Some(storage))
+    }
+
+    fn build(
+        node_id: String,
+        config: BftConfig,
+        storage: Option<Arc<dyn StorageBackend>>,
+    ) -> Result<Self> {
         // Generate a random SigningKey using rand crate's random() to avoid type conflicts
         // This avoids the scirs2-core OsRng re-export issue
         let seed_bytes: [u8; 32] = rand::random();
@@ -292,7 +341,17 @@ impl BftConsensus {
             byzantine_tracker: Arc::new(RwLock::new(ByzantineTracker::new(5))),
             view_timer: Arc::new(RwLock::new(None)),
             commit_callback: Arc::new(RwLock::new(None)),
+            storage,
+            broadcaster: RwLock::new(None),
         })
+    }
+
+    /// Register the sync-callable sink used by [`BftConsensus::broadcast_message`]
+    /// to hand protocol messages to the authenticated network broadcast task.
+    pub fn set_broadcaster(&self, sender: mpsc::UnboundedSender<BftMessage>) {
+        if let Ok(mut slot) = self.broadcaster.write() {
+            *slot = Some(sender);
+        }
     }
 
     /// Register a callback fired the moment [`BftConsensus::handle_commit`]
@@ -363,10 +422,22 @@ impl BftConsensus {
     }
 
     /// Create a message digest
-    fn create_digest(message: &[u8]) -> Vec<u8> {
+    pub(crate) fn create_digest(message: &[u8]) -> Vec<u8> {
         let mut hasher = Sha256::new();
         hasher.update(message);
         hasher.finalize().to_vec()
+    }
+
+    /// Test-only probe: has a pre-prepare been stored for `(view, sequence)`?
+    ///
+    /// Used by the manager-level closed-loop test to wait until the primary
+    /// has locally recorded the pre-prepare before delivering commit votes.
+    #[cfg(test)]
+    pub(crate) fn has_pre_prepare(&self, view: u64, sequence: u64) -> bool {
+        self.message_log
+            .read()
+            .map(|log| log.pre_prepares.contains_key(&(view, sequence)))
+            .unwrap_or(false)
     }
 
     /// Sign a message
@@ -635,23 +706,26 @@ impl BftConsensus {
                 },
             );
 
-        // Check if committed (2f + 1 commits)
-        if log.is_committed(view, sequence, self.config.required_votes()) {
-            // Clone data we need before mutable borrow
-            let operation_data = if let Some(pre_prepare) = log.pre_prepares.get(&(view, sequence))
+        // Act only on the transition into "committed": the per-sequence
+        // `completed` marker makes the state-machine apply and the client
+        // reply fire exactly once, so redundant Commit votes arriving after the
+        // 2f+1 quorum can never re-execute the operation or re-notify the
+        // caller.
+        if log.is_committed(view, sequence, self.config.required_votes())
+            && !log.completed.contains_key(&sequence)
+        {
+            // Recover the original request bound to this (view, sequence).
+            let operation_data = if let Some(BftMessage::PrePrepare { request, .. }) =
+                log.pre_prepares.get(&(view, sequence))
             {
-                if let BftMessage::PrePrepare { request, .. } = pre_prepare {
-                    if let BftMessage::Request {
-                        operation,
-                        client_id,
-                        timestamp,
-                        ..
-                    } = &**request
-                    {
-                        Some((operation.clone(), client_id.clone(), *timestamp))
-                    } else {
-                        None
-                    }
+                if let BftMessage::Request {
+                    operation,
+                    client_id,
+                    timestamp,
+                    ..
+                } = &**request
+                {
+                    Some((operation.clone(), client_id.clone(), *timestamp))
                 } else {
                     None
                 }
@@ -659,16 +733,16 @@ impl BftConsensus {
                 None
             };
 
-            // Now we can mutably borrow log
             if let Some((operation, client_id, timestamp)) = operation_data {
+                // Mark executed *before* releasing the log lock so a concurrent
+                // redundant Commit cannot race into a second apply.
                 log.completed.insert(sequence, operation.clone());
+                drop(log);
 
-                // Execute the operation and generate result
-                // In a real implementation, this would execute the RDF operation
-                // and return the actual query results or modification status
+                // Apply to the real state machine and answer the client. A
+                // failed apply surfaces as an error (the caller times out);
+                // it is never turned into a fabricated success.
                 let execution_result = self.execute_operation(&operation)?;
-
-                // Send reply to client
                 let reply = BftMessage::Reply {
                     view,
                     timestamp,
@@ -677,8 +751,6 @@ impl BftConsensus {
                     result: execution_result,
                     signature: self.sign_message(&digest),
                 };
-
-                drop(log);
                 self.send_reply(reply)?;
             }
         }
@@ -778,45 +850,146 @@ impl BftConsensus {
         Ok(())
     }
 
-    /// Execute an operation and return the result
+    /// Execute a committed operation against the real state machine and return
+    /// the serialized [`RdfResponse`].
     ///
-    /// This is a placeholder implementation. In a production system, this would:
-    /// - Parse the operation bytes into an RDF command (SPARQL query, triple insert, etc.)
-    /// - Execute the command against the RDF store
-    /// - Serialize the results (query results, success/failure status, etc.)
-    /// - Return the serialized result bytes
+    /// The `operation` bytes are the serialized [`RdfCommand`] the client
+    /// submitted. This deserializes them, applies the command to the configured
+    /// [`StorageBackend`], and serializes the resulting [`RdfResponse`] — the
+    /// exact byte shape `notify_request_committed`/the commit callback expects.
+    /// A malformed payload, an unsupported command, or a backend failure all
+    /// surface as explicit errors; success is never fabricated.
     fn execute_operation(&self, operation: &[u8]) -> Result<Vec<u8>> {
-        // For now, return a simple success response with the operation hash
-        let mut hasher = Sha256::new();
-        hasher.update(operation);
-        let operation_hash = hasher.finalize();
+        let command: RdfCommand = serde_json::from_slice(operation).map_err(|e| {
+            ClusterError::Serialize(format!(
+                "BFT operation payload is not a valid RdfCommand: {e}"
+            ))
+        })?;
 
-        // Create a simple JSON success response
-        let response = serde_json::json!({
-            "status": "success",
-            "operation_hash": hex::encode(operation_hash),
-            "timestamp": std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("SystemTime should be after UNIX_EPOCH")
-                .as_secs(),
-        });
+        let response = self.apply_command(command)?;
 
         serde_json::to_vec(&response).map_err(|e| ClusterError::Serialize(e.to_string()))
     }
 
-    /// Broadcast message to all nodes
+    /// Apply a committed [`RdfCommand`] to the configured state-machine backend.
     ///
-    /// This is a placeholder implementation. In a production system, this would:
-    /// - Serialize the BftMessage to bytes
-    /// - Send the message to all peer nodes in the cluster
-    /// - Use the existing network layer (crate::network) for reliable delivery
-    /// - Handle network failures and retries
-    /// - Track message acknowledgments
-    fn broadcast_message(&self, _message: BftMessage) -> Result<()> {
-        // Integration with network layer will be implemented when:
-        // 1. Network module provides a broadcast_to_peers() method
-        // 2. Message routing is available for BFT consensus messages
-        // 3. Proper async handling is in place
+    /// Bridges the synchronous PBFT commit path to the async [`StorageBackend`]
+    /// via [`futures::executor::block_on`]. The apply is a short in-memory/WAL
+    /// operation that needs no ambient tokio runtime, so this drives it to
+    /// completion on the current thread without a nested-runtime panic.
+    fn apply_command(&self, command: RdfCommand) -> Result<RdfResponse> {
+        let storage = self
+            .storage
+            .as_ref()
+            .ok_or_else(|| {
+                ClusterError::Consensus(
+                    "BFT state-machine backend is not configured; refusing to fabricate a commit \
+                     result"
+                        .to_string(),
+                )
+            })?
+            .clone();
+
+        futures::executor::block_on(Self::apply_to_backend(storage, command))
+    }
+
+    /// Materialize a committed [`RdfCommand`] on `storage`.
+    async fn apply_to_backend(
+        storage: Arc<dyn StorageBackend>,
+        command: RdfCommand,
+    ) -> Result<RdfResponse> {
+        match command {
+            RdfCommand::Insert {
+                subject,
+                predicate,
+                object,
+            } => {
+                let triple = Self::triple_from_parts(&subject, &predicate, &object)?;
+                storage
+                    .insert_triple_to_shard(BFT_DEFAULT_SHARD, triple)
+                    .await
+                    .map_err(|e| ClusterError::Storage(e.to_string()))?;
+                Ok(RdfResponse::Success)
+            }
+            RdfCommand::Delete {
+                subject,
+                predicate,
+                object,
+            } => {
+                let triple = Self::triple_from_parts(&subject, &predicate, &object)?;
+                storage
+                    .delete_triple_from_shard(BFT_DEFAULT_SHARD, &triple)
+                    .await
+                    .map_err(|e| ClusterError::Storage(e.to_string()))?;
+                Ok(RdfResponse::Success)
+            }
+            RdfCommand::Clear => {
+                let existing = storage
+                    .get_shard_triples(BFT_DEFAULT_SHARD)
+                    .await
+                    .map_err(|e| ClusterError::Storage(e.to_string()))?;
+                for triple in existing {
+                    storage
+                        .delete_triple_from_shard(BFT_DEFAULT_SHARD, &triple)
+                        .await
+                        .map_err(|e| ClusterError::Storage(e.to_string()))?;
+                }
+                Ok(RdfResponse::Success)
+            }
+            other => Ok(RdfResponse::Error(format!(
+                "RdfCommand {other:?} is not supported by the BFT state-machine backend"
+            ))),
+        }
+    }
+
+    /// Build an RDF [`Triple`] from the string components of an [`RdfCommand`].
+    ///
+    /// Subjects and objects prefixed with `_:` are treated as blank nodes;
+    /// object strings that are not valid IRIs fall back to simple literals.
+    /// An invalid IRI/blank-node component is a fail-loud error.
+    fn triple_from_parts(subject: &str, predicate: &str, object: &str) -> Result<Triple> {
+        let subj: Subject = if let Some(id) = subject.strip_prefix("_:") {
+            Subject::BlankNode(BlankNode::new(id).map_err(|e| {
+                ClusterError::Serialize(format!("invalid blank-node subject '{subject}': {e}"))
+            })?)
+        } else {
+            Subject::NamedNode(NamedNode::new(subject).map_err(|e| {
+                ClusterError::Serialize(format!("invalid IRI subject '{subject}': {e}"))
+            })?)
+        };
+
+        let pred = NamedNode::new(predicate).map_err(|e| {
+            ClusterError::Serialize(format!("invalid IRI predicate '{predicate}': {e}"))
+        })?;
+
+        let obj: Object = if let Some(id) = object.strip_prefix("_:") {
+            Object::BlankNode(BlankNode::new(id).map_err(|e| {
+                ClusterError::Serialize(format!("invalid blank-node object '{object}': {e}"))
+            })?)
+        } else if let Ok(iri) = NamedNode::new(object) {
+            Object::NamedNode(iri)
+        } else {
+            Object::Literal(Literal::new_simple_literal(object))
+        };
+
+        Ok(Triple::new(subj, pred, obj))
+    }
+
+    /// Broadcast a protocol message to all peers.
+    ///
+    /// Hands the message to the sync-callable broadcast sink registered via
+    /// [`BftConsensus::set_broadcaster`], which a spawned task drains to perform
+    /// the authenticated network broadcast. When no sink is registered (e.g. a
+    /// consensus engine exercised in isolation) the message is dropped locally
+    /// — real network fan-out only happens once a manager has wired the sink.
+    fn broadcast_message(&self, message: BftMessage) -> Result<()> {
+        if let Ok(guard) = self.broadcaster.read() {
+            if let Some(sender) = guard.as_ref() {
+                if sender.send(message).is_err() {
+                    tracing::warn!("BFT broadcast channel closed; message not delivered to peers");
+                }
+            }
+        }
         Ok(())
     }
 
@@ -985,8 +1158,11 @@ mod tests {
     /// engine observes a real 2f+1 matching-commit quorum -- not before.
     #[test]
     fn test_commit_quorum_invokes_registered_callback() {
+        use crate::storage::mock::MockStorageBackend;
+
         let config = BftConfig::new(4); // max_faulty=1, required_votes=3
-        let primary = BftConsensus::new("1".to_string(), config).unwrap();
+        let storage = Arc::new(MockStorageBackend::new());
+        let primary = BftConsensus::with_storage("1".to_string(), config, storage).unwrap();
 
         // Register three remote nodes whose commit votes the primary trusts.
         let mut remotes: Vec<(String, SigningKey)> = Vec::new();
@@ -1009,9 +1185,14 @@ mod tests {
                 .push((client_id, timestamp, result));
         });
 
-        // Submit a client request as the (self) primary; this stores a
+        // Submit a real client request as the (self) primary; this stores a
         // pre-prepare at (view=0, sequence=1) carrying the original request.
-        let operation = b"insert triple".to_vec();
+        let command = RdfCommand::Insert {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        };
+        let operation = serde_json::to_vec(&command).unwrap();
         let request = BftMessage::Request {
             client_id: "client-42".to_string(),
             operation: operation.clone(),
@@ -1051,6 +1232,79 @@ mod tests {
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].0, "client-42");
         assert_eq!(recorded[0].1, 1234);
+        // The callback carries the real serialized RdfResponse, not a fabricated
+        // status blob: applying an Insert yields RdfResponse::Success.
+        let response: RdfResponse = serde_json::from_slice(&recorded[0].2).unwrap();
+        assert_eq!(response, RdfResponse::Success);
+    }
+
+    /// Redundant Commit votes beyond the 2f+1 quorum must neither re-apply the
+    /// operation nor re-fire the commit callback.
+    #[test]
+    fn test_extra_commits_beyond_quorum_do_not_re_execute() {
+        use crate::storage::mock::MockStorageBackend;
+
+        // config for f=1 (required_votes=3) but register four remotes so we can
+        // deliver a fourth, redundant commit after quorum is reached.
+        let config = BftConfig::new(4);
+        let storage = Arc::new(MockStorageBackend::new());
+        let primary = BftConsensus::with_storage("1".to_string(), config, storage.clone()).unwrap();
+
+        let mut remotes: Vec<(String, SigningKey)> = Vec::new();
+        for id in ["2", "3", "4", "5"] {
+            let seed: [u8; 32] = rand::random();
+            let signing_key = SigningKey::from_bytes(&seed);
+            primary
+                .register_node(id.to_string(), signing_key.verifying_key())
+                .unwrap();
+            remotes.push((id.to_string(), signing_key));
+        }
+
+        let calls = Arc::new(std::sync::Mutex::new(0usize));
+        let calls_clone = calls.clone();
+        primary.set_commit_callback(move |_client_id, _timestamp, _result| {
+            *calls_clone.lock().expect("test mutex poisoned") += 1;
+        });
+
+        let command = RdfCommand::Insert {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        };
+        let operation = serde_json::to_vec(&command).unwrap();
+        let request = BftMessage::Request {
+            client_id: "client-1".to_string(),
+            operation: operation.clone(),
+            timestamp: 7,
+            signature: None,
+        };
+        primary.process_request(request).unwrap();
+
+        let view = primary.current_view().unwrap();
+        let sequence = 1;
+        let digest = BftConsensus::create_digest(&operation);
+
+        for (node_id, signing_key) in &remotes {
+            let commit = BftMessage::Commit {
+                view,
+                sequence,
+                digest: digest.clone(),
+                node_id: node_id.clone(),
+                signature: signing_key.sign(&digest).to_bytes().to_vec(),
+            };
+            primary.handle_message(commit, node_id).unwrap();
+        }
+
+        // Four commits delivered, quorum is three: exactly one execution/reply.
+        assert_eq!(
+            *calls.lock().expect("test mutex poisoned"),
+            1,
+            "redundant commits beyond quorum must not re-fire the callback"
+        );
+        // And the state machine applied the insert exactly once.
+        let triples =
+            futures::executor::block_on(storage.get_shard_triples(BFT_DEFAULT_SHARD)).unwrap();
+        assert_eq!(triples.len(), 1, "insert must be applied exactly once");
     }
 
     /// The default (no callback registered) path must keep working exactly
@@ -1058,8 +1312,11 @@ mod tests {
     /// behavior when nobody is listening.
     #[test]
     fn test_commit_quorum_without_callback_does_not_panic() {
+        use crate::storage::mock::MockStorageBackend;
+
         let config = BftConfig::new(4);
-        let primary = BftConsensus::new("1".to_string(), config).unwrap();
+        let storage = Arc::new(MockStorageBackend::new());
+        let primary = BftConsensus::with_storage("1".to_string(), config, storage).unwrap();
 
         let mut remotes: Vec<(String, SigningKey)> = Vec::new();
         for id in ["2", "3", "4"] {
@@ -1071,7 +1328,12 @@ mod tests {
             remotes.push((id.to_string(), signing_key));
         }
 
-        let operation = b"delete triple".to_vec();
+        let command = RdfCommand::Delete {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        };
+        let operation = serde_json::to_vec(&command).unwrap();
         let request = BftMessage::Request {
             client_id: "client-7".to_string(),
             operation: operation.clone(),

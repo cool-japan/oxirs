@@ -19,10 +19,10 @@
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
+use oxirs_core::rdf_store::ConcreteStore;
 use oxirs_fuseki::config::{DatasetConfig, ServerConfig};
 use oxirs_fuseki::server::{build_jena_router, build_minimal_app_state};
 use oxirs_fuseki::store::Store;
-use oxirs_core::rdf_store::ConcreteStore;
 use serde_json::Value;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -148,7 +148,11 @@ async fn read_only_dataset_rejects_update_with_403_and_leaves_data_unchanged() {
 
     // Data must be untouched.
     let (qstatus, qbody) = post_query(&router, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }").await;
-    assert_eq!(qstatus, StatusCode::OK, "query after rejected update: {qbody}");
+    assert_eq!(
+        qstatus,
+        StatusCode::OK,
+        "query after rejected update: {qbody}"
+    );
     assert_eq!(
         binding_count(&qbody),
         0,
@@ -170,16 +174,42 @@ async fn read_only_blocks_gsp_upload_and_patch_writes() {
     ));
     let router = axum::Router::new()
         .route("/data", put(oxirs_fuseki::handlers::handle_gsp_put_server))
-        .route("/data-post", post(oxirs_fuseki::handlers::handle_gsp_post_server))
-        .route("/upload", post(oxirs_fuseki::handlers::handle_upload_server))
+        .route(
+            "/data-post",
+            post(oxirs_fuseki::handlers::handle_gsp_post_server),
+        )
+        .route(
+            "/upload",
+            post(oxirs_fuseki::handlers::handle_upload_server),
+        )
         .route("/patch", post(oxirs_fuseki::handlers::handle_patch_server))
         .with_state(state);
 
     let cases = [
-        ("PUT", "/data", "text/turtle", "<http://a> <http://b> <http://c> ."),
-        ("POST", "/data-post", "text/turtle", "<http://a> <http://b> <http://c> ."),
-        ("POST", "/upload", "text/turtle", "<http://a> <http://b> <http://c> ."),
-        ("POST", "/patch", "text/plain", "A <http://a> <http://b> <http://c> .\n"),
+        (
+            "PUT",
+            "/data",
+            "text/turtle",
+            "<http://a> <http://b> <http://c> .",
+        ),
+        (
+            "POST",
+            "/data-post",
+            "text/turtle",
+            "<http://a> <http://b> <http://c> .",
+        ),
+        (
+            "POST",
+            "/upload",
+            "text/turtle",
+            "<http://a> <http://b> <http://c> .",
+        ),
+        (
+            "POST",
+            "/patch",
+            "text/plain",
+            "A <http://a> <http://b> <http://c> .\n",
+        ),
     ];
     for (method, path, ctype, body) in cases {
         let req = Request::builder()
@@ -212,7 +242,11 @@ async fn writable_dataset_allows_update() {
     );
 
     let (_qs, qbody) = post_query(&router, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }").await;
-    assert_eq!(binding_count(&qbody), 1, "inserted triple must be present: {qbody}");
+    assert_eq!(
+        binding_count(&qbody),
+        1,
+        "inserted triple must be present: {qbody}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +264,10 @@ async fn insert_data_multiple_triples_on_one_line_inserts_all() {
         "INSERT DATA { <http://ex/a> <http://ex/p> <http://ex/b> . <http://ex/c> <http://ex/p> <http://ex/d> . }",
     )
     .await;
-    assert!(status.is_success(), "insert should succeed; got {status}: {body}");
+    assert!(
+        status.is_success(),
+        "insert should succeed; got {status}: {body}"
+    );
 
     let (_s, qbody) = post_query(&router, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }").await;
     assert_eq!(
@@ -256,7 +293,11 @@ async fn insert_data_malformed_is_not_a_silent_success() {
 
     // And nothing must have been written.
     let (_s, qbody) = post_query(&router, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }").await;
-    assert_eq!(binding_count(&qbody), 0, "no data should be written: {qbody}");
+    assert_eq!(
+        binding_count(&qbody),
+        0,
+        "no data should be written: {qbody}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -308,9 +349,18 @@ async fn select_group_by_counts_per_group() {
     assert_eq!(rows.len(), 3, "three departments expected; body: {body}");
     let total: i64 = rows
         .iter()
-        .map(|r| r["c"]["value"].as_str().unwrap_or("0").parse::<i64>().unwrap_or(0))
+        .map(|r| {
+            r["c"]["value"]
+                .as_str()
+                .unwrap_or("0")
+                .parse::<i64>()
+                .unwrap_or(0)
+        })
         .sum();
-    assert_eq!(total, 5, "group counts must sum to the 5 dept triples; body: {body}");
+    assert_eq!(
+        total, 5,
+        "group counts must sum to the 5 dept triples; body: {body}"
+    );
 }
 
 #[tokio::test]
@@ -322,7 +372,11 @@ async fn select_limit_offset_bounds_rows() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "limit/offset status: {body}");
-    assert_eq!(binding_count(&body), 3, "LIMIT 3 OFFSET 1 over 5 rows -> 3; body: {body}");
+    assert_eq!(
+        binding_count(&body),
+        3,
+        "LIMIT 3 OFFSET 1 over 5 rows -> 3; body: {body}"
+    );
 }
 
 #[tokio::test]
@@ -353,7 +407,11 @@ async fn ask_returns_true_for_present_and_false_for_absent() {
     .await;
     assert_eq!(s1, StatusCode::OK);
     let v1: Value = serde_json::from_str(&b1).unwrap_or(Value::Null);
-    assert_eq!(v1["boolean"], Value::Bool(true), "present triple -> true; body: {b1}");
+    assert_eq!(
+        v1["boolean"],
+        Value::Bool(true),
+        "present triple -> true; body: {b1}"
+    );
 
     let (s2, b2) = post_query(
         &router,
@@ -362,7 +420,11 @@ async fn ask_returns_true_for_present_and_false_for_absent() {
     .await;
     assert_eq!(s2, StatusCode::OK);
     let v2: Value = serde_json::from_str(&b2).unwrap_or(Value::Null);
-    assert_eq!(v2["boolean"], Value::Bool(false), "absent triple -> false; body: {b2}");
+    assert_eq!(
+        v2["boolean"],
+        Value::Bool(false),
+        "absent triple -> false; body: {b2}"
+    );
 }
 
 #[tokio::test]

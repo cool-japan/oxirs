@@ -20,6 +20,8 @@ use crate::store::store_types::{
     IndexMetrics, QueryResultWithStats, StorageMetrics, TdbConfig, TdbEnhancedStats, TdbStats,
     TransactionMetrics,
 };
+use crate::store::store_wal::StoreOp;
+use crate::transaction::wal::Lsn;
 use crate::transaction::{LockManager, TransactionManager, WriteAheadLog};
 use std::path::Path;
 use std::sync::Arc;
@@ -70,6 +72,11 @@ pub struct TdbStore {
     pub(crate) diagnostic_engine: DiagnosticEngine,
     /// Spatial index for GeoSPARQL queries (optional)
     pub(crate) spatial_index: Option<SpatialIndex>,
+    /// Monotonic transaction-id counter for WAL-integrated writes (F3). Seeded
+    /// past any id left in the WAL by a crashed session during recovery so
+    /// replayed and freshly-issued ids never collide. See
+    /// [`crate::store::store_wal`].
+    pub(crate) wal_txn_counter: u64,
 }
 
 impl TdbStore {
@@ -171,8 +178,12 @@ impl TdbStore {
                 }
             };
 
-        // Initialize transaction management
-        let wal = Arc::new(WriteAheadLog::new(&config.data_dir)?);
+        // Initialize transaction management. Open (rather than create) the WAL
+        // so any records left by a previous, un-checkpointed session are read
+        // back and the LSN is positioned correctly; the committed operations are
+        // replayed into the reconstructed catalog below, before the store serves
+        // any read (F3 crash recovery).
+        let wal = Arc::new(WriteAheadLog::open(&config.data_dir)?);
         let lock_manager = Arc::new(LockManager::new());
         let txn_manager = Arc::new(TransactionManager::new(wal, lock_manager));
 
@@ -239,6 +250,7 @@ impl TdbStore {
             query_monitor,
             diagnostic_engine,
             spatial_index,
+            wal_txn_counter: 0,
         };
 
         // The bloom filter is an in-memory acceleration structure that is not
@@ -247,6 +259,16 @@ impl TdbStore {
         // does not incorrectly report reopened triples as absent. For a fresh
         // store the index scan is empty and this is a no-op.
         store.rebuild_bloom_filter()?;
+
+        // Crash recovery: replay committed WAL operations recorded since the
+        // last checkpoint on top of the just-reconstructed catalog, so a store
+        // that was written but not `sync()`ed still comes back with its
+        // committed data. A clean shutdown truncated the WAL, so this is a
+        // no-op then. Runs before any read is served.
+        let replayed = store.recover_from_wal()?;
+        if replayed > 0 {
+            log::info!("oxirs-tdb: replayed {replayed} committed WAL operations on open");
+        }
 
         Ok(store)
     }
@@ -269,27 +291,52 @@ impl TdbStore {
         Ok(())
     }
 
-    /// Flush all pending state to disk durably.
+    /// Flush all pending state to disk durably and checkpoint the WAL.
     ///
-    /// This first flushes every dirty page in the buffer pool (each fsynced by
-    /// the file manager), then snapshots the live catalog — the SPO/POS/OSP and
-    /// dictionary B+Tree root pages, the next dictionary id, the triple count,
-    /// and the free-page-list head — into the on-disk superblock (page 0) and
-    /// fsyncs it. After `sync()` returns, reopening the store reconstructs
-    /// exactly this state.
+    /// After `sync()` returns, reopening the store reconstructs exactly this
+    /// state from the superblock alone (the WAL has been truncated).
     ///
-    /// Ordering matters: the B+Tree pages are made durable *before* the
-    /// superblock is written, so the superblock never references pages that are
-    /// not yet on disk.
+    /// # Ordering invariant (crash-safe checkpoint)
+    ///
+    /// The four steps below run in a fixed order, and each is only correct
+    /// because the previous one is already durable:
+    ///
+    /// 1. **WAL commit + flush.** Force every logged operation to the WAL, and
+    ///    capture the checkpoint LSN (the WAL high-water mark). Nothing that is
+    ///    about to be reflected in the superblock may still be un-flushed in the
+    ///    WAL.
+    /// 2. **Page flush.** Make every dirty B+Tree/dictionary page durable
+    ///    (each fsynced by the file manager). The superblock written next must
+    ///    never reference a page that is not yet on disk.
+    /// 3. **Superblock + checkpoint-LSN write.** Snapshot the live catalog —
+    ///    the SPO/POS/OSP and GSPO/GPOS/GOSP roots, the dictionary roots, the
+    ///    next id, the triple/quad counts, the free-list head, and the
+    ///    checkpoint LSN — into page 0 and fsync it. Once this is durable the
+    ///    on-disk catalog reflects every operation up to the checkpoint LSN.
+    /// 4. **WAL truncate up to the checkpoint.** Only now, with the superblock
+    ///    durable, discard the WAL records the catalog already covers.
+    ///
+    /// A crash between steps 3 and 4 leaves WAL records that the superblock
+    /// already reflects; replay on reopen re-applies them idempotently, so the
+    /// result is identical. A crash before step 3 leaves the previous
+    /// superblock, and the WAL still holds the committed operations for replay.
     pub fn sync(&self) -> Result<()> {
-        // 1. Persist all dirty B+Tree/dictionary pages durably.
+        // 1. WAL commit + flush: make every logged operation durable, then take
+        //    the checkpoint LSN (the next LSN to be assigned — all lower LSNs
+        //    are now durable and about to be reflected in the superblock).
+        let wal = self.txn_manager.wal();
+        wal.flush()?;
+        let checkpoint_lsn = wal.next_lsn();
+
+        // 2. Persist all dirty B+Tree/dictionary pages durably.
         self.buffer_pool.flush_all()?;
 
-        // 2. Snapshot the live catalog into the superblock and fsync it.
-        //    Quad roots come from the live quad indexes when present; when quad
-        //    support is disabled they are recorded as empty (a disabled store
-        //    has no live quad data — see `open_with_config`, which reconstructs
-        //    the indexes whenever persisted quad roots exist).
+        // 3. Snapshot the live catalog (including the checkpoint LSN) into the
+        //    superblock and fsync it. Quad roots come from the live quad indexes
+        //    when present; when quad support is disabled they are recorded as
+        //    empty (a disabled store has no live quad data — see
+        //    `open_with_config`, which reconstructs the indexes whenever
+        //    persisted quad roots exist).
         let (gspo_root, gpos_root, gosp_root) = match &self.quad_indexes {
             Some(qi) => (qi.gspo_root(), qi.gpos_root(), qi.gosp_root()),
             None => (None, None, None),
@@ -309,8 +356,16 @@ impl TdbStore {
             gpos_root: Superblock::option_to_slot(gpos_root),
             gosp_root: Superblock::option_to_slot(gosp_root),
             quad_count: self.quad_count as u64,
+            checkpoint_lsn: checkpoint_lsn.as_u64(),
         };
         superblock.write(&self.file_manager)?;
+
+        // 4. WAL truncate up to the checkpoint: the superblock now covers every
+        //    operation with LSN < checkpoint_lsn, so those records are redundant.
+        //    truncate() keeps records with LSN strictly greater than its
+        //    argument, so pass one below the high-water mark to drop them all.
+        let truncate_up_to = Lsn::new(checkpoint_lsn.as_u64().saturating_sub(1));
+        wal.truncate(truncate_up_to)?;
         Ok(())
     }
 
@@ -360,9 +415,16 @@ impl TdbStore {
         self.query_cache
             .invalidate_pattern(Some(subject), Some(predicate), Some(object));
 
-        // Update count only for genuinely new triples.
+        // Update count only for genuinely new triples, and log the committed
+        // operation to the WAL (no-op if WAL disabled or the triple already
+        // existed) so it survives a crash before the next checkpoint.
         if is_new {
             self.triple_count += 1;
+            self.wal_log_op(StoreOp::InsertTriple {
+                subject: s_term,
+                predicate: p_term,
+                object: o_term,
+            })?;
         }
 
         Ok(())
@@ -426,12 +488,18 @@ impl TdbStore {
         // Delete from indexes
         let deleted = self.indexes.delete(&triple)?;
 
-        // Update statistics and cache if deleted
+        // Update statistics and cache if deleted, and log the committed delete
+        // to the WAL so the removal survives a crash before the next checkpoint.
         if deleted {
             self.statistics.record_delete(s_id, p_id, o_id);
             self.query_cache
                 .invalidate_pattern(Some(subject), Some(predicate), Some(object));
             self.triple_count = self.triple_count.saturating_sub(1);
+            self.wal_log_op(StoreOp::DeleteTriple {
+                subject: s_term,
+                predicate: p_term,
+                object: o_term,
+            })?;
         }
 
         Ok(deleted)
@@ -550,9 +618,15 @@ impl TdbStore {
             bloom.insert(&triple);
         }
 
-        // Update count only for genuinely new triples.
+        // Update count only for genuinely new triples, and log the committed
+        // insert to the WAL so it survives a crash before the next checkpoint.
         if is_new {
             self.triple_count += 1;
+            self.wal_log_op(StoreOp::InsertTriple {
+                subject: subject.clone(),
+                predicate: predicate.clone(),
+                object: object.clone(),
+            })?;
         }
 
         Ok(())
@@ -568,7 +642,13 @@ impl TdbStore {
         self.count() == 0
     }
 
-    /// Bulk insert triples (transactional: all-or-nothing)
+    /// Bulk insert triples (transactional: all-or-nothing).
+    ///
+    /// The whole batch is logged as a *single* WAL transaction (one
+    /// `Begin -> DataOp* -> Commit`, no per-element fsync) and then persisted by
+    /// a single checkpoint, so a bulk load survives a reopen even if the caller
+    /// drops the store without an explicit `sync()`, while keeping fsync cost
+    /// amortized across the batch.
     pub fn insert_triples_bulk(&mut self, triples: &[(Term, Term, Term)]) -> Result<()> {
         // Validate all triples first (subject must be IRI or blank node, not literal)
         for (subject, _predicate, _object) in triples {
@@ -577,16 +657,54 @@ impl TdbStore {
             }
         }
 
-        // If all valid, insert them
+        // Apply each triple to the in-memory indexes without per-op WAL logging,
+        // collecting the genuinely-new inserts so the batch can be logged as one
+        // transaction below. `insert_triple_no_wal` mirrors `insert_triple`
+        // minus the WAL append.
+        let mut ops: Vec<StoreOp> = Vec::new();
         for (subject, predicate, object) in triples {
-            self.insert_triple(subject, predicate, object)?;
+            if self.insert_triple_no_wal(subject, predicate, object)? {
+                ops.push(StoreOp::InsertTriple {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                });
+            }
         }
+
+        // Log the whole batch as one WAL transaction (durable via the sync
+        // below; no per-element fsync).
+        self.wal_log_batch(&ops)?;
 
         // Persist the batch durably (pages + catalog) so a bulk load survives a
         // reopen even if the caller drops the store without an explicit sync.
         self.sync()?;
 
         Ok(())
+    }
+
+    /// Insert a triple into the in-memory indexes (index + bloom + count) without
+    /// writing a WAL record. Used by the bulk path, which logs the whole batch
+    /// as one transaction. Returns whether the triple was genuinely new.
+    fn insert_triple_no_wal(
+        &mut self,
+        subject: &Term,
+        predicate: &Term,
+        object: &Term,
+    ) -> Result<bool> {
+        let s_id = self.dictionary.encode(subject)?;
+        let p_id = self.dictionary.encode(predicate)?;
+        let o_id = self.dictionary.encode(object)?;
+
+        let triple = Triple::new(s_id, p_id, o_id);
+        let is_new = self.indexes.insert(triple)?;
+        if let Some(ref mut bloom) = self.bloom_filter {
+            bloom.insert(&triple);
+        }
+        if is_new {
+            self.triple_count += 1;
+        }
+        Ok(is_new)
     }
 
     /// Query triples with optional pattern matching (None = wildcard)

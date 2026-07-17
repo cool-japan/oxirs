@@ -580,8 +580,14 @@ mod update_dispatch_tests {
         let store = Store::new().expect("create store");
 
         // Duplicate triple appears twice in one INSERT DATA batch. Note:
-        // `parse_data_block` parses one triple per *line*, so the triples
-        // must be on separate lines (not just separated by ` . `).
+        // `parse_data_block` (via `parse_ntriples_document`) splits the block
+        // into individual statements on top-level `.` terminators -- a `.`
+        // that is not inside an `<IRI>`, a quoted literal, or a `#` comment --
+        // so several `.`-separated triples may share one physical line just
+        // as well as being on separate lines; either form works here. Any
+        // statement that fails to parse aborts the whole block (no partial
+        // apply), so putting the triples on separate lines below is purely
+        // for readability, not a parser requirement.
         let result = store
             .update(
                 "INSERT DATA {\n\

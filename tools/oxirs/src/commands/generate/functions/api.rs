@@ -164,6 +164,12 @@ pub async fn from_shacl(
     let progress = helpers::query_progress();
     progress.set_message("Parsing SHACL shapes");
     let shapes = schema_shacl::parse_shacl_shapes(&shapes_file, &ctx)?;
+    if shapes.is_empty() {
+        return Err(
+            "No SHACL shapes found in shapes file. Ensure the file contains sh:NodeShape definitions with sh:targetClass."
+                .into(),
+        );
+    }
     ctx.info(&format!("Found {} shape definitions", shapes.len()));
     progress.set_message("Generating conforming data");
     let quads = schema_shacl::generate_from_shapes(&mut rng, &shapes, count)?;
@@ -248,6 +254,12 @@ pub async fn from_rdfs(
     let progress = helpers::query_progress();
     progress.set_message("Parsing RDFS schema");
     let schema = schema_rdfs::parse_rdfs_schema(&schema_file, &ctx)?;
+    if schema.classes.is_empty() {
+        return Err(
+            "No RDFS classes found in schema file. Ensure the file contains rdfs:Class definitions."
+                .into(),
+        );
+    }
     ctx.info(&format!(
         "Found {} classes and {} properties",
         schema.classes.len(),
@@ -335,6 +347,12 @@ pub async fn from_owl(
     let progress = helpers::query_progress();
     progress.set_message("Parsing OWL ontology");
     let ontology = schema_owl::parse_owl_ontology(&ontology_file, &ctx)?;
+    if ontology.classes.is_empty() {
+        return Err(
+            "No OWL classes found in ontology file. Ensure the file contains owl:Class definitions."
+                .into(),
+        );
+    }
     ctx.info(&format!(
         "Found {} classes and {} properties",
         ontology.classes.len(),

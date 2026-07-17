@@ -85,7 +85,6 @@ impl TestCluster {
                     .collect(),
                 discovery: None,
                 replication_strategy: None,
-                #[cfg(feature = "bft")]
                 use_bft: false,
                 region_config: None,
             };

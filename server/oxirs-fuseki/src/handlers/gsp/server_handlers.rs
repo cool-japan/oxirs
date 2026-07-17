@@ -44,17 +44,13 @@ pub async fn handle_gsp_options_server() -> Response {
 ///
 /// GSP `PUT`/`POST`/`DELETE` mutate the store just like SPARQL UPDATE, so a
 /// read-only public deployment must block them too (HTTP 403). The default
-/// dataset is keyed `"default"` in single-dataset mode.
+/// dataset is keyed `"default"` in single-dataset mode; see
+/// `AppState::reject_if_read_only` for the shared resolution/guard logic.
 fn gsp_read_only_guard(state: &AppState) -> Option<Response> {
-    if state.is_dataset_read_only("default") {
-        return Some(
-            crate::error::FusekiError::forbidden(
-                "Dataset is read-only; Graph Store Protocol writes are not permitted",
-            )
-            .into_response(),
-        );
-    }
-    None
+    state
+        .reject_if_read_only("default", "Graph Store Protocol writes")
+        .err()
+        .map(IntoResponse::into_response)
 }
 
 /// PUT handler for AppState

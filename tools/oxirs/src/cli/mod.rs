@@ -30,7 +30,6 @@ pub mod schema_autocomplete;
 pub mod sparql_autocomplete;
 pub mod syntax_highlighting;
 pub mod template_formatter;
-pub mod transaction;
 pub mod tutorial;
 pub mod utils;
 pub mod validation;
@@ -77,10 +76,6 @@ pub use syntax_highlighting::{
     HighlightConfig,
 };
 pub use template_formatter::{TemplateFormatter, TemplatePresets};
-pub use transaction::{
-    IsolationLevel, TransactionConfig, TransactionManager, TransactionMetadata,
-    TransactionOperation, TransactionState, TransactionStats,
-};
 pub use tutorial::{Difficulty, TutorialLesson, TutorialManager, TutorialStep};
 pub use utils::*;
 pub use validation::ArgumentValidator;

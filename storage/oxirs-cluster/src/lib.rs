@@ -382,8 +382,12 @@ pub struct NodeConfig {
     pub discovery: Option<DiscoveryConfig>,
     /// Replication strategy
     pub replication_strategy: Option<ReplicationStrategy>,
-    /// Use Byzantine fault tolerance instead of Raft
-    #[cfg(feature = "bft")]
+    /// Use Byzantine fault tolerance instead of Raft.
+    ///
+    /// This field is always present so a caller can request BFT regardless of
+    /// how the crate was compiled; if it is `true` but the `bft` feature was
+    /// not enabled, [`ClusterNode::start`] fails loud rather than silently
+    /// running Raft.
     pub use_bft: bool,
     /// Multi-region deployment configuration
     pub region_config: Option<MultiRegionConfig>,
@@ -399,7 +403,6 @@ impl NodeConfig {
             peers: Vec::new(),
             discovery: Some(DiscoveryConfig::default()),
             replication_strategy: Some(ReplicationStrategy::default()),
-            #[cfg(feature = "bft")]
             use_bft: false,
             region_config: None,
         }
@@ -425,8 +428,11 @@ impl NodeConfig {
         self
     }
 
-    /// Enable Byzantine fault tolerance
-    #[cfg(feature = "bft")]
+    /// Enable Byzantine fault tolerance.
+    ///
+    /// Requesting BFT here always compiles; it only takes effect when the crate
+    /// is built with the `bft` feature. Otherwise [`ClusterNode::start`] returns
+    /// an explicit configuration error.
     pub fn with_bft(mut self, enable: bool) -> Self {
         self.use_bft = enable;
         self
@@ -473,6 +479,11 @@ pub struct ClusterNode {
     running: Arc<RwLock<bool>>,
     byzantine_mode: Arc<RwLock<bool>>,
     network_isolated: Arc<RwLock<bool>>,
+    /// Byzantine fault-tolerant consensus manager, present only when the node
+    /// was started with `use_bft = true` and the `bft` feature is enabled.
+    /// Held so its background tasks keep running for the node's lifetime.
+    #[cfg(feature = "bft")]
+    bft_manager: Option<Arc<bft_consensus::BftConsensusManager>>,
 }
 
 impl ClusterNode {
@@ -591,7 +602,52 @@ impl ClusterNode {
             running: Arc::new(RwLock::new(false)),
             byzantine_mode: Arc::new(RwLock::new(false)),
             network_isolated: Arc::new(RwLock::new(false)),
+            #[cfg(feature = "bft")]
+            bft_manager: None,
         })
+    }
+
+    /// Access the Byzantine fault-tolerant consensus manager, if this node was
+    /// started with `use_bft = true` and the `bft` feature is enabled.
+    #[cfg(feature = "bft")]
+    pub fn bft_manager(&self) -> Option<&Arc<bft_consensus::BftConsensusManager>> {
+        self.bft_manager.as_ref()
+    }
+
+    /// Construct and start the Byzantine fault-tolerant consensus manager for
+    /// this node, binding it to a persistent state-machine backend rooted at the
+    /// node's data directory. Stores the manager so its background tasks stay
+    /// alive for the node's lifetime.
+    #[cfg(feature = "bft")]
+    async fn start_bft_consensus(&mut self) -> Result<()> {
+        use crate::bft_consensus::BftConsensusManager;
+        use crate::network::NetworkConfig;
+        use crate::storage::{PersistentStorage, StorageConfig};
+
+        let storage_config = StorageConfig {
+            data_dir: self.config.data_dir.clone(),
+            ..StorageConfig::default()
+        };
+        let storage = Arc::new(
+            PersistentStorage::new(self.config.node_id, storage_config)
+                .await
+                .map_err(|e| {
+                    ClusterError::Storage(format!("failed to open BFT storage backend: {e}"))
+                })?,
+        );
+
+        let peers: Vec<String> = self.config.peers.iter().map(|p| p.to_string()).collect();
+        let manager = BftConsensusManager::new(
+            self.config.node_id.to_string(),
+            peers,
+            storage,
+            NetworkConfig::default(),
+        )
+        .await?;
+        manager.start().await?;
+
+        self.bft_manager = Some(Arc::new(manager));
+        Ok(())
     }
 
     /// Start the cluster node
@@ -602,6 +658,33 @@ impl ClusterNode {
                 return Ok(());
             }
             *running = true;
+        }
+
+        // Byzantine fault-tolerant consensus is opt-in via `NodeConfig::use_bft`
+        // and replaces the Raft path. When requested but the crate was built
+        // without the `bft` feature, fail loud rather than silently running Raft
+        // under a caller who explicitly asked for BFT.
+        if self.config.use_bft {
+            #[cfg(feature = "bft")]
+            {
+                self.start_bft_consensus().await?;
+                tracing::info!(
+                    "Cluster node {} started in Byzantine fault-tolerant mode",
+                    self.config.node_id
+                );
+                return Ok(());
+            }
+            #[cfg(not(feature = "bft"))]
+            {
+                let mut running = self.running.write().await;
+                *running = false;
+                return Err(ClusterError::Config(format!(
+                    "node {} requested Byzantine fault tolerance (use_bft = true) but this build \
+                     was compiled without the 'bft' feature; refusing to silently fall back to \
+                     Raft",
+                    self.config.node_id
+                )));
+            }
         }
 
         tracing::info!(

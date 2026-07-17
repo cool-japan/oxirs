@@ -3,11 +3,13 @@
 > A Rust-native, modular platform for Semantic Web, SPARQL 1.2, GraphQL, and AI-augmented reasoning
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.2 - Released - 2026-07-12
+**Status**: v0.4.0 - Release preparation - 2026-07-17
 
 **Production Ready**: Complete SPARQL 1.1/1.2 implementation with **3.8x faster optimizer**, industrial IoT support, and AI-powered features. **45,034 tests passing** (`--all-features`; 44,344 with default features) with zero warnings across all 27 crates.
+
+**v0.4.0 Highlights (2026-07-17)**: Consolidates the previously-unpublished 0.3.3 production-hardening work (a 272-finding audit → 288 fixes plus 455 regression tests across storage, security, and distributed subsystems) with 0.3.4's deployment fixes from the public, query-only sparql.wik.jp rollout — neither 0.3.3 nor 0.3.4 was published to crates.io, so both ship here as 0.4.0. oxirs-tdb is now a real durable on-disk backend (superblock, fsync-backed writes, free-page allocator, GSPO/GPOS/GOSP indexes) wired into oxirs-fuseki via `StoreType::TDB2`/`dataset_type = "tdb2"` and into `oxirs import --dataset-type tdb2`; oxirs-core's `RdfStore` Persistent backend replaces its O(N²) per-insert full-file rewrite with O(N) buffered-append persistence, and `MemoryStorage` now interns terms for roughly 4x lower RAM. The SPARQL query path is now unified through the real oxirs-arq engine end to end: `CONSTRUCT`/`DESCRIBE` execute via new template-instantiation/CBD machinery, `GRAPH <iri>`/`GRAPH ?g` and `FROM`/`FROM NAMED` execute for real against dataset views, `SERVICE` HTTP federation is reachable from the SPARQL endpoint, and native aggregate projections (`COUNT`/`SUM`/`MIN`/`MAX`/`AVG`/`SAMPLE`/`GROUP_CONCAT`, expressions inside aggregates, `DISTINCT`) plus `HAVING` (including aggregates inside `HAVING`) run through the engine's grouping machinery — the legacy demo path and every silent-empty-200 fallback are gone. Parser fixes cover WHERE-less `ASK`/`SELECT *`, positionally-scoped `BIND`, group-scoped `FILTER` (including after a top-level `UNION`), populated `GROUP BY`/`ORDER BY` lists, and multi-triple `INSERT/DELETE DATA` parsing. The axum 0.8 route migration is now complete workspace-wide (fuseki, cluster, embed, chat). Security hardening adds real X25519/Ristretto DID crypto, OIDC/SAML SSO signature verification, real cluster RPC with BFT quorum, and enforced `read_only` dataset checks — now name-agnostic for single-dataset deployments, with startup diagnostics for multi-dataset misconfigurations — across all write paths including REST API v2 and admin dataset management.
 
 **v0.3.2 Highlights (2026-07-12)**: "Pure-Rust Policy v2" — six C-FFI integrations (NVML GPU monitoring, CUDA, GEOS, DuckDB, Kafka, Pulsar) extracted out of the in-tree feature flags into opt-in `publish = false` quarantine adapter crates, so every published crate's `--all-features` build is 100% Pure Rust; GeoSPARQL's GeoPackage backend migrated off `rusqlite` onto the new Pure-Rust `oxisql-core`/`oxisql-sqlite-compat` engine; a Pure-Rust `zstd` shim (backed by `oxiarc-zstd`) removes the last transitive `zstd-sys` C dependency (tantivy/parquet/pulsar/wasmtime). Also: SHACL targets gain subclass-aware `sh:class` matching and real SPARQL/property-path target execution, oxirs-wasm gains PREFIX/BASE query prologues, a per-store solution budget, and SPO/POS/OSP-index-driven pattern matching, plus GeoSPARQL shapefile/compressed-geometry hole and multi-ring round-tripping fixes. SciRS2 0.6.0; oxiarc 0.3.5.
 
@@ -39,6 +41,29 @@ cargo build --workspace --release
 > (e.g. the DuckDB-backed `tsdb-duckdb` feature) without pulling their C FFI onto a
 > published Pure-Rust surface. All 25 OxiRS library crates remain normally published to
 > crates.io — see [Published Crates](#published-crates) below.
+
+### What's New in v0.4.0 (2026-07-17)
+
+**Production Hardening & Deployment Release: TDB2 On-Disk Backend, SPARQL Correctness, and Security Fixes**
+
+OxiRS v0.4.0 consolidates the unreleased 0.3.3 production-hardening pass (a 272-finding audit spanning storage, security, and distributed subsystems) with the 0.3.4 deployment fixes surfaced by the public, query-only sparql.wik.jp rollout. Neither 0.3.3 nor 0.3.4 was published to crates.io — both ship here as 0.4.0:
+
+- **oxirs-tdb real on-disk backend** - Superblock (v2, quad roots), fsync-backed writes, a free-page allocator, GSPO/GPOS/GOSP quad and named-graph indexes, and streaming quad iterators replace the previous non-persisting placeholder; wired into oxirs-fuseki as `StoreType::TDB2`/`dataset_type = "tdb2"` (new `TdbStoreAdapter`/`StoreFactory`) and into `oxirs import --dataset-type tdb2` for bounded-RAM bulk loads; unknown dataset types now fail loud instead of silently falling back to in-memory
+- **oxirs-core storage rewrite** - `RdfStore`'s Persistent backend replaces its O(N²) per-insert full-file rewrite with a single buffered N-Quads append (O(N)); `MemoryStorage` now interns terms behind ID-based index permutations, cutting per-triple RAM roughly 4x; new public durability API (`open_with_sync_policy`, `flush`, `SyncPolicy`, `AsyncRdfStore::flush_async`) plus streaming `bulk_insert_quads`/`for_each_quad` on the `Store` trait
+- **SPARQL query path unified through the real oxirs-arq engine** - a single parse-once dispatch replaces substring-based query-type routing; `CONSTRUCT` and `DESCRIBE` (including `DESCRIBE <iri>` with no `WHERE`, `DESCRIBE *`, and the `CONSTRUCT WHERE {}` shorthand) execute via new template-instantiation/CBD machinery; `GRAPH <iri>`/`GRAPH ?g` execute for real in both the serial and parallel executors; `FROM`/`FROM NAMED` are honored via dataset views; `SERVICE` HTTP federation is reachable end-to-end; native aggregate projections (`COUNT`/`SUM`/`MIN`/`MAX`/`AVG`/`SAMPLE`/`GROUP_CONCAT` with `SEPARATOR`, expressions inside aggregates like `SUM(?a*?b)`, `DISTINCT`) and `HAVING` (including aggregate calls in `HAVING`) run through the engine's grouping machinery; the legacy demo path and every silent-empty-200 fallback are deleted — parse failures are HTTP 400, execution failures HTTP 500, never a silent empty 200
+- **SPARQL parser fixes** - WHERE-less `ASK {}`/`SELECT * {}` now extract patterns correctly; the arq parser accepts `SELECT *` and optional-WHERE `ASK`; `BIND` is now scoped positionally (was deferred to the group end, silently producing wrong bindings); a `FILTER` after a top-level `UNION` is now group-scoped; `GROUP BY`/`ORDER BY` expression lists actually populate (a latent tokenizer bug on the trailing `BY` keyword silently dropped both lists); `DESCRIBE` targets are retained
+- **oxirs-fuseki hardening** - SPARQL UPDATE dispatch now runs on the parsed AST instead of a `.contains("CLEAR")` substring scan; `INSERT DATA`/`DELETE DATA` blocks parse every triple via proper top-level `.`-terminator splitting instead of dropping rows past the first line; routes migrated to axum 0.8/matchit 0.8 path syntax — and that migration is now complete workspace-wide (oxirs-cluster's dashboard, oxirs-embed's API, and oxirs-chat's server each got their own route fixes plus a router-construction regression test)
+- **read_only dataset enforcement hardened** - name-agnostic resolution when exactly one dataset is configured (any name gets write protection, not only `"default"`); startup WARN/ERROR diagnostics for multi-dataset misconfigurations; a shared guard helper now also protects admin dataset create/delete/compact/reload and the REST API v2 dataset/triple write endpoints, closing a previously unguarded write bypass
+- **Security fixes** - oxirs-did gains real X25519 ECDH and Ristretto Schnorr/Pedersen crypto (replacing forgeable placeholders); oxirs-chat SSO verifies OIDC ID tokens (RS256/ES256 via JWKS) and SAML XML signatures, failing closed; oxirs-cluster inter-node RPC is now real length-prefixed, oxicode-framed TCP with a real 2f+1 BFT quorum
+- **Other fixes** - oxirs-vec TF-IDF smoothed-IDF correction and a FAISS HNSW/IVF read-path cursor-alignment fix; oxirs-samm graph analytics short-circuits `density = 0` for `n < 2`
+
+**Quality Metrics (v0.4.0):**
+- ✅ **272-finding production-hardening audit** → 288 fixes and **455 new regression tests** across storage, security, and distributed subsystems (on top of the 45,034 tests passing at v0.3.2 with `--all-features`)
+- ✅ New query-path/parser suites: `oxirs-fuseki/tests/query_path_040.rs` (20 real-server end-to-end cases), `oxirs-arq/tests/bind_scoping_test.rs` (9 cases), `oxirs-arq/tests/parser_forms_test.rs` (23 cases); oxirs-arq 3012 tests passing, oxirs-fuseki 2381 tests passing at integration time
+- ✅ Zero compilation warnings maintained across all 27 crates
+- ✅ Consolidates the unreleased 0.3.3 + 0.3.4 work into a single release; not yet published to crates.io
+
+---
 
 ### What's New in v0.3.2 (2026-07-12)
 

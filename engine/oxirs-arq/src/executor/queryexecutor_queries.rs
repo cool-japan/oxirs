@@ -225,7 +225,9 @@ impl QueryExecutor {
                         Err(anyhow::anyhow!("lcase() requires exactly 1 argument"))
                     }
                 }
-                _ => Err(anyhow::anyhow!("Unknown function: {}", name)),
+                _ => Err(anyhow::Error::new(super::types::UnknownFunctionError(
+                    name.clone(),
+                ))),
             },
             Expression::Exists(algebra) => match self.evaluate_exists_subquery(algebra, binding) {
                 Ok(has_solutions) => Ok(crate::algebra::Term::Literal(crate::algebra::Literal {

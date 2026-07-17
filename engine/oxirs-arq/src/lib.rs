@@ -47,6 +47,10 @@ pub use gql::{GqlToSparqlTranslator, GqlTranslateError};
 pub mod generate;
 pub use generate::{parse_generate, GenerateError, GenerateExecutor, GenerateResult};
 
+// Graph-form (CONSTRUCT / DESCRIBE) result production
+pub mod graph_result;
+pub use graph_result::{describe, instantiate_construct};
+
 // Core modules
 pub mod adaptive_execution;
 pub mod aggregates_ext;

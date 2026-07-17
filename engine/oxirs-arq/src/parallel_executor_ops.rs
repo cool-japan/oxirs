@@ -394,17 +394,55 @@ impl ParallelQueryExecutor {
         crate::service_federation::execute_service_clause(endpoint, pattern, silent)
     }
 
-    /// Execute graph pattern in parallel
+    /// Execute a `GRAPH` pattern in parallel with real named-graph scoping.
+    ///
+    /// Mirrors the serial executor
+    /// ([`crate::executor::QueryExecutor::execute_graph`]): `GRAPH <iri>`
+    /// restricts the inner pattern to that named graph via a
+    /// [`GraphScopedDataset`] view, and `GRAPH ?g` enumerates the dataset's
+    /// named graphs, scopes to each, and binds `?g`. It never silently ignores
+    /// the graph label.
     pub(crate) fn execute_parallel_graph(
         &self,
-        _graph: &AlgebraTerm,
+        graph: &AlgebraTerm,
         pattern: &Algebra,
         dataset: &dyn Dataset,
         context: &ExecutionContext,
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
-        // Execute pattern within the specified graph context
-        self.execute_parallel_internal(pattern, dataset, context, stats)
+        use crate::executor::dataset::{GraphScopedDataset, GraphSelector};
+        match graph {
+            AlgebraTerm::Iri(iri) => {
+                let scoped = GraphScopedDataset::new(dataset, GraphSelector::Named(iri.clone()));
+                self.execute_parallel_internal(pattern, &scoped, context, stats)
+            }
+            AlgebraTerm::Variable(var) => {
+                let graphs = dataset.named_graphs()?;
+                let mut combined = Solution::new();
+                for g in graphs {
+                    let iri = match &g {
+                        AlgebraTerm::Iri(n) => n.clone(),
+                        _ => continue,
+                    };
+                    let scoped = GraphScopedDataset::new(dataset, GraphSelector::Named(iri));
+                    let rows = self.execute_parallel_internal(pattern, &scoped, context, stats)?;
+                    for mut binding in rows {
+                        match binding.get(var) {
+                            Some(existing) if existing != &g => continue,
+                            Some(_) => combined.push(binding),
+                            None => {
+                                binding.insert(var.clone(), g.clone());
+                                combined.push(binding);
+                            }
+                        }
+                    }
+                }
+                Ok(combined)
+            }
+            other => Err(anyhow::anyhow!(
+                "GRAPH label must be an IRI or a variable, got: {other}"
+            )),
+        }
     }
 
     /// Execute projection in parallel

@@ -151,6 +151,10 @@ pub async fn create_dataset(
     // Check permissions
     // check_admin_permission(&auth_user, &Permission::SystemConfig)?;
 
+    // Mutates dataset existence -- must respect the read-only guard before
+    // any further validation or the (durable, disk-touching) creation below.
+    state.reject_if_read_only(&request.name, "dataset creation")?;
+
     // Validate dataset name
     validate_dataset_name(&request.name)?;
 
@@ -246,6 +250,10 @@ pub async fn delete_dataset(
     // Check permissions
     // check_admin_permission(&auth_user, &Permission::SystemConfig)?;
 
+    // Mutates dataset existence -- guard before touching the dataset manager
+    // or the live backing store.
+    state.reject_if_read_only(&dataset_name, "dataset deletion")?;
+
     if let Some(dataset_manager) = &state.dataset_manager {
         if dataset_manager.get_dataset(&dataset_name).await.is_ok() {
             dataset_manager.delete_dataset(&dataset_name).await?;
@@ -315,12 +323,18 @@ pub async fn server_info(
     )))
 }
 
-/// Get server statistics
-#[instrument(skip(state))]
-pub async fn server_stats(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<ServerStats>, FusekiError> {
-    let stats = if let Some(metrics_service) = &state.metrics_service {
+/// Collect the server-wide runtime statistics (uptime, request count,
+/// memory/CPU usage, active connections) that back both `GET /$/server`'s
+/// sibling admin endpoint and the `"runtime"` object nested in the merged
+/// `GET /$/stats` response (see `server::functions::stats_server_handler`).
+///
+/// Extracted from [`server_stats`] so the collection logic lives in exactly
+/// one place — `/$/stats` reuses it rather than re-deriving the same fields
+/// a second time (see commit 7b32c39f's removal of the duplicate `/$/stats`
+/// route, which silently dropped these fields from that endpoint's shape
+/// until this merge restored them additively).
+pub async fn collect_runtime_stats(state: &AppState) -> ServerStats {
+    if let Some(metrics_service) = &state.metrics_service {
         let summary = metrics_service.get_summary().await;
 
         ServerStats {
@@ -346,9 +360,15 @@ pub async fn server_stats(
             active_connections: 0,
             last_updated: chrono::Utc::now().to_rfc3339(),
         }
-    };
+    }
+}
 
-    Ok(Json(stats))
+/// Get server statistics
+#[instrument(skip(state))]
+pub async fn server_stats(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ServerStats>, FusekiError> {
+    Ok(Json(collect_runtime_stats(&state).await))
 }
 
 /// Returns `Ok(())` if `name` is a known dataset (statically configured or
@@ -383,6 +403,11 @@ pub async fn compact_dataset(
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     // Check permissions
     // check_admin_permission(&auth_user, &Permission::SystemConfig)?;
+
+    // Compaction is a store-mutating maintenance operation (even though the
+    // current backend has nothing to physically reclaim yet, see the
+    // function doc comment) -- guard it the same as any other write.
+    state.reject_if_read_only(&dataset_name, "dataset compaction")?;
 
     ensure_dataset_known(&state, &dataset_name).await?;
 
@@ -419,6 +444,14 @@ pub async fn compact_dataset(
 /// falling back to the default backing store when no distinct named store
 /// was registered for `dataset_name`) in the requested RDF format, instead
 /// of returning fixed placeholder triples.
+///
+/// Classification (read_only guard NOT applied): this handler only *reads*
+/// the dataset and serializes a snapshot to the HTTP response body -- it
+/// never writes to the store. Backup *creation* is intentionally exempt
+/// from the read_only write guard (unlike restore-from-backup, which would
+/// mutate the store and must be guarded); see `create_dataset`,
+/// `delete_dataset`, and `compact_dataset` above for the mutating siblings
+/// that are guarded.
 #[instrument(skip(state))]
 pub async fn backup_dataset(
     State(state): State<Arc<AppState>>,
@@ -1060,6 +1093,18 @@ pub struct ReloadResponse {
 pub async fn reload_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ReloadResponse>, FusekiError> {
+    // Reloading can create/delete datasets via `state.dataset_manager` (see
+    // the dataset diff below), so it mutates dataset existence just like
+    // `POST /$/datasets/{name}` and `DELETE /$/datasets/{name}` and must
+    // respect the same read-only guard. Unlike those endpoints this
+    // operation is not scoped to a single path-parameter dataset name, so it
+    // is guarded on the resolved "default"/sole-dataset key (see
+    // `AppState::is_dataset_read_only`) rather than per-affected-dataset.
+    state.reject_if_read_only(
+        "default",
+        "configuration reload (may create or delete datasets)",
+    )?;
+
     info!("Configuration reload requested");
 
     let config_file = state

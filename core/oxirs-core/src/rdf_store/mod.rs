@@ -1497,6 +1497,16 @@ impl Store for RdfStore {
         ))
     }
 
+    /// Enumerate named graphs via the interned graph-name index
+    /// (`storage.named_graphs`, a `BTreeSet` maintained incrementally on
+    /// insert/remove) rather than the trait default's empty `Vec`. This
+    /// resolves to `RdfStore`'s inherent `named_graphs` (inherent methods take
+    /// priority over trait methods of the same name), which is O(graphs) for
+    /// the Memory/Persistent backends instead of an O(quads) streaming scan.
+    fn named_graphs(&self) -> Result<Vec<NamedNode>> {
+        self.named_graphs()
+    }
+
     /// Bulk-insert override: one write lock for the whole batch and, for the
     /// durable backend, one append + exactly one `fsync` for the batch (via
     /// [`PersistentState::append_lines`]) instead of a per-quad fsync loop.
@@ -1557,8 +1567,11 @@ impl Store for RdfStore {
     /// Streaming scan override: visit each matching quad without building a
     /// result `Vec`. For the in-memory / persistent backends the read lock is
     /// held for the duration of the scan and each quad is handed to `f` in
-    /// deterministic `Quad` order; the callback must not re-enter the store for
-    /// a write (that would deadlock on the same lock).
+    /// deterministic *index (term-interning) order* — which differs from the
+    /// `Quad`-ordered [`quads`](RdfStore::quads)/[`find_quads`](Store::find_quads)
+    /// result order but visits exactly the same set (RDF is unordered, so
+    /// serialization consumers do not depend on the order); the callback must not
+    /// re-enter the store for a write (that would deadlock on the same lock).
     fn for_each_quad(
         &self,
         subject: Option<&Subject>,
@@ -1651,10 +1664,56 @@ mod bulk_and_scan_tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// After the interned-only refactor (no owned quad set), a durable delete
+    /// still compacts the on-disk file *from the interned indexes* on flush, and
+    /// a reopen observes exactly the surviving quads. This exercises the
+    /// `PersistentState::compact` path that now streams `storage.iter_quads()`.
+    #[test]
+    fn persistent_delete_compacts_from_interned_state_and_reopens() {
+        let dir = unique_dir("delete_compact");
+        let g = GraphName::NamedNode(NamedNode::new("http://example.org/g").expect("graph IRI"));
+        let keep_a = quad("http://example.org/a", "1", GraphName::DefaultGraph);
+        let drop_b = quad("http://example.org/b", "2", GraphName::DefaultGraph);
+        let keep_c = quad("http://example.org/c", "3", g.clone());
+
+        {
+            let store = RdfStore::open(&dir).expect("open persistent store");
+            store.insert_quad(keep_a.clone()).expect("insert a");
+            store.insert_quad(drop_b.clone()).expect("insert b");
+            store.insert_quad(keep_c.clone()).expect("insert c");
+            store.flush().expect("flush appends");
+            assert_eq!(store.len().expect("len"), 3);
+
+            // Delete one quad; this only mutates memory + marks dirty.
+            assert!(store.remove_quad(&drop_b).expect("remove b"));
+            assert_eq!(store.len().expect("len"), 2);
+            assert!(!store.contains_quad(&drop_b).expect("contains b"));
+
+            // Flush compacts: the file is rewritten from the interned indexes.
+            store.flush().expect("flush compaction");
+            let data = std::fs::read_to_string(dir.join("data.nq")).expect("read data.nq");
+            let lines = data.lines().filter(|l| !l.trim().is_empty()).count();
+            assert_eq!(lines, 2, "compacted file holds only the surviving quads");
+        }
+
+        // Reopen: the deletion is durable and only the kept quads survive.
+        let reopened = RdfStore::open(&dir).expect("reopen persistent store");
+        assert_eq!(reopened.len().expect("len"), 2);
+        assert!(reopened.contains_quad(&keep_a).expect("contains a"));
+        assert!(reopened.contains_quad(&keep_c).expect("contains c"));
+        assert!(!reopened.contains_quad(&drop_b).expect("not contains b"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// `for_each_quad` visits exactly the quads matching the pattern (and no
-    /// others), in the same order as `find_quads`, across backends.
+    /// others) across backends. It streams in index (term-interning) order,
+    /// which need not equal `find_quads`' `Quad` order, so content is compared
+    /// as a set.
     #[test]
     fn for_each_quad_visits_exactly_matching_quads() {
+        use std::collections::BTreeSet;
+
         let store = RdfStore::new().expect("in-memory store");
         let g = GraphName::NamedNode(NamedNode::new("http://example.org/g").expect("graph IRI"));
         Store::bulk_insert_quads(
@@ -1667,14 +1726,16 @@ mod bulk_and_scan_tests {
         )
         .expect("seed");
 
-        // Unbound pattern visits every quad, and matches find_quads ordering.
+        // Unbound pattern visits exactly the same set as find_quads.
         let mut visited: Vec<Quad> = Vec::new();
         Store::for_each_quad(&store, None, None, None, None, &mut |q| visited.push(q))
             .expect("scan all");
         let via_find = store.find_quads(None, None, None, None).expect("find all");
+        let visited_set: BTreeSet<Quad> = visited.iter().cloned().collect();
+        let find_set: BTreeSet<Quad> = via_find.into_iter().collect();
         assert_eq!(
-            visited, via_find,
-            "scan must match find_quads order/content"
+            visited_set, find_set,
+            "scan must match find_quads content (set-equal)"
         );
         assert_eq!(visited.len(), 3);
 
@@ -1694,5 +1755,127 @@ mod bulk_and_scan_tests {
         .expect("scan by object");
         assert_eq!(by_obj.len(), 1);
         assert_eq!(by_obj[0].object(), &obj);
+    }
+}
+
+/// Tests for `Store::named_graphs()` exercised strictly through the trait
+/// interface (`&dyn Store`) so they prove the per-impl overrides -- not the
+/// trait's empty-`Vec` default -- are what actually runs. See the override in
+/// `impl Store for RdfStore` above and `impl Store for ConcreteStore` in
+/// `concrete.rs`.
+#[cfg(test)]
+mod named_graphs_trait_tests {
+    use super::*;
+    use crate::model::{GraphName, Literal, NamedNode, Quad};
+
+    fn quad(s: &str, o: &str, g: GraphName) -> Quad {
+        Quad::new(
+            NamedNode::new(s).expect("subject IRI"),
+            NamedNode::new("http://example.org/p").expect("predicate IRI"),
+            Literal::new_simple_literal(o),
+            g,
+        )
+    }
+
+    /// Seeds two default-graph quads (must be excluded from `named_graphs()`)
+    /// plus three named graphs, one of which (`g1`) gets two quads so a
+    /// naive implementation that doesn't dedup would over-report.
+    fn seed(store: &dyn Store) {
+        let g1 = GraphName::NamedNode(NamedNode::new("http://example.org/g1").expect("g1 IRI"));
+        let g2 = GraphName::NamedNode(NamedNode::new("http://example.org/g2").expect("g2 IRI"));
+        let g3 = GraphName::NamedNode(NamedNode::new("http://example.org/g3").expect("g3 IRI"));
+
+        store
+            .insert_quad(quad("http://example.org/a", "1", GraphName::DefaultGraph))
+            .expect("insert default graph quad 1");
+        store
+            .insert_quad(quad("http://example.org/b", "2", GraphName::DefaultGraph))
+            .expect("insert default graph quad 2");
+
+        store
+            .insert_quad(quad("http://example.org/c", "3", g1.clone()))
+            .expect("insert g1 quad 1");
+        store
+            .insert_quad(quad("http://example.org/d", "4", g1.clone()))
+            .expect("insert g1 quad 2");
+        store
+            .insert_quad(quad("http://example.org/e", "5", g2.clone()))
+            .expect("insert g2 quad");
+        store
+            .insert_quad(quad("http://example.org/f", "6", g3.clone()))
+            .expect("insert g3 quad");
+    }
+
+    /// Asserts `named_graphs()` returns exactly `{g1, g2, g3}`: the default
+    /// graph is absent and `g1` (which holds two quads) appears once.
+    fn assert_exactly_three_named_graphs(store: &dyn Store) {
+        let mut graphs: Vec<String> = store
+            .named_graphs()
+            .expect("named_graphs via Store trait")
+            .into_iter()
+            .map(|n| n.as_str().to_string())
+            .collect();
+        graphs.sort();
+        graphs.dedup();
+        assert_eq!(
+            graphs,
+            vec![
+                "http://example.org/g1".to_string(),
+                "http://example.org/g2".to_string(),
+                "http://example.org/g3".to_string(),
+            ],
+            "named_graphs() through the Store trait must return exactly the \
+             named graphs (default graph excluded, no duplicates)"
+        );
+    }
+
+    /// In-memory backend: `Store::named_graphs`, called through a `dyn Store`
+    /// trait object, must return the real graph list from the interned
+    /// `BTreeSet` dictionary -- not the trait default's empty `Vec` -- and
+    /// must not include the default graph or duplicate any graph name.
+    #[test]
+    fn dyn_store_named_graphs_in_memory_excludes_default_and_dedups() {
+        let store = RdfStore::new().expect("in-memory store");
+        seed(&store);
+        let dyn_store: &dyn Store = &store;
+        assert_exactly_three_named_graphs(dyn_store);
+    }
+
+    /// Persistent backend (temp-dir-backed): same contract as the in-memory
+    /// case, exercised through `dyn Store` so the test proves the trait
+    /// override -- not just the pre-existing inherent method -- is wired up,
+    /// and that the graph index survives a durable close/reopen round-trip.
+    #[test]
+    fn dyn_store_named_graphs_persistent_excludes_default_and_dedups() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("oxirs_named_graphs_trait_{nanos}"));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        {
+            let store = RdfStore::open(&dir).expect("open persistent store");
+            seed(&store);
+            let dyn_store: &dyn Store = &store;
+            assert_exactly_three_named_graphs(dyn_store);
+        }
+
+        let reopened = RdfStore::open(&dir).expect("reopen persistent store");
+        let dyn_reopened: &dyn Store = &reopened;
+        assert_exactly_three_named_graphs(dyn_reopened);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// `ConcreteStore` wraps an inner `RdfStore` behind a lock; its
+    /// `Store::named_graphs` override must delegate through to the same
+    /// interned-index lookup rather than falling back on the trait default.
+    #[test]
+    fn dyn_store_named_graphs_concrete_store_delegates() {
+        let store = ConcreteStore::new().expect("concrete store");
+        seed(&store);
+        let dyn_store: &dyn Store = &store;
+        assert_exactly_three_named_graphs(dyn_store);
     }
 }

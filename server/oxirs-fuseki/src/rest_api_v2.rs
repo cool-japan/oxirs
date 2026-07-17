@@ -326,7 +326,7 @@ pub enum ApiError {
     BadRequest(String),
     InternalError(anyhow::Error),
     Unauthorized,
-    Forbidden,
+    Forbidden(String),
 }
 
 impl IntoResponse for ApiError {
@@ -344,11 +344,7 @@ impl IntoResponse for ApiError {
                 "UNAUTHORIZED",
                 "Authentication required".to_string(),
             ),
-            ApiError::Forbidden => (
-                StatusCode::FORBIDDEN,
-                "FORBIDDEN",
-                "Access denied".to_string(),
-            ),
+            ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, "FORBIDDEN", msg),
         };
 
         let error = ErrorResponse {
@@ -359,6 +355,24 @@ impl IntoResponse for ApiError {
         };
 
         (status, Json(error)).into_response()
+    }
+}
+
+/// Bridges [`crate::error::FusekiError`] (the type
+/// `AppState::reject_if_read_only` returns) into this module's own
+/// [`ApiError`], so `?` can propagate the shared read-only guard directly
+/// out of every REST v2 handler below without hand-rolling a duplicate
+/// check-and-403 per call site. Only the read-only guard's `Forbidden`
+/// outcome is expected to cross this boundary in practice; any other
+/// `FusekiError` is mapped conservatively to `InternalError` rather than
+/// silently discarding its status code.
+impl From<crate::error::FusekiError> for ApiError {
+    fn from(err: crate::error::FusekiError) -> Self {
+        if err.status_code() == StatusCode::FORBIDDEN {
+            ApiError::Forbidden(err.to_string())
+        } else {
+            ApiError::InternalError(anyhow::anyhow!(err.to_string()))
+        }
     }
 }
 
@@ -498,6 +512,10 @@ pub async fn create_dataset(
     State(state): State<Arc<AppState>>,
     Json(request): Json<CreateDatasetRequest>,
 ) -> Result<(StatusCode, Json<Dataset>), ApiError> {
+    // Mutates dataset existence -- guard before any further validation or
+    // the on-disk creation below.
+    state.reject_if_read_only(&request.name, "dataset creation")?;
+
     let store = &state.store;
     if store.dataset_exists(&request.name) {
         return Err(ApiError::BadRequest(format!(
@@ -553,6 +571,9 @@ pub async fn delete_dataset(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    // Mutates dataset existence -- guard before touching the store.
+    state.reject_if_read_only(&name, "dataset deletion")?;
+
     let store = &state.store;
     if !store.dataset_exists(&name) {
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
@@ -719,6 +740,11 @@ pub async fn insert_triple(
     Path(name): Path<String>,
     Json(request): Json<InsertTripleRequest>,
 ) -> Result<StatusCode, ApiError> {
+    // Direct triple-level write -- guard before any parsing or mutation,
+    // same as the SPARQL Update / Graph Store Protocol / upload / patch
+    // write paths.
+    state.reject_if_read_only(&name, "triple insertion")?;
+
     let store = &state.store;
     if !store.dataset_exists(&name) {
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
@@ -769,6 +795,9 @@ pub async fn delete_triple(
     Path(name): Path<String>,
     Json(request): Json<DeleteTripleRequest>,
 ) -> Result<StatusCode, ApiError> {
+    // Direct triple-level write -- guard before any parsing or mutation.
+    state.reject_if_read_only(&name, "triple deletion")?;
+
     let store = &state.store;
     if !store.dataset_exists(&name) {
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
@@ -915,5 +944,102 @@ mod tests {
         };
 
         assert_eq!(error.code, "TEST_ERROR");
+    }
+
+    fn read_only_default_state() -> Arc<AppState> {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = crate::config::ServerConfig::default();
+        config.datasets.insert(
+            "default".to_string(),
+            crate::config::DatasetConfig {
+                name: "default".to_string(),
+                location: String::new(),
+                read_only: true,
+                text_index: None,
+                shacl_shapes: vec![],
+                services: vec![],
+                access_control: None,
+                backup: None,
+            },
+        );
+        Arc::new(crate::server::test_app::build_minimal_app_state(
+            store, config,
+        ))
+    }
+
+    /// Regression for the most severe gap found by the Task 2 route audit:
+    /// `POST /api/v2/datasets/{name}/triples` (`insert_triple`) is a direct
+    /// triple-level write that completely bypassed `read_only` before this
+    /// guard was added -- unlike SPARQL UPDATE / Graph Store Protocol /
+    /// `/upload` / `/patch`, which were already covered.
+    #[tokio::test]
+    async fn test_insert_triple_rejected_when_dataset_read_only() {
+        let state = read_only_default_state();
+        let result = insert_triple(
+            State(state),
+            Path("default".to_string()),
+            Json(InsertTripleRequest {
+                triples: vec![Triple {
+                    subject: "http://example.org/s".to_string(),
+                    predicate: "http://example.org/p".to_string(),
+                    object: "http://example.org/o".to_string(),
+                    object_type: "uri".to_string(),
+                }],
+                graph: None,
+            }),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(ApiError::Forbidden(_))),
+            "expected Forbidden, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_triple_rejected_when_dataset_read_only() {
+        let state = read_only_default_state();
+        let result = delete_triple(
+            State(state),
+            Path("default".to_string()),
+            Json(DeleteTripleRequest {
+                subject: None,
+                predicate: None,
+                object: None,
+                graph: None,
+            }),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(ApiError::Forbidden(_))),
+            "expected Forbidden, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_dataset_rejected_when_target_dataset_read_only() {
+        let state = read_only_default_state();
+        let result = create_dataset(
+            State(state),
+            Json(CreateDatasetRequest {
+                name: "default".to_string(),
+                description: None,
+                storage_type: default_storage_type(),
+            }),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(ApiError::Forbidden(_))),
+            "expected Forbidden, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_dataset_rejected_when_dataset_read_only() {
+        let state = read_only_default_state();
+        let result = delete_dataset(State(state), Path("default".to_string())).await;
+        assert!(
+            matches!(result, Err(ApiError::Forbidden(_))),
+            "expected Forbidden, got {result:?}"
+        );
     }
 }

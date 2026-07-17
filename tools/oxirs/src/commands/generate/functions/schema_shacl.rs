@@ -3,60 +3,243 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::super::types::*;
-use oxirs_core::model::{GraphName, Literal, NamedNode, Quad, Subject, Term};
+use super::schema_detect::detect_rdf_format;
+use oxirs_core::format::RdfParser;
+use oxirs_core::model::{GraphName, Literal, NamedNode, Object, Quad, Subject, Term};
+use oxirs_core::RdfTerm;
 use scirs2_core::RngExt;
+use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
+use std::io::BufReader;
 
-/// Parse SHACL shapes from file (simplified implementation)
+const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const SH_NODE_SHAPE: &str = "http://www.w3.org/ns/shacl#NodeShape";
+const SH_PROPERTY_SHAPE: &str = "http://www.w3.org/ns/shacl#PropertyShape";
+const SH_TARGET_CLASS: &str = "http://www.w3.org/ns/shacl#targetClass";
+const SH_PROPERTY: &str = "http://www.w3.org/ns/shacl#property";
+const SH_PATH: &str = "http://www.w3.org/ns/shacl#path";
+const SH_DATATYPE: &str = "http://www.w3.org/ns/shacl#datatype";
+const SH_MIN_COUNT: &str = "http://www.w3.org/ns/shacl#minCount";
+const SH_MAX_COUNT: &str = "http://www.w3.org/ns/shacl#maxCount";
+const SH_PATTERN: &str = "http://www.w3.org/ns/shacl#pattern";
+const SH_MIN_LENGTH: &str = "http://www.w3.org/ns/shacl#minLength";
+const SH_MAX_LENGTH: &str = "http://www.w3.org/ns/shacl#maxLength";
+const SH_MIN_INCLUSIVE: &str = "http://www.w3.org/ns/shacl#minInclusive";
+const SH_MAX_INCLUSIVE: &str = "http://www.w3.org/ns/shacl#maxInclusive";
+const SH_NODE_KIND: &str = "http://www.w3.org/ns/shacl#nodeKind";
+const SH_CLASS: &str = "http://www.w3.org/ns/shacl#class";
+
+/// Parse SHACL shapes from the user's schema file.
+///
+/// Reads and parses the file with the real RDF parser, then extracts node shapes
+/// that carry a `sh:targetClass` together with their property constraints.
+/// Property shapes referenced by `sh:property` are followed whether they are
+/// named nodes or blank nodes. A missing, unparseable, or malformed file is
+/// surfaced as an explicit error; there is no fallback to placeholder data.
 pub(super) fn parse_shacl_shapes(
-    _path: &std::path::PathBuf,
-    _ctx: &crate::cli::CliContext,
+    path: &std::path::PathBuf,
+    ctx: &crate::cli::CliContext,
 ) -> Result<Vec<ShaclShape>, Box<dyn Error>> {
-    let person_shape = ShaclShape {
-        target_class: Some("http://xmlns.com/foaf/0.1/Person".to_string()),
-        properties: vec![
-            PropertyConstraint {
-                path: "http://xmlns.com/foaf/0.1/name".to_string(),
-                min_count: Some(1),
-                max_count: Some(1),
-                datatype: Some("http://www.w3.org/2001/XMLSchema#string".to_string()),
-                pattern: None,
-                min_length: Some(1),
-                max_length: Some(100),
-                min_inclusive: None,
-                max_inclusive: None,
-                node_kind: Some("Literal".to_string()),
-                class: None,
-            },
-            PropertyConstraint {
-                path: "http://xmlns.com/foaf/0.1/age".to_string(),
-                min_count: Some(0),
-                max_count: Some(1),
-                datatype: Some("http://www.w3.org/2001/XMLSchema#integer".to_string()),
-                pattern: None,
-                min_length: None,
-                max_length: None,
-                min_inclusive: Some("0".to_string()),
-                max_inclusive: Some("150".to_string()),
-                node_kind: Some("Literal".to_string()),
-                class: None,
-            },
-            PropertyConstraint {
-                path: "http://xmlns.com/foaf/0.1/email".to_string(),
-                min_count: Some(1),
-                max_count: None,
-                datatype: Some("http://www.w3.org/2001/XMLSchema#string".to_string()),
-                pattern: Some("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$".to_string()),
-                min_length: None,
-                max_length: None,
-                min_inclusive: None,
-                max_inclusive: None,
-                node_kind: Some("Literal".to_string()),
-                class: None,
-            },
-        ],
+    let format = detect_rdf_format(path)?;
+    let file = fs::File::open(path)?;
+    let reader = BufReader::new(file);
+    let parser = RdfParser::new(format);
+
+    let mut quads = Vec::new();
+    for quad_result in parser.for_reader(reader) {
+        quads.push(quad_result?);
+    }
+    ctx.info(&format!("Parsed {} RDF quads", quads.len()));
+
+    Ok(extract_shacl_shapes(&quads))
+}
+
+/// Identifier for a subject that can anchor a shape (named node or blank node).
+fn subject_key(subject: &Subject) -> Option<&str> {
+    match subject {
+        Subject::NamedNode(nn) => Some(nn.as_str()),
+        Subject::BlankNode(bn) => Some(bn.as_str()),
+        _ => None,
+    }
+}
+
+/// Identifier for an object that references another node (named or blank).
+fn object_key(object: &Object) -> Option<&str> {
+    match object {
+        Object::NamedNode(nn) => Some(nn.as_str()),
+        Object::BlankNode(bn) => Some(bn.as_str()),
+        _ => None,
+    }
+}
+
+/// Map a `sh:nodeKind` IRI to the label the value generator understands.
+fn node_kind_label(uri: &str) -> Option<String> {
+    match uri {
+        "http://www.w3.org/ns/shacl#IRI" => Some("IRI".to_string()),
+        "http://www.w3.org/ns/shacl#Literal" => Some("Literal".to_string()),
+        "http://www.w3.org/ns/shacl#BlankNode" => Some("BlankNode".to_string()),
+        "http://www.w3.org/ns/shacl#BlankNodeOrIRI" => Some("BlankNodeOrIRI".to_string()),
+        "http://www.w3.org/ns/shacl#BlankNodeOrLiteral" => Some("BlankNodeOrLiteral".to_string()),
+        "http://www.w3.org/ns/shacl#IRIOrLiteral" => Some("IRIOrLiteral".to_string()),
+        _ => None,
+    }
+}
+
+/// Extract SHACL node shapes (with target classes) from parsed quads.
+fn extract_shacl_shapes(quads: &[Quad]) -> Vec<ShaclShape> {
+    let mut shape_map: HashMap<String, ShaclShape> = HashMap::new();
+
+    // Pass 1: register shape subjects and their target classes.
+    for quad in quads {
+        let Some(subject) = subject_key(quad.subject()) else {
+            continue;
+        };
+        match quad.predicate().as_str() {
+            SH_TARGET_CLASS => {
+                if let Object::NamedNode(nn) = quad.object() {
+                    shape_map
+                        .entry(subject.to_string())
+                        .or_insert_with(new_shape)
+                        .target_class = Some(nn.as_str().to_string());
+                }
+            }
+            RDF_TYPE => {
+                if let Object::NamedNode(nn) = quad.object() {
+                    if matches!(nn.as_str(), SH_NODE_SHAPE | SH_PROPERTY_SHAPE) {
+                        shape_map
+                            .entry(subject.to_string())
+                            .or_insert_with(new_shape);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Pass 2: attach property constraints referenced via sh:property.
+    for quad in quads {
+        let Some(subject) = subject_key(quad.subject()) else {
+            continue;
+        };
+        if quad.predicate().as_str() != SH_PROPERTY || !shape_map.contains_key(subject) {
+            continue;
+        }
+        let Some(prop_ref) = object_key(quad.object()) else {
+            continue;
+        };
+        if let Some(constraint) = extract_property_constraint(prop_ref, quads) {
+            if let Some(shape) = shape_map.get_mut(subject) {
+                shape.properties.push(constraint);
+            }
+        }
+    }
+
+    // Only shapes with a target class can seed instance generation. Sort for
+    // reproducible output given a seed.
+    let mut shapes: Vec<ShaclShape> = shape_map
+        .into_values()
+        .filter(|shape| shape.target_class.is_some())
+        .collect();
+    shapes.sort_by(|a, b| a.target_class.cmp(&b.target_class));
+    shapes
+}
+
+/// Extract a single property constraint from the triples of a property shape.
+fn extract_property_constraint(prop_ref: &str, quads: &[Quad]) -> Option<PropertyConstraint> {
+    let mut constraint = PropertyConstraint {
+        path: String::new(),
+        min_count: None,
+        max_count: None,
+        datatype: None,
+        pattern: None,
+        min_length: None,
+        max_length: None,
+        min_inclusive: None,
+        max_inclusive: None,
+        node_kind: None,
+        class: None,
     };
-    Ok(vec![person_shape])
+
+    for quad in quads {
+        let Some(subject) = subject_key(quad.subject()) else {
+            continue;
+        };
+        if subject != prop_ref {
+            continue;
+        }
+        match quad.predicate().as_str() {
+            SH_PATH => {
+                if let Object::NamedNode(nn) = quad.object() {
+                    constraint.path = nn.as_str().to_string();
+                }
+            }
+            SH_DATATYPE => {
+                if let Object::NamedNode(nn) = quad.object() {
+                    constraint.datatype = Some(nn.as_str().to_string());
+                }
+            }
+            SH_MIN_COUNT => {
+                if let Object::Literal(lit) = quad.object() {
+                    constraint.min_count = lit.value().parse().ok();
+                }
+            }
+            SH_MAX_COUNT => {
+                if let Object::Literal(lit) = quad.object() {
+                    constraint.max_count = lit.value().parse().ok();
+                }
+            }
+            SH_PATTERN => {
+                if let Object::Literal(lit) = quad.object() {
+                    constraint.pattern = Some(lit.value().to_string());
+                }
+            }
+            SH_MIN_LENGTH => {
+                if let Object::Literal(lit) = quad.object() {
+                    constraint.min_length = lit.value().parse().ok();
+                }
+            }
+            SH_MAX_LENGTH => {
+                if let Object::Literal(lit) = quad.object() {
+                    constraint.max_length = lit.value().parse().ok();
+                }
+            }
+            SH_MIN_INCLUSIVE => {
+                if let Object::Literal(lit) = quad.object() {
+                    constraint.min_inclusive = Some(lit.value().to_string());
+                }
+            }
+            SH_MAX_INCLUSIVE => {
+                if let Object::Literal(lit) = quad.object() {
+                    constraint.max_inclusive = Some(lit.value().to_string());
+                }
+            }
+            SH_NODE_KIND => {
+                if let Object::NamedNode(nn) = quad.object() {
+                    constraint.node_kind = node_kind_label(nn.as_str());
+                }
+            }
+            SH_CLASS => {
+                if let Object::NamedNode(nn) = quad.object() {
+                    constraint.class = Some(nn.as_str().to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if constraint.path.is_empty() {
+        None
+    } else {
+        Some(constraint)
+    }
+}
+
+fn new_shape() -> ShaclShape {
+    ShaclShape {
+        target_class: None,
+        properties: Vec::new(),
+    }
 }
 
 /// Generate RDF data conforming to SHACL shapes
@@ -251,4 +434,106 @@ pub(super) fn generate_decimal_value<R: RngExt>(
         .unwrap_or(1000.0);
     let value = min + (max - min) * (rng.random_range(0..10000) as f64 / 10000.0);
     format!("{:.2}", value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use scirs2_core::random::Random;
+    use std::io::Write;
+
+    const SHACL_TTL: &str = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://catalog.example/> .
+
+ex:ProductShape a sh:NodeShape ;
+    sh:targetClass ex:Product ;
+    sh:property [
+        sh:path ex:sku ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path ex:price ;
+        sh:datatype xsd:integer ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:minInclusive 1 ;
+        sh:maxInclusive 100 ;
+    ] .
+"#;
+
+    fn write_temp(name: &str, content: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "oxirs_gen_shacl_{}_{}.ttl",
+            std::process::id(),
+            name
+        ));
+        let mut file = std::fs::File::create(&path).expect("create temp shapes file");
+        file.write_all(content.as_bytes())
+            .expect("write temp shapes file");
+        path
+    }
+
+    fn dump(quads: &[Quad]) -> String {
+        quads
+            .iter()
+            .map(|q| format!("{:?}", q))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn parses_user_shacl_shapes_and_generates_their_iris() {
+        let ctx = crate::cli::CliContext::new();
+        let path = write_temp("basic", SHACL_TTL);
+        let shapes = parse_shacl_shapes(&path, &ctx).expect("parse shacl shapes");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(shapes.len(), 1);
+        let shape = &shapes[0];
+        assert_eq!(
+            shape.target_class.as_deref(),
+            Some("http://catalog.example/Product")
+        );
+        // Blank-node property shapes must be followed and their paths captured.
+        let paths: Vec<&str> = shape.properties.iter().map(|p| p.path.as_str()).collect();
+        assert!(paths.contains(&"http://catalog.example/sku"));
+        assert!(paths.contains(&"http://catalog.example/price"));
+        // The old placeholder shape (foaf:Person) must never leak in.
+        assert!(shape.target_class.as_deref() != Some("http://xmlns.com/foaf/0.1/Person"));
+
+        let mut rng = Random::seed(23);
+        let quads = generate_from_shapes(&mut rng, &shapes, 5).expect("generate");
+        assert!(!quads.is_empty());
+        let text = dump(&quads);
+        assert!(text.contains("http://catalog.example/Product"));
+        assert!(text.contains("http://catalog.example/sku"));
+        assert!(text.contains("http://catalog.example/price"));
+        assert!(!text.contains("foaf/0.1/Person"));
+    }
+
+    #[test]
+    fn nonexistent_shacl_file_is_error() {
+        let ctx = crate::cli::CliContext::new();
+        let mut path = std::env::temp_dir();
+        path.push("oxirs_gen_shacl_missing_zzz_does_not_exist.ttl");
+        assert!(parse_shacl_shapes(&path, &ctx).is_err());
+    }
+
+    #[test]
+    fn malformed_shacl_file_is_error() {
+        let ctx = crate::cli::CliContext::new();
+        let path = write_temp(
+            "malformed",
+            "@prefix sh: <http://x/> .\nex:S a sh:NodeShape ; << broken",
+        );
+        let result = parse_shacl_shapes(&path, &ctx);
+        std::fs::remove_file(&path).ok();
+        assert!(result.is_err());
+    }
 }

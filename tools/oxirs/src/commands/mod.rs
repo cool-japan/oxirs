@@ -64,8 +64,6 @@ pub mod aspect_analyzer_formats;
 pub mod aspect_analyzer_runner;
 mod aspect_analyzer_tests;
 pub mod aspect_analyzer_types;
-mod aspect_tests;
-pub mod aspect_types;
 
 /// AAS (Asset Administration Shell) commands (Java ESMF SDK compatible)
 pub mod aas;
@@ -81,9 +79,6 @@ pub mod query_optimizer;
 
 /// Intelligent query advisor with best practices
 pub mod query_advisor;
-
-/// Advanced statistical performance analyzer (SciRS2-powered)
-pub mod performance_analyzer;
 
 /// Performance optimization utilities (SciRS2-powered)
 pub mod performance_optimizer;
@@ -153,12 +148,6 @@ pub mod result_cache;
 /// Stream processing CLI commands
 pub mod stream;
 
-/// Streaming SPARQL query results (NDJSON, CSV-stream, TSV-stream)
-pub mod query_stream;
-
-/// ML-based query optimization advisor
-pub mod ml_advisor;
-
 /// Query history store with analytics and CSV export
 pub mod query_history;
 
@@ -168,38 +157,8 @@ pub mod data_profiler;
 /// RDF schema inferencer (class/property discovery, domain/range, cardinality)
 pub mod schema_inferencer;
 
-/// SPARQL benchmark runner with statistical metrics and regression detection
-pub mod benchmark_runner;
-
 /// SPARQL query validator (syntax, structure, prefixes, variables)
 pub mod query_validator;
-
-/// Multi-format RDF data exporter (Turtle, N-Triples, N-Quads, JSON-LD, RDF/XML, TriG, CSV)
-pub mod export_command;
-
-/// Multi-format RDF data importer (Turtle, N-Triples, N-Quads, JSON-LD, RDF/XML, TriG, CSV)
-pub mod import_command;
-
-/// Core data types for the multi-format RDF importer
-pub mod import_command_types;
-
-/// Format-specific parsers for the multi-format RDF importer
-pub mod import_command_formats;
-
-/// Import execution, format detection, and shared helpers for the RDF importer
-pub mod import_command_runner;
-
-#[cfg(test)]
-mod import_command_tests;
-
-/// SHACL/RDF validation CLI command (simulated SHACL validation with text/JSON/Turtle output)
-pub mod validate_command;
-
-/// RDF format conversion CLI command (N-Triples, N-Quads, Turtle, TriG, JSON-LD, RDF/XML, CSV)
-pub mod convert_command;
-
-/// RDF graph diff/comparison command (added/removed/common triples + similarity score)
-pub mod diff_command;
 
 /// RDF dataset statistics command (triple counts, unique URIs, predicate analysis)
 pub mod stats_command;
@@ -213,17 +172,8 @@ pub mod lint_command;
 /// RDF merge command (set-union, blank node renaming, conflict detection, provenance tracking)
 pub mod merge_command;
 
-/// SPARQL query command with multi-format output (Table, JSON, CSV, TSV) and validation
-pub mod query_command;
-
 /// RDF graph inspection command (triple count, predicates, subjects, namespaces, connectivity, object types)
 pub mod inspect_command;
-
-/// SPARQL query profiler CLI command (analyzes query complexity and estimates cost)
-pub mod profile_command;
-
-/// SPARQL endpoint benchmark CLI command (simulated load testing with statistical analysis)
-pub mod benchmark_command;
 
 /// Server lifecycle management command (config validation + dry-run start)
 pub mod serve_command;

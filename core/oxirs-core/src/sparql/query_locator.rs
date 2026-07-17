@@ -12,15 +12,17 @@
 //! module provides scanner-based helpers that:
 //!
 //! 1. locate the `WHERE` keyword only when it appears as a stand-alone,
-//!    top-level word (never inside an IRI `<...>` or a string literal), and
+//!    top-level word (never inside an IRI `<...>`, a string literal, or a `#`
+//!    line comment), and
 //! 2. fall back to the first top-level `{ ... }` group when `WHERE` is omitted,
 //!    honoring the fact that for a `CONSTRUCT` query the first group is the
 //!    template and the graph pattern is the group that follows it.
 //!
 //! All offsets returned are **byte** indices into the original `sparql` string
 //! and always fall on `char` boundaries (the markers scanned — `{`, `}`, `<`,
-//! `>`, `"`, `'`, `\` and the ASCII keyword bytes — are all single-byte ASCII,
-//! and UTF-8 continuation bytes never collide with them).
+//! `>`, `"`, `'`, `\`, `#`, the `\n` that ends a comment, and the ASCII keyword
+//! bytes — are all single-byte ASCII, and UTF-8 continuation bytes never collide
+//! with them).
 
 /// The top-level result form of a SPARQL query.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,10 +48,11 @@ fn is_ident_byte(b: u8) -> bool {
 
 /// Find the byte offset of `keyword` occurring as a stand-alone, top-level word.
 ///
-/// The match is ASCII case-insensitive. Occurrences inside an IRI (`<...>`) or a
-/// string literal (`"..."` / `'...'`) are ignored, as are occurrences that are
-/// adjacent to other identifier characters (so `WHERE` never matches inside
-/// `somewhere`). Returns the byte index of the first qualifying match.
+/// The match is ASCII case-insensitive. Occurrences inside an IRI (`<...>`), a
+/// string literal (`"..."` / `'...'`), or a `#` line comment are ignored, as are
+/// occurrences that are adjacent to other identifier characters (so `WHERE`
+/// never matches inside `somewhere`). Returns the byte index of the first
+/// qualifying match.
 pub fn find_keyword(sparql: &str, keyword: &str) -> Option<usize> {
     let bytes = sparql.as_bytes();
     let kw = keyword.as_bytes();
@@ -61,6 +64,7 @@ pub fn find_keyword(sparql: &str, keyword: &str) -> Option<usize> {
 
     let mut in_string: Option<u8> = None;
     let mut in_iri = false;
+    let mut in_comment = false;
     let mut escaped = false;
     let mut i = 0usize;
 
@@ -87,6 +91,14 @@ pub fn find_keyword(sparql: &str, keyword: &str) -> Option<usize> {
             continue;
         }
 
+        if in_comment {
+            if b == b'\n' {
+                in_comment = false;
+            }
+            i += 1;
+            continue;
+        }
+
         match b {
             b'"' | b'\'' => {
                 in_string = Some(b);
@@ -95,6 +107,11 @@ pub fn find_keyword(sparql: &str, keyword: &str) -> Option<usize> {
             }
             b'<' => {
                 in_iri = true;
+                i += 1;
+                continue;
+            }
+            b'#' => {
+                in_comment = true;
                 i += 1;
                 continue;
             }
@@ -117,7 +134,8 @@ pub fn find_keyword(sparql: &str, keyword: &str) -> Option<usize> {
 }
 
 /// Find the byte index of the next top-level `{` at or after `from`, skipping
-/// any `{` that appears inside an IRI (`<...>`) or a string literal.
+/// any `{` that appears inside an IRI (`<...>`), a string literal, or a `#` line
+/// comment.
 pub fn next_group_open_brace(sparql: &str, from: usize) -> Option<usize> {
     let bytes = sparql.as_bytes();
     let n = bytes.len();
@@ -125,6 +143,7 @@ pub fn next_group_open_brace(sparql: &str, from: usize) -> Option<usize> {
 
     let mut in_string: Option<u8> = None;
     let mut in_iri = false;
+    let mut in_comment = false;
     let mut escaped = false;
 
     while i < n {
@@ -150,9 +169,18 @@ pub fn next_group_open_brace(sparql: &str, from: usize) -> Option<usize> {
             continue;
         }
 
+        if in_comment {
+            if b == b'\n' {
+                in_comment = false;
+            }
+            i += 1;
+            continue;
+        }
+
         match b {
             b'"' | b'\'' => in_string = Some(b),
             b'<' => in_iri = true,
+            b'#' => in_comment = true,
             b'{' => return Some(i),
             _ => {}
         }
@@ -164,9 +192,9 @@ pub fn next_group_open_brace(sparql: &str, from: usize) -> Option<usize> {
 }
 
 /// Find the byte index of the `}` that matches the `{` located at byte index
-/// `open`, tracking nested braces and skipping braces inside IRIs and string
-/// literals. Returns `None` if `open` does not point at a `{` or the group is
-/// unbalanced.
+/// `open`, tracking nested braces and skipping braces inside IRIs, string
+/// literals, and `#` line comments. Returns `None` if `open` does not point at a
+/// `{` or the group is unbalanced.
 pub fn matching_close_brace(sparql: &str, open: usize) -> Option<usize> {
     let bytes = sparql.as_bytes();
     let n = bytes.len();
@@ -177,6 +205,7 @@ pub fn matching_close_brace(sparql: &str, open: usize) -> Option<usize> {
     let mut depth: i32 = 0;
     let mut in_string: Option<u8> = None;
     let mut in_iri = false;
+    let mut in_comment = false;
     let mut escaped = false;
     let mut i = open;
 
@@ -203,9 +232,18 @@ pub fn matching_close_brace(sparql: &str, open: usize) -> Option<usize> {
             continue;
         }
 
+        if in_comment {
+            if b == b'\n' {
+                in_comment = false;
+            }
+            i += 1;
+            continue;
+        }
+
         match b {
             b'"' | b'\'' => in_string = Some(b),
             b'<' => in_iri = true,
+            b'#' => in_comment = true,
             b'{' => depth += 1,
             b'}' => {
                 depth -= 1;
@@ -382,5 +420,54 @@ mod tests {
         let end = select_projection_end(q, select_start).expect("end");
         assert_eq!(q.as_bytes()[end], b'{');
         assert_eq!(&q[select_start + 6..end], " ?x ?y ");
+    }
+
+    #[test]
+    fn find_keyword_ignores_keyword_in_comment() {
+        // The first "WHERE" sits inside a # line comment and must be skipped; the
+        // real keyword on the next line is the one located.
+        let q = "SELECT * # WHERE inside a comment\nWHERE { ?s ?p ?o }";
+        let pos = find_keyword(q, "WHERE").expect("real WHERE present");
+        assert_eq!(&q[pos..pos + 5], "WHERE");
+        let newline = q.find('\n').expect("newline present");
+        assert!(pos > newline, "matched the WHERE after the comment line");
+    }
+
+    #[test]
+    fn find_keyword_hash_in_string_is_not_comment() {
+        // A '#' inside a string literal must not start a comment, so the "WHERE"
+        // that follows the string on the same line is still located.
+        let q = "SELECT * \"# not a comment WHERE\" WHERE { ?s ?p ?o }";
+        let pos = find_keyword(q, "WHERE").expect("WHERE present");
+        let close_quote = q.rfind('"').expect("closing quote");
+        assert!(pos > close_quote, "matched the real WHERE after the string");
+    }
+
+    #[test]
+    fn find_keyword_hash_in_iri_is_not_comment() {
+        // '#' is a legal IRI fragment delimiter; it must not start a comment, so
+        // the "WHERE" after the IRI on the same line is still located.
+        let q = "SELECT * { ?s <http://example.org/x#frag> ?o } WHERE { ?a ?b ?c }";
+        let pos = find_keyword(q, "WHERE").expect("WHERE present");
+        let frag = q.find("frag").expect("frag present");
+        assert!(pos > frag, "matched the real WHERE after the IRI fragment");
+    }
+
+    #[test]
+    fn next_group_open_brace_skips_brace_in_comment() {
+        // A '{' inside a comment must not be taken as the group open.
+        let q = "SELECT * # { not this one\nWHERE { ?s ?p ?o }";
+        let open = next_group_open_brace(q, 0).expect("group present");
+        let newline = q.find('\n').expect("newline present");
+        assert!(open > newline, "skipped the fake brace inside the comment");
+        assert_eq!(q.as_bytes()[open], b'{');
+    }
+
+    #[test]
+    fn matching_close_brace_skips_brace_in_comment() {
+        // A '}' inside a comment must not close the group prematurely.
+        let q = "{ ?s ?p ?o # } fake close\n ?a ?b ?c }";
+        let close = matching_close_brace(q, 0).expect("balanced");
+        assert_eq!(close, q.len() - 1);
     }
 }

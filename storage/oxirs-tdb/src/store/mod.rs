@@ -12,6 +12,7 @@ pub mod store_quad;
 pub mod store_stream;
 mod store_tests;
 pub mod store_types;
+pub mod store_wal;
 
 pub use store_impl::*;
 pub use store_index::*;

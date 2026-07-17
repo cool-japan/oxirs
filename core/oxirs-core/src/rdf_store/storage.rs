@@ -1,13 +1,39 @@
 //! RDF storage backends and implementations.
 //!
-//! [`MemoryStorage`] uses **term interning** to avoid the previous five full
-//! owned-`Quad` copies per triple. Each column (subject, predicate, object,
-//! graph name) is interned into a [`ColumnDictionary`], and quads are stored as
-//! compact `[u32; 4]` id-tuples in four permutation indexes (SPOG/POSG/OSPG/
-//! GSPO) that support `O(log n + k)` range-scan lookups without cloning whole
-//! index sets. The canonical owned set `quads` is retained so query results can
-//! be materialized deterministically at the API boundary and so the file stays
-//! a straightforward N-Quads export.
+//! [`MemoryStorage`] uses **term interning** and keeps *no* owned-`Quad` copies
+//! at all. Each column (subject, predicate, object, graph name) is interned into
+//! a [`ColumnDictionary`] (term <-> `u32`), and every quad lives *only* as four
+//! compact `[u32; 4]` id-tuples in the SPOG/POSG/OSPG/GSPO permutation indexes.
+//! All reads — `len`/`contains`/pattern queries/full scans/N-Quads export —
+//! derive their `Quad` values on the fly by resolving ids back through the
+//! dictionaries, so a triple costs four id-tuples plus one interned copy of each
+//! *distinct* term per column, rather than a fully materialized owned `Quad`.
+//!
+//! ## Iteration order
+//!
+//! [`query_quads`](MemoryStorage::query_quads) still returns results in
+//! canonical `Quad` order (it re-sorts through a `BTreeSet<Quad>` at the API
+//! boundary), so its observable order is unchanged. The *streaming* scans
+//! ([`iter_quads`](MemoryStorage::iter_quads) and
+//! [`for_each_quad`](MemoryStorage::for_each_quad)) instead visit quads in
+//! *index (term-interning) order* — the order of the leading permutation — so
+//! they never materialize the whole graph at once. That order is deterministic
+//! but differs from `Quad` order; RDF is unordered and the persistence /
+//! serialization consumers of these scans do not depend on a particular order.
+//!
+//! ## Deletion and the dictionaries
+//!
+//! Each column dictionary reference counts its ids. A successful `insert_quad`
+//! takes one reference on each of the four column ids (only *after* the SPOG
+//! novelty gate, so a duplicate insert never double-counts); `remove_quad`
+//! drops one reference on each. When a term's last referencing quad is removed
+//! its count reaches zero and the id is reclaimed **synchronously** — the value
+//! is tombstoned, its lookup entry dropped, and the id pushed onto a free list
+//! for reuse by the next new term in that column. Term ids therefore never leak:
+//! the dictionary's live footprint tracks the set of terms actually in use, and
+//! repeated insert/remove/reinsert churn does not grow it. Round-trips stay
+//! correct: a re-inserted term reuses its still-live id, and a term whose id was
+//! reclaimed is re-interned into the freed slot on the next insert.
 
 use super::dictionary::ColumnDictionary;
 use super::persistence::PersistentState;
@@ -35,22 +61,18 @@ pub enum StorageBackend {
     Persistent(Arc<RwLock<MemoryStorage>>, Arc<PersistentState>),
 }
 
-/// In-memory storage implementation backed by interned `[u32; 4]` id-tuples.
+/// In-memory storage implementation backed *entirely* by interned `[u32; 4]`
+/// id-tuples — no owned `Quad` copies are retained.
 #[derive(Debug, Clone, Default)]
 pub struct MemoryStorage {
-    /// Canonical set of quads in owned form (SPOG-ordered).
-    ///
-    /// Retained for deterministic iteration, `contains`/`len`, N-Quads export,
-    /// and to satisfy read-only consumers that iterate quads directly. The four
-    /// permutation indexes below hold only compact id-tuples, so this is the
-    /// single owned copy per triple rather than the previous five.
-    pub quads: BTreeSet<Quad>,
     /// Per-column term dictionaries (term <-> u32).
     subjects: ColumnDictionary<Subject>,
     predicates: ColumnDictionary<Predicate>,
     objects: ColumnDictionary<Object>,
     graphs: ColumnDictionary<GraphName>,
-    /// SPOG permutation: `[s, p, o, g]` — subject and full lookups.
+    /// SPOG permutation: `[s, p, o, g]` — subject / full-scan lookups.
+    /// This index is the single source of truth for `len`, membership, and
+    /// full iteration.
     spog: BTreeSet<[u32; 4]>,
     /// POSG permutation: `[p, o, s, g]` — predicate lookups.
     posg: BTreeSet<[u32; 4]>,
@@ -62,19 +84,38 @@ pub struct MemoryStorage {
     pub named_graphs: BTreeSet<NamedNode>,
 }
 
-/// Lead index chosen for a lookup, encoding how a scanned tuple maps back to
-/// canonical `(s, p, o, g)` ids.
-enum LeadIndex {
-    Spog,
-    Posg,
-    Ospg,
-    Gspo,
+/// `true` when a bound id constraint is absent (`None`) or equals `actual`.
+///
+/// Spelled as an explicit match rather than `Option::is_none_or` so the crate
+/// stays warning-clean under its conservative declared MSRV.
+#[inline]
+fn id_matches(bound: Option<u32>, actual: u32) -> bool {
+    match bound {
+        Some(want) => want == actual,
+        None => true,
+    }
+}
+
+/// Pass a dictionary resolution through unchanged, asserting in debug builds
+/// that it is `Some`.
+///
+/// Every id stored in a permutation index is reference counted, so the id is
+/// reclaimed only after its last referencing tuple is removed; a `None` here
+/// therefore signals an index/dictionary desync (a bug). We assert in debug
+/// builds and, in release, fall through the caller's `?` so a corrupt tuple is
+/// skipped rather than panicking.
+#[inline]
+fn resolve_live<T>(resolved: Option<&T>) -> Option<&T> {
+    debug_assert!(
+        resolved.is_some(),
+        "permutation index references an id with no live term (dictionary/index desync)"
+    );
+    resolved
 }
 
 impl MemoryStorage {
     pub fn new() -> Self {
         MemoryStorage {
-            quads: BTreeSet::new(),
             subjects: ColumnDictionary::new(),
             predicates: ColumnDictionary::new(),
             objects: ColumnDictionary::new(),
@@ -88,17 +129,27 @@ impl MemoryStorage {
     }
 
     pub fn insert_quad(&mut self, quad: Quad) -> bool {
-        // BTreeSet::insert reports novelty and keeps the canonical owned copy.
-        if !self.quads.insert(quad.clone()) {
-            return false;
-        }
-
+        // Intern every column first (a no-op that returns the existing id when a
+        // term is already present). Novelty is then decided solely by the SPOG
+        // index: `BTreeSet::insert` reports whether the id-tuple was new.
         let s = self.subjects.intern(quad.subject());
         let p = self.predicates.intern(quad.predicate());
         let o = self.objects.intern(quad.object());
         let g = self.graphs.intern(quad.graph_name());
 
-        self.spog.insert([s, p, o, g]);
+        if !self.spog.insert([s, p, o, g]) {
+            // Duplicate quad: the id-tuple already exists in every permutation.
+            // No reference is taken, so a repeated insert never double-counts.
+            return false;
+        }
+
+        // Genuinely new quad: take one reference on each column's id so it stays
+        // interned for exactly as long as some quad uses it.
+        self.subjects.retain(s);
+        self.predicates.retain(p);
+        self.objects.retain(o);
+        self.graphs.retain(g);
+
         self.posg.insert([p, o, s, g]);
         self.ospg.insert([o, s, p, g]);
         self.gspo.insert([g, s, p, o]);
@@ -111,32 +162,42 @@ impl MemoryStorage {
     }
 
     pub fn remove_quad(&mut self, quad: &Quad) -> bool {
-        if !self.quads.remove(quad) {
-            return false;
-        }
-
-        // The quad was present, so every component is already interned.
-        if let (Some(s), Some(p), Some(o), Some(g)) = (
+        // If any component was never interned the quad cannot be present.
+        let (s, p, o, g) = match (
             self.subjects.get_id(quad.subject()),
             self.predicates.get_id(quad.predicate()),
             self.objects.get_id(quad.object()),
             self.graphs.get_id(quad.graph_name()),
         ) {
-            self.spog.remove(&[s, p, o, g]);
-            self.posg.remove(&[p, o, s, g]);
-            self.ospg.remove(&[o, s, p, g]);
-            self.gspo.remove(&[g, s, p, o]);
+            (Some(s), Some(p), Some(o), Some(g)) => (s, p, o, g),
+            _ => return false,
+        };
 
-            // Drop the named graph from the set once its last quad is gone.
-            if let GraphName::NamedNode(graph_name) = quad.graph_name() {
-                let still_present = self
-                    .gspo
-                    .range([g, 0, 0, 0]..=[g, u32::MAX, u32::MAX, u32::MAX])
-                    .next()
-                    .is_some();
-                if !still_present {
-                    self.named_graphs.remove(graph_name);
-                }
+        // The SPOG index is authoritative for membership; if the tuple was not
+        // present the quad is not in the store.
+        if !self.spog.remove(&[s, p, o, g]) {
+            return false;
+        }
+        self.posg.remove(&[p, o, s, g]);
+        self.ospg.remove(&[o, s, p, g]);
+        self.gspo.remove(&[g, s, p, o]);
+
+        // Drop one reference on each column's id; the id (and its interned term)
+        // is reclaimed synchronously when its last referencing quad is gone.
+        self.subjects.release(s);
+        self.predicates.release(p);
+        self.objects.release(o);
+        self.graphs.release(g);
+
+        // Drop the named graph from the set once its last quad is gone.
+        if let GraphName::NamedNode(graph_name) = quad.graph_name() {
+            let still_present = self
+                .gspo
+                .range([g, 0, 0, 0]..=[g, u32::MAX, u32::MAX, u32::MAX])
+                .next()
+                .is_some();
+            if !still_present {
+                self.named_graphs.remove(graph_name);
             }
         }
 
@@ -144,22 +205,108 @@ impl MemoryStorage {
     }
 
     pub fn contains_quad(&self, quad: &Quad) -> bool {
-        self.quads.contains(quad)
-    }
-
-    #[allow(dead_code)]
-    fn iter_quads(&self) -> impl Iterator<Item = &Quad> {
-        self.quads.iter()
+        match (
+            self.subjects.get_id(quad.subject()),
+            self.predicates.get_id(quad.predicate()),
+            self.objects.get_id(quad.object()),
+            self.graphs.get_id(quad.graph_name()),
+        ) {
+            (Some(s), Some(p), Some(o), Some(g)) => self.spog.contains(&[s, p, o, g]),
+            _ => false,
+        }
     }
 
     /// Resolve a canonical `(s, p, o, g)` id-tuple into an owned `Quad`.
     fn materialize(&self, s: u32, p: u32, o: u32, g: u32) -> Option<Quad> {
         Some(Quad::new(
-            self.subjects.resolve(s)?.clone(),
-            self.predicates.resolve(p)?.clone(),
-            self.objects.resolve(o)?.clone(),
-            self.graphs.resolve(g)?.clone(),
+            resolve_live(self.subjects.resolve(s))?.clone(),
+            resolve_live(self.predicates.resolve(p))?.clone(),
+            resolve_live(self.objects.resolve(o))?.clone(),
+            resolve_live(self.graphs.resolve(g))?.clone(),
         ))
+    }
+
+    /// Scan the best permutation for the given bound-id constraints, yielding
+    /// canonical `[s, p, o, g]` id-tuples (with the non-lead constraints applied
+    /// as cheap integer filters).
+    ///
+    /// The leading permutation is chosen by the most selective bound column
+    /// (subject, then object, then predicate, then graph); when nothing is bound
+    /// the whole SPOG index is scanned. Yielded tuples are in the leading
+    /// permutation's order, i.e. term-interning order, *not* `Quad` order.
+    fn scan_ids<'a>(
+        &'a self,
+        sid: Option<u32>,
+        pid: Option<u32>,
+        oid: Option<u32>,
+        gid: Option<u32>,
+    ) -> Box<dyn Iterator<Item = [u32; 4]> + 'a> {
+        const LO: [u32; 4] = [0, 0, 0, 0];
+        let hi = |k: u32| [k, u32::MAX, u32::MAX, u32::MAX];
+
+        let base: Box<dyn Iterator<Item = [u32; 4]> + 'a> = if let Some(s) = sid {
+            Box::new(
+                self.spog
+                    .range([s, LO[1], LO[2], LO[3]]..=hi(s))
+                    .map(|t| [t[0], t[1], t[2], t[3]]),
+            )
+        } else if let Some(o) = oid {
+            Box::new(
+                self.ospg
+                    .range([o, LO[1], LO[2], LO[3]]..=hi(o))
+                    .map(|t| [t[1], t[2], t[0], t[3]]),
+            )
+        } else if let Some(p) = pid {
+            Box::new(
+                self.posg
+                    .range([p, LO[1], LO[2], LO[3]]..=hi(p))
+                    .map(|t| [t[2], t[0], t[1], t[3]]),
+            )
+        } else if let Some(g) = gid {
+            Box::new(
+                self.gspo
+                    .range([g, LO[1], LO[2], LO[3]]..=hi(g))
+                    .map(|t| [t[1], t[2], t[3], t[0]]),
+            )
+        } else {
+            Box::new(self.spog.iter().copied())
+        };
+
+        Box::new(base.filter(move |q| {
+            id_matches(sid, q[0])
+                && id_matches(pid, q[1])
+                && id_matches(oid, q[2])
+                && id_matches(gid, q[3])
+        }))
+    }
+
+    /// Resolve the four optional bound terms to their ids. Returns `None` if any
+    /// bound term is not interned (so the pattern cannot match any quad).
+    #[allow(clippy::type_complexity)]
+    fn resolve_pattern_ids(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+        graph_name: Option<&GraphName>,
+    ) -> Option<(Option<u32>, Option<u32>, Option<u32>, Option<u32>)> {
+        let sid = match subject {
+            Some(s) => Some(self.subjects.get_id(s)?),
+            None => None,
+        };
+        let pid = match predicate {
+            Some(p) => Some(self.predicates.get_id(p)?),
+            None => None,
+        };
+        let oid = match object {
+            Some(o) => Some(self.objects.get_id(o)?),
+            None => None,
+        };
+        let gid = match graph_name {
+            Some(g) => Some(self.graphs.get_id(g)?),
+            None => None,
+        };
+        Some((sid, pid, oid, gid))
     }
 
     pub fn query_quads(
@@ -169,110 +316,45 @@ impl MemoryStorage {
         object: Option<&Object>,
         graph_name: Option<&GraphName>,
     ) -> Vec<Quad> {
-        // Resolve each bound term to its id. A bound term that is not interned
-        // means no quad can match, so return immediately.
-        let sid = match subject {
-            Some(s) => match self.subjects.get_id(s) {
-                Some(id) => Some(id),
+        // A bound term that is not interned means no quad can match.
+        let (sid, pid, oid, gid) =
+            match self.resolve_pattern_ids(subject, predicate, object, graph_name) {
+                Some(ids) => ids,
                 None => return Vec::new(),
-            },
-            None => None,
-        };
-        let pid = match predicate {
-            Some(p) => match self.predicates.get_id(p) {
-                Some(id) => Some(id),
-                None => return Vec::new(),
-            },
-            None => None,
-        };
-        let oid = match object {
-            Some(o) => match self.objects.get_id(o) {
-                Some(id) => Some(id),
-                None => return Vec::new(),
-            },
-            None => None,
-        };
-        let gid = match graph_name {
-            Some(g) => match self.graphs.get_id(g) {
-                Some(id) => Some(id),
-                None => return Vec::new(),
-            },
-            None => None,
-        };
-
-        // Fully unbound: return every quad (result-sized clone, deterministic).
-        if sid.is_none() && pid.is_none() && oid.is_none() && gid.is_none() {
-            return self.quads.iter().cloned().collect();
-        }
-
-        // Pick the lead permutation by the most selective bound column
-        // (subject, then object, then predicate, then graph).
-        let (lead, index, key): (LeadIndex, &BTreeSet<[u32; 4]>, u32) = if let Some(s) = sid {
-            (LeadIndex::Spog, &self.spog, s)
-        } else if let Some(o) = oid {
-            (LeadIndex::Ospg, &self.ospg, o)
-        } else if let Some(p) = pid {
-            (LeadIndex::Posg, &self.posg, p)
-        } else if let Some(g) = gid {
-            (LeadIndex::Gspo, &self.gspo, g)
-        } else {
-            // Unreachable given the guard above, but stay safe.
-            return self.quads.iter().cloned().collect();
-        };
-
-        // Collect into a BTreeSet<Quad> so results stay Quad-ordered and
-        // deterministic regardless of which permutation led the scan.
-        let mut results: BTreeSet<Quad> = BTreeSet::new();
-        let lower = [key, 0, 0, 0];
-        let upper = [key, u32::MAX, u32::MAX, u32::MAX];
-        for tuple in index.range(lower..=upper) {
-            let (s, p, o, g) = match lead {
-                LeadIndex::Spog => (tuple[0], tuple[1], tuple[2], tuple[3]),
-                LeadIndex::Posg => (tuple[2], tuple[0], tuple[1], tuple[3]),
-                LeadIndex::Ospg => (tuple[1], tuple[2], tuple[0], tuple[3]),
-                LeadIndex::Gspo => (tuple[1], tuple[2], tuple[3], tuple[0]),
             };
 
-            // Apply the remaining bound filters via cheap integer comparisons.
-            if let Some(want) = sid {
-                if s != want {
-                    continue;
-                }
-            }
-            if let Some(want) = pid {
-                if p != want {
-                    continue;
-                }
-            }
-            if let Some(want) = oid {
-                if o != want {
-                    continue;
-                }
-            }
-            if let Some(want) = gid {
-                if g != want {
-                    continue;
-                }
-            }
-
+        // Collect into a BTreeSet<Quad> so results stay Quad-ordered and
+        // deterministic regardless of which permutation led the scan (this keeps
+        // `query_quads`' observable order identical to the previous design).
+        let mut results: BTreeSet<Quad> = BTreeSet::new();
+        for [s, p, o, g] in self.scan_ids(sid, pid, oid, gid) {
             if let Some(quad) = self.materialize(s, p, o, g) {
                 results.insert(quad);
             }
         }
-
         results.into_iter().collect()
     }
 
-    /// Stream every quad matching the pattern to `f` without allocating a
-    /// result `Vec`.
+    /// Streaming decode iterator over every stored quad, materialized on the fly
+    /// from the SPOG index. Visits quads in index (term-interning) order and
+    /// keeps only one `Quad` alive at a time, so a whole graph can be exported
+    /// without ever materializing it in full. Backs the persistence compaction
+    /// rewrite and any full-graph N-Quads export.
+    pub fn iter_quads(&self) -> impl Iterator<Item = Quad> + '_ {
+        self.spog
+            .iter()
+            .filter_map(move |t| self.materialize(t[0], t[1], t[2], t[3]))
+    }
+
+    /// Stream every quad matching the pattern to `f` without building a result
+    /// `Vec`.
     ///
-    /// Iterates the canonical owned `quads` set (which is `Quad`-ordered) and
-    /// applies the bound-term filters inline, so quads are visited in exactly
-    /// the same deterministic order as [`query_quads`](Self::query_quads)
-    /// returns them, but only one quad clone is alive at a time (the one handed
-    /// to `f`). This backs [`Store::for_each_quad`](super::Store::for_each_quad)
-    /// so consumers can serialize a whole graph incrementally without ever
-    /// materializing it in full.
+    /// Selects the best permutation for the bound terms, decodes each matching
+    /// id-tuple, and hands the owned `Quad` to `f`, so only one quad is alive at
+    /// a time. Quads are visited in the leading permutation's order (term
+    /// interning order), which is deterministic but differs from `Quad` order;
+    /// see the module-level "Iteration order" note. This backs
+    /// [`Store::for_each_quad`](super::Store::for_each_quad).
     pub fn for_each_quad(
         &self,
         subject: Option<&Subject>,
@@ -281,37 +363,44 @@ impl MemoryStorage {
         graph_name: Option<&GraphName>,
         f: &mut dyn FnMut(Quad),
     ) {
-        for quad in &self.quads {
-            if let Some(s) = subject {
-                if quad.subject() != s {
-                    continue;
-                }
+        // A bound term that is not interned means nothing matches.
+        let (sid, pid, oid, gid) =
+            match self.resolve_pattern_ids(subject, predicate, object, graph_name) {
+                Some(ids) => ids,
+                None => return,
+            };
+        for [s, p, o, g] in self.scan_ids(sid, pid, oid, gid) {
+            if let Some(quad) = self.materialize(s, p, o, g) {
+                f(quad);
             }
-            if let Some(p) = predicate {
-                if quad.predicate() != p {
-                    continue;
-                }
-            }
-            if let Some(o) = object {
-                if quad.object() != o {
-                    continue;
-                }
-            }
-            if let Some(g) = graph_name {
-                if quad.graph_name() != g {
-                    continue;
-                }
-            }
-            f(quad.clone());
         }
     }
 
     pub fn len(&self) -> usize {
-        self.quads.len()
+        self.spog.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.quads.is_empty()
+        self.spog.is_empty()
+    }
+
+    /// Best-effort estimate of the resident heap footprint of the interned
+    /// structures, in bytes. Sums the four permutation indexes (compact
+    /// `[u32; 4]` tuples) plus every column dictionary (structural capacity plus
+    /// the interned term string bytes) plus the named-graph set. Intended for
+    /// coarse before/after comparisons, not exact accounting; it deliberately
+    /// omits per-node `BTreeSet` bookkeeping overhead.
+    pub fn size_estimate(&self) -> usize {
+        use std::mem::size_of;
+        let tuple = size_of::<[u32; 4]>();
+        let perm_bytes =
+            (self.spog.len() + self.posg.len() + self.ospg.len() + self.gspo.len()) * tuple;
+        let dict_bytes = self.subjects.size_estimate()
+            + self.predicates.size_estimate()
+            + self.objects.size_estimate()
+            + self.graphs.size_estimate();
+        let named_graph_bytes = self.named_graphs.len() * size_of::<NamedNode>();
+        perm_bytes + dict_bytes + named_graph_bytes
     }
 }
 
@@ -335,10 +424,22 @@ mod tests {
     ) -> BTreeSet<Quad> {
         reference
             .iter()
-            .filter(|q| subject.is_none_or(|s| q.subject() == s))
-            .filter(|q| predicate.is_none_or(|p| q.predicate() == p))
-            .filter(|q| object.is_none_or(|o| q.object() == o))
-            .filter(|q| graph_name.is_none_or(|g| q.graph_name() == g))
+            .filter(|q| match subject {
+                Some(s) => q.subject() == s,
+                None => true,
+            })
+            .filter(|q| match predicate {
+                Some(p) => q.predicate() == p,
+                None => true,
+            })
+            .filter(|q| match object {
+                Some(o) => q.object() == o,
+                None => true,
+            })
+            .filter(|q| match graph_name {
+                Some(g) => q.graph_name() == g,
+                None => true,
+            })
             .cloned()
             .collect()
     }
@@ -521,5 +622,455 @@ mod tests {
         assert!(!storage.insert_quad(quad.clone()));
         assert_eq!(storage.len(), 1);
         assert!(storage.contains_quad(&quad));
+    }
+
+    /// Every binding shape (subject-only, subject+predicate, full triple,
+    /// graph-scoped, and the fully-unbound full scan) routes through the
+    /// intended permutation and returns exactly the naive reference set. This is
+    /// the observable proxy for "the right permutation was selected": the SPOG,
+    /// POSG, OSPG, and GSPO decode arms must all reconstruct canonical quads.
+    #[test]
+    fn test_pattern_queries_select_correct_permutation() {
+        let (storage, reference) = build_dataset();
+
+        let s = Subject::NamedNode(nn("http://ex.org/s1"));
+        let p = Predicate::NamedNode(nn("http://ex.org/p1"));
+        let o = Object::NamedNode(nn("http://ex.org/o1"));
+        let g = GraphName::NamedNode(nn("http://ex.org/g1"));
+
+        // subject-only -> SPOG lead
+        let got: BTreeSet<Quad> = storage
+            .query_quads(Some(&s), None, None, None)
+            .into_iter()
+            .collect();
+        assert_eq!(got, naive_query(&reference, Some(&s), None, None, None));
+
+        // subject + predicate -> SPOG lead, predicate id-filter
+        let got: BTreeSet<Quad> = storage
+            .query_quads(Some(&s), Some(&p), None, None)
+            .into_iter()
+            .collect();
+        assert_eq!(got, naive_query(&reference, Some(&s), Some(&p), None, None));
+
+        // full triple s+p+o
+        let got: BTreeSet<Quad> = storage
+            .query_quads(Some(&s), Some(&p), Some(&o), None)
+            .into_iter()
+            .collect();
+        assert_eq!(
+            got,
+            naive_query(&reference, Some(&s), Some(&p), Some(&o), None)
+        );
+
+        // predicate-only -> POSG lead
+        let got: BTreeSet<Quad> = storage
+            .query_quads(None, Some(&p), None, None)
+            .into_iter()
+            .collect();
+        assert_eq!(got, naive_query(&reference, None, Some(&p), None, None));
+
+        // object-only -> OSPG lead
+        let got: BTreeSet<Quad> = storage
+            .query_quads(None, None, Some(&o), None)
+            .into_iter()
+            .collect();
+        assert_eq!(got, naive_query(&reference, None, None, Some(&o), None));
+
+        // graph-scoped -> GSPO lead
+        let got: BTreeSet<Quad> = storage
+            .query_quads(None, None, None, Some(&g))
+            .into_iter()
+            .collect();
+        assert_eq!(got, naive_query(&reference, None, None, None, Some(&g)));
+
+        // full scan (fully unbound) -> SPOG iteration
+        let got: BTreeSet<Quad> = storage
+            .query_quads(None, None, None, None)
+            .into_iter()
+            .collect();
+        assert_eq!(got, reference);
+    }
+
+    /// insert -> remove -> reinsert round-trips cleanly with no owned quad set:
+    /// membership, length, and pattern reads all reflect the current state, and
+    /// a re-inserted quad is reported novel again after removal.
+    #[test]
+    fn test_insert_remove_reinsert_round_trip() {
+        let mut storage = MemoryStorage::new();
+        let quad = Quad::new(
+            Subject::NamedNode(nn("http://ex.org/s")),
+            Predicate::NamedNode(nn("http://ex.org/p")),
+            Object::Literal(Literal::new("v")),
+            GraphName::NamedNode(nn("http://ex.org/g")),
+        );
+
+        assert!(storage.insert_quad(quad.clone()));
+        assert!(storage.contains_quad(&quad));
+        assert_eq!(storage.len(), 1);
+        assert!(storage.named_graphs.contains(&nn("http://ex.org/g")));
+
+        assert!(storage.remove_quad(&quad));
+        assert!(!storage.contains_quad(&quad));
+        assert_eq!(storage.len(), 0);
+        assert!(storage.is_empty());
+        assert!(!storage.named_graphs.contains(&nn("http://ex.org/g")));
+        assert!(storage.query_quads(None, None, None, None).is_empty());
+        // Removing an absent quad is a no-op.
+        assert!(!storage.remove_quad(&quad));
+
+        // Reinsert: reported novel again, fully queryable, named graph restored.
+        assert!(storage.insert_quad(quad.clone()));
+        assert!(storage.contains_quad(&quad));
+        assert_eq!(storage.len(), 1);
+        assert!(storage.named_graphs.contains(&nn("http://ex.org/g")));
+        let got: Vec<Quad> = storage.query_quads(
+            Some(&Subject::NamedNode(nn("http://ex.org/s"))),
+            None,
+            None,
+            None,
+        );
+        assert_eq!(got, vec![quad]);
+    }
+
+    /// `named_graphs` tracks the distinct named graphs incrementally and is
+    /// maintained on removal (dropping a graph exactly when its last quad goes),
+    /// independent of the total quad count.
+    #[test]
+    fn test_named_graphs_tracked_incrementally() {
+        let mut storage = MemoryStorage::new();
+        let g1 = nn("http://ex.org/g1");
+        let g2 = nn("http://ex.org/g2");
+
+        // Two quads in g1, one in g2, one in the default graph.
+        let q_g1a = Quad::new(
+            Subject::NamedNode(nn("http://ex.org/s1")),
+            Predicate::NamedNode(nn("http://ex.org/p")),
+            Object::Literal(Literal::new("a")),
+            GraphName::NamedNode(g1.clone()),
+        );
+        let q_g1b = Quad::new(
+            Subject::NamedNode(nn("http://ex.org/s2")),
+            Predicate::NamedNode(nn("http://ex.org/p")),
+            Object::Literal(Literal::new("b")),
+            GraphName::NamedNode(g1.clone()),
+        );
+        let q_g2 = Quad::new(
+            Subject::NamedNode(nn("http://ex.org/s3")),
+            Predicate::NamedNode(nn("http://ex.org/p")),
+            Object::Literal(Literal::new("c")),
+            GraphName::NamedNode(g2.clone()),
+        );
+        let q_default = Quad::new(
+            Subject::NamedNode(nn("http://ex.org/s4")),
+            Predicate::NamedNode(nn("http://ex.org/p")),
+            Object::Literal(Literal::new("d")),
+            GraphName::DefaultGraph,
+        );
+
+        for q in [&q_g1a, &q_g1b, &q_g2, &q_default] {
+            assert!(storage.insert_quad(q.clone()));
+        }
+        // The default graph never contributes a named graph.
+        assert_eq!(
+            storage.named_graphs,
+            [g1.clone(), g2.clone()].into_iter().collect()
+        );
+
+        // Removing one of g1's two quads keeps g1 present.
+        assert!(storage.remove_quad(&q_g1a));
+        assert!(storage.named_graphs.contains(&g1));
+        // Removing g1's last quad drops g1 but leaves g2.
+        assert!(storage.remove_quad(&q_g1b));
+        assert!(!storage.named_graphs.contains(&g1));
+        assert!(storage.named_graphs.contains(&g2));
+        assert_eq!(storage.named_graphs, [g2].into_iter().collect());
+    }
+
+    /// Repeated insert/remove/reinsert of the same quad must reclaim and reuse
+    /// its column ids rather than allocate new slots, so neither the per-column
+    /// slot counts nor the overall size estimate grow without bound.
+    #[test]
+    fn test_id_reclamation_bounded_growth() {
+        let mut storage = MemoryStorage::new();
+        let quad = Quad::new(
+            Subject::NamedNode(nn("http://ex.org/s")),
+            Predicate::NamedNode(nn("http://ex.org/p")),
+            Object::Literal(Literal::new("v")),
+            GraphName::NamedNode(nn("http://ex.org/g")),
+        );
+
+        // First insert establishes exactly one slot per column.
+        assert!(storage.insert_quad(quad.clone()));
+        for dict_slots in [
+            storage.subjects.slot_count(),
+            storage.predicates.slot_count(),
+            storage.objects.slot_count(),
+            storage.graphs.slot_count(),
+        ] {
+            assert_eq!(dict_slots, 1);
+        }
+
+        // One warmup cycle so the free-list vectors reach their steady-state
+        // capacity before the baseline snapshot (the first remove is what first
+        // grows each column's free-id stack).
+        assert!(storage.remove_quad(&quad));
+        assert!(storage.insert_quad(quad.clone()));
+        let baseline = storage.size_estimate();
+
+        // Many churn cycles: each remove reclaims the ids (live -> 0, one free
+        // slot) and each reinsert must reuse the freed slot.
+        for _ in 0..1_000 {
+            assert!(storage.remove_quad(&quad));
+            assert_eq!(storage.subjects.live_count(), 0);
+            assert_eq!(storage.subjects.free_count(), 1);
+            assert_eq!(storage.graphs.live_count(), 0);
+            assert!(storage.insert_quad(quad.clone()));
+        }
+
+        // No growth: still one slot per column and an unchanged size estimate.
+        assert_eq!(storage.subjects.slot_count(), 1);
+        assert_eq!(storage.predicates.slot_count(), 1);
+        assert_eq!(storage.objects.slot_count(), 1);
+        assert_eq!(storage.graphs.slot_count(), 1);
+        assert_eq!(storage.size_estimate(), baseline);
+        assert_eq!(storage.len(), 1);
+        assert!(storage.contains_quad(&quad));
+    }
+
+    /// Interleaving inserts and removes so ids get reclaimed and reused must
+    /// leave the interned store exactly equal to a naive `BTreeSet<Quad>` model.
+    #[test]
+    fn test_id_reuse_round_trip_matches_naive_model() {
+        let mk = |i: usize| {
+            Quad::new(
+                Subject::NamedNode(nn(&format!("http://ex.org/s{i}"))),
+                Predicate::NamedNode(nn("http://ex.org/p")),
+                Object::Literal(Literal::new(format!("v{i}"))),
+                GraphName::DefaultGraph,
+            )
+        };
+
+        let mut storage = MemoryStorage::new();
+        let mut reference: BTreeSet<Quad> = BTreeSet::new();
+
+        // Insert 0..20.
+        for i in 0..20 {
+            let q = mk(i);
+            assert_eq!(storage.insert_quad(q.clone()), reference.insert(q));
+        }
+        // Remove the even-indexed quads, freeing their subject/object ids.
+        for i in (0..20).step_by(2) {
+            let q = mk(i);
+            assert_eq!(storage.remove_quad(&q), reference.remove(&q));
+        }
+        // Insert a fresh batch 20..30 — these must reuse the freed id slots.
+        let slots_before = storage.subjects.slot_count();
+        for i in 20..30 {
+            let q = mk(i);
+            assert_eq!(storage.insert_quad(q.clone()), reference.insert(q));
+        }
+        // The new subjects reused reclaimed slots, so the slot count did not grow
+        // by the full ten (ten ids were freed, ten reinserted).
+        assert_eq!(storage.subjects.slot_count(), slots_before);
+
+        // Full scan and every membership probe agree with the naive model.
+        let got: BTreeSet<Quad> = storage
+            .query_quads(None, None, None, None)
+            .into_iter()
+            .collect();
+        assert_eq!(got, reference);
+        for q in &reference {
+            assert!(storage.contains_quad(q));
+        }
+        // A removed quad is really gone and its subject reclaimed.
+        assert!(!storage.contains_quad(&mk(0)));
+    }
+
+    /// A term shared by several distinct quads (a duplicate insert takes no extra
+    /// reference) must stay interned until the *last* quad referencing it is
+    /// removed — guarding both the shared-term refcount and the duplicate no-op.
+    #[test]
+    fn test_shared_term_retained_until_last_quad_removed() {
+        let mut storage = MemoryStorage::new();
+        let s = Subject::NamedNode(nn("http://ex.org/s"));
+        let p = Predicate::NamedNode(nn("http://ex.org/p"));
+        let q1 = Quad::new(
+            s.clone(),
+            p.clone(),
+            Object::Literal(Literal::new("o1")),
+            GraphName::DefaultGraph,
+        );
+        let q2 = Quad::new(
+            s.clone(),
+            p.clone(),
+            Object::Literal(Literal::new("o2")),
+            GraphName::DefaultGraph,
+        );
+
+        assert!(storage.insert_quad(q1.clone()));
+        assert!(storage.insert_quad(q2.clone()));
+        // Duplicate insert must NOT take a second reference on the shared terms.
+        assert!(!storage.insert_quad(q1.clone()));
+
+        let s_id = storage.subjects.get_id(&s).expect("subject interned");
+
+        // Removing q1 leaves the shared subject live — q2 still references it.
+        assert!(storage.remove_quad(&q1));
+        assert_eq!(storage.subjects.get_id(&s), Some(s_id));
+        assert!(storage.subjects.resolve(s_id).is_some());
+        assert_eq!(storage.subjects.live_count(), 1);
+
+        // Removing q2 (the last referencing quad) reclaims the subject term. If
+        // the duplicate insert had double-counted, the term would survive here.
+        assert!(storage.remove_quad(&q2));
+        assert_eq!(storage.subjects.get_id(&s), None);
+        assert_eq!(storage.subjects.live_count(), 0);
+        assert_eq!(storage.subjects.free_count(), 1);
+        assert!(storage.is_empty());
+    }
+
+    /// Clearing a whole graph (as `RdfStore::clear_graph` / `drop_graph` do, by
+    /// removing every quad in it) reclaims every column id it used and drops the
+    /// graph from `named_graphs`.
+    #[test]
+    fn test_clearing_a_graph_reclaims_its_terms() {
+        let mut storage = MemoryStorage::new();
+        let g = GraphName::NamedNode(nn("http://ex.org/g"));
+        let quads: Vec<Quad> = (0..5)
+            .map(|i| {
+                Quad::new(
+                    Subject::NamedNode(nn(&format!("http://ex.org/s{i}"))),
+                    Predicate::NamedNode(nn("http://ex.org/p")),
+                    Object::Literal(Literal::new(format!("o{i}"))),
+                    g.clone(),
+                )
+            })
+            .collect();
+        for q in &quads {
+            assert!(storage.insert_quad(q.clone()));
+        }
+        assert!(storage.named_graphs.contains(&nn("http://ex.org/g")));
+        let graph_slots = storage.graphs.slot_count();
+        assert_eq!(storage.graphs.live_count(), 1);
+
+        // Emulate clear_graph / drop_graph: remove every quad in graph g.
+        for q in &quads {
+            assert!(storage.remove_quad(q));
+        }
+
+        // The graph name is dropped and every column has reclaimed all its ids.
+        assert!(!storage.named_graphs.contains(&nn("http://ex.org/g")));
+        assert_eq!(storage.graphs.live_count(), 0);
+        assert_eq!(storage.graphs.free_count(), graph_slots);
+        assert_eq!(storage.subjects.live_count(), 0);
+        assert_eq!(storage.predicates.live_count(), 0);
+        assert_eq!(storage.objects.live_count(), 0);
+        assert!(storage.is_empty());
+    }
+
+    /// `named_graphs` bookkeeping stays correct across id reclamation: dropping a
+    /// graph's last quad reclaims its graph-name id and removes it from the set,
+    /// and a brand-new graph reuses the freed id slot without corrupting the set.
+    #[test]
+    fn test_named_graphs_bookkeeping_with_id_reclamation() {
+        let mut storage = MemoryStorage::new();
+        let g1 = nn("http://ex.org/g1");
+        let g2 = nn("http://ex.org/g2");
+        let mk = |g: &NamedNode, o: &str| {
+            Quad::new(
+                Subject::NamedNode(nn("http://ex.org/s")),
+                Predicate::NamedNode(nn("http://ex.org/p")),
+                Object::Literal(Literal::new(o)),
+                GraphName::NamedNode(g.clone()),
+            )
+        };
+
+        let q1 = mk(&g1, "a");
+        let q2 = mk(&g2, "b");
+        assert!(storage.insert_quad(q1.clone()));
+        assert!(storage.insert_quad(q2.clone()));
+        assert_eq!(
+            storage.named_graphs,
+            [g1.clone(), g2.clone()].into_iter().collect()
+        );
+
+        // Drop g1's only quad: its graph-name id is reclaimed and g1 leaves the
+        // set, while g2 stays.
+        assert!(storage.remove_quad(&q1));
+        assert!(!storage.named_graphs.contains(&g1));
+        assert!(storage.named_graphs.contains(&g2));
+        assert_eq!(
+            storage.graphs.get_id(&GraphName::NamedNode(g1.clone())),
+            None
+        );
+
+        // A brand-new graph g3 reuses g1's freed graph-id slot; the set tracks it
+        // by value, so no slot growth and the membership stays exact.
+        let g3 = nn("http://ex.org/g3");
+        let q3 = mk(&g3, "c");
+        assert!(storage.insert_quad(q3.clone()));
+        assert_eq!(
+            storage.named_graphs,
+            [g2.clone(), g3.clone()].into_iter().collect()
+        );
+        assert_eq!(storage.graphs.slot_count(), 2);
+        assert_eq!(storage.graphs.live_count(), 2);
+
+        // Full-scan correctness after all the churn.
+        let got: BTreeSet<Quad> = storage
+            .query_quads(None, None, None, None)
+            .into_iter()
+            .collect();
+        assert_eq!(got, [q2, q3].into_iter().collect());
+    }
+
+    /// Best-effort memory-footprint measurement for the interned-only design.
+    /// Reports the estimated resident bytes for the current structures versus
+    /// the previous design (which additionally held a full owned
+    /// `BTreeSet<Quad>`), for 100k synthetic triples. Ignored by default; run
+    /// with `cargo nextest run -p oxirs-core --run-ignored all
+    /// memory_footprint_100k_triples` (or `cargo test ... -- --ignored`).
+    #[test]
+    #[ignore = "manual memory-footprint measurement"]
+    fn memory_footprint_100k_triples() {
+        let mut storage = MemoryStorage::new();
+        for i in 0..100_000u32 {
+            let quad = Quad::new(
+                Subject::NamedNode(nn(&format!("http://ex.org/s{}", i % 10_000))),
+                Predicate::NamedNode(nn(&format!("http://ex.org/p{}", i % 100))),
+                Object::Literal(Literal::new(format!("value-{i}"))),
+                GraphName::DefaultGraph,
+            );
+            storage.insert_quad(quad);
+        }
+        assert_eq!(storage.len(), 100_000);
+
+        let after = storage.size_estimate();
+
+        // The previous design also kept one owned `Quad` per triple in a
+        // `BTreeSet<Quad>`; approximate that removed overhead (struct size plus
+        // the term string bytes it duplicated) for the before/after ratio.
+        let owned_quad_bytes: usize = storage
+            .iter_quads()
+            .map(|q| {
+                std::mem::size_of::<Quad>()
+                    + q.subject().to_string().len()
+                    + q.predicate().to_string().len()
+                    + q.object().to_string().len()
+                    + q.graph_name().to_string().len()
+            })
+            .sum();
+        let before = after + owned_quad_bytes;
+
+        eprintln!(
+            "memory_footprint(100k triples): interned-only ~= {after} bytes \
+             ({:.1} MiB); previous design with owned quad set ~= {before} bytes \
+             ({:.1} MiB); dropping the owned set saves ~= {} bytes ({:.2}x smaller)",
+            after as f64 / (1024.0 * 1024.0),
+            before as f64 / (1024.0 * 1024.0),
+            owned_quad_bytes,
+            before as f64 / after as f64,
+        );
+        assert!(after < before, "interned-only must be smaller than before");
     }
 }

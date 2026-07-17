@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail, Result};
 use oxirs_core::model::NamedNode;
 use std::collections::{HashMap, HashSet};
 
-use super::types::{DatasetClause, Query, QueryType, Token};
+use super::types::{DatasetClause, DescribeTarget, ProjectionItem, Query, QueryType, Token};
 
 use super::queryparser_type::QueryParser;
 
@@ -307,6 +307,9 @@ impl QueryParser {
             prefixes: HashMap::new(),
             base_iri: None,
             dataset: DatasetClause::default(),
+            projection_items: Vec::new(),
+            describe_targets: Vec::new(),
+            describe_all: false,
         };
         self.skip_whitespace();
         self.parse_prologue(&mut query)?;
@@ -384,18 +387,38 @@ impl QueryParser {
         }
         // `SELECT *`: the tokenizer emits `Token::Star` for `*`, so the legacy
         // `Token::Multiply` check never matched and `SELECT *` failed to parse.
-        // Accept either. An empty `select_variables` means "project all
-        // in-scope variables".
+        // Accept either. An empty `select_variables` (and empty
+        // `projection_items`) means "project all in-scope variables".
         if self.match_token(&Token::Star) || self.match_token(&Token::Multiply) {
         } else {
             while !self.is_at_end()
                 && !matches!(self.peek(), Some(Token::Where) | Some(Token::From))
             {
-                if let Some(Token::Variable(var)) = self.peek() {
-                    query.select_variables.push(Variable::new(var.clone())?);
-                    self.advance();
-                } else {
-                    break;
+                match self.peek() {
+                    Some(Token::Variable(var)) => {
+                        let variable = Variable::new(var.clone())?;
+                        self.advance();
+                        query.select_variables.push(variable.clone());
+                        query
+                            .projection_items
+                            .push(ProjectionItem::Variable(variable));
+                    }
+                    // A parenthesized projection: `( Expression AS ?var )`,
+                    // including SPARQL aggregates such as `(COUNT(*) AS ?n)`.
+                    Some(Token::LeftParen) => {
+                        let item = self.parse_projection_paren_item()?;
+                        // The projected output variable is the alias; record it
+                        // in `select_variables` too so the output column set is
+                        // complete regardless of which field a consumer reads.
+                        let alias = match &item {
+                            ProjectionItem::Variable(v) => v.clone(),
+                            ProjectionItem::Expression { alias, .. }
+                            | ProjectionItem::Aggregate { alias, .. } => alias.clone(),
+                        };
+                        query.select_variables.push(alias);
+                        query.projection_items.push(item);
+                    }
+                    _ => break,
                 }
             }
         }
@@ -409,86 +432,138 @@ impl QueryParser {
     }
     pub(super) fn parse_describe_query(&mut self, query: &mut Query) -> Result<()> {
         self.expect_token(Token::Describe)?;
-        while !self.is_at_end() && !matches!(self.peek(), Some(Token::Where) | Some(Token::From)) {
-            if let Some(Token::Variable(var)) = self.peek() {
-                query.select_variables.push(Variable::new(var.clone())?);
-                self.advance();
-            } else if matches!(
-                self.peek(),
-                Some(Token::Iri(_)) | Some(Token::PrefixedName(_, _))
-            ) {
-                self.advance();
-            } else {
-                break;
+        self.skip_whitespace_and_newlines();
+        // `DESCRIBE *` describes every in-scope variable binding; it takes no
+        // explicit target list.
+        if self.match_token(&Token::Star) || self.match_token(&Token::Multiply) {
+            query.describe_all = true;
+        } else {
+            // `DESCRIBE VarOrIri+`: one or more IRIs and/or variables. Prefixed
+            // names are expanded against the prologue exactly like other term
+            // positions; the raw targets are RETAINED in `describe_targets`.
+            loop {
+                self.skip_whitespace_and_newlines();
+                match self.peek() {
+                    Some(Token::Variable(var)) => {
+                        let variable = Variable::new(var.clone())?;
+                        self.advance();
+                        query
+                            .describe_targets
+                            .push(DescribeTarget::Variable(variable.clone()));
+                        query.select_variables.push(variable);
+                    }
+                    Some(Token::Iri(iri)) => {
+                        let iri = iri.clone();
+                        self.advance();
+                        query
+                            .describe_targets
+                            .push(DescribeTarget::Iri(NamedNode::new_unchecked(iri)));
+                    }
+                    Some(Token::PrefixedName(prefix, local)) => {
+                        let prefix = prefix.clone();
+                        let local = local.clone();
+                        self.advance();
+                        let full_iri = self.resolve_prefixed_name(&prefix, &local)?;
+                        query
+                            .describe_targets
+                            .push(DescribeTarget::Iri(NamedNode::new_unchecked(full_iri)));
+                    }
+                    _ => break,
+                }
+            }
+            if query.describe_targets.is_empty() {
+                bail!("DESCRIBE requires at least one IRI or variable target, or '*'");
             }
         }
         self.parse_dataset_clause(&mut query.dataset)?;
+        // `WhereClause ::= 'WHERE'? GroupGraphPattern` — the WHERE keyword is
+        // optional, so accept `DESCRIBE ?x { … }` as well as
+        // `DESCRIBE ?x WHERE { … }`.
         if self.match_token(&Token::Where) {
             self.expect_token(Token::LeftBrace)?;
             query.where_clause = self.parse_group_graph_pattern()?;
             self.expect_token(Token::RightBrace)?;
+        } else if self.match_token(&Token::LeftBrace) {
+            query.where_clause = self.parse_group_graph_pattern()?;
+            self.expect_token(Token::RightBrace)?;
         }
+        self.parse_solution_modifiers(query)?;
         Ok(())
     }
     pub(super) fn parse_group_graph_pattern(&mut self) -> Result<Algebra> {
-        if self.has_union_pattern() {
-            return self.parse_graph_pattern_or_union();
-        }
-        // Collect the group's basic patterns separately from its `FILTER` /
-        // `BIND` modifiers. `parse_filter_pattern` / `parse_bind_pattern`
-        // return `Filter { pattern: Table, .. }` / `Extend { pattern: Table, .. }`
-        // placeholders; a `FILTER`/`BIND` constrains/extends the *whole* group,
-        // so joining those placeholders with the BGPs (the previous behaviour)
-        // evaluated the condition over an empty binding and silently dropped
-        // every row. Instead, join the basic patterns and then wrap the result
-        // with each modifier, in query order.
-        let mut patterns = Vec::new();
-        let mut modifiers = Vec::new();
+        // A group graph pattern is a sequence of graph patterns interleaved with
+        // `FILTER` / `BIND` modifiers, and the two modifiers scope DIFFERENTLY:
+        //
+        //   * `FILTER` constrains the WHOLE group regardless of its textual
+        //     position, so bare filters are collected and applied once, wrapping
+        //     the fully-joined group (SPARQL 1.1 §18.2.2 "collect FILTERs").
+        //
+        //   * `BIND` is POSITIONAL: `BIND(expr AS ?v)` extends the solution
+        //     produced by the elements written BEFORE it, and elements written
+        //     AFTER it join against the extended solution. `{ ?s ?p ?o .
+        //     BIND(?o AS ?x) . ?x ?q ?r }` therefore means
+        //     `Join(Extend(BGP(?s ?p ?o), ?x, ?o), BGP(?x ?q ?r))`. Deferring
+        //     the `BIND` to the group end (as `FILTER` is deferred) would join
+        //     both BGPs first and only then extend, letting the second BGP bind
+        //     `?x` and be silently mis-joined/overwritten. A leading `BIND`
+        //     extends the unit table (join identity), so `{ BIND(1 AS ?v) … }`
+        //     still works.
+        //
+        // Modifiers are recognised SYNTACTICALLY, by the leading `FILTER` /
+        // `BIND` token of THIS group — never structurally by matching a
+        // `Filter/Extend { pattern: Table, .. }` shape. A nested single-element
+        // group such as `{ ?s ?p ?o { FILTER(?o > 5) } }` also parses to
+        // `Filter { pattern: Table, .. }`, but it is a JOIN operand of the outer
+        // group, not an outer-group modifier, and must not be re-scoped.
+        //
+        // A top-level `UNION` needs no special-casing: it is parsed by
+        // `parse_graph_pattern_or_union` as one element of the loop below, so a
+        // trailing `FILTER`/`BIND` after a union is still scoped to the group.
+        let mut acc: Option<Algebra> = None;
+        let mut filters: Vec<Algebra> = Vec::new();
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
             self.skip_whitespace_and_newlines();
             if self.is_at_end() || matches!(self.peek(), Some(Token::RightBrace)) {
                 break;
             }
-            let pattern = self.parse_graph_pattern_or_union()?;
-            match &pattern {
-                Algebra::Filter { pattern: inner, .. }
-                | Algebra::Extend { pattern: inner, .. }
-                    if matches!(**inner, Algebra::Table) =>
-                {
-                    modifiers.push(pattern);
+            if matches!(self.peek(), Some(Token::Filter)) {
+                // Bare FILTER: whole-group scope, deferred to the group end.
+                filters.push(self.parse_filter_pattern()?);
+            } else if matches!(self.peek(), Some(Token::Bind)) {
+                // Bare BIND: positional Extend over the algebra accumulated so
+                // far (the unit table when the BIND leads the group).
+                match self.parse_bind_pattern()? {
+                    Algebra::Extend { variable, expr, .. } => {
+                        let base = acc.take().unwrap_or(Algebra::Table);
+                        acc = Some(Algebra::Extend {
+                            pattern: Box::new(base),
+                            variable,
+                            expr,
+                        });
+                    }
+                    other => bail!("BIND parser returned unexpected algebra: {other:?}"),
                 }
-                _ => patterns.push(pattern),
+            } else {
+                let pattern = self.parse_graph_pattern_or_union()?;
+                acc = Some(match acc.take() {
+                    Some(prev) => Algebra::join(prev, pattern),
+                    None => pattern,
+                });
             }
             self.match_token(&Token::Dot);
             self.skip_whitespace_and_newlines();
         }
-        let mut result = if patterns.is_empty() {
-            Algebra::Table
-        } else {
-            let mut patterns_iter = patterns.into_iter();
-            let mut acc = patterns_iter
-                .next()
-                .expect("collection validated to be non-empty");
-            for pattern in patterns_iter {
-                acc = Algebra::join(acc, pattern);
+        let mut result = acc.unwrap_or(Algebra::Table);
+        for modifier in filters {
+            match modifier {
+                Algebra::Filter { condition, .. } => {
+                    result = Algebra::Filter {
+                        pattern: Box::new(result),
+                        condition,
+                    };
+                }
+                other => bail!("FILTER parser returned unexpected algebra: {other:?}"),
             }
-            acc
-        };
-        for modifier in modifiers {
-            result = match modifier {
-                Algebra::Filter { condition, .. } => Algebra::Filter {
-                    pattern: Box::new(result),
-                    condition,
-                },
-                Algebra::Extend {
-                    variable, expr, ..
-                } => Algebra::Extend {
-                    pattern: Box::new(result),
-                    variable,
-                    expr,
-                },
-                other => Algebra::join(result, other),
-            };
         }
         Ok(result)
     }

@@ -235,30 +235,7 @@ impl ChatServer {
             .layer(TraceLayer::new_for_http())
             .layer(cors);
 
-        let app = Router::new()
-            .route("/api/sessions", post(create_session))
-            .route("/api/sessions/:session_id", get(get_session))
-            .route("/api/sessions/:session_id/messages", post(send_message))
-            .route("/api/sessions/:session_id/messages", get(get_messages))
-            .route("/api/sessions/:session_id/threads", get(get_threads))
-            .route(
-                "/api/sessions/:session_id/threads/:thread_id/messages",
-                get(get_thread_messages),
-            )
-            .route(
-                "/api/sessions/:session_id/messages/:message_id/replies",
-                get(get_message_replies),
-            )
-            .route(
-                "/api/sessions/:session_id/messages/:message_id/reactions",
-                post(add_reaction),
-            )
-            .route("/api/sessions/:session_id/ws", get(websocket_handler))
-            .route("/api/stats", get(get_stats))
-            .route("/health", get(health_check))
-            .route("/metrics", get(metrics_handler))
-            .layer(middleware)
-            .with_state(self.state.clone());
+        let app = Self::build_router(self.state.clone()).layer(middleware);
 
         let addr = SocketAddr::from(([127, 0, 0, 1], self.state.config.port));
         info!("Starting chat server on {}", addr);
@@ -267,6 +244,37 @@ impl ChatServer {
         axum::serve(listener, app).await?;
 
         Ok(())
+    }
+
+    /// Build the axum [`Router`] for the chat REST/WebSocket API.
+    ///
+    /// Split out from [`serve`](Self::serve) so the route table (and its
+    /// path-string syntax) can be exercised directly by tests without
+    /// binding a real TCP listener.
+    fn build_router(state: AppState) -> Router {
+        Router::new()
+            .route("/api/sessions", post(create_session))
+            .route("/api/sessions/{session_id}", get(get_session))
+            .route("/api/sessions/{session_id}/messages", post(send_message))
+            .route("/api/sessions/{session_id}/messages", get(get_messages))
+            .route("/api/sessions/{session_id}/threads", get(get_threads))
+            .route(
+                "/api/sessions/{session_id}/threads/{thread_id}/messages",
+                get(get_thread_messages),
+            )
+            .route(
+                "/api/sessions/{session_id}/messages/{message_id}/replies",
+                get(get_message_replies),
+            )
+            .route(
+                "/api/sessions/{session_id}/messages/{message_id}/reactions",
+                post(add_reaction),
+            )
+            .route("/api/sessions/{session_id}/ws", get(websocket_handler))
+            .route("/api/stats", get(get_stats))
+            .route("/health", get(health_check))
+            .route("/metrics", get(metrics_handler))
+            .with_state(state)
     }
 }
 
@@ -946,4 +954,41 @@ async fn get_active_topics(state: &AppState) -> HashMap<String, usize> {
     }
 
     topic_counts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::OxiRSChat;
+
+    /// Regression test for the axum 0.8 route-syntax migration.
+    ///
+    /// `Router::route` parses every path string at *construction* time
+    /// (matchit 0.8 under axum 0.8), not at compile time. Old-style
+    /// `:param` / `*wildcard` segments compile fine but panic the instant
+    /// the router is built. This test builds the real router via
+    /// [`ChatServer::build_router`] with the cheapest valid `AppState` so
+    /// any reintroduction of the old syntax fails the test suite instead
+    /// of surfacing only as a startup panic in production.
+    ///
+    /// Deliberately a plain (non-async) `#[test]`: `OxiRSChat::create_default`
+    /// spins up its own single-use Tokio runtime internally, and nesting
+    /// that inside a `#[tokio::test]` runtime would itself panic.
+    #[test]
+    fn build_router_accepts_axum_08_route_syntax() {
+        let chat = Arc::new(
+            OxiRSChat::create_default().expect("failed to build default OxiRSChat for test"),
+        );
+        let (broadcast_tx, _rx) = broadcast::channel(16);
+        let state = AppState {
+            chat,
+            websocket_sessions: Arc::new(RwLock::new(HashMap::new())),
+            broadcast_tx,
+            config: ServerConfig::default(),
+        };
+
+        // Must not panic: constructing the router forces axum to parse
+        // every route path string registered in `build_router`.
+        let _router: Router = ChatServer::build_router(state);
+    }
 }

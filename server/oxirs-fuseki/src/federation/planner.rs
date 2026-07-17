@@ -926,6 +926,9 @@ impl QueryPlanner {
             prefixes: std::collections::HashMap::new(),
             base_iri: None,
             dataset: oxirs_arq::query::DatasetClause::default(),
+            projection_items: vec![],
+            describe_targets: vec![],
+            describe_all: false,
         })
     }
 

@@ -234,8 +234,11 @@ impl PersistentState {
             })?;
             let mut writer = BufWriter::new(file);
             let serializer = Serializer::new(RdfFormat::NQuads);
-            for quad in &storage.quads {
-                let line = serializer.serialize_quad_to_nquads(quad)?;
+            // Stream the live quads straight from the interned indexes; no owned
+            // quad set exists, so each quad is materialized on the fly and dropped
+            // after its line is written.
+            for quad in storage.iter_quads() {
+                let line = serializer.serialize_quad_to_nquads(&quad)?;
                 writeln!(writer, "{line}").map_err(|e| {
                     OxirsError::Io(format!("Failed to write {}: {e}", tmp_file.display()))
                 })?;
