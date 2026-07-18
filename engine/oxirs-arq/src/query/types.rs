@@ -151,8 +151,26 @@ pub enum Token {
     Colon,
     Iri(String),
     PrefixedName(String, String),
+    /// A SPARQL 1.1 built-in call name (e.g. `LANG`, `isIRI`, `REGEX`),
+    /// carrying its canonical lower-case spelling. Only a *bare* (colon-free)
+    /// keyword is classified as a built-in; a leading-colon default-prefix name
+    /// such as `:lang` stays a [`Token::PrefixedName`] so user functions are
+    /// never mistaken for built-ins.
+    BuiltIn(String),
+    /// The bare `a` keyword: the `rdf:type` predicate shorthand. Only a bare
+    /// (colon-free) lowercase `a` is classified here; `?a`, `:a`, `"a"` and
+    /// `a:` (a prefix name) are never affected.
+    A,
     Variable(String),
     StringLiteral(String),
+    /// A string literal carrying a language tag (`"foo"@ja`) or an explicit
+    /// datatype (`"1"^^xsd:integer`). `datatype` holds the raw form as written
+    /// (an absolute IRI, or a `prefix:local` name resolved at parse time).
+    RdfLiteral {
+        value: String,
+        language: Option<String>,
+        datatype: Option<String>,
+    },
     NumericLiteral(String),
     BooleanLiteral(bool),
     BlankNode(String),

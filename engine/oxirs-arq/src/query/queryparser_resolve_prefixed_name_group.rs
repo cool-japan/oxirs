@@ -5,6 +5,7 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use anyhow::{bail, Result};
+use oxirs_core::model::NamedNode;
 
 use super::types::Token;
 
@@ -17,6 +18,26 @@ impl QueryParser {
             Ok(format!("{base}{local}"))
         } else {
             bail!("Undefined prefix '{prefix}' in prefixed name '{prefix}:{local}'")
+        }
+    }
+    /// Resolve the raw datatype of an `"…"^^dt` literal to a `NamedNode`.
+    ///
+    /// `raw` is the datatype exactly as written after `^^`: either an absolute
+    /// IRI (the `<iri>` form, already unwrapped by the lexer) or a
+    /// `prefix:local` name. An absolute IRI is recognised by an authority
+    /// separator (`scheme://…`); anything else with a colon is treated as a
+    /// prefixed name and resolved against the declared prefixes.
+    pub(super) fn resolve_datatype(&self, raw: &str) -> Result<NamedNode> {
+        if let Some(colon) = raw.find(':') {
+            if raw[colon + 1..].starts_with("//") {
+                return Ok(NamedNode::new_unchecked(raw.to_string()));
+            }
+            let prefix = &raw[..colon];
+            let local = &raw[colon + 1..];
+            let full = self.resolve_prefixed_name(prefix, local)?;
+            Ok(NamedNode::new_unchecked(full))
+        } else {
+            Ok(NamedNode::new_unchecked(raw.to_string()))
         }
     }
     pub(super) fn expect_iri(&mut self) -> Result<String> {

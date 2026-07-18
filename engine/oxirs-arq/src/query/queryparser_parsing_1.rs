@@ -36,6 +36,13 @@ impl QueryParser {
                 let full_iri = self.resolve_prefixed_name(&prefix, &local)?;
                 Ok(Term::Iri(NamedNode::new_unchecked(full_iri)))
             }
+            Some(Token::A) => {
+                // `a` in a term position is the rdf:type predicate shorthand.
+                self.advance();
+                Ok(Term::Iri(NamedNode::new_unchecked(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                )))
+            }
             Some(Token::StringLiteral(value)) => {
                 let value = value.clone();
                 self.advance();
@@ -43,6 +50,25 @@ impl QueryParser {
                     value,
                     language: None,
                     datatype: None,
+                }))
+            }
+            Some(Token::RdfLiteral {
+                value,
+                language,
+                datatype,
+            }) => {
+                let value = value.clone();
+                let language = language.clone();
+                let datatype = datatype.clone();
+                self.advance();
+                let datatype = match datatype {
+                    Some(raw) => Some(self.resolve_datatype(&raw)?),
+                    None => None,
+                };
+                Ok(Term::Literal(Literal {
+                    value,
+                    language,
+                    datatype,
                 }))
             }
             Some(Token::NumericLiteral(value)) => {

@@ -16,6 +16,7 @@ impl QueryParser {
             Some(Token::Caret)
                 | Some(Token::Iri(_))
                 | Some(Token::PrefixedName(_, _))
+                | Some(Token::A)
                 | Some(Token::LeftParen)
                 | Some(Token::Bang)
         )

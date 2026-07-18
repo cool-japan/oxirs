@@ -4,7 +4,7 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use crate::algebra::{Algebra, PropertyPath, PropertyPathPattern, Term, TriplePattern, Variable};
+use crate::algebra::{Algebra, PropertyPath, Term, TriplePattern, Variable};
 use anyhow::{anyhow, bail, Result};
 use oxirs_core::model::NamedNode;
 use std::collections::{HashMap, HashSet};
@@ -226,7 +226,46 @@ impl QueryParser {
                             literal.push(ch);
                         }
                     }
-                    tokens.push(Token::StringLiteral(literal));
+                    // Optional RDF literal suffix: a language tag (`@ja`, with
+                    // subtags such as `@ja-JP`) or an explicit datatype
+                    // (`^^<iri>` / `^^prefix:local`). A plain literal keeps the
+                    // simple `StringLiteral` token so existing call sites are
+                    // unaffected.
+                    if chars.peek() == Some(&'@') {
+                        chars.next();
+                        let mut lang = String::new();
+                        while let Some(&c) = chars.peek() {
+                            if c.is_ascii_alphanumeric() || c == '-' {
+                                lang.push(c);
+                                chars.next();
+                            } else {
+                                break;
+                            }
+                        }
+                        tokens.push(Token::RdfLiteral {
+                            value: literal,
+                            language: Some(lang),
+                            datatype: None,
+                        });
+                    } else if chars.peek() == Some(&'^') {
+                        chars.next();
+                        if chars.peek() == Some(&'^') {
+                            chars.next();
+                            let datatype = self.parse_datatype_iri(&mut chars);
+                            tokens.push(Token::RdfLiteral {
+                                value: literal,
+                                language: None,
+                                datatype: Some(datatype),
+                            });
+                        } else {
+                            // A lone `^` after a string is not a datatype marker;
+                            // keep the literal and emit the caret separately.
+                            tokens.push(Token::StringLiteral(literal));
+                            tokens.push(Token::Caret);
+                        }
+                    } else {
+                        tokens.push(Token::StringLiteral(literal));
+                    }
                 }
                 '_' => {
                     chars.next();
@@ -277,6 +316,28 @@ impl QueryParser {
             }
         }
         identifier
+    }
+    /// Read the datatype that follows a `^^` marker: either an absolute IRI in
+    /// angle brackets (`<iri>`, returned without the brackets) or a
+    /// `prefix:local` name (returned verbatim for parse-time resolution).
+    pub(super) fn parse_datatype_iri(
+        &self,
+        chars: &mut std::iter::Peekable<std::str::Chars>,
+    ) -> String {
+        if chars.peek() == Some(&'<') {
+            chars.next();
+            let mut iri = String::new();
+            while let Some(&c) = chars.peek() {
+                chars.next();
+                if c == '>' {
+                    break;
+                }
+                iri.push(c);
+            }
+            iri
+        } else {
+            self.parse_identifier(chars)
+        }
     }
     pub(super) fn parse_number(&self, chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
         let mut number = String::new();
@@ -591,33 +652,89 @@ impl QueryParser {
                 self.advance();
                 continue;
             }
-            let triple = self.parse_triple_pattern()?;
-            triples.push(triple);
+            triples.extend(self.parse_triples_same_subject()?);
             if !self.match_token(&Token::Dot) {
                 break;
             }
         }
         Ok(Algebra::Bgp(triples))
     }
-    pub(super) fn parse_triple_pattern(&mut self) -> Result<TriplePattern> {
+    /// Parse a `TriplesSameSubjectPath`: one subject followed by a
+    /// predicate-object list, expanding the SPARQL 1.1 abbreviations `;`
+    /// (predicate-object list) and `,` (object list) into every triple that
+    /// shares the subject. `{ ?s :p ?o ; :q ?r , ?t }` therefore yields the
+    /// three triples `(?s :p ?o)`, `(?s :q ?r)`, `(?s :q ?t)`.
+    pub(super) fn parse_triples_same_subject(&mut self) -> Result<Vec<TriplePattern>> {
         self.skip_whitespace_and_newlines();
         let subject = self.parse_term()?;
-        self.skip_whitespace_and_newlines();
-        if self.is_property_path_start() {
-            let path = self.parse_property_path()?;
+        let mut triples = Vec::new();
+        self.parse_predicate_object_list(&subject, &mut triples)?;
+        Ok(triples)
+    }
+    /// Parse a `PropertyListPathNotEmpty`:
+    /// `verb objectList ( ';' ( verb objectList )? )*`. A trailing `;` (and a
+    /// repeated `;;`) with no following verb is valid SPARQL and tolerated.
+    pub(super) fn parse_predicate_object_list(
+        &mut self,
+        subject: &Term,
+        out: &mut Vec<TriplePattern>,
+    ) -> Result<()> {
+        loop {
+            self.skip_whitespace_and_newlines();
+            let predicate = self.parse_verb()?;
+            self.parse_object_list(subject, &predicate, out)?;
+            self.skip_whitespace_and_newlines();
+            if !self.match_token(&Token::Semicolon) {
+                break;
+            }
+            // After ';', a further `verb objectList` is optional. Skip any run of
+            // extra `;` and stop when no verb follows (a trailing semicolon).
+            self.skip_whitespace_and_newlines();
+            while self.match_token(&Token::Semicolon) {
+                self.skip_whitespace_and_newlines();
+            }
+            if !self.is_verb_start() {
+                break;
+            }
+        }
+        Ok(())
+    }
+    /// Parse an `ObjectListPath`: one or more objects separated by `,`, emitting
+    /// one triple per object with the shared subject and predicate.
+    pub(super) fn parse_object_list(
+        &mut self,
+        subject: &Term,
+        predicate: &Term,
+        out: &mut Vec<TriplePattern>,
+    ) -> Result<()> {
+        loop {
             self.skip_whitespace_and_newlines();
             let object = self.parse_term()?;
-            let path_pattern = PropertyPathPattern::new(subject, path, object);
-            return Ok(TriplePattern::new(
-                path_pattern.subject.clone(),
-                Term::PropertyPath(path_pattern.path.clone()),
-                path_pattern.object.clone(),
+            out.push(TriplePattern::new(
+                subject.clone(),
+                predicate.clone(),
+                object,
             ));
+            self.skip_whitespace_and_newlines();
+            if !self.match_token(&Token::Comma) {
+                break;
+            }
         }
-        let predicate = self.parse_term()?;
-        self.skip_whitespace_and_newlines();
-        let object = self.parse_term()?;
-        Ok(TriplePattern::new(subject, predicate, object))
+        Ok(())
+    }
+    /// Parse a verb (predicate): a property path (`IRI`, `a`, `p1/p2`, `p+`, …)
+    /// or a plain variable predicate.
+    pub(super) fn parse_verb(&mut self) -> Result<Term> {
+        if self.is_property_path_start() {
+            Ok(Term::PropertyPath(self.parse_property_path()?))
+        } else {
+            self.parse_term()
+        }
+    }
+    /// Whether the current token can begin a verb (predicate): a property-path
+    /// start (`IRI` / prefixed name / `a` / `^` / `(` / `!`) or a variable.
+    pub(super) fn is_verb_start(&self) -> bool {
+        self.is_property_path_start() || matches!(self.peek(), Some(Token::Variable(_)))
     }
     /// Parse primary property path expressions
     pub(super) fn parse_property_path_primary(&mut self) -> Result<PropertyPath> {
@@ -638,6 +755,13 @@ impl QueryParser {
                 self.advance();
                 let full_iri = self.resolve_prefixed_name(&prefix, &local)?;
                 Ok(PropertyPath::iri(NamedNode::new_unchecked(full_iri)))
+            }
+            Some(Token::A) => {
+                // `a` is the SPARQL shorthand for the rdf:type predicate.
+                self.advance();
+                Ok(PropertyPath::iri(NamedNode::new_unchecked(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                )))
             }
             Some(Token::Variable(var)) => {
                 let var = var.clone();

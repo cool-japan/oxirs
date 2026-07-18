@@ -65,11 +65,22 @@ impl QueryParser {
             // terminator).
             self.match_token(&Token::OrderBy);
             while !self.is_at_end() && !self.is_solution_modifier_end() {
-                let expr = self.parse_expression()?;
-                let alias = if self.match_token(&Token::As) {
-                    Some(self.expect_variable()?)
+                // A grouping condition is a bare `Var`, a `BuiltInCall` /
+                // `FunctionCall`, or the parenthesised `'(' Expression ('AS'
+                // Var)? ')'` form — where the `AS` alias lives INSIDE the
+                // parentheses (`GROUP BY (LANG(?l) AS ?g)`).
+                let (expr, alias) = if matches!(self.peek(), Some(Token::LeftParen)) {
+                    self.advance(); // consume '('
+                    let expr = self.parse_expression()?;
+                    let alias = if self.match_token(&Token::As) {
+                        Some(self.expect_variable()?)
+                    } else {
+                        None
+                    };
+                    self.expect_token(Token::RightParen)?;
+                    (expr, alias)
                 } else {
-                    None
+                    (self.parse_expression()?, None)
                 };
                 query.group_by.push(GroupCondition { expr, alias });
             }

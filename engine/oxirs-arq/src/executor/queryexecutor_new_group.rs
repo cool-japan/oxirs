@@ -466,18 +466,23 @@ impl QueryExecutor {
         aggregates: &[(crate::algebra::Variable, crate::algebra::Aggregate)],
     ) -> Result<Solution> {
         use std::collections::HashMap;
-        let mut groups: HashMap<
-            Vec<(crate::algebra::Variable, crate::algebra::Term)>,
-            Vec<&crate::algebra::Binding>,
-        > = HashMap::new();
+        // Each grouping condition is a full expression (`GROUP BY ?v`,
+        // `GROUP BY (LANG(?l))`, `GROUP BY (STR(?x) AS ?k)`), so the group key is
+        // the ordered tuple of the *evaluated* condition values. Evaluating the
+        // expression per binding — rather than only reading plain variables — is
+        // what makes `GROUP BY (expr)` split into the correct groups instead of
+        // collapsing every row into one. An unevaluable condition (unbound
+        // variable, type error) contributes `None`, a distinct key slot.
+        let mut groups: HashMap<Vec<Option<crate::algebra::Term>>, Vec<&crate::algebra::Binding>> =
+            HashMap::new();
         for binding in &solution {
-            let mut group_key = Vec::new();
+            let mut group_key = Vec::with_capacity(variables.len());
             for group_condition in variables {
-                if let crate::algebra::Expression::Variable(var) = &group_condition.expr {
-                    if let Some(term) = binding.get(var) {
-                        group_key.push((var.clone(), term.clone()));
-                    }
-                }
+                let value = match &group_condition.expr {
+                    crate::algebra::Expression::Variable(var) => binding.get(var).cloned(),
+                    other => self.evaluate_expression(other, binding).ok(),
+                };
+                group_key.push(value);
             }
             groups.entry(group_key).or_default().push(binding);
         }
@@ -489,8 +494,19 @@ impl QueryExecutor {
         let mut result = Solution::new();
         for (group_key, group_bindings) in groups {
             let mut group_result = crate::algebra::Binding::new();
-            for (var, term) in group_key {
-                group_result.insert(var, term);
+            // Expose each grouping key under its bound name: a plain `?v`
+            // grouping binds `?v`, and an aliased `(expr AS ?k)` binds `?k`, so
+            // the key value is visible to the projection / ORDER BY. A bare
+            // `GROUP BY (expr)` with no alias binds nothing (SPARQL requires an
+            // alias to project such a key).
+            for (group_condition, value) in variables.iter().zip(group_key.iter()) {
+                let bind_var = match &group_condition.expr {
+                    crate::algebra::Expression::Variable(var) => Some(var.clone()),
+                    _ => group_condition.alias.clone(),
+                };
+                if let (Some(var), Some(term)) = (bind_var, value) {
+                    group_result.insert(var, term.clone());
+                }
             }
             for (agg_var, aggregate) in aggregates {
                 let agg_value = self.calculate_aggregate(aggregate, &group_bindings)?;

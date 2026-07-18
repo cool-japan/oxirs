@@ -4,7 +4,7 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use crate::algebra::{Algebra, Expression, Literal, TriplePattern, Variable};
+use crate::algebra::{Algebra, Expression, Literal, TriplePattern, UnaryOperator, Variable};
 use crate::update::{GraphReference, QuadPattern, UpdateOperation};
 use anyhow::{bail, Result};
 use oxirs_core::model::NamedNode;
@@ -13,6 +13,60 @@ use std::collections::HashMap;
 use super::types::{Token, UpdateRequest};
 
 use super::queryparser_type::QueryParser;
+
+/// Validate the argument count of a SPARQL 1.1 built-in call at parse time, so a
+/// malformed call (e.g. `REGEX(?x)`, `IF(?a, ?b)`) surfaces as a client parse
+/// error (4xx) rather than failing deep in execution. `name` is the canonical
+/// lower-case built-in name produced by `builtin_call_name`.
+fn validate_builtin_arity(name: &str, argc: usize) -> Result<()> {
+    let ok = match name {
+        // No-argument built-ins.
+        "now" | "rand" | "uuid" | "struuid" => argc == 0,
+        // Zero or one argument.
+        "bnode" => argc <= 1,
+        // Exactly one argument.
+        "str" | "lang" | "datatype" | "bound" | "iri" | "uri" | "abs" | "ceil" | "floor"
+        | "round" | "strlen" | "ucase" | "lcase" | "encode_for_uri" | "year" | "month" | "day"
+        | "hours" | "minutes" | "seconds" | "timezone" | "tz" | "md5" | "sha1" | "sha256"
+        | "sha384" | "sha512" | "isiri" | "isuri" | "isblank" | "isliteral" | "isnumeric" => {
+            argc == 1
+        }
+        // Exactly two arguments.
+        "langmatches" | "contains" | "strstarts" | "strends" | "strbefore" | "strafter"
+        | "strlang" | "strdt" | "sameterm" => argc == 2,
+        // Two or three arguments.
+        "regex" | "substr" => (2..=3).contains(&argc),
+        // Exactly three arguments.
+        "if" => argc == 3,
+        // Three or four arguments.
+        "replace" => (3..=4).contains(&argc),
+        // At least one argument.
+        "coalesce" => argc >= 1,
+        // Variadic (zero or more): CONCAT.
+        "concat" => true,
+        // Any name not in the table imposes no arity constraint here.
+        _ => true,
+    };
+    if ok {
+        Ok(())
+    } else {
+        bail!("built-in {name} called with wrong number of arguments ({argc})")
+    }
+}
+
+/// Take the single argument of a validated unary built-in. Arity is checked by
+/// [`validate_builtin_arity`] before this is reached, so `args` holds exactly
+/// one element; the empty-string fallback keeps the parser total without an
+/// `unwrap`.
+fn pop_single_arg(args: Vec<Expression>) -> Expression {
+    args.into_iter()
+        .next()
+        .unwrap_or(Expression::Literal(Literal {
+            value: String::new(),
+            language: None,
+            datatype: None,
+        }))
+}
 
 impl QueryParser {
     pub(super) fn parse_additive_expression(&mut self) -> Result<Expression> {
@@ -71,6 +125,27 @@ impl QueryParser {
                     datatype: None,
                 }))
             }
+            Some(Token::RdfLiteral {
+                value,
+                language,
+                datatype,
+            }) => {
+                // A language-tagged or explicitly-typed literal in an expression,
+                // e.g. `FILTER(?l = "hokkaido"@ja)` or `?x = "1"^^xsd:integer`.
+                let value = value.clone();
+                let language = language.clone();
+                let datatype = datatype.clone();
+                self.advance();
+                let datatype = match datatype {
+                    Some(raw) => Some(self.resolve_datatype(&raw)?),
+                    None => None,
+                };
+                Ok(Expression::Literal(Literal {
+                    value,
+                    language,
+                    datatype,
+                }))
+            }
             Some(Token::BooleanLiteral(value)) => {
                 let value = *value;
                 self.advance();
@@ -86,6 +161,11 @@ impl QueryParser {
                 self.expect_token(Token::RightParen)?;
                 Ok(expr)
             }
+            Some(Token::BuiltIn(name)) => {
+                let name = name.clone();
+                self.advance();
+                self.parse_builtin_call(&name)
+            }
             Some(Token::PrefixedName(prefix, local)) => {
                 let prefix = prefix.clone();
                 let local = local.clone();
@@ -93,6 +173,18 @@ impl QueryParser {
                 self.advance();
                 if self.match_token(&Token::LeftParen) {
                     let mut args = Vec::new();
+                    // `COUNT(*)` in an expression context (e.g. `HAVING (COUNT(*)
+                    // > 1)`): the star is the count-all form, carried as an empty
+                    // argument list. It is only accepted when it is the sole
+                    // token before `)`, so `SUM(?a * ?b)` (a multiplication) is
+                    // untouched.
+                    if matches!(self.peek(), Some(Token::Star) | Some(Token::Multiply))
+                        && matches!(self.tokens.get(self.position + 1), Some(Token::RightParen))
+                    {
+                        self.advance(); // `*`
+                        self.advance(); // `)`
+                        return Ok(Expression::Function { name, args });
+                    }
                     while !self.match_token(&Token::RightParen) {
                         args.push(self.parse_expression()?);
                         if !self.match_token(&Token::Comma) {
@@ -113,11 +205,91 @@ impl QueryParser {
             _ => bail!("Expected primary expression"),
         }
     }
+    /// Parse a SPARQL 1.1 `BuiltInCall` whose name token has already been
+    /// consumed. `name` is the canonical lower-case built-in name.
+    ///
+    /// The argument list is parsed with the ordinary expression grammar, its
+    /// arity is validated, and the call is lowered to the AST shape the
+    /// evaluator expects: the type-check predicates and `BOUND` become dedicated
+    /// [`Expression`] variants (`Unary` / `Bound`), `IF` becomes `Conditional`,
+    /// and every other built-in becomes an `Expression::Function` keyed by its
+    /// canonical name (matching the evaluator's function table).
+    pub(super) fn parse_builtin_call(&mut self, name: &str) -> Result<Expression> {
+        self.expect_token(Token::LeftParen)?;
+        let mut args = Vec::new();
+        // A built-in with no arguments closes immediately, e.g. `NOW()`.
+        if !self.match_token(&Token::RightParen) {
+            loop {
+                args.push(self.parse_expression()?);
+                if self.match_token(&Token::Comma) {
+                    continue;
+                }
+                self.expect_token(Token::RightParen)?;
+                break;
+            }
+        }
+        validate_builtin_arity(name, args.len())?;
+
+        // Lower to the dedicated AST variant when one exists, so the evaluator
+        // reaches its native handler rather than the generic function table.
+        match name {
+            "isiri" | "isuri" => Ok(Expression::Unary {
+                op: UnaryOperator::IsIri,
+                operand: Box::new(pop_single_arg(args)),
+            }),
+            "isblank" => Ok(Expression::Unary {
+                op: UnaryOperator::IsBlank,
+                operand: Box::new(pop_single_arg(args)),
+            }),
+            "isliteral" => Ok(Expression::Unary {
+                op: UnaryOperator::IsLiteral,
+                operand: Box::new(pop_single_arg(args)),
+            }),
+            "isnumeric" => Ok(Expression::Unary {
+                op: UnaryOperator::IsNumeric,
+                operand: Box::new(pop_single_arg(args)),
+            }),
+            "bound" => match pop_single_arg(args) {
+                Expression::Variable(var) => Ok(Expression::Bound(var)),
+                _ => bail!("BOUND requires a variable argument"),
+            },
+            "if" => {
+                let mut it = args.into_iter();
+                let condition = Box::new(it.next().unwrap_or(Expression::Literal(Literal {
+                    value: "false".to_string(),
+                    language: None,
+                    datatype: None,
+                })));
+                let then_expr = Box::new(it.next().unwrap_or(Expression::Literal(Literal {
+                    value: String::new(),
+                    language: None,
+                    datatype: None,
+                })));
+                let else_expr = Box::new(it.next().unwrap_or(Expression::Literal(Literal {
+                    value: String::new(),
+                    language: None,
+                    datatype: None,
+                })));
+                Ok(Expression::Conditional {
+                    condition,
+                    then_expr,
+                    else_expr,
+                })
+            }
+            _ => Ok(Expression::Function {
+                name: name.to_string(),
+                args,
+            }),
+        }
+    }
     pub(super) fn parse_construct_template(&mut self) -> Result<Vec<TriplePattern>> {
         let mut triples = Vec::new();
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
-            let triple = self.parse_triple_pattern()?;
-            triples.push(triple);
+            self.skip_whitespace_and_newlines();
+            if matches!(self.peek(), Some(Token::RightBrace)) {
+                break;
+            }
+            triples.extend(self.parse_triples_same_subject()?);
             if !self.match_token(&Token::Dot) {
                 break;
             }

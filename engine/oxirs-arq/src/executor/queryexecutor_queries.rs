@@ -225,6 +225,72 @@ impl QueryExecutor {
                         Err(anyhow::anyhow!("lcase() requires exactly 1 argument"))
                     }
                 }
+                // String predicate functions (2 string arguments -> xsd:boolean).
+                "contains" | "CONTAINS" => {
+                    if args.len() == 2 {
+                        let hay = self.evaluate_expression(&args[0], binding)?;
+                        let needle = self.evaluate_expression(&args[1], binding)?;
+                        self.string_predicate_function(&hay, &needle, "contains")
+                    } else {
+                        Err(anyhow::anyhow!("contains() requires exactly 2 arguments"))
+                    }
+                }
+                "strstarts" | "STRSTARTS" => {
+                    if args.len() == 2 {
+                        let hay = self.evaluate_expression(&args[0], binding)?;
+                        let needle = self.evaluate_expression(&args[1], binding)?;
+                        self.string_predicate_function(&hay, &needle, "strstarts")
+                    } else {
+                        Err(anyhow::anyhow!("strstarts() requires exactly 2 arguments"))
+                    }
+                }
+                "strends" | "STRENDS" => {
+                    if args.len() == 2 {
+                        let hay = self.evaluate_expression(&args[0], binding)?;
+                        let needle = self.evaluate_expression(&args[1], binding)?;
+                        self.string_predicate_function(&hay, &needle, "strends")
+                    } else {
+                        Err(anyhow::anyhow!("strends() requires exactly 2 arguments"))
+                    }
+                }
+                // REGEX(text, pattern [, flags]) -> xsd:boolean.
+                "regex" | "REGEX" => {
+                    if (2..=3).contains(&args.len()) {
+                        let text = self.evaluate_expression(&args[0], binding)?;
+                        let pattern = self.evaluate_expression(&args[1], binding)?;
+                        let flags = match args.get(2) {
+                            Some(flag_expr) => Some(self.evaluate_expression(flag_expr, binding)?),
+                            None => None,
+                        };
+                        self.regex_function(&text, &pattern, flags.as_ref())
+                    } else {
+                        Err(anyhow::anyhow!("regex() requires 2 or 3 arguments"))
+                    }
+                }
+                // LANGMATCHES(language-tag, language-range) -> xsd:boolean.
+                "langmatches" | "LANGMATCHES" => {
+                    if args.len() == 2 {
+                        let tag = self.evaluate_expression(&args[0], binding)?;
+                        let range = self.evaluate_expression(&args[1], binding)?;
+                        self.langmatches_function(&tag, &range)
+                    } else {
+                        Err(anyhow::anyhow!(
+                            "langmatches() requires exactly 2 arguments"
+                        ))
+                    }
+                }
+                // COALESCE(expr, ...) returns the first argument that evaluates
+                // without error. Arguments are evaluated lazily so an unbound
+                // variable or type error in an earlier argument is skipped rather
+                // than failing the whole call (SPARQL 1.1 §17.4.2.2).
+                "coalesce" | "COALESCE" => {
+                    for arg in args {
+                        if let Ok(term) = self.evaluate_expression(arg, binding) {
+                            return Ok(term);
+                        }
+                    }
+                    Err(anyhow::anyhow!("COALESCE: no argument could be evaluated"))
+                }
                 _ => Err(anyhow::Error::new(super::types::UnknownFunctionError(
                     name.clone(),
                 ))),
@@ -894,5 +960,111 @@ impl QueryExecutor {
                 "lcase() requires a string literal argument"
             )),
         }
+    }
+
+    /// Extract the lexical string value of a term for string built-ins. A
+    /// literal yields its lexical form; an IRI yields the IRI string. Any other
+    /// term kind is a type error for these functions.
+    pub(super) fn term_string_value(&self, term: &crate::algebra::Term) -> Result<String> {
+        match term {
+            crate::algebra::Term::Literal(lit) => Ok(lit.value.clone()),
+            crate::algebra::Term::Iri(iri) => Ok(iri.as_str().to_string()),
+            _ => Err(anyhow::anyhow!(
+                "string function not applicable to this term type"
+            )),
+        }
+    }
+
+    /// Build an `xsd:boolean` term.
+    pub(super) fn boolean_term(&self, value: bool) -> crate::algebra::Term {
+        crate::algebra::Term::Literal(crate::algebra::Literal {
+            value: value.to_string(),
+            language: None,
+            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                "http://www.w3.org/2001/XMLSchema#boolean",
+            )),
+        })
+    }
+
+    /// CONTAINS / STRSTARTS / STRENDS: substring predicate over two string
+    /// terms, returning an `xsd:boolean`. `kind` selects the predicate.
+    pub(super) fn string_predicate_function(
+        &self,
+        haystack: &crate::algebra::Term,
+        needle: &crate::algebra::Term,
+        kind: &str,
+    ) -> Result<crate::algebra::Term> {
+        let hay = self.term_string_value(haystack)?;
+        let needle = self.term_string_value(needle)?;
+        let result = match kind {
+            "contains" => hay.contains(&needle),
+            "strstarts" => hay.starts_with(&needle),
+            "strends" => hay.ends_with(&needle),
+            other => return Err(anyhow::anyhow!("unknown string predicate: {other}")),
+        };
+        Ok(self.boolean_term(result))
+    }
+
+    /// Built-in `REGEX(text, pattern [, flags])` -> `xsd:boolean`. Supported
+    /// flags: `i` (case-insensitive), `m` (multi-line), `s` (dot-all), `x`
+    /// (extended/ignore-whitespace).
+    pub(super) fn regex_function(
+        &self,
+        text: &crate::algebra::Term,
+        pattern: &crate::algebra::Term,
+        flags: Option<&crate::algebra::Term>,
+    ) -> Result<crate::algebra::Term> {
+        use regex::RegexBuilder;
+        let text = self.term_string_value(text)?;
+        let pattern = self.term_string_value(pattern)?;
+        let mut builder = RegexBuilder::new(&pattern);
+        if let Some(flags_term) = flags {
+            let flags = self.term_string_value(flags_term)?;
+            for flag in flags.chars() {
+                match flag {
+                    'i' => {
+                        builder.case_insensitive(true);
+                    }
+                    'm' => {
+                        builder.multi_line(true);
+                    }
+                    's' => {
+                        builder.dot_matches_new_line(true);
+                    }
+                    'x' => {
+                        builder.ignore_whitespace(true);
+                    }
+                    other => return Err(anyhow::anyhow!("unknown regex flag: {other}")),
+                }
+            }
+        }
+        let re = builder
+            .build()
+            .map_err(|e| anyhow::anyhow!("invalid regex pattern: {e}"))?;
+        Ok(self.boolean_term(re.is_match(&text)))
+    }
+
+    /// Built-in `LANGMATCHES(language-tag, language-range)` -> `xsd:boolean`,
+    /// implementing RFC 4647 basic-filtering matching: `*` matches any
+    /// non-empty tag, otherwise the range matches the tag exactly or as a
+    /// subtag-boundary prefix, case-insensitively.
+    pub(super) fn langmatches_function(
+        &self,
+        tag: &crate::algebra::Term,
+        range: &crate::algebra::Term,
+    ) -> Result<crate::algebra::Term> {
+        let tag = self.term_string_value(tag)?;
+        let range = self.term_string_value(range)?;
+        let matches = if range == "*" {
+            !tag.is_empty()
+        } else {
+            let tag_l = tag.to_ascii_lowercase();
+            let range_l = range.to_ascii_lowercase();
+            tag_l == range_l
+                || tag_l
+                    .strip_prefix(&range_l)
+                    .is_some_and(|rest| rest.starts_with('-'))
+        };
+        Ok(self.boolean_term(matches))
     }
 }
