@@ -203,10 +203,10 @@ impl Ed25519JwsSigner {
     /// Generate a new random key pair using OS entropy
     pub fn generate(kid: Option<&str>) -> DidResult<Self> {
         use ed25519_dalek::SigningKey as DalekSigningKey;
-        // Use OS RNG via p256's rand_core integration
-        let mut seed = [0u8; 32];
-        use p256::elliptic_curve::rand_core::RngCore;
-        p256::elliptic_curve::rand_core::OsRng.fill_bytes(&mut seed);
+        // 32-byte Ed25519 seed from the OS CSPRNG (oxicrypto-rand → getrandom).
+        // Any 32-byte string is a valid Ed25519 seed, so no rejection needed.
+        let seed = oxicrypto_rand::random_nonce::<32>()
+            .map_err(|e| DidError::InternalError(format!("OS entropy source failed: {e}")))?;
         let signing_key = DalekSigningKey::from_bytes(&seed);
         Ok(Self {
             signing_key,
@@ -299,7 +299,7 @@ impl EcdsaJwsSigner {
                 bytes.len()
             )));
         }
-        let signing_key = p256::ecdsa::SigningKey::from_bytes(bytes.into())
+        let signing_key = p256::ecdsa::SigningKey::from_slice(bytes)
             .map_err(|e| DidError::InvalidKey(format!("Invalid P-256 key: {e}")))?;
         Ok(Self {
             signing_key,
@@ -307,22 +307,23 @@ impl EcdsaJwsSigner {
         })
     }
 
-    /// Generate a random P-256 key pair
-    pub fn generate(kid: Option<&str>) -> Self {
-        let signing_key =
-            p256::ecdsa::SigningKey::random(&mut p256::elliptic_curve::rand_core::OsRng);
-        Self {
+    /// Generate a random P-256 key pair.
+    ///
+    /// Fails closed (returns an error) if the OS entropy source is unavailable,
+    /// rather than falling back to a weaker RNG.
+    pub fn generate(kid: Option<&str>) -> DidResult<Self> {
+        let signing_key = crate::signatures::es256::generate_p256_signing_key()?;
+        Ok(Self {
             signing_key,
             kid: kid.map(String::from),
-        }
+        })
     }
 
     /// 33-byte compressed public key
     pub fn public_key_compressed(&self) -> Vec<u8> {
-        use p256::elliptic_curve::sec1::ToEncodedPoint;
         self.signing_key
             .verifying_key()
-            .to_encoded_point(true)
+            .to_sec1_point(true)
             .as_bytes()
             .to_vec()
     }
@@ -568,7 +569,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_sign_verify_roundtrip() {
-        let signer = EcdsaJwsSigner::generate(Some("p256-key-1"));
+        let signer = EcdsaJwsSigner::generate(Some("p256-key-1")).expect("generate ES256 signer");
         let verifier = signer.verifier();
         let jws = signer.sign_payload(b"hello ecdsa p256").unwrap();
         assert!(verifier.verify_jws(&jws).unwrap());
@@ -576,7 +577,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_invalid_signature_detected() {
-        let signer = EcdsaJwsSigner::generate(None);
+        let signer = EcdsaJwsSigner::generate(None).expect("generate ES256 signer");
         let verifier = signer.verifier();
         let mut jws = signer.sign_payload(b"tamper ecdsa").unwrap();
         if let Some(b) = jws.signature.first_mut() {
@@ -587,9 +588,9 @@ mod tests {
 
     #[test]
     fn test_ecdsa_wrong_key_fails() {
-        let signer = EcdsaJwsSigner::generate(None);
+        let signer = EcdsaJwsSigner::generate(None).expect("generate ES256 signer");
         let jws = signer.sign_payload(b"ecdsa cross-key").unwrap();
-        let other_signer = EcdsaJwsSigner::generate(None);
+        let other_signer = EcdsaJwsSigner::generate(None).expect("generate ES256 signer");
         let other_verifier = other_signer.verifier();
         assert!(!other_verifier.verify_jws(&jws).unwrap_or(true));
     }
@@ -602,7 +603,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_header_alg_es256() {
-        let signer = EcdsaJwsSigner::generate(Some("es256-kid"));
+        let signer = EcdsaJwsSigner::generate(Some("es256-kid")).expect("generate ES256 signer");
         let jws = signer.sign_payload(b"algorithm check").unwrap();
         assert_eq!(jws.header.alg, "ES256");
         assert_eq!(jws.header.kid, Some("es256-kid".to_string()));
@@ -610,7 +611,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_compact_roundtrip() {
-        let signer = EcdsaJwsSigner::generate(None);
+        let signer = EcdsaJwsSigner::generate(None).expect("generate ES256 signer");
         let verifier = signer.verifier();
         let jws = signer.sign_payload(b"compact ecdsa").unwrap();
         let compact = jws.to_compact().unwrap();
@@ -620,7 +621,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_compressed_pubkey_length() {
-        let signer = EcdsaJwsSigner::generate(None);
+        let signer = EcdsaJwsSigner::generate(None).expect("generate ES256 signer");
         let pk = signer.public_key_compressed();
         assert_eq!(pk.len(), 33);
         // Must start with 0x02 or 0x03 for compressed point
@@ -629,7 +630,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_verifier_from_compressed() {
-        let signer = EcdsaJwsSigner::generate(None);
+        let signer = EcdsaJwsSigner::generate(None).expect("generate ES256 signer");
         let pk = signer.public_key_compressed();
         let verifier = EcdsaJwsVerifier::from_compressed(&pk).unwrap();
         let jws = signer.sign_payload(b"verifier from compressed").unwrap();

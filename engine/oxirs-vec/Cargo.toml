@@ -58,7 +58,7 @@ chrono.workspace = true
 pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 numpy = { version = "0.29", optional = true }
 uuid.workspace = true
-humantime = "2.3"
+humantime = "2.4"
 indicatif.workspace = true
 # Tantivy full-text search (upgraded to 0.25 for lru security fix)
 tantivy = { workspace = true, optional = true }

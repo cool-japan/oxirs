@@ -47,6 +47,9 @@ hmac = "0.12"
 base64.workspace = true
 hex.workspace = true
 p256.workspace = true
+# OS CSPRNG (ChaCha20 seeded from getrandom) — used for key/seed/blinding
+# generation now that rand_core 0.9 (via p256 0.14) dropped `OsRng`.
+oxicrypto-rand.workspace = true
 bls12_381_plus.workspace = true
 # rsa provides the pure-Rust RS256 (RSASSA-PKCS1-v1_5) signing and verification
 # path (replaces the former `ring` dependency). Key generation lives behind the

@@ -130,6 +130,8 @@ pub enum AuthenticationError {
     UnsupportedMethod(String),
     /// The `challenge_id` in the response does not match any active challenge.
     ChallengeMismatch,
+    /// An internal error occurred (e.g. the OS entropy source was unavailable).
+    Internal(String),
 }
 
 impl std::fmt::Display for AuthenticationError {
@@ -144,6 +146,7 @@ impl std::fmt::Display for AuthenticationError {
                 write!(f, "unsupported auth method: {m}")
             }
             AuthenticationError::ChallengeMismatch => write!(f, "challenge ID mismatch"),
+            AuthenticationError::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
 }
@@ -245,14 +248,12 @@ impl Authenticator {
         }
 
         // Fresh 32-byte challenge from the OS CSPRNG (unpredictable, non-replayable).
+        // Sourced from oxicrypto-rand (→ getrandom); fails closed if the OS
+        // entropy source is unavailable rather than issuing a weak challenge.
         let seq = self.sequence;
         self.sequence = self.sequence.wrapping_add(1);
-        let challenge_bytes: Vec<u8> = {
-            use p256::elliptic_curve::rand_core::{OsRng, RngCore};
-            let mut buf = [0u8; 32];
-            OsRng.fill_bytes(&mut buf);
-            buf.to_vec()
-        };
+        let challenge_bytes: Vec<u8> = oxicrypto_rand::random_bytes(32)
+            .map_err(|e| AuthenticationError::Internal(format!("OS entropy source failed: {e}")))?;
 
         let challenge_id = format!("chg-{did}-{seq}");
         let challenge = AuthChallenge {

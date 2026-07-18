@@ -22,9 +22,11 @@ use wasmparser::{Validator, WasmFeatures as WasmParserFeatures};
 // declaration in Cargo.toml.
 #[cfg(feature = "wasm-rsa")]
 // `.verify()` on the RSA `VerifyingKey` resolves through the `signature::Verifier`
-// trait already brought into scope by the `ed25519_dalek::Verifier` import above
-// (both are re-exports of the same `signature` crate trait), so no separate
-// `rsa::signature::Verifier` import is needed here.
+// trait, but the two crates now disagree on its version: ed25519-dalek 3.0
+// re-exports signature 3.0, while `rsa` 0.9.10 still implements signature 2.2.
+// The module-level `ed25519_dalek::Verifier` import therefore no longer covers
+// this call, so the RSA verify path brings in its own `rsa::signature::Verifier`
+// locally (see `verify_rsa_signature`).
 use rsa::{pkcs1v15::VerifyingKey as RsaVerifyingKey, RsaPublicKey};
 
 /// WebAssembly edge processor for distributed streaming
@@ -977,6 +979,11 @@ impl WasmEdgeProcessor {
         signature: &DigitalSignature,
     ) -> StreamResult<()> {
         use rsa::pkcs1::DecodeRsaPublicKey;
+        // `rsa` 0.9.10 implements signature 2.2's `Verifier`, whereas the
+        // module-level `ed25519_dalek::Verifier` is signature 3.0's. Bring the
+        // matching trait into scope (methods only, `as _` avoids clashing with
+        // the ed25519 import) so `verifying_key.verify(..)` resolves below.
+        use rsa::signature::Verifier as _;
         use sha2::{Digest, Sha256};
 
         // Parse the RSA public key from DER format

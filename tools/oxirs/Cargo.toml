@@ -91,7 +91,7 @@ rust_xlsxwriter = { workspace = true, optional = true }  # Excel XLSX file gener
 keyring-core = { workspace = true, optional = true }  # System keyring integration (platform-specific, feature-gated)
 apple-native-keyring-store = { workspace = true, optional = true }  # macOS Keychain backend for keyring
 inferno = "0.12"    # Flame graph generation for profiling
-printpdf = { version = "0.9", optional = true }    # PDF generation for reports (feature-gated; requires pdf-export feature)
+printpdf = { version = "0.11", optional = true }    # PDF generation for reports (feature-gated; requires pdf-export feature)
 handlebars.workspace = true  # Template engine for custom output formats
 oxilangtag.workspace = true  # BCP-47 language tag validation and normalization
 quick-xml.workspace = true   # XML parsing for SPARQL Results XML (SRX) format

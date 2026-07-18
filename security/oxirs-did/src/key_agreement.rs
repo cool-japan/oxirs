@@ -30,6 +30,8 @@
 //! assert_eq!(alice_secret.value, bob_secret.value);
 //! ```
 
+use crate::{DidError, DidResult};
+
 /// Diffie–Hellman parameter set (prime and generator)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DhParams {
@@ -187,24 +189,29 @@ impl EcdhKeyAgreement {
     ///
     /// Takes `&mut self` for backward-compatible call sites, but no longer keeps
     /// any deterministic internal state — each call draws fresh OS entropy.
-    pub fn generate_keypair(&mut self) -> X25519KeyPair {
+    ///
+    /// Fails closed if the OS entropy source is unavailable.
+    pub fn generate_keypair(&mut self) -> DidResult<X25519KeyPair> {
         Self::generate_keypair_static()
     }
 
     /// Generate a fresh X25519 key pair (does not require `&mut self`).
-    pub fn generate_keypair_static() -> X25519KeyPair {
+    ///
+    /// Fails closed if the OS entropy source is unavailable.
+    pub fn generate_keypair_static() -> DidResult<X25519KeyPair> {
         use curve25519_dalek::constants::X25519_BASEPOINT;
-        use p256::elliptic_curve::rand_core::{OsRng, RngCore};
 
-        let mut private_bytes = [0u8; 32];
-        OsRng.fill_bytes(&mut private_bytes);
+        // 32-byte X25519 private seed from the OS CSPRNG (oxicrypto-rand →
+        // getrandom). Any 32-byte value is a valid X25519 scalar (clamped on use).
+        let private_bytes = oxicrypto_rand::random_nonce::<32>()
+            .map_err(|e| DidError::InternalError(format!("OS entropy source failed: {e}")))?;
         // Public key = clamp(private) * basepoint (mul_clamped applies the
         // RFC 7748 clamping internally).
         let public_bytes = X25519_BASEPOINT.mul_clamped(private_bytes).to_bytes();
-        X25519KeyPair {
+        Ok(X25519KeyPair {
             private_bytes,
             public_bytes,
-        }
+        })
     }
 
     /// Derive the X25519 shared secret from the local private key and the
@@ -468,7 +475,7 @@ mod tests {
     #[test]
     fn test_ecdh_generate_keypair_length() {
         let mut ecdh = EcdhKeyAgreement::new("X25519");
-        let kp = ecdh.generate_keypair();
+        let kp = ecdh.generate_keypair().expect("X25519 keygen");
         assert_eq!(kp.private_bytes.len(), 32);
         assert_eq!(kp.public_bytes.len(), 32);
     }
@@ -476,8 +483,8 @@ mod tests {
     #[test]
     fn test_ecdh_successive_keypairs_differ() {
         let mut ecdh = EcdhKeyAgreement::new("X25519");
-        let kp1 = ecdh.generate_keypair();
-        let kp2 = ecdh.generate_keypair();
+        let kp1 = ecdh.generate_keypair().expect("X25519 keygen");
+        let kp2 = ecdh.generate_keypair().expect("X25519 keygen");
         // Counter-based seeds → different output
         assert_ne!(kp1.public_bytes, kp2.public_bytes);
     }
@@ -485,8 +492,8 @@ mod tests {
     #[test]
     fn test_ecdh_derive_shared_secret_length() {
         let mut ecdh = EcdhKeyAgreement::new("X25519");
-        let alice = ecdh.generate_keypair();
-        let bob = ecdh.generate_keypair();
+        let alice = ecdh.generate_keypair().expect("X25519 keygen");
+        let bob = ecdh.generate_keypair().expect("X25519 keygen");
         let shared = ecdh.derive_shared_secret(&alice, &bob.public_bytes);
         assert_eq!(shared.len(), 32);
     }
@@ -495,8 +502,8 @@ mod tests {
     fn test_ecdh_derive_shared_secret_symmetry() {
         // Real X25519 ECDH: both parties derive the SAME shared secret.
         let mut ecdh = EcdhKeyAgreement::new("X25519");
-        let alice = ecdh.generate_keypair();
-        let bob = ecdh.generate_keypair();
+        let alice = ecdh.generate_keypair().expect("X25519 keygen");
+        let bob = ecdh.generate_keypair().expect("X25519 keygen");
         let s1 = ecdh.derive_shared_secret(&alice, &bob.public_bytes);
         let s2 = ecdh.derive_shared_secret(&bob, &alice.public_bytes);
         assert_eq!(s1, s2, "X25519 ECDH must be symmetric");
@@ -508,9 +515,9 @@ mod tests {
     fn test_ecdh_distinct_pairs_yield_distinct_secrets() {
         // An attacker (mallory) with their own keypair cannot derive alice&bob's
         // shared secret.
-        let alice = EcdhKeyAgreement::generate_keypair_static();
-        let bob = EcdhKeyAgreement::generate_keypair_static();
-        let mallory = EcdhKeyAgreement::generate_keypair_static();
+        let alice = EcdhKeyAgreement::generate_keypair_static().expect("X25519 keygen");
+        let bob = EcdhKeyAgreement::generate_keypair_static().expect("X25519 keygen");
+        let mallory = EcdhKeyAgreement::generate_keypair_static().expect("X25519 keygen");
         let ecdh = EcdhKeyAgreement::new("X25519");
 
         let ab = ecdh.derive_shared_secret(&alice, &bob.public_bytes);
@@ -525,7 +532,7 @@ mod tests {
     fn test_ecdh_public_key_matches_basepoint_mul() {
         // The generated public key really is basepoint * clamp(private).
         use curve25519_dalek::constants::X25519_BASEPOINT;
-        let kp = EcdhKeyAgreement::generate_keypair_static();
+        let kp = EcdhKeyAgreement::generate_keypair_static().expect("X25519 keygen");
         let expected = X25519_BASEPOINT.mul_clamped(kp.private_bytes).to_bytes();
         assert_eq!(kp.public_bytes, expected);
     }

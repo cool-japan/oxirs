@@ -575,7 +575,9 @@ fn verify_rs256(signing_input: &[u8], signature: &[u8], jwk: &Jwk) -> Result<(),
 fn verify_es256(signing_input: &[u8], signature: &[u8], jwk: &Jwk) -> Result<(), SsoError> {
     use p256::ecdsa::signature::Verifier;
     use p256::ecdsa::{Signature, VerifyingKey};
-    use p256::EncodedPoint;
+    // `EncodedPoint` was removed from the p256 crate root in 0.14; the SEC1 point
+    // type is now `p256::Sec1Point` (elliptic-curve 0.14 renamed `EncodedPoint`).
+    use p256::Sec1Point;
 
     if jwk.kty != "EC" {
         return Err(SsoError::InvalidKey(format!(
@@ -601,7 +603,7 @@ fn verify_es256(signing_input: &[u8], signature: &[u8], jwk: &Jwk) -> Result<(),
     let x = left_pad_32(&b64url_decode(x_b64)?)?;
     let y = left_pad_32(&b64url_decode(y_b64)?)?;
 
-    let point = EncodedPoint::from_affine_coordinates(
+    let point = Sec1Point::from_affine_coordinates(
         p256::FieldBytes::from_slice(&x),
         p256::FieldBytes::from_slice(&y),
         false,
@@ -779,7 +781,7 @@ mod tests {
 
     fn es256_public_jwk() -> Jwk {
         let sk = es256_signing_key();
-        let point = sk.verifying_key().to_encoded_point(false);
+        let point = sk.verifying_key().to_sec1_point(false);
         Jwk {
             kty: "EC".to_string(),
             kid: Some("ec-test".to_string()),

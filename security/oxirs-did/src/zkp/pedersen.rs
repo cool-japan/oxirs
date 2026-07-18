@@ -74,23 +74,26 @@ fn sha256(data: &[u8]) -> [u8; 32] {
 
 /// CSPRNG blinding: 32 random bytes from OS entropy XOR-ed with a deterministic
 /// seed (index + name) to ensure distinctness per attribute.
-fn generate_blinding(index: usize, name: &str) -> [u8; 32] {
+///
+/// Fails closed (returns an error) if the OS entropy source is unavailable — a
+/// predictable blinding factor would break the hiding property of the
+/// commitment, so no weak fallback is used.
+fn generate_blinding(index: usize, name: &str) -> DidResult<[u8; 32]> {
     // Deterministic component
     let det = sha256(&{
         let mut buf = index.to_be_bytes().to_vec();
         buf.extend_from_slice(name.as_bytes());
         buf
     });
-    // OS-entropy component
-    let mut rng_bytes = [0u8; 32];
-    use p256::elliptic_curve::rand_core::RngCore;
-    p256::elliptic_curve::rand_core::OsRng.fill_bytes(&mut rng_bytes);
+    // OS-entropy component (oxicrypto-rand → getrandom).
+    let rng_bytes = oxicrypto_rand::random_nonce::<32>()
+        .map_err(|e| DidError::InternalError(format!("OS entropy source failed: {e}")))?;
     // XOR
     let mut result = [0u8; 32];
     for (i, r) in result.iter_mut().enumerate() {
         *r = det[i] ^ rng_bytes[i];
     }
-    result
+    Ok(result)
 }
 
 // ── PedersenParams ────────────────────────────────────────────────────────────
@@ -172,16 +175,19 @@ pub struct AttributeCommitment {
 }
 
 impl AttributeCommitment {
-    /// Create a new commitment with a fresh blinding factor
-    pub fn commit_attr(params: &PedersenParams, attr: &CredentialAttribute) -> Self {
-        let blinding = generate_blinding(attr.index, &attr.name);
+    /// Create a new commitment with a fresh blinding factor.
+    ///
+    /// Fails closed if the OS entropy source needed for the blinding factor is
+    /// unavailable.
+    pub fn commit_attr(params: &PedersenParams, attr: &CredentialAttribute) -> DidResult<Self> {
+        let blinding = generate_blinding(attr.index, &attr.name)?;
         let commitment = params.commit(&attr.value, &blinding);
-        Self {
+        Ok(Self {
             index: attr.index,
             name: attr.name.clone(),
             commitment,
             blinding: Some(blinding),
-        }
+        })
     }
 
     /// Create a public commitment (no blinding factor)
@@ -247,12 +253,12 @@ impl SchnorrProof {
         message: &[u8],
         blinding: &[u8; 32],
         nonce: &[u8],
-    ) -> Self {
+    ) -> DidResult<Self> {
         let (g, h) = ped_generators(params);
         let m = ped_scalar_from_bytes(message);
         let r = ped_scalar_from_bytes(blinding);
-        let t_m = ped_scalar_from_bytes(&generate_blinding(0, "schnorr-nonce-m"));
-        let t_r = ped_scalar_from_bytes(&generate_blinding(0, "schnorr-nonce-r"));
+        let t_m = ped_scalar_from_bytes(&generate_blinding(0, "schnorr-nonce-m")?);
+        let t_r = ped_scalar_from_bytes(&generate_blinding(0, "schnorr-nonce-r")?);
 
         // Nonce commitment A = t_m·G + t_r·H
         let nonce_commit = RistrettoPoint::multiscalar_mul([t_m, t_r], [g, h])
@@ -267,13 +273,13 @@ impl SchnorrProof {
         let z_m = t_m + c * m;
         let z_r = t_r + c * r;
 
-        Self {
+        Ok(Self {
             commitment,
             challenge,
             nonce_commit,
             response_m: z_m.to_bytes(),
             response_r: z_r.to_bytes(),
-        }
+        })
     }
 
     /// Verify the Schnorr proof: checks `z_m·G + z_r·H == A + c·C` with the
@@ -441,7 +447,7 @@ pub fn prove_selective(
         .attributes
         .iter()
         .map(|attr| AttributeCommitment::commit_attr(&params, attr))
-        .collect();
+        .collect::<DidResult<Vec<_>>>()?;
 
     // Root commitment = SHA-256 of all individual Pedersen commitment bytes
     let root_commitment = pedersen_root_commitment(&attr_commits);
@@ -465,7 +471,7 @@ pub fn prove_selective(
                 &attr.value,
                 &blinding,
                 &request.nonce,
-            );
+            )?;
             schnorr_proofs.push(proof);
             hidden_commitments.push(AttributeCommitment::public_only(
                 attr.index,
@@ -915,7 +921,7 @@ mod tests {
     fn test_attribute_commitment_has_blinding() {
         let p = PedersenParams::standard();
         let attr = CredentialAttribute::new("name", "Alice", 0);
-        let c = AttributeCommitment::commit_attr(&p, &attr);
+        let c = AttributeCommitment::commit_attr(&p, &attr).expect("commit");
         assert!(c.blinding.is_some());
     }
 
@@ -923,7 +929,7 @@ mod tests {
     fn test_attribute_commitment_verify_opening() {
         let p = PedersenParams::standard();
         let attr = CredentialAttribute::new("age", "25", 1);
-        let c = AttributeCommitment::commit_attr(&p, &attr);
+        let c = AttributeCommitment::commit_attr(&p, &attr).expect("commit");
         let blinding = c.blinding.unwrap();
         assert!(p.verify_opening(&c.commitment, &attr.value, &blinding));
     }
@@ -944,7 +950,7 @@ mod tests {
         let commitment = p.commit(msg, &blinding);
         let nonce = b"verifier-nonce";
 
-        let proof = SchnorrProof::prove(&p, commitment, msg, &blinding, nonce);
+        let proof = SchnorrProof::prove(&p, commitment, msg, &blinding, nonce).expect("prove");
         assert!(proof.verify(&p, nonce));
     }
 
@@ -955,7 +961,7 @@ mod tests {
         let blinding = [3u8; 32];
         let commitment = p.commit(msg, &blinding);
 
-        let proof = SchnorrProof::prove(&p, commitment, msg, &blinding, b"nonce1");
+        let proof = SchnorrProof::prove(&p, commitment, msg, &blinding, b"nonce1").expect("prove");
         assert!(!proof.verify(&p, b"nonce2"));
     }
 
@@ -966,7 +972,7 @@ mod tests {
         let blinding = [1u8; 32];
         let commitment = p.commit(msg, &blinding);
 
-        let mut proof = SchnorrProof::prove(&p, commitment, msg, &blinding, b"n");
+        let mut proof = SchnorrProof::prove(&p, commitment, msg, &blinding, b"n").expect("prove");
         // Tamper the commitment in the proof
         proof.commitment[0] ^= 0xFF;
         assert!(!proof.verify(&p, b"n"));
@@ -996,7 +1002,7 @@ mod tests {
         let p = PedersenParams::standard();
         let b1 = [4u8; 32];
         let c1 = p.commit(b"message-one", &b1);
-        let mut proof = SchnorrProof::prove(&p, c1, b"message-one", &b1, b"n");
+        let mut proof = SchnorrProof::prove(&p, c1, b"message-one", &b1, b"n").expect("prove");
 
         let c2 = p.commit(b"message-two", &[5u8; 32]);
         proof.commitment = c2;
@@ -1010,7 +1016,7 @@ mod tests {
         let p = PedersenParams::standard();
         let b = [6u8; 32];
         let c = p.commit(b"val", &b);
-        let mut proof = SchnorrProof::prove(&p, c, b"val", &b, b"nn");
+        let mut proof = SchnorrProof::prove(&p, c, b"val", &b, b"nn").expect("prove");
         proof.response_m[0] ^= 0x01;
         assert!(!proof.verify(&p, b"nn"));
     }

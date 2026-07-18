@@ -165,9 +165,8 @@ impl ManagedKey {
             }
             KeyAlgorithm::P256 => {
                 use p256::ecdsa::signature::Signer;
-                let signing_key =
-                    p256::ecdsa::SigningKey::from_bytes(self.secret_key.as_slice().into())
-                        .map_err(|e| KeyManagerError::SigningUnsupported(e.to_string()))?;
+                let signing_key = p256::ecdsa::SigningKey::from_slice(&self.secret_key)
+                    .map_err(|e| KeyManagerError::SigningUnsupported(e.to_string()))?;
                 let sig: p256::ecdsa::Signature = signing_key.sign(message);
                 Ok(sig.to_bytes().to_vec())
             }
@@ -238,32 +237,33 @@ impl std::error::Error for KeyManagerError {}
 ///
 /// All secrets are drawn from the OS CSPRNG.
 fn generate_keypair(algo: KeyAlgorithm) -> Result<(Vec<u8>, Vec<u8>), KeyManagerError> {
-    use p256::elliptic_curve::rand_core::{OsRng, RngCore};
+    // All secrets are drawn from the OS CSPRNG (oxicrypto-rand → getrandom);
+    // generation fails closed if the entropy source is unavailable.
     match algo {
         KeyAlgorithm::Ed25519 => {
-            let mut seed = [0u8; 32];
-            OsRng.fill_bytes(&mut seed);
+            let seed = oxicrypto_rand::random_nonce::<32>().map_err(|e| {
+                KeyManagerError::KeyGenerationFailed(format!("OS entropy source failed: {e}"))
+            })?;
             let signer = crate::proof::ed25519::Ed25519Signer::from_bytes(&seed)
                 .map_err(|e| KeyManagerError::KeyGenerationFailed(e.to_string()))?;
             Ok((signer.public_key_bytes().to_vec(), seed.to_vec()))
         }
         KeyAlgorithm::X25519 => {
             use curve25519_dalek::constants::X25519_BASEPOINT;
-            let mut private_bytes = [0u8; 32];
-            OsRng.fill_bytes(&mut private_bytes);
+            let private_bytes = oxicrypto_rand::random_nonce::<32>().map_err(|e| {
+                KeyManagerError::KeyGenerationFailed(format!("OS entropy source failed: {e}"))
+            })?;
             let public = X25519_BASEPOINT.mul_clamped(private_bytes).to_bytes();
             Ok((public.to_vec(), private_bytes.to_vec()))
         }
         KeyAlgorithm::P256 => {
-            let signing_key = p256::ecdsa::SigningKey::random(&mut OsRng);
-            let public = {
-                use p256::elliptic_curve::sec1::ToEncodedPoint;
-                signing_key
-                    .verifying_key()
-                    .to_encoded_point(true)
-                    .as_bytes()
-                    .to_vec()
-            };
+            let signing_key = crate::signatures::es256::generate_p256_signing_key()
+                .map_err(|e| KeyManagerError::KeyGenerationFailed(e.to_string()))?;
+            let public = signing_key
+                .verifying_key()
+                .to_sec1_point(true)
+                .as_bytes()
+                .to_vec();
             let secret = signing_key.to_bytes().to_vec();
             Ok((public, secret))
         }
@@ -1293,7 +1293,7 @@ mod tests {
         let msg = b"p256 message";
         let sig_bytes = key.sign(msg).expect("sign");
         let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&key.public_key).expect("vk");
-        let sig = p256::ecdsa::Signature::from_bytes(sig_bytes.as_slice().into()).expect("sig");
+        let sig = p256::ecdsa::Signature::from_slice(&sig_bytes).expect("sig");
         assert!(vk.verify(msg, &sig).is_ok());
     }
 
