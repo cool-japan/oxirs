@@ -250,6 +250,7 @@ const FIXTURE_R2_NT: &str = concat!(
     "<http://ex/c1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex/Concept> .\n",
     "<http://ex/c2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex/Concept> .\n",
     "<http://ex/c3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex/Concept> .\n",
+    "<http://ex/c1> <http://www.w3.org/2004/02/skos/core#broader> <http://ex/c2> .\n",
 );
 
 fn seeded_router_r2() -> Router {
@@ -258,7 +259,7 @@ fn seeded_router_r2() -> Router {
     let loaded = store
         .load_data(FIXTURE_R2_NT, RdfSerializationFormat::NTriples, None)
         .expect("r2 fixture must load");
-    assert_eq!(loaded, 8, "the r2 fixture has eight triples");
+    assert_eq!(loaded, 9, "the r2 fixture has nine triples");
     let state = Arc::new(build_minimal_app_state(store, ServerConfig::default()));
     build_jena_router(state, core_store)
 }
@@ -358,4 +359,209 @@ async fn filter_lang_literal_exact_match() {
         "http://ex/c1",
         "the exact-match row must be c1; body: {body}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Round 3: predicate-object lists (`;`), object lists (`,`), CONSTRUCT `;`,
+//          OPTIONAL `;`, trailing `;`, property-path sequences,
+//          GROUP BY (expr AS ?var)
+// ---------------------------------------------------------------------------
+
+/// POST a SPARQL query with a chosen `Accept` header; return (status, body).
+async fn post_query_accept(router: &Router, query: &str, accept: &str) -> (StatusCode, String) {
+    let req = Request::builder()
+        .method("POST")
+        .uri("/sparql")
+        .header("content-type", "application/sparql-query")
+        .header("accept", accept)
+        .body(Body::from(query.to_string()))
+        .expect("request");
+    let resp = router.clone().oneshot(req).await.expect("oneshot");
+    let status = resp.status();
+    let bytes = to_bytes(resp.into_body(), usize::MAX).await.expect("body");
+    (status, String::from_utf8_lossy(&bytes).to_string())
+}
+
+/// Count serialized RDF triples in a Turtle/N-Triples body (lines ending `.`).
+fn turtle_triple_count(body: &str) -> usize {
+    body.lines()
+        .filter(|l| {
+            let t = l.trim();
+            t.starts_with('<') && t.ends_with('.')
+        })
+        .count()
+}
+
+#[tokio::test]
+async fn predicate_object_list_query() {
+    let router = seeded_router_r2();
+    // `a` + a prefixed predicate joined by `;` over the same subject.
+    let query = concat!(
+        "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n",
+        "SELECT ?c ?l WHERE { ?c a <http://ex/Concept> ; skos:prefLabel ?l }"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a `;` predicate-object list must return 200, not the old 400; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(
+        rows.len(),
+        5,
+        "c1(2) + c2(2) + c3(1) label rows; body: {body}"
+    );
+}
+
+#[tokio::test]
+async fn object_list_query() {
+    let router = seeded_router_r2();
+    // `,` object list: only c1 carries BOTH labels.
+    let query = concat!(
+        "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n",
+        "SELECT ?c WHERE { ?c skos:prefLabel \"inu\"@ja , \"dog\"@en }"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a `,` object list must return 200; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(
+        rows.len(),
+        1,
+        "only c1 has both inu@ja and dog@en; body: {body}"
+    );
+    assert_eq!(
+        rows[0]["c"]["value"].as_str().unwrap_or(""),
+        "http://ex/c1",
+        "body: {body}"
+    );
+}
+
+#[tokio::test]
+async fn construct_template_with_semicolon() {
+    let router = seeded_router_r2();
+    // A `;` predicate-object list inside a CONSTRUCT template: two output
+    // triples per binding.
+    let query = concat!(
+        "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n",
+        "CONSTRUCT { ?c <http://ex/p> ?l ; <http://ex/q> ?l } ",
+        "WHERE { ?c skos:prefLabel ?l }"
+    );
+    let (status, body) = post_query_accept(&router, query, "text/turtle").await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a `;` in a CONSTRUCT template must return 200; body: {body}"
+    );
+    assert_eq!(
+        turtle_triple_count(&body),
+        10,
+        "5 label rows x 2 template triples = 10 output triples; body:\n{body}"
+    );
+}
+
+#[tokio::test]
+async fn optional_block_with_semicolon() {
+    let router = seeded_router_r2();
+    // `;` inside an OPTIONAL block.
+    let query = concat!(
+        "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n",
+        "SELECT ?c ?l WHERE { ?c a <http://ex/Concept> ",
+        "OPTIONAL { ?c skos:prefLabel ?l ; a <http://ex/Concept> } }"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a `;` inside OPTIONAL must return 200; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(
+        rows.len(),
+        5,
+        "each concept contributes its labels; body: {body}"
+    );
+}
+
+#[tokio::test]
+async fn trailing_semicolon_query() {
+    let router = seeded_router_r2();
+    let query = "SELECT ?c WHERE { ?c a <http://ex/Concept> ; }";
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a trailing `;` must be tolerated (200); body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(rows.len(), 3, "the three typed concepts; body: {body}");
+}
+
+#[tokio::test]
+async fn property_path_sequence_with_semicolon() {
+    let router = seeded_router_r2();
+    // `a` + a `/`-sequence property path in one predicate-object list:
+    // c1 --broader--> c2 --prefLabel--> {neko@ja, cat@en}.
+    let query = concat!(
+        "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n",
+        "SELECT ?bl WHERE { ?c a <http://ex/Concept> ; skos:broader/skos:prefLabel ?bl }"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "an `a ; path/sequence` list must return 200; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(
+        rows.len(),
+        2,
+        "only c1 has a broader concept (c2); its two labels are reached; body: {body}"
+    );
+    let labels: Vec<&str> = rows
+        .iter()
+        .filter_map(|r| r["bl"]["value"].as_str())
+        .collect();
+    assert!(
+        labels.contains(&"neko") && labels.contains(&"cat"),
+        "the broader concept c2's labels must be reached; got {labels:?}; body: {body}"
+    );
+}
+
+#[tokio::test]
+async fn group_by_expr_as_var_wire() {
+    let router = seeded_router_r2();
+    let query = concat!(
+        "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n",
+        "SELECT ?g (COUNT(*) AS ?n) WHERE { ?c skos:prefLabel ?l } GROUP BY (LANG(?l) AS ?g)"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "GROUP BY (expr AS ?var) must return 200, not the old 400; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(rows.len(), 2, "two language groups; body: {body}");
+    // The alias ?g must be projected as the language key.
+    let mut langs: Vec<&str> = rows
+        .iter()
+        .filter_map(|r| r["g"]["value"].as_str())
+        .collect();
+    langs.sort_unstable();
+    assert_eq!(
+        langs,
+        vec!["en", "ja"],
+        "?g must bind the language; body: {body}"
+    );
+    let mut counts: Vec<i64> = rows
+        .iter()
+        .filter_map(|r| r["n"]["value"].as_str().and_then(|s| s.parse().ok()))
+        .collect();
+    counts.sort_unstable();
+    assert_eq!(counts, vec![2, 3], "ja=2, en=3; body: {body}");
 }

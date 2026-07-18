@@ -24,6 +24,24 @@ impl QueryExecutor {
         pattern: &crate::algebra::TriplePattern,
         dataset: &dyn Dataset,
     ) -> Result<Solution> {
+        // A complex property path (`p1/p2`, `^p`, `p+`, `p*`, `p?`, `p1|p2`,
+        // `!p`) cannot be matched by a single triple lookup — `find_triples`
+        // only understands a plain IRI/variable predicate. Route it to the path
+        // engine (`execute_property_path`). A bare `Iri`/`Variable` property-path
+        // predicate stays on the fast triple-lookup path below.
+        if let crate::algebra::Term::PropertyPath(path) = &pattern.predicate {
+            if !matches!(
+                path,
+                crate::algebra::PropertyPath::Iri(_) | crate::algebra::PropertyPath::Variable(_)
+            ) {
+                return self.execute_property_path(
+                    &pattern.subject,
+                    path,
+                    &pattern.object,
+                    dataset,
+                );
+            }
+        }
         let access_path = self.select_access_path(pattern);
         let solution = match access_path {
             AccessPath::SubjectIndex => self.lookup_by_subject(pattern, dataset)?,

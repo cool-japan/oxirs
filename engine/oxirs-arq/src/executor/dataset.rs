@@ -409,7 +409,11 @@ impl Dataset for ConcreteStoreDataset {
     ) -> Result<Vec<(AlgebraTerm, AlgebraTerm, AlgebraTerm)>> {
         use oxirs_core::rdf_store::Store;
 
-        let (subject, predicate, object) = pattern_to_query_terms(pattern)?;
+        let Some((subject, predicate, object)) = pattern_to_query_terms(pattern)? else {
+            // The pattern references a term that cannot occupy its position, so
+            // it matches nothing (not an error).
+            return Ok(Vec::new());
+        };
         let graph_name = graph_selector_to_name(selector);
         let quads = self.store.find_quads(
             subject.as_ref(),
@@ -542,14 +546,25 @@ pub(crate) fn core_literal_to_algebra(l: &oxirs_core::model::Literal) -> crate::
 
 /// Convert a triple pattern into optional (subject, predicate, object) store
 /// query terms. `None` in any position means an unbound wildcard.
+/// Convert a triple pattern's terms into a store `find_quads` filter.
+///
+/// Returns `Ok(None)` when a concrete term cannot occupy its position — a
+/// literal (or property-path / quoted-triple) subject, or a literal / blank
+/// predicate — because such a pattern matches nothing in a well-formed RDF
+/// graph. Callers must treat `None` as an empty result rather than an error:
+/// the property-path engine, when both endpoints are variables, probes every
+/// term (including literals) as a candidate start node, and those probes must
+/// yield no rows rather than failing the whole query.
 #[allow(clippy::type_complexity)]
 pub(crate) fn pattern_to_query_terms(
     pattern: &TriplePattern,
-) -> Result<(
-    Option<oxirs_core::model::Subject>,
-    Option<oxirs_core::model::Predicate>,
-    Option<oxirs_core::model::Object>,
-)> {
+) -> Result<
+    Option<(
+        Option<oxirs_core::model::Subject>,
+        Option<oxirs_core::model::Predicate>,
+        Option<oxirs_core::model::Object>,
+    )>,
+> {
     let subject = match &pattern.subject {
         AlgebraTerm::Iri(iri) => Some(oxirs_core::model::Subject::NamedNode(iri.clone())),
         AlgebraTerm::Variable(_) => None,
@@ -557,7 +572,8 @@ pub(crate) fn pattern_to_query_terms(
             oxirs_core::model::BlankNode::new(id)
                 .map_err(|e| anyhow!("Invalid blank node: {}", e))?,
         )),
-        _ => return Err(anyhow!("Invalid subject in pattern")),
+        // A literal / property-path / quoted-triple can never be a subject.
+        _ => return Ok(None),
     };
 
     let predicate = match &pattern.predicate {
@@ -566,18 +582,16 @@ pub(crate) fn pattern_to_query_terms(
         AlgebraTerm::PropertyPath(path) => match path {
             PropertyPath::Iri(iri) => Some(oxirs_core::model::Predicate::NamedNode(iri.clone())),
             PropertyPath::Variable(_) => None,
+            // A complex path must be evaluated by the path engine, not matched
+            // as a single triple; reaching here is an engine routing fault.
             _ => {
                 return Err(anyhow!(
                     "Complex property paths not yet supported in find_triples"
                 ))
             }
         },
-        _ => {
-            return Err(anyhow!(
-                "Predicate must be IRI, variable, or property path, got: {:?}",
-                pattern.predicate
-            ))
-        }
+        // A literal / blank node can never be a predicate.
+        _ => return Ok(None),
     };
 
     let object = match &pattern.object {
@@ -590,10 +604,11 @@ pub(crate) fn pattern_to_query_terms(
                 .map_err(|e| anyhow!("Invalid blank node: {}", e))?,
         )),
         AlgebraTerm::Variable(_) => None,
-        _ => return Err(anyhow!("Invalid object in pattern")),
+        // A property-path / quoted-triple can never be an object here.
+        _ => return Ok(None),
     };
 
-    Ok((subject, predicate, object))
+    Ok(Some((subject, predicate, object)))
 }
 
 /// Convert store quads into algebra triples, preserving literal datatype and
@@ -698,7 +713,9 @@ impl<'s> Dataset for StoreRefDataset<'s> {
         selector: &GraphSelector,
         pattern: &TriplePattern,
     ) -> Result<Vec<(AlgebraTerm, AlgebraTerm, AlgebraTerm)>> {
-        let (subject, predicate, object) = pattern_to_query_terms(pattern)?;
+        let Some((subject, predicate, object)) = pattern_to_query_terms(pattern)? else {
+            return Ok(Vec::new());
+        };
         let graph_name = graph_selector_to_name(selector);
         let quads = self.store.find_quads(
             subject.as_ref(),

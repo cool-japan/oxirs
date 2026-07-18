@@ -914,6 +914,49 @@ fn semicolon_in_optional_and_construct() {
 }
 
 #[test]
+fn blank_node_and_collection_syntax_are_clean_parse_errors() {
+    // Blank-node property lists `[ … ]` / `[]` and RDF collections `( … )` are
+    // not yet implemented. They must surface as a clear parse error (a 4xx over
+    // HTTP), never a silent wrong answer.
+    for query in [
+        "PREFIX : <http://ex/> SELECT * WHERE { [ :p ?o ] }",
+        "PREFIX : <http://ex/> SELECT * WHERE { [] :p ?o }",
+        "PREFIX : <http://ex/> SELECT * WHERE { ?s :p [ :q ?o ] }",
+        "PREFIX : <http://ex/> SELECT * WHERE { ?s :p ( :a :b ) }",
+    ] {
+        let mut parser = QueryParser::new();
+        assert!(
+            parser.parse(query).is_err(),
+            "unsupported blank-node/collection syntax must be a parse error: `{query}`"
+        );
+    }
+}
+
+#[test]
+fn eval_property_path_sequence() {
+    // A `/`-sequence property path (previously a parse failure: the lexer emits
+    // `/` as `Token::Divide`, which the path-sequence parser now accepts) must
+    // both parse and evaluate: c1 --broader--> c2 --label--> {neko, cat}.
+    let broader = "http://www.w3.org/2004/02/skos/core#broader";
+    let mut ds = MemDataset {
+        triples: Vec::new(),
+    };
+    ds.add(iri("http://ex/c1"), iri(broader), iri("http://ex/c2"));
+    ds.add(iri("http://ex/c2"), iri(LABEL), lang_lit("neko", "ja"));
+    ds.add(iri("http://ex/c2"), iri(LABEL), lang_lit("cat", "en"));
+    let rows = run(
+        "SELECT ?bl WHERE { <http://ex/c1> \
+         <http://www.w3.org/2004/02/skos/core#broader>/<http://ex/label> ?bl }",
+        &ds,
+    );
+    assert_eq!(
+        rows.len(),
+        2,
+        "the broader/label sequence must reach c2's two labels: {rows:?}"
+    );
+}
+
+#[test]
 fn eval_predicate_object_list_matches_dot_form() {
     // End-to-end: the `;` form returns the same rows as the `.` form.
     let mut ds = MemDataset {
