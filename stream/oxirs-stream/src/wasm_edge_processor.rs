@@ -21,9 +21,11 @@ use wasmparser::{Validator, WasmFeatures as WasmParserFeatures};
 // Gated behind `wasm-rsa` (opt-in, RUSTSEC-2023-0071) per the `rsa` dependency
 // declaration in Cargo.toml.
 #[cfg(feature = "wasm-rsa")]
-use rsa::{
-    pkcs1v15::VerifyingKey as RsaVerifyingKey, signature::Verifier as RsaVerifier, RsaPublicKey,
-};
+// `.verify()` on the RSA `VerifyingKey` resolves through the `signature::Verifier`
+// trait already brought into scope by the `ed25519_dalek::Verifier` import above
+// (both are re-exports of the same `signature` crate trait), so no separate
+// `rsa::signature::Verifier` import is needed here.
+use rsa::{pkcs1v15::VerifyingKey as RsaVerifyingKey, RsaPublicKey};
 
 /// WebAssembly edge processor for distributed streaming
 pub struct WasmEdgeProcessor {
@@ -981,7 +983,11 @@ impl WasmEdgeProcessor {
         let public_key = RsaPublicKey::from_pkcs1_der(&signature.public_key)
             .map_err(|e| StreamError::InvalidSignature(format!("Invalid RSA public key: {}", e)))?;
 
-        let verifying_key = RsaVerifyingKey::<Sha256>::new(public_key);
+        // NOTE: use `rsa::sha2::Sha256` (re-exported by `rsa` via its `sha2`
+        // feature), NOT the workspace `sha2` crate. The workspace pins
+        // `sha2 = "0.11"` (digest 0.11) but `rsa` 0.9 builds on digest 0.10;
+        // mixing them yields an unsatisfied `Digest`/`HashMarker` trait bound.
+        let verifying_key = RsaVerifyingKey::<rsa::sha2::Sha256>::new(public_key);
 
         // Hash the data
         let mut hasher = Sha256::new();
