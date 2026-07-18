@@ -427,36 +427,20 @@ impl QueryExecutor {
             self.execute_single_pattern(&optimized_bgp.patterns[0], dataset)?;
         for pattern in optimized_bgp.patterns.iter().skip(1) {
             let pattern_results = self.execute_single_pattern(pattern, dataset)?;
-            current_solution = self.join_solutions(current_solution, pattern_results)?;
+            // Hash-join on the shared variables rather than a nested-loop scan:
+            // a high-cardinality BGP such as `?c a :C ; :label ?l` (tens of
+            // thousands x hundreds of thousands of rows) is otherwise O(|L|x|R|)
+            // and effectively hangs. Build the hash table on the SMALLER side.
+            current_solution = if current_solution.len() <= pattern_results.len() {
+                self.hash_join(current_solution, pattern_results)?
+            } else {
+                self.hash_join(pattern_results, current_solution)?
+            };
             if current_solution.is_empty() {
                 break;
             }
         }
         Ok(current_solution)
-    }
-    /// Join two solutions
-    pub(super) fn join_solutions(&self, left: Solution, right: Solution) -> Result<Solution> {
-        let mut result = Solution::new();
-        for left_binding in &left {
-            for right_binding in &right {
-                let mut is_compatible = true;
-                let mut merged = left_binding.clone();
-                for (var, term) in right_binding {
-                    if let Some(existing_term) = merged.get(var) {
-                        if existing_term != term {
-                            is_compatible = false;
-                            break;
-                        }
-                    } else {
-                        merged.insert(var.clone(), term.clone());
-                    }
-                }
-                if is_compatible {
-                    result.push(merged);
-                }
-            }
-        }
-        Ok(result)
     }
     /// Apply GROUP BY with aggregation
     pub(super) fn apply_group_by(
@@ -696,25 +680,64 @@ impl QueryExecutor {
         right: Solution,
         _conditions: &Option<crate::algebra::Expression>,
     ) -> Result<Solution> {
+        use std::collections::{HashMap, HashSet};
+        // A no-op right side keeps every left row unbound.
+        if right.is_empty() {
+            return Ok(left);
+        }
+        // Hash the right side on the variables it shares with the left, so an
+        // OPTIONAL against a high-cardinality right pattern is O(|L|+|R|) rather
+        // than the O(|L|x|R|) nested loop that hangs at scale (the `?c :label ?l`
+        // OPTIONAL shape). Left rows with no compatible right row are kept with
+        // their unbound optional variables (left-join semantics).
+        let left_vars: HashSet<crate::algebra::Variable> =
+            left.iter().flat_map(|b| b.keys().cloned()).collect();
+        let right_vars: HashSet<crate::algebra::Variable> =
+            right.iter().flat_map(|b| b.keys().cloned()).collect();
+        let shared_vars: Vec<crate::algebra::Variable> =
+            left_vars.intersection(&right_vars).cloned().collect();
+
+        let mut hash_table: HashMap<
+            Vec<(crate::algebra::Variable, crate::algebra::Term)>,
+            Vec<&crate::algebra::Binding>,
+        > = HashMap::new();
+        for binding in &right {
+            let key: Vec<_> = shared_vars
+                .iter()
+                .filter_map(|var| binding.get(var).map(|term| (var.clone(), term.clone())))
+                .collect();
+            hash_table.entry(key).or_default().push(binding);
+        }
+
         let mut result = Solution::new();
         for left_binding in &left {
+            let key: Vec<_> = shared_vars
+                .iter()
+                .filter_map(|var| {
+                    left_binding
+                        .get(var)
+                        .map(|term| (var.clone(), term.clone()))
+                })
+                .collect();
             let mut has_join = false;
-            for right_binding in &right {
-                let mut is_compatible = true;
-                let mut merged = left_binding.clone();
-                for (var, term) in right_binding {
-                    if let Some(existing_term) = merged.get(var) {
-                        if existing_term != term {
-                            is_compatible = false;
-                            break;
+            if let Some(matching) = hash_table.get(&key) {
+                for &right_binding in matching {
+                    let mut is_compatible = true;
+                    let mut merged = left_binding.clone();
+                    for (var, term) in right_binding {
+                        if let Some(existing_term) = merged.get(var) {
+                            if existing_term != term {
+                                is_compatible = false;
+                                break;
+                            }
+                        } else {
+                            merged.insert(var.clone(), term.clone());
                         }
-                    } else {
-                        merged.insert(var.clone(), term.clone());
                     }
-                }
-                if is_compatible {
-                    result.push(merged);
-                    has_join = true;
+                    if is_compatible {
+                        result.push(merged);
+                        has_join = true;
+                    }
                 }
             }
             if !has_join {
@@ -827,15 +850,18 @@ impl QueryExecutor {
         // to avoid lifetime issues with storing references in thread-locals.
         let dataset_ptr: *const dyn super::dataset::Dataset = dataset;
         let (data_addr, vtable_addr): (usize, usize) = unsafe { std::mem::transmute(dataset_ptr) };
-        EXISTS_DATASET.with(|cell| {
-            *cell.borrow_mut() = Some((data_addr, vtable_addr));
-        });
+        // SAVE the previous value and RESTORE it afterwards, rather than clearing
+        // to `None`. A FILTER can itself be evaluated inside an EXISTS/NOT EXISTS
+        // subquery whose inner pattern also contains a FILTER; clearing here
+        // would strip the dataset the OUTER EXISTS loop still depends on and
+        // silently drop every subsequent row into the (dataset-less, incorrect)
+        // syntactic fallback.
+        let prev = EXISTS_DATASET.with(|cell| cell.replace(Some((data_addr, vtable_addr))));
 
         let result = self.apply_filter(solution, condition);
 
-        // Clear the thread-local after filter evaluation
         EXISTS_DATASET.with(|cell| {
-            *cell.borrow_mut() = None;
+            *cell.borrow_mut() = prev;
         });
 
         result

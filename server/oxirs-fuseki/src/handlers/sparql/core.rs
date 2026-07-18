@@ -315,7 +315,11 @@ pub async fn sparql_query_post(
 
         for part in body_str.split('&') {
             if let Some((key, value)) = part.split_once('=') {
-                let decoded_value = oxirs_core::encoding::percent_decode(value)
+                // application/x-www-form-urlencoded encodes spaces as `+`; decode
+                // `+`→space BEFORE percent-decoding so a literal plus (`%2B`)
+                // survives. Without this, `query=SELECT+?s+WHERE...` reaches the
+                // SPARQL lexer with `+` intact and fails ("found Plus").
+                let decoded_value = oxirs_core::encoding::percent_decode(&value.replace('+', " "))
                     .unwrap_or_default()
                     .to_string();
                 match key {
@@ -737,6 +741,26 @@ fn negotiate_sparql_format(accept: &str) -> String {
 /// matches, JSON Results is the default.
 fn format_query_response(result: QueryResult, content_type: &str) -> Response {
     let primary = negotiate_sparql_format(content_type);
+
+    // A CONSTRUCT/DESCRIBE produces an RDF graph, not a bindings table. If the
+    // client negotiated a bindings format (SPARQL Results JSON/XML/CSV/TSV, or an
+    // unrecognised type falling through to the JSON default), serving it would
+    // emit a silently-empty `bindings` array. Fall back to Turtle instead so a
+    // graph result is never a silent empty answer.
+    let is_graph = matches!(result.query_type.as_str(), "CONSTRUCT" | "DESCRIBE");
+    let is_graph_format = matches!(
+        primary.as_str(),
+        "text/turtle"
+            | "application/x-turtle"
+            | "application/n-triples"
+            | "application/rdf+xml"
+            | "application/ld+json"
+    );
+    let primary = if is_graph && !is_graph_format {
+        "text/turtle".to_string()
+    } else {
+        primary
+    };
 
     match primary.as_str() {
         "application/sparql-results+json" | "application/json" => {

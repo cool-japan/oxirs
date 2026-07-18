@@ -68,7 +68,9 @@ pub async fn query_handler_post(
 
         for part in body_str.split('&') {
             if let Some((key, value)) = part.split_once('=') {
-                let decoded_value = oxirs_core::encoding::percent_decode(value)
+                // application/x-www-form-urlencoded encodes spaces as `+`; decode
+                // `+`→space before percent-decoding (so a literal `%2B` survives).
+                let decoded_value = oxirs_core::encoding::percent_decode(&value.replace('+', " "))
                     .unwrap_or_default()
                     .to_string();
                 match key {

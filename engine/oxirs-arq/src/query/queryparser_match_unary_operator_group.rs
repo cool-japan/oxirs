@@ -13,7 +13,10 @@ use super::queryparser_type::QueryParser;
 impl QueryParser {
     pub(super) fn match_unary_operator(&mut self) -> Option<UnaryOperator> {
         match self.peek() {
-            Some(Token::Not) => {
+            // Both the `NOT` keyword and the `!` operator are logical negation
+            // (effective-boolean-value negation). `!` is the usual SPARQL
+            // spelling: `!BOUND(?x)`, `!EXISTS { … }`, `!(?a = ?b)`.
+            Some(Token::Not) | Some(Token::Bang) => {
                 self.advance();
                 Some(UnaryOperator::Not)
             }

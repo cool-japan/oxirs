@@ -111,6 +111,7 @@ impl QueryParser {
             "VALUES" => Token::Values,
             "EXISTS" => Token::Exists,
             "NOT" => Token::Not,
+            "IN" => Token::In,
             "AND" => Token::And,
             "OR" => Token::Or,
             "TRUE" => Token::BooleanLiteral(true),

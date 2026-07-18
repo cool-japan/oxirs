@@ -17,7 +17,7 @@
 //!   `isIRI`/`isLiteral` predicates, `STRLEN`/`CONTAINS`, and `COALESCE`/`IF`.
 
 use oxirs_arq::algebra::{
-    Aggregate, Expression, GroupCondition, PropertyPath, Term, UnaryOperator,
+    Aggregate, BinaryOperator, Expression, GroupCondition, PropertyPath, Term, UnaryOperator,
 };
 use oxirs_arq::query::{ProjectionItem, QueryParser};
 use oxirs_arq::{Algebra, Dataset, Literal, QueryExecutor, TriplePattern, Variable};
@@ -1031,5 +1031,430 @@ fn group_by_expr_as_var_parses_and_binds_alias() {
         langs,
         vec!["en".to_string(), "ja".to_string()],
         "the alias ?g must bind the language key: {solution:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Round 4: MINUS / OPTIONAL composition, FILTER (NOT) EXISTS, unary `!`,
+//          IN / NOT IN, subquery clean-error
+// ---------------------------------------------------------------------------
+
+const DEP: &str = "http://ex/dep";
+
+/// Three concepts typed `ex:Concept`; only `c2` is flagged deprecated
+/// (`ex:dep "yes"`).
+fn concept_dataset() -> MemDataset {
+    let mut ds = MemDataset {
+        triples: Vec::new(),
+    };
+    for c in ["http://ex/c1", "http://ex/c2", "http://ex/c3"] {
+        ds.add(iri(c), iri(RDF_TYPE), iri("http://ex/Concept"));
+    }
+    ds.add(
+        iri("http://ex/c2"),
+        iri(DEP),
+        Term::Literal(Literal {
+            value: "yes".to_string(),
+            language: None,
+            datatype: None,
+        }),
+    );
+    ds
+}
+
+#[test]
+fn eval_minus_shared_variable_subtracts() {
+    // Regression guard for the MINUS silent no-op: `MINUS { ?c dep "yes" }`
+    // must remove the deprecated concept (shared variable ?c).
+    let ds = concept_dataset();
+    let rows = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> MINUS { ?c <http://ex/dep> \"yes\" } }",
+        &ds,
+    );
+    assert_eq!(
+        rows.len(),
+        2,
+        "MINUS must subtract the deprecated concept c2, leaving c1 and c3: {rows:?}"
+    );
+    assert!(
+        rows.iter().all(|b| match b.get(&var("c")) {
+            Some(Term::Iri(n)) => n.as_str() != "http://ex/c2",
+            _ => true,
+        }),
+        "c2 must have been removed by MINUS: {rows:?}"
+    );
+}
+
+#[test]
+fn eval_minus_disjoint_variables_removes_nothing() {
+    // SPARQL: a MINUS whose right pattern shares NO variable with the left
+    // removes nothing.
+    let ds = concept_dataset();
+    let rows = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> MINUS { ?x <http://ex/dep> \"yes\" } }",
+        &ds,
+    );
+    assert_eq!(
+        rows.len(),
+        3,
+        "a variable-disjoint MINUS must remove nothing: {rows:?}"
+    );
+}
+
+#[test]
+fn eval_optional_keeps_unmatched_left_rows() {
+    // Regression guard: OPTIONAL was collapsing into an inner join. Every
+    // concept must survive; only c2 gets ?d bound.
+    let ds = concept_dataset();
+    let rows = run(
+        "SELECT ?c ?d WHERE { ?c a <http://ex/Concept> OPTIONAL { ?c <http://ex/dep> ?d } }",
+        &ds,
+    );
+    assert_eq!(
+        rows.len(),
+        3,
+        "OPTIONAL must keep all three concepts: {rows:?}"
+    );
+    let bound = rows.iter().filter(|b| b.get(&var("d")).is_some()).count();
+    assert_eq!(bound, 1, "only c2 has a dep value bound: {rows:?}");
+}
+
+#[test]
+fn filter_exists_and_not_exists_parse() {
+    // `EXISTS { … }` lowers to Expression::Exists; `NOT EXISTS` is unary NOT
+    // applied to it.
+    assert!(matches!(
+        projected_expr("EXISTS { ?a ?b ?c }"),
+        Expression::Exists(_)
+    ));
+    assert!(matches!(
+        projected_expr("NOT EXISTS { ?a ?b ?c }"),
+        Expression::Unary {
+            op: UnaryOperator::Not,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn eval_filter_exists_and_not_exists() {
+    let ds = concept_dataset();
+    let exists = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> FILTER EXISTS { ?c <http://ex/dep> \"yes\" } }",
+        &ds,
+    );
+    assert_eq!(
+        exists.len(),
+        1,
+        "FILTER EXISTS keeps only the deprecated c2: {exists:?}"
+    );
+
+    let not_exists = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> FILTER NOT EXISTS { ?c <http://ex/dep> \"yes\" } }",
+        &ds,
+    );
+    assert_eq!(
+        not_exists.len(),
+        2,
+        "FILTER NOT EXISTS keeps the non-deprecated c1 and c3: {not_exists:?}"
+    );
+}
+
+#[test]
+fn unary_not_parses_and_evaluates() {
+    // `!` lowers to a unary NOT.
+    assert!(matches!(
+        projected_expr("!BOUND(?x)"),
+        Expression::Unary {
+            op: UnaryOperator::Not,
+            ..
+        }
+    ));
+
+    // `!BOUND(?d)` over an OPTIONAL keeps the rows where ?d is unbound.
+    let ds = concept_dataset();
+    let rows = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> OPTIONAL { ?c <http://ex/dep> ?d } FILTER(!BOUND(?d)) }",
+        &ds,
+    );
+    assert_eq!(
+        rows.len(),
+        2,
+        "!BOUND(?d) keeps the two non-deprecated concepts: {rows:?}"
+    );
+
+    // `!EXISTS { … }` is the same as NOT EXISTS.
+    let not_exists = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> FILTER(!EXISTS { ?c <http://ex/dep> \"yes\" }) }",
+        &ds,
+    );
+    assert_eq!(
+        not_exists.len(),
+        2,
+        "!EXISTS keeps c1 and c3: {not_exists:?}"
+    );
+}
+
+#[test]
+fn in_and_not_in_parse() {
+    match projected_expr("?x IN (1, 2, 3)") {
+        Expression::Binary {
+            op: BinaryOperator::In,
+            right,
+            ..
+        } => match *right {
+            Expression::Function { name, args } => {
+                assert_eq!(name, "list");
+                assert_eq!(args.len(), 3);
+            }
+            other => panic!("IN right operand must be a list, got {other:?}"),
+        },
+        other => panic!("`?x IN (…)` must be a Binary IN, got {other:?}"),
+    }
+    assert!(matches!(
+        projected_expr("?x NOT IN (1)"),
+        Expression::Binary {
+            op: BinaryOperator::NotIn,
+            ..
+        }
+    ));
+    // Empty list parses.
+    assert!(matches!(
+        projected_expr("?x IN ()"),
+        Expression::Binary {
+            op: BinaryOperator::In,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn eval_in_and_not_in() {
+    let ds = concept_dataset();
+    let in_rows = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> FILTER(?c IN (<http://ex/c1>, <http://ex/c3>)) }",
+        &ds,
+    );
+    assert_eq!(in_rows.len(), 2, "IN keeps c1 and c3: {in_rows:?}");
+
+    let not_in_rows = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> FILTER(?c NOT IN (<http://ex/c2>)) }",
+        &ds,
+    );
+    assert_eq!(
+        not_in_rows.len(),
+        2,
+        "NOT IN (<c2>) keeps c1 and c3: {not_in_rows:?}"
+    );
+
+    let empty_rows = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> FILTER(?c IN ()) }",
+        &ds,
+    );
+    assert!(
+        empty_rows.is_empty(),
+        "IN () is always false: {empty_rows:?}"
+    );
+}
+
+#[test]
+fn subquery_is_a_clean_parse_error() {
+    // A `{ SELECT … }` subquery is not yet implemented; it must be a clear parse
+    // error (a 4xx over HTTP), never a silent wrong answer.
+    let mut parser = QueryParser::new();
+    assert!(
+        parser
+            .parse("SELECT ?c WHERE { { SELECT ?c WHERE { ?c a <http://ex/Concept> } } }")
+            .is_err(),
+        "an unsupported subquery must be a parse error, not a silent result"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Round 5-1: EXISTS / NOT EXISTS with an inner FILTER (and correlated form)
+// ---------------------------------------------------------------------------
+
+/// Concepts with mixed language labels: c1 has @ja + @en, c2 has @ja only,
+/// c3 has @en only.
+fn mixed_lang_dataset() -> MemDataset {
+    let label = "http://ex/label";
+    let mut ds = MemDataset {
+        triples: Vec::new(),
+    };
+    ds.add(iri("http://ex/c1"), iri(label), lang_lit("inu", "ja"));
+    ds.add(iri("http://ex/c1"), iri(label), lang_lit("dog", "en"));
+    ds.add(iri("http://ex/c2"), iri(label), lang_lit("neko", "ja"));
+    ds.add(iri("http://ex/c3"), iri(label), lang_lit("x", "en"));
+    ds
+}
+
+#[test]
+fn eval_not_exists_with_inner_filter() {
+    // The reported P0: an inner FILTER inside NOT EXISTS was ignored (nothing
+    // excluded). `NOT EXISTS { ?c label ?e FILTER(lang(?e)="en") }` must keep
+    // only the concept with NO English label (c2).
+    let ds = mixed_lang_dataset();
+    let rows = run(
+        "SELECT DISTINCT ?c WHERE { ?c <http://ex/label> ?any \
+         FILTER NOT EXISTS { ?c <http://ex/label> ?e FILTER(lang(?e) = \"en\") } }",
+        &ds,
+    );
+    let concepts: std::collections::HashSet<String> = rows
+        .iter()
+        .filter_map(|b| match b.get(&var("c")) {
+            Some(Term::Iri(n)) => Some(n.as_str().to_string()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        concepts,
+        std::collections::HashSet::from(["http://ex/c2".to_string()]),
+        "NOT EXISTS with an inner lang filter must keep only the en-less concept c2: {concepts:?}"
+    );
+}
+
+#[test]
+fn eval_exists_with_inner_filter() {
+    // `EXISTS { ?c label ?e FILTER(lang(?e)="en") }` must match the concepts
+    // that DO have an English label (c1, c3).
+    let ds = mixed_lang_dataset();
+    let rows = run(
+        "SELECT DISTINCT ?c WHERE { ?c <http://ex/label> ?any \
+         FILTER EXISTS { ?c <http://ex/label> ?e FILTER(lang(?e) = \"en\") } }",
+        &ds,
+    );
+    let concepts: std::collections::HashSet<String> = rows
+        .iter()
+        .filter_map(|b| match b.get(&var("c")) {
+            Some(Term::Iri(n)) => Some(n.as_str().to_string()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        concepts,
+        std::collections::HashSet::from(["http://ex/c1".to_string(), "http://ex/c3".to_string()]),
+        "EXISTS with an inner lang filter must match the en-labelled concepts: {concepts:?}"
+    );
+}
+
+#[test]
+fn eval_correlated_exists_references_outer_vars() {
+    // A correlated EXISTS whose inner FILTER references BOTH outer variables
+    // (?c and ?l): keep (?c,?l) rows whose label ?l is also held by a DIFFERENT
+    // subject.
+    let mut ds = MemDataset {
+        triples: Vec::new(),
+    };
+    let p = "http://ex/p";
+    ds.add(iri("http://ex/c1"), iri(p), lang_lit("a", "en"));
+    ds.add(iri("http://ex/c1"), iri(p), lang_lit("b", "en"));
+    ds.add(iri("http://ex/c2"), iri(p), lang_lit("a", "en"));
+    let rows = run(
+        "SELECT ?c ?l WHERE { ?c <http://ex/p> ?l \
+         FILTER EXISTS { ?other <http://ex/p> ?l FILTER(?other != ?c) } }",
+        &ds,
+    );
+    // \"a\" is shared by c1 and c2; \"b\" is unique to c1.
+    assert_eq!(
+        rows.len(),
+        2,
+        "only the shared-label rows (c1,a) and (c2,a) survive the correlated EXISTS: {rows:?}"
+    );
+    for row in &rows {
+        match row.get(&var("l")) {
+            Some(Term::Literal(lit)) => assert_eq!(
+                lit.value, "a",
+                "the surviving label must be the shared \"a\": {rows:?}"
+            ),
+            other => panic!("?l must bind a literal, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn eval_not_exists_without_inner_filter_still_works() {
+    // Non-regression: the filter-less NOT EXISTS form (the R4 case).
+    let ds = concept_dataset();
+    let rows = run(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> \
+         FILTER NOT EXISTS { ?c <http://ex/dep> \"yes\" } }",
+        &ds,
+    );
+    assert_eq!(
+        rows.len(),
+        2,
+        "filter-less NOT EXISTS keeps the two non-deprecated concepts: {rows:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Round 5-2: high-cardinality joins must use a hash join, not a nested loop
+// ---------------------------------------------------------------------------
+
+/// Build a dataset of `n` concepts, each `rdf:type ex:Concept` with one
+/// `ex:label` literal.
+fn many_concepts_dataset(n: usize) -> MemDataset {
+    let mut ds = MemDataset {
+        triples: Vec::with_capacity(2 * n),
+    };
+    for i in 0..n {
+        let c = format!("http://ex/c{i}");
+        ds.add(iri(&c), iri(RDF_TYPE), iri("http://ex/Concept"));
+        ds.add(
+            iri(&c),
+            iri("http://ex/label"),
+            Term::Literal(Literal {
+                value: format!("label {i}"),
+                language: None,
+                datatype: None,
+            }),
+        );
+    }
+    ds
+}
+
+/// Run `query` against an `n`-concept dataset on a worker thread and require it
+/// to finish within `secs`; otherwise the join has regressed to a nested loop.
+fn run_within(query: &'static str, n: usize, secs: u64, expected_rows: usize, label: &str) {
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let ds = many_concepts_dataset(n);
+        let start = Instant::now();
+        let rows = run(query, &ds);
+        let _ = tx.send((rows.len(), start.elapsed()));
+    });
+    match rx.recv_timeout(Duration::from_secs(secs)) {
+        Ok((rows, elapsed)) => {
+            eprintln!("[{label}] {n} concepts joined in {elapsed:?} -> {rows} rows");
+            assert_eq!(rows, expected_rows, "[{label}] row count mismatch");
+        }
+        Err(_) => panic!(
+            "[{label}] join over {n} concepts did not finish within {secs}s \
+             — nested-loop regression"
+        ),
+    }
+}
+
+#[test]
+fn perf_predicate_object_list_join_is_not_nested_loop() {
+    run_within(
+        "SELECT ?c ?l WHERE { ?c a <http://ex/Concept> ; <http://ex/label> ?l }",
+        20_000,
+        30,
+        20_000,
+        "bgp-join",
+    );
+}
+
+#[test]
+fn perf_optional_join_is_not_nested_loop() {
+    run_within(
+        "SELECT ?c ?l WHERE { ?c a <http://ex/Concept> OPTIONAL { ?c <http://ex/label> ?l } }",
+        20_000,
+        30,
+        20_000,
+        "optional-join",
     );
 }

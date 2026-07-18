@@ -358,24 +358,18 @@ impl QueryExecutor {
             let fat_ptr: *const dyn super::dataset::Dataset =
                 unsafe { std::mem::transmute((data_ptr, vtable_ptr)) };
             let dataset: &dyn super::dataset::Dataset = unsafe { &*fat_ptr };
-            // Execute the subquery against the dataset, substituting current binding
-            // into the algebra by first executing, then checking if any result
-            // is compatible with current_binding
-            let mut joined_algebra = algebra.clone();
-            // Substitute known bindings as Values inline
-            if !current_binding.is_empty() {
-                let vars: Vec<crate::algebra::Variable> = current_binding.keys().cloned().collect();
-                let bindings_vec = vec![current_binding.clone()];
-                let values_node = crate::algebra::Algebra::Values {
-                    variables: vars,
-                    bindings: bindings_vec,
-                };
-                joined_algebra = crate::algebra::Algebra::Join {
-                    left: Box::new(values_node),
-                    right: Box::new(algebra.clone()),
-                };
-            }
-            match self.execute_serial(&joined_algebra, dataset) {
+            // Substitute the current solution mapping INTO the inner pattern
+            // (SPARQL 1.1 §18.2.1: EXISTS evaluates the pattern with the current
+            // bindings substituted in). This yields the correct correlated
+            // answer AND constrains the pattern — a substituted subject/object
+            // turns a full store scan into a point lookup, so EXISTS does not
+            // re-scan the whole store for every outer row. The previous
+            // `Join(Values, pattern)` shape both scanned unconstrained and,
+            // combined with the filter thread-local clear, fell into an
+            // incorrect syntactic fallback whenever the inner pattern held a
+            // FILTER.
+            let substituted = substitute_algebra_binding(algebra, current_binding);
+            match self.execute_serial(&substituted, dataset) {
                 Ok(solutions) => Some(Ok(!solutions.is_empty())),
                 Err(e) => Some(Err(e)),
             }
@@ -1066,5 +1060,169 @@ impl QueryExecutor {
                     .is_some_and(|rest| rest.starts_with('-'))
         };
         Ok(self.boolean_term(matches))
+    }
+}
+
+/// Substitute a solution binding into an algebra sub-tree, replacing every
+/// bound variable (in triple patterns, filter conditions, `BIND`/`GRAPH`, and
+/// nested `EXISTS`) with its bound term.
+///
+/// This implements the SPARQL 1.1 §18.2.1 EXISTS/NOT EXISTS semantics: the
+/// inner group graph pattern is evaluated with the current solution mapping
+/// substituted in. Beyond correctness (correlated conditions such as
+/// `FILTER(?e = ?outer)` now see the outer value), substitution constrains the
+/// pattern so a bound subject/object becomes a point lookup instead of a full
+/// store scan per outer row.
+fn substitute_algebra_binding(
+    algebra: &crate::algebra::Algebra,
+    binding: &crate::algebra::Binding,
+) -> crate::algebra::Algebra {
+    use crate::algebra::Algebra as A;
+    match algebra {
+        A::Bgp(triples) => A::Bgp(
+            triples
+                .iter()
+                .map(|t| substitute_triple_binding(t, binding))
+                .collect(),
+        ),
+        A::Filter { pattern, condition } => A::Filter {
+            pattern: Box::new(substitute_algebra_binding(pattern, binding)),
+            condition: substitute_expression_binding(condition, binding),
+        },
+        A::Join { left, right } => A::Join {
+            left: Box::new(substitute_algebra_binding(left, binding)),
+            right: Box::new(substitute_algebra_binding(right, binding)),
+        },
+        A::LeftJoin {
+            left,
+            right,
+            filter,
+        } => A::LeftJoin {
+            left: Box::new(substitute_algebra_binding(left, binding)),
+            right: Box::new(substitute_algebra_binding(right, binding)),
+            filter: filter
+                .as_ref()
+                .map(|f| substitute_expression_binding(f, binding)),
+        },
+        A::Union { left, right } => A::Union {
+            left: Box::new(substitute_algebra_binding(left, binding)),
+            right: Box::new(substitute_algebra_binding(right, binding)),
+        },
+        A::Minus { left, right } => A::Minus {
+            left: Box::new(substitute_algebra_binding(left, binding)),
+            right: Box::new(substitute_algebra_binding(right, binding)),
+        },
+        A::Graph { graph, pattern } => A::Graph {
+            graph: substitute_term_binding(graph, binding),
+            pattern: Box::new(substitute_algebra_binding(pattern, binding)),
+        },
+        A::Extend {
+            pattern,
+            variable,
+            expr,
+        } => A::Extend {
+            pattern: Box::new(substitute_algebra_binding(pattern, binding)),
+            variable: variable.clone(),
+            expr: substitute_expression_binding(expr, binding),
+        },
+        // Other shapes (subquery projection/group/slice/values/…) are left
+        // as-is: they are not produced inside an EXISTS group by this parser,
+        // and their free variables still evaluate correctly (just unconstrained).
+        other => other.clone(),
+    }
+}
+
+fn substitute_triple_binding(
+    triple: &crate::algebra::TriplePattern,
+    binding: &crate::algebra::Binding,
+) -> crate::algebra::TriplePattern {
+    crate::algebra::TriplePattern::new(
+        substitute_term_binding(&triple.subject, binding),
+        substitute_term_binding(&triple.predicate, binding),
+        substitute_term_binding(&triple.object, binding),
+    )
+}
+
+fn substitute_term_binding(
+    term: &crate::algebra::Term,
+    binding: &crate::algebra::Binding,
+) -> crate::algebra::Term {
+    match term {
+        crate::algebra::Term::Variable(var) => {
+            binding.get(var).cloned().unwrap_or_else(|| term.clone())
+        }
+        _ => term.clone(),
+    }
+}
+
+fn substitute_expression_binding(
+    expr: &crate::algebra::Expression,
+    binding: &crate::algebra::Binding,
+) -> crate::algebra::Expression {
+    use crate::algebra::Expression as E;
+    match expr {
+        E::Variable(var) => match binding.get(var) {
+            Some(term) => term_to_expression(term).unwrap_or_else(|| expr.clone()),
+            None => expr.clone(),
+        },
+        E::Binary { op, left, right } => E::Binary {
+            op: op.clone(),
+            left: Box::new(substitute_expression_binding(left, binding)),
+            right: Box::new(substitute_expression_binding(right, binding)),
+        },
+        E::Unary { op, operand } => E::Unary {
+            op: op.clone(),
+            operand: Box::new(substitute_expression_binding(operand, binding)),
+        },
+        E::Function { name, args } => E::Function {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|a| substitute_expression_binding(a, binding))
+                .collect(),
+        },
+        E::Conditional {
+            condition,
+            then_expr,
+            else_expr,
+        } => E::Conditional {
+            condition: Box::new(substitute_expression_binding(condition, binding)),
+            then_expr: Box::new(substitute_expression_binding(then_expr, binding)),
+            else_expr: Box::new(substitute_expression_binding(else_expr, binding)),
+        },
+        E::Exists(inner) => E::Exists(Box::new(substitute_algebra_binding(inner, binding))),
+        E::NotExists(inner) => E::NotExists(Box::new(substitute_algebra_binding(inner, binding))),
+        // BOUND(?v): if ?v is bound in the outer solution it is bound here too,
+        // so fold it to a constant `true`; otherwise keep the check.
+        E::Bound(var) => {
+            if binding.contains_key(var) {
+                E::Literal(crate::algebra::Literal {
+                    value: "true".to_string(),
+                    language: None,
+                    datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
+                })
+            } else {
+                E::Bound(var.clone())
+            }
+        }
+        E::Literal(_) | E::Iri(_) => expr.clone(),
+    }
+}
+
+/// Lift a bound term into an expression operand. Blank nodes / property paths /
+/// quoted triples have no expression form, so return `None` and leave the
+/// original variable in place.
+fn term_to_expression(term: &crate::algebra::Term) -> Option<crate::algebra::Expression> {
+    match term {
+        crate::algebra::Term::Iri(iri) => Some(crate::algebra::Expression::Iri(iri.clone())),
+        crate::algebra::Term::Literal(lit) => {
+            Some(crate::algebra::Expression::Literal(lit.clone()))
+        }
+        crate::algebra::Term::Variable(var) => {
+            Some(crate::algebra::Expression::Variable(var.clone()))
+        }
+        _ => None,
     }
 }

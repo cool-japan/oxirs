@@ -202,6 +202,16 @@ impl QueryParser {
                     Ok(Expression::Iri(NamedNode::new_unchecked(full_iri)))
                 }
             }
+            // `EXISTS { GroupGraphPattern }` as a filter expression. `NOT EXISTS`
+            // is `NOT` (a unary operator) applied to this, i.e. `!EXISTS { … }`,
+            // and needs no separate arm.
+            Some(Token::Exists) => {
+                self.advance();
+                self.expect_token(Token::LeftBrace)?;
+                let pattern = self.parse_group_graph_pattern()?;
+                self.expect_token(Token::RightBrace)?;
+                Ok(Expression::Exists(Box::new(pattern)))
+            }
             _ => bail!("Expected primary expression"),
         }
     }

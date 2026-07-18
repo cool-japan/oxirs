@@ -13,6 +13,40 @@ use super::types::{DatasetClause, DescribeTarget, ProjectionItem, Query, QueryTy
 
 use super::queryparser_type::QueryParser;
 
+/// Compose the next group-graph-pattern element onto the accumulated pattern.
+///
+/// `OPTIONAL`, `MINUS` and a leading `UNION` are each parsed with the unit table
+/// (`Algebra::Table`) as their left operand, because a group element is written
+/// standalone. At the group level, however, they operate on the pattern that
+/// PRECEDES them, so they must be re-rooted on the accumulated `prev` rather
+/// than joined as an independent unit:
+///
+/// * `Join(prev, Minus(Table, r))` makes `MINUS` a silent no-op — a `Table` left
+///   shares no variables with `r`, and SPARQL `MINUS` removes nothing when the
+///   operands are variable-disjoint. Re-rooting to `Minus(prev, r)` restores the
+///   difference.
+/// * `Join(prev, LeftJoin(Table, r))` collapses `OPTIONAL` into an inner join
+///   (dropping `prev` rows without an `r` match). Re-rooting to
+///   `LeftJoin(prev, r)` restores proper optional semantics.
+fn compose_group_element(prev: Algebra, element: Algebra) -> Algebra {
+    match element {
+        Algebra::LeftJoin {
+            left,
+            right,
+            filter,
+        } if matches!(*left, Algebra::Table) => Algebra::LeftJoin {
+            left: Box::new(prev),
+            right,
+            filter,
+        },
+        Algebra::Minus { left, right } if matches!(*left, Algebra::Table) => Algebra::Minus {
+            left: Box::new(prev),
+            right,
+        },
+        other => Algebra::join(prev, other),
+    }
+}
+
 impl QueryParser {
     pub fn new() -> Self {
         Self {
@@ -607,7 +641,7 @@ impl QueryParser {
             } else {
                 let pattern = self.parse_graph_pattern_or_union()?;
                 acc = Some(match acc.take() {
-                    Some(prev) => Algebra::join(prev, pattern),
+                    Some(prev) => compose_group_element(prev, pattern),
                     None => pattern,
                 });
             }

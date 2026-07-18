@@ -129,6 +129,8 @@ pub enum Token {
     And,
     Or,
     Not,
+    /// The `IN` operator keyword (`?x IN (…)`, `?x NOT IN (…)`).
+    In,
     Plus,
     Minus_,
     Multiply,

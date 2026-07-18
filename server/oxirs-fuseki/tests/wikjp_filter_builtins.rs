@@ -565,3 +565,272 @@ async fn group_by_expr_as_var_wire() {
     counts.sort_unstable();
     assert_eq!(counts, vec![2, 3], "ja=2, en=3; body: {body}");
 }
+
+// ---------------------------------------------------------------------------
+// Round 4: MINUS, FILTER (NOT) EXISTS, unary `!`, IN, form-urlencoded `+`
+// ---------------------------------------------------------------------------
+
+/// Three concepts typed `ex:Concept`; `c2` is flagged deprecated.
+const FIXTURE_R4_NT: &str = concat!(
+    "<http://ex/c1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex/Concept> .\n",
+    "<http://ex/c2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex/Concept> .\n",
+    "<http://ex/c3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex/Concept> .\n",
+    "<http://ex/c2> <http://ex/deprecated> \"true\" .\n",
+);
+
+fn seeded_router_r4() -> Router {
+    let core_store = Arc::new(ConcreteStore::new().expect("concrete store"));
+    let store = Store::new().expect("multi-dataset store");
+    let loaded = store
+        .load_data(FIXTURE_R4_NT, RdfSerializationFormat::NTriples, None)
+        .expect("r4 fixture must load");
+    assert_eq!(loaded, 4, "the r4 fixture has four triples");
+    let state = Arc::new(build_minimal_app_state(store, ServerConfig::default()));
+    build_jena_router(state, core_store)
+}
+
+/// application/x-www-form-urlencoded encode, encoding spaces as `+` (the
+/// browser/YASGUI default) rather than `%20`.
+fn form_encode_plus(s: &str) -> String {
+    let mut out = String::new();
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            b' ' => out.push('+'),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// POST a query as `application/x-www-form-urlencoded` with `+`-encoded spaces.
+async fn post_query_form_plus(router: &Router, query: &str) -> (StatusCode, String) {
+    let body = format!("query={}", form_encode_plus(query));
+    let req = Request::builder()
+        .method("POST")
+        .uri("/sparql")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("accept", "application/sparql-results+json")
+        .body(Body::from(body))
+        .expect("request");
+    let resp = router.clone().oneshot(req).await.expect("oneshot");
+    let status = resp.status();
+    let bytes = to_bytes(resp.into_body(), usize::MAX).await.expect("body");
+    (status, String::from_utf8_lossy(&bytes).to_string())
+}
+
+#[tokio::test]
+async fn minus_subtracts_deprecated_concepts() {
+    let router = seeded_router_r4();
+    let query = concat!(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> ",
+        "MINUS { ?c <http://ex/deprecated> \"true\" } }"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "MINUS must return 200; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(
+        rows.len(),
+        2,
+        "MINUS must subtract the deprecated c2 (was a silent no-op returning 3); body: {body}"
+    );
+    assert!(
+        rows.iter()
+            .all(|r| r["c"]["value"].as_str() != Some("http://ex/c2")),
+        "c2 must be removed by MINUS; body: {body}"
+    );
+}
+
+#[tokio::test]
+async fn filter_not_exists_excludes_deprecated() {
+    let router = seeded_router_r4();
+    let query = concat!(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> ",
+        "FILTER NOT EXISTS { ?c <http://ex/deprecated> \"true\" } }"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "FILTER NOT EXISTS must return 200, not the old 400; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(
+        rows.len(),
+        2,
+        "NOT EXISTS keeps the two non-deprecated concepts; body: {body}"
+    );
+
+    // FILTER EXISTS keeps only the deprecated one.
+    let exists_query = concat!(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> ",
+        "FILTER EXISTS { ?c <http://ex/deprecated> \"true\" } }"
+    );
+    let (status, body) = post_query(&router, exists_query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "FILTER EXISTS must return 200; body: {body}"
+    );
+    assert_eq!(
+        bindings(&body).len(),
+        1,
+        "EXISTS keeps only c2; body: {body}"
+    );
+}
+
+#[tokio::test]
+async fn unary_not_bound_via_optional() {
+    let router = seeded_router_r4();
+    let query = concat!(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> ",
+        "OPTIONAL { ?c <http://ex/deprecated> ?d } FILTER(!BOUND(?d)) }"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "`!BOUND` must return 200; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(
+        rows.len(),
+        2,
+        "!BOUND(?d) keeps the two non-deprecated concepts; body: {body}"
+    );
+}
+
+#[tokio::test]
+async fn in_filter_selects_listed_concepts() {
+    let router = seeded_router_r4();
+    let query = concat!(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> ",
+        "FILTER(?c IN (<http://ex/c1>, <http://ex/c3>)) }"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "IN must return 200, not the old 400; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(
+        rows.len(),
+        2,
+        "IN (<c1>,<c3>) keeps c1 and c3; body: {body}"
+    );
+
+    // NOT IN excludes the listed concept.
+    let not_in = concat!(
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> ",
+        "FILTER(?c NOT IN (<http://ex/c2>)) }"
+    );
+    let (status, body) = post_query(&router, not_in).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "NOT IN must return 200; body: {body}"
+    );
+    assert_eq!(
+        bindings(&body).len(),
+        2,
+        "NOT IN (<c2>) keeps c1 and c3; body: {body}"
+    );
+}
+
+#[tokio::test]
+async fn form_urlencoded_plus_spaces_decode() {
+    let router = seeded_router_r4();
+    // The browser/YASGUI default POST encodes spaces as `+`; this must decode to
+    // spaces before the SPARQL lexer sees the query (was 400 "found Plus").
+    let query = "SELECT ?c WHERE { ?c a <http://ex/Concept> }";
+    let (status, body) = post_query_form_plus(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a `+`-encoded form POST must decode spaces and return 200; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(rows.len(), 3, "all three concepts; body: {body}");
+}
+
+#[tokio::test]
+async fn construct_with_bindings_accept_falls_back_to_turtle() {
+    let router = seeded_router_r4();
+    // A CONSTRUCT asked for SPARQL Results JSON must NOT return a silently-empty
+    // bindings array; it falls back to an RDF (Turtle) serialization.
+    let query = "CONSTRUCT { ?c <http://ex/p> ?c } WHERE { ?c a <http://ex/Concept> }";
+    let (status, body) = post_query_accept(&router, query, "application/sparql-results+json").await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "CONSTRUCT must return 200; body: {body}"
+    );
+    assert!(
+        !body.contains("\"bindings\""),
+        "a graph result must not be serialized as an empty bindings table; body: {body}"
+    );
+    assert_eq!(
+        turtle_triple_count(&body),
+        3,
+        "the CONSTRUCT graph (one triple per concept) must be serialized as RDF; body:\n{body}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Round 5-1: EXISTS / NOT EXISTS with an inner FILTER (wire level)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn not_exists_with_inner_filter_excludes_correctly() {
+    // r2 fixture: c1/c2 have @ja + @en labels, c3 has only @en. A NOT EXISTS with
+    // an INNER FILTER (`lang(?e)="ja"`) must keep only the concept WITHOUT a @ja
+    // label (c3). Before R5 the inner FILTER was ignored and nothing was excluded.
+    let router = seeded_router_r2();
+    let query = concat!(
+        "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n",
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> ",
+        "FILTER NOT EXISTS { ?c skos:prefLabel ?e FILTER(lang(?e) = \"ja\") } }"
+    );
+    let (status, body) = post_query(&router, query).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "NOT EXISTS + inner FILTER must return 200; body: {body}"
+    );
+    let rows = bindings(&body);
+    assert_eq!(
+        rows.len(),
+        1,
+        "only c3 (no @ja label) survives NOT EXISTS with an inner lang filter; body: {body}"
+    );
+    assert_eq!(
+        rows[0]["c"]["value"].as_str().unwrap_or(""),
+        "http://ex/c3",
+        "the surviving concept must be c3; body: {body}"
+    );
+
+    // EXISTS with the same inner filter matches the @ja-labelled concepts (c1, c2).
+    let exists = concat!(
+        "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n",
+        "SELECT ?c WHERE { ?c a <http://ex/Concept> ",
+        "FILTER EXISTS { ?c skos:prefLabel ?e FILTER(lang(?e) = \"ja\") } }"
+    );
+    let (status, body) = post_query(&router, exists).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "EXISTS + inner FILTER must return 200; body: {body}"
+    );
+    assert_eq!(
+        bindings(&body).len(),
+        2,
+        "EXISTS with an inner lang filter matches c1 and c2; body: {body}"
+    );
+}
