@@ -603,11 +603,14 @@ fn verify_es256(signing_input: &[u8], signature: &[u8], jwk: &Jwk) -> Result<(),
     let x = left_pad_32(&b64url_decode(x_b64)?)?;
     let y = left_pad_32(&b64url_decode(y_b64)?)?;
 
-    let point = Sec1Point::from_affine_coordinates(
-        p256::FieldBytes::from_slice(&x),
-        p256::FieldBytes::from_slice(&y),
-        false,
-    );
+    // `Array::from_slice` is deprecated in favor of `TryFrom`; `left_pad_32`
+    // guarantees exactly 32 bytes, but we still propagate the (unreachable in
+    // practice) conversion error rather than unwrapping.
+    let x_field = p256::FieldBytes::try_from(x.as_slice())
+        .map_err(|err| SsoError::InvalidKey(format!("invalid EC x-coordinate: {err}")))?;
+    let y_field = p256::FieldBytes::try_from(y.as_slice())
+        .map_err(|err| SsoError::InvalidKey(format!("invalid EC y-coordinate: {err}")))?;
+    let point = Sec1Point::from_affine_coordinates(&x_field, &y_field, false);
     let verifying_key = VerifyingKey::from_sec1_bytes(point.as_bytes())
         .map_err(|err| SsoError::InvalidKey(format!("invalid EC public key: {err}")))?;
     // JWS ES256 signatures are the fixed 64-byte r‖s concatenation.
