@@ -288,6 +288,18 @@ impl StorageBackend for DiskStorage {
 
             let mut writer = BufWriter::new(file);
             oxicode::serde::encode_into_std_write(graph, &mut writer, oxicode::config::standard())?;
+
+            // Explicitly flush the buffer and fsync, propagating any error. A
+            // `BufWriter` flushes on drop but *swallows* the error, so under I/O
+            // pressure a short/failed write would otherwise leave a truncated
+            // graph file behind while this call still returned `Ok`, making a
+            // subsequent `read_graph` fail to decode. Mirrors `write_metadata`.
+            let file = writer.into_inner().map_err(|e| DiskAnnError::IoError {
+                message: format!("Failed to flush graph file: {}", e),
+            })?;
+            file.sync_all().map_err(|e| DiskAnnError::IoError {
+                message: format!("Failed to sync graph file: {}", e),
+            })?;
         }
         Ok(())
     }

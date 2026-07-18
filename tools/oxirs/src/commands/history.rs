@@ -72,6 +72,14 @@ impl QueryHistory {
         Ok(())
     }
 
+    /// Monotonic per-process counter used to give each atomic-write temp file a
+    /// unique name, so rapid successive saves never collide on the temp path.
+    fn next_tmp_seq() -> u64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    }
+
     /// Save history to file
     pub fn save(&self) -> Result<()> {
         // Ensure parent directory exists
@@ -83,8 +91,25 @@ impl QueryHistory {
         let content = serde_json::to_string_pretty(&self.entries)
             .with_context(|| "Failed to serialize history")?;
 
-        fs::write(&self.history_file, content)
-            .with_context(|| format!("Failed to write history file: {:?}", self.history_file))?;
+        // Write atomically: serialize into a unique sibling temp file, then rename
+        // it over the target. `fs::write` is not atomic — a concurrent reader
+        // (another CLI invocation, or a parallel test, sharing the default store)
+        // can observe a half-written file and fail to parse it. A same-directory
+        // rename is atomic on the target filesystem, so readers always see either
+        // the old or the new complete file, never a torn one.
+        let tmp_path = self.history_file.with_extension(format!(
+            "json.tmp.{}.{}",
+            std::process::id(),
+            Self::next_tmp_seq()
+        ));
+        fs::write(&tmp_path, content)
+            .with_context(|| format!("Failed to write temp history file: {:?}", tmp_path))?;
+        if let Err(e) = fs::rename(&tmp_path, &self.history_file) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e).with_context(|| {
+                format!("Failed to persist history file: {:?}", self.history_file)
+            });
+        }
 
         Ok(())
     }

@@ -5,7 +5,10 @@
 use anyhow::Result;
 use std::{
     collections::HashMap,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::{Duration, SystemTime},
 };
 use tokio::sync::RwLock;
@@ -75,7 +78,13 @@ impl CacheMetrics {
 #[derive(Debug, Clone)]
 struct LruEntry {
     cached_response: CachedResponse,
-    last_accessed: SystemTime,
+    /// Monotonic access rank used for LRU ordering.
+    ///
+    /// Deliberately a monotonic counter rather than `SystemTime`: the wall
+    /// clock is non-monotonic and too coarse to order operations that occur
+    /// within the same tick, which would make eviction pick a non-deterministic
+    /// victim under fast/parallel access.
+    last_accessed: u64,
 }
 
 /// Response cache with LRU eviction
@@ -83,6 +92,8 @@ pub struct ResponseCache {
     cache: Arc<RwLock<HashMap<RequestHash, LruEntry>>>,
     config: CacheConfig,
     metrics: Arc<RwLock<CacheMetrics>>,
+    /// Monotonically increasing access clock feeding `LruEntry::last_accessed`.
+    access_tick: Arc<AtomicU64>,
 }
 
 impl ResponseCache {
@@ -91,7 +102,13 @@ impl ResponseCache {
             cache: Arc::new(RwLock::new(HashMap::new())),
             config,
             metrics: Arc::new(RwLock::new(CacheMetrics::default())),
+            access_tick: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// Return the next strictly-increasing access rank for LRU ordering.
+    fn next_tick(&self) -> u64 {
+        self.access_tick.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Generate hash for request
@@ -134,8 +151,8 @@ impl ResponseCache {
                 return None;
             }
 
-            // Update access time and count
-            entry.last_accessed = SystemTime::now();
+            // Update access rank and count
+            entry.last_accessed = self.next_tick();
             entry.cached_response.access_count += 1;
 
             self.record_hit().await;
@@ -166,7 +183,7 @@ impl ResponseCache {
 
         let entry = LruEntry {
             cached_response,
-            last_accessed: SystemTime::now(),
+            last_accessed: self.next_tick(),
         };
 
         cache.insert(hash, entry);

@@ -74,12 +74,26 @@ impl TestCluster {
 
         let mut nodes = Vec::new();
 
+        // Per-process isolation: `cargo nextest` runs each test in its own
+        // process, so the previous fixed `./test_data/node_N` dir and `8080+N`
+        // ports were shared across concurrently-scheduled test processes (the
+        // in-process `TEST_MUTEX` does not serialize across processes). Derive a
+        // unique data dir and port base from the PID so no two test processes
+        // ever collide on the filesystem or on an address, and keep temp files
+        // out of the source tree.
+        let pid = std::process::id();
+        let data_root = std::env::temp_dir().join(format!("oxirs_cluster_test_{pid}"));
+        let base_port: usize = 20000 + (pid as usize % 20000);
+
         // Create cluster nodes
         for i in 0..config.num_nodes {
             let node_config = NodeConfig {
                 node_id: i as u64 + 1,
-                address: format!("127.0.0.1:{}", 8080 + i).parse()?,
-                data_dir: format!("./test_data/node_{}", i),
+                address: format!("127.0.0.1:{}", base_port + i).parse()?,
+                data_dir: data_root
+                    .join(format!("node_{i}"))
+                    .to_string_lossy()
+                    .into_owned(),
                 peers: (1..=config.num_nodes as u64)
                     .filter(|&id| id != (i as u64 + 1))
                     .collect(),
