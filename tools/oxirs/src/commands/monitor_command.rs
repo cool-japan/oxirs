@@ -243,6 +243,160 @@ impl MonitorState {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CLI runner — real remote-endpoint polling
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Lightweight SPARQL liveness probe. `ASK {}` returns a boolean cheaply and
+/// is valid against any conformant SPARQL 1.1 endpoint.
+const PROBE_QUERY: &str = "ASK {}";
+
+/// Current Unix time in whole seconds (0 if the clock is before the epoch).
+fn now_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Poll a *remote* SPARQL endpoint `count` times spaced `interval_secs` apart,
+/// recording real latency/availability metrics and printing aggregate
+/// statistics (uptime, average latency, P95, health).
+///
+/// This performs real HTTP requests against `endpoint`; it is distinct from
+/// `oxirs performance monitor`, which samples the local process/dataset. All
+/// argument validation happens up-front and fails loudly, so the command never
+/// silently reports success against a bad configuration. If every probe fails,
+/// the command returns an error rather than reporting a green run.
+pub async fn run(
+    endpoint: String,
+    interval_secs: u64,
+    count: usize,
+    timeout_secs: u64,
+    threshold_ms: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Fail-loud argument validation (requires no network).
+    if endpoint.trim().is_empty() {
+        return Err("monitor: endpoint URL must not be empty".into());
+    }
+    if !(endpoint.starts_with("http://") || endpoint.starts_with("https://")) {
+        return Err(format!("monitor: endpoint must be an http(s) URL, got '{endpoint}'").into());
+    }
+    if count == 0 {
+        return Err("monitor: --count must be at least 1".into());
+    }
+    if timeout_secs == 0 {
+        return Err("monitor: --timeout must be at least 1 second".into());
+    }
+
+    let config = MonitorConfig {
+        endpoint_url: endpoint.clone(),
+        interval_secs,
+        alert_threshold_ms: threshold_ms,
+        max_errors: 3,
+    };
+    let mut state = MonitorState::new(config, count.max(1));
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| format!("monitor: failed to build HTTP client: {e}"))?;
+
+    println!("Monitoring remote SPARQL endpoint: {endpoint}");
+    println!(
+        "Probes: {count} | interval: {interval_secs}s | timeout: {timeout_secs}s | alert > {threshold_ms} ms"
+    );
+    println!("{:-<72}", "");
+
+    for i in 0..count {
+        let timestamp = now_unix_secs();
+        let start = std::time::Instant::now();
+        let response = client
+            .post(&endpoint)
+            .header("Content-Type", "application/sparql-query")
+            .header("Accept", "application/sparql-results+json")
+            .body(PROBE_QUERY)
+            .send()
+            .await;
+        let latency_ms = start.elapsed().as_millis() as u64;
+
+        let metric = match response {
+            Ok(resp) if resp.status().is_success() => {
+                EndpointMetric::ok(timestamp, latency_ms, None)
+            }
+            Ok(resp) => EndpointMetric::error(
+                timestamp,
+                latency_ms,
+                format!("HTTP {}", resp.status().as_u16()),
+            ),
+            Err(e) if e.is_timeout() => EndpointMetric::timeout(timestamp, latency_ms),
+            Err(e) => EndpointMetric::error(timestamp, latency_ms, e.to_string()),
+        };
+
+        print_probe_line(i + 1, count, &metric, threshold_ms);
+        state.record(metric);
+
+        if i + 1 < count {
+            tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
+        }
+    }
+
+    print_summary(&state);
+
+    let stats = state.stats();
+    if stats.ok_count == 0 {
+        return Err(format!(
+            "monitor: endpoint '{endpoint}' did not respond successfully to any of {count} probe(s)"
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
+/// Print a single per-probe status line.
+fn print_probe_line(idx: usize, total: usize, metric: &EndpointMetric, threshold_ms: u64) {
+    let status = match &metric.status {
+        QueryStatus::Ok => {
+            if metric.latency_ms > threshold_ms {
+                "OK (SLOW)"
+            } else {
+                "OK"
+            }
+        }
+        QueryStatus::Timeout => "TIMEOUT",
+        QueryStatus::Error(_) => "ERROR",
+    };
+    let detail = match &metric.status {
+        QueryStatus::Error(msg) => format!(" — {msg}"),
+        _ => String::new(),
+    };
+    println!(
+        "[{idx}/{total}] {status:<9} {} ms{detail}",
+        metric.latency_ms
+    );
+}
+
+/// Print the aggregate monitoring summary.
+fn print_summary(state: &MonitorState) {
+    let s = state.stats();
+    println!("{:-<72}", "");
+    println!("Total probes : {}", s.total_checks);
+    println!("Successful   : {}", s.ok_count);
+    println!("Failed       : {}", s.error_count);
+    println!("Uptime       : {:.1}%", s.uptime_pct);
+    println!("Avg latency  : {:.1} ms", s.avg_latency_ms);
+    println!("P95 latency  : {:.1} ms", s.p95_latency_ms);
+    println!(
+        "Health       : {}",
+        if state.is_healthy() {
+            "healthy"
+        } else {
+            "unhealthy"
+        }
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -252,6 +406,32 @@ mod tests {
 
     fn default_state() -> MonitorState {
         MonitorState::new(MonitorConfig::default(), 100)
+    }
+
+    // ── run() argument validation (no network) ────────────────────────────────
+
+    #[tokio::test]
+    async fn test_run_rejects_empty_endpoint() {
+        let result = run(String::new(), 1, 1, 5, 5_000).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_run_rejects_non_http_endpoint() {
+        let result = run("ftp://example.org/sparql".to_string(), 1, 1, 5, 5_000).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_run_rejects_zero_count() {
+        let result = run("http://localhost:3030/sparql".to_string(), 1, 0, 5, 5_000).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_run_rejects_zero_timeout() {
+        let result = run("http://localhost:3030/sparql".to_string(), 1, 1, 0, 5_000).await;
+        assert!(result.is_err());
     }
 
     // ── MonitorConfig::default ────────────────────────────────────────────────

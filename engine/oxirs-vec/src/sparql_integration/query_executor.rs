@@ -573,6 +573,15 @@ impl QueryExecutor {
         (self.query_cache.len(), 1000)
     }
 
+    /// Look up a previously-indexed vector by its store ID.
+    ///
+    /// Used by callers (e.g. the `embed_text`/`embed` SPARQL function) that
+    /// need the *actual* computed embedding, not just the `(id, score)` pair
+    /// returned by [`QueryExecutor::execute_optimized_query`].
+    pub fn get_vector(&self, id: &str) -> Option<crate::Vector> {
+        self.vector_store.get_vector(id).cloned()
+    }
+
     /// Add a resource embedding to the vector store
     pub fn add_resource_embedding(&mut self, uri: &str, content: &EmbeddableContent) -> Result<()> {
         // Generate embedding for the content

@@ -1,9 +1,9 @@
 //! # OxiRS CLI Tool
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs/badge.svg)](https://docs.rs/oxirs)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Command-line interface for OxiRS providing import, export, SPARQL queries,
@@ -117,6 +117,10 @@
 //! ```
 //!
 //! ### Modbus Operations
+//!
+//! TCP-based commands are wired to a real `oxirs_modbus` client/mock server.
+//! `monitor-rtu` (serial) and `to-rdf` are not yet wired into the CLI and
+//! return an explicit error.
 //! ```bash
 //! # Monitor Modbus TCP device (real-time)
 //! oxirs modbus monitor-tcp --address 192.168.1.100:502 --start 40001 --count 10 --interval 1000
@@ -124,18 +128,17 @@
 //! # Read registers
 //! oxirs modbus read --device 192.168.1.100:502 --address 40001 --count 5 --datatype float32
 //!
-//! # Generate RDF from Modbus data
-//! oxirs modbus to-rdf --device 192.168.1.100:502 --config modbus_map.toml --output data.ttl
-//!
-//! # Start mock server for testing
+//! # Start a real mock Modbus TCP server for testing
 //! oxirs modbus mock-server --port 5020
 //! ```
 //!
 //! ### CANbus Operations
-//! ```bash
-//! # Monitor CAN interface
-//! oxirs canbus monitor --interface can0 --dbc vehicle.dbc --j1939
 //!
+//! DBC parsing, frame decoding, and SAMM generation are wired to real
+//! `oxirs_canbus` APIs. Live SocketCAN interface access (`monitor`, `send`,
+//! `to-rdf`, `replay`) is Linux-only and not yet wired into the CLI; those
+//! commands return an explicit error.
+//! ```bash
 //! # Parse DBC file
 //! oxirs canbus parse-dbc --file vehicle.dbc --detailed
 //!
@@ -144,9 +147,6 @@
 //!
 //! # Generate SAMM Aspect Models from DBC
 //! oxirs canbus to-samm --dbc vehicle.dbc --output ./models/
-//!
-//! # Generate RDF from live CAN data
-//! oxirs canbus to-rdf --interface can0 --dbc vehicle.dbc --output can_data.ttl --count 1000
 //! ```
 //!
 //! ## Data Persistence

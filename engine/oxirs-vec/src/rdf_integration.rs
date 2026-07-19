@@ -6,10 +6,16 @@
 use crate::{similarity::SimilarityMetric, Vector, VectorId, VectorStoreTrait};
 use anyhow::{anyhow, Result};
 use oxirs_core::model::{GraphName, Literal, NamedNode, Term};
+// parking_lot::RwLock (not std::sync::RwLock) per the P1 lock-poisoning
+// finding: a single panic while holding a std::sync lock would poison it
+// permanently, breaking every subsequent call for the process lifetime.
+// parking_lot's RwLock has no poisoning, matching the pattern used
+// elsewhere in this crate (e.g. store_integration_adapters.rs).
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 /// Configuration for RDF-vector integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,11 +192,7 @@ impl RdfVectorIntegration {
         vector: Vector,
         graph_context: Option<GraphName>,
     ) -> Result<VectorId> {
-        let vector_id = self
-            .vector_store
-            .write()
-            .expect("lock poisoned")
-            .add_vector(vector)?;
+        let vector_id = self.vector_store.write().add_vector(vector)?;
         let metadata = self.extract_term_metadata(&term)?;
 
         let mapping = RdfTermMapping {
@@ -204,18 +206,18 @@ impl RdfVectorIntegration {
 
         // Update mappings
         {
-            let mut term_mappings = self.term_mappings.write().expect("lock poisoned");
+            let mut term_mappings = self.term_mappings.write();
             term_mappings.insert(term_hash, mapping.clone());
         }
 
         {
-            let mut vector_mappings = self.vector_mappings.write().expect("lock poisoned");
+            let mut vector_mappings = self.vector_mappings.write();
             vector_mappings.insert(vector_id.clone(), mapping);
         }
 
         // Update graph cache if applicable
         if let Some(graph) = graph_context {
-            let mut graph_cache = self.graph_cache.write().expect("lock poisoned");
+            let mut graph_cache = self.graph_cache.write();
             graph_cache
                 .entry(graph)
                 .or_default()
@@ -243,23 +245,19 @@ impl RdfVectorIntegration {
         let query_vector = self
             .vector_store
             .read()
-            .expect("lock poisoned")
             .get_vector(&query_vector_id)?
             .ok_or_else(|| anyhow!("Query vector not found"))?;
 
         // Filter by graph context if specified
         let candidate_vectors = if let Some(graph) = graph_context {
-            let graph_cache = self.graph_cache.read().expect("lock poisoned");
+            let graph_cache = self.graph_cache.read();
             graph_cache
                 .get(graph)
                 .map(|set| set.iter().cloned().collect::<Vec<_>>())
                 .unwrap_or_default()
         } else {
             // Use all vectors if no graph context specified
-            self.vector_store
-                .read()
-                .expect("lock poisoned")
-                .get_all_vector_ids()?
+            self.vector_store.read().get_all_vector_ids()?
         };
 
         // Perform similarity search
@@ -269,12 +267,7 @@ impl RdfVectorIntegration {
                 continue; // Skip self
             }
 
-            if let Ok(Some(vector)) = self
-                .vector_store
-                .read()
-                .expect("lock poisoned")
-                .get_vector(&vector_id)
-            {
+            if let Ok(Some(vector)) = self.vector_store.read().get_vector(&vector_id) {
                 let similarity = self.config.default_metric.compute(&query_vector, &vector)?;
 
                 // Apply threshold filtering
@@ -285,7 +278,7 @@ impl RdfVectorIntegration {
                 }
 
                 // Get term mapping
-                let vector_mappings = self.vector_mappings.read().expect("lock poisoned");
+                let vector_mappings = self.vector_mappings.read();
                 if let Some(mapping) = vector_mappings.get(&vector_id) {
                     let processing_time = start_time.elapsed().as_micros() as u64;
 
@@ -335,36 +328,24 @@ impl RdfVectorIntegration {
         let query_vector = self.generate_text_embedding(query_text)?;
 
         // Register temporary term (optional - for caching)
-        let temp_vector_id = self
-            .vector_store
-            .write()
-            .expect("lock poisoned")
-            .add_vector(query_vector.clone())?;
+        let temp_vector_id = self.vector_store.write().add_vector(query_vector.clone())?;
 
         // Perform similarity search against all terms
         let candidate_vectors = if let Some(graph) = graph_context {
-            let graph_cache = self.graph_cache.read().expect("lock poisoned");
+            let graph_cache = self.graph_cache.read();
             graph_cache
                 .get(graph)
                 .map(|set| set.iter().cloned().collect::<Vec<_>>())
                 .unwrap_or_default()
         } else {
-            self.vector_store
-                .read()
-                .expect("lock poisoned")
-                .get_all_vector_ids()?
+            self.vector_store.read().get_all_vector_ids()?
         };
 
         let mut results = Vec::new();
         let start_time = std::time::Instant::now();
 
         for vector_id in candidate_vectors {
-            if let Ok(Some(vector)) = self
-                .vector_store
-                .read()
-                .expect("lock poisoned")
-                .get_vector(&vector_id)
-            {
+            if let Ok(Some(vector)) = self.vector_store.read().get_vector(&vector_id) {
                 let similarity = self.config.default_metric.compute(&query_vector, &vector)?;
 
                 if let Some(thresh) = threshold {
@@ -373,7 +354,7 @@ impl RdfVectorIntegration {
                     }
                 }
 
-                let vector_mappings = self.vector_mappings.read().expect("lock poisoned");
+                let vector_mappings = self.vector_mappings.read();
                 if let Some(mapping) = vector_mappings.get(&vector_id) {
                     let processing_time = start_time.elapsed().as_micros() as u64;
 
@@ -394,11 +375,7 @@ impl RdfVectorIntegration {
         }
 
         // Clean up temporary vector
-        let _ = self
-            .vector_store
-            .write()
-            .expect("lock poisoned")
-            .remove_vector(&temp_vector_id);
+        let _ = self.vector_store.write().remove_vector(&temp_vector_id);
 
         // Sort and limit results
         results.sort_by(|a, b| {
@@ -414,7 +391,7 @@ impl RdfVectorIntegration {
     /// Get vector ID for an RDF term
     pub fn get_vector_id(&self, term: &Term) -> Result<Option<VectorId>> {
         let term_hash = TermHash::from_term(term);
-        let term_mappings = self.term_mappings.read().expect("lock poisoned");
+        let term_mappings = self.term_mappings.read();
         Ok(term_mappings
             .get(&term_hash)
             .map(|mapping| mapping.vector_id.clone()))
@@ -422,7 +399,7 @@ impl RdfVectorIntegration {
 
     /// Get RDF term for a vector ID
     pub fn get_term(&self, vector_id: VectorId) -> Result<Option<Term>> {
-        let vector_mappings = self.vector_mappings.read().expect("lock poisoned");
+        let vector_mappings = self.vector_mappings.read();
         Ok(vector_mappings
             .get(&vector_id)
             .map(|mapping| mapping.term.clone()))
@@ -430,7 +407,7 @@ impl RdfVectorIntegration {
 
     /// Register a namespace prefix
     pub fn register_namespace(&self, prefix: String, uri: String) -> Result<()> {
-        let mut registry = self.namespace_registry.write().expect("lock poisoned");
+        let mut registry = self.namespace_registry.write();
         registry.insert(prefix, uri);
         Ok(())
     }
@@ -611,9 +588,9 @@ impl RdfVectorIntegration {
 
     /// Get statistics about the RDF-vector integration
     pub fn get_statistics(&self) -> RdfIntegrationStats {
-        let term_mappings = self.term_mappings.read().expect("lock poisoned");
-        let graph_cache = self.graph_cache.read().expect("lock poisoned");
-        let namespace_registry = self.namespace_registry.read().expect("lock poisoned");
+        let term_mappings = self.term_mappings.read();
+        let graph_cache = self.graph_cache.read();
+        let namespace_registry = self.namespace_registry.read();
 
         let mut type_counts = HashMap::new();
         for mapping in term_mappings.values() {
@@ -682,6 +659,45 @@ mod tests {
         let (namespace, local_name) = integration.split_uri("http://example.org/ontology#Person");
         assert_eq!(namespace, Some("http://example.org/ontology#".to_string()));
         assert_eq!(local_name, Some("Person".to_string()));
+    }
+
+    /// Regression test for the P1 finding: a panic while holding one of
+    /// `RdfVectorIntegration`'s locks used to permanently poison it (via
+    /// `std::sync::RwLock` + `.expect("lock poisoned")`), breaking every
+    /// subsequent call for the process lifetime. `parking_lot::RwLock` has
+    /// no poisoning, so a panic in one thread must not prevent other
+    /// threads from continuing to use the lock afterwards.
+    #[test]
+    fn test_lock_survives_panic_while_held() -> Result<()> {
+        let config = RdfVectorConfig::default();
+        let vector_store = Arc::new(RwLock::new(VectorStore::new()));
+        let integration = Arc::new(RdfVectorIntegration::new(config, vector_store));
+
+        let integration_clone = integration.clone();
+        let handle = std::thread::spawn(move || {
+            // Panic while holding a write lock on term_mappings, simulating
+            // a bug elsewhere in a caller that holds this lock.
+            let _guard = integration_clone.term_mappings.write();
+            panic!("simulated panic while holding the lock");
+        });
+        // The panicking thread's lock must not poison the RwLock for
+        // everyone else.
+        assert!(handle.join().is_err());
+
+        // A completely unrelated, later call must still succeed instead of
+        // panicking with "lock poisoned".
+        let named_node = NamedNode::new("http://example.org/after-panic")?;
+        let term = Term::NamedNode(named_node);
+        let vector = Vector::new(vec![1.0, 0.0, 0.0]);
+        let vector_id = integration.register_term(term.clone(), vector, None)?;
+        assert_eq!(
+            integration
+                .get_vector_id(&term)
+                .expect("get_vector_id should not panic after another thread's panic")
+                .expect("vector id should be present"),
+            vector_id
+        );
+        Ok(())
     }
 
     #[test]

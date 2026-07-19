@@ -394,34 +394,46 @@ impl BbsProof {
         })
     }
 
-    /// Verify a BBS+ derived proof
+    /// Verify a BBS+ derived (selective-disclosure) proof.
     ///
-    /// Verifies that:
-    /// 1. The disclosed messages are consistent with a valid BBS+ signature
-    /// 2. The proof was generated with the correct nonce (freshness)
+    /// # Not implemented
+    ///
+    /// A sound BBS+ derived-proof verification requires checking a pairing-based
+    /// zero-knowledge proof of knowledge of the undisclosed messages against the
+    /// signature and public key. That protocol is **not implemented** here:
+    /// [`BbsProof::create`] currently produces only a hash commitment
+    /// ([`compute_proof_commitment`]), which is not a verifiable ZKP.
+    ///
+    /// Rather than fabricate success (the previous behaviour returned
+    /// `Ok(true)` after only structural checks — a critical security defect),
+    /// this method performs the cheap structural sanity checks and then returns
+    /// an explicit error so that a caller can never mistake an unverified proof
+    /// for a cryptographically valid one. The lower-level
+    /// [`BbsPlusSignature::verify`] (full-disclosure pairing check) IS real and
+    /// should be used when selective disclosure is not required.
     pub fn verify(&self, public_key_bytes: &[u8], _nonce: &[u8]) -> DidResult<bool> {
-        // Validate public key
+        // Validate public key material (still useful to reject malformed input).
         let _public_key = BbsKeyPair::verifying_key_from_bytes(public_key_bytes)?;
 
-        // Validate disclosed indices are consistent
+        // Structural sanity checks — a proof failing these is definitively invalid.
         if self.disclosed_messages.len() != self.disclosed_indices.len() {
             return Ok(false);
         }
-
-        // Validate proof bytes are present and not empty
         if self.proof_bytes.is_empty() {
             return Ok(false);
         }
-
-        // Validate that disclosed count <= total count
         if self.disclosed_indices.len() > self.total_message_count {
             return Ok(false);
         }
 
-        // In a full implementation, we would verify the Schnorr-style ZKP proof
-        // by reconstructing the commitment and checking it matches
-        // For this implementation, we verify the structural consistency
-        Ok(true)
+        // Structural checks passed, but we cannot (yet) cryptographically verify
+        // the zero-knowledge proof of the undisclosed messages. Fail loudly.
+        Err(DidError::VerificationFailed(
+            "BBS+ derived-proof (selective disclosure) verification is not implemented; \
+             refusing to report success for an unverified zero-knowledge proof. Use \
+             BbsPlusSignature::verify for full-disclosure verification instead."
+                .to_string(),
+        ))
     }
 
     /// Get disclosed messages as string slices if valid UTF-8
@@ -717,7 +729,10 @@ mod tests {
     }
 
     #[test]
-    fn test_bbs_proof_verify() {
+    fn test_bbs_proof_verify_is_not_implemented_never_true() {
+        // The derived-proof ZKP verification is intentionally unimplemented and
+        // must fail loudly rather than fabricate success (it used to return
+        // Ok(true) unconditionally — a critical security defect).
         let kp = create_test_keypair();
         let messages: Vec<&[u8]> = vec![b"name: Alice", b"age: 30", b"country: USA"];
         let sig = BbsPlusSignature::sign(&messages, &kp, None).unwrap();
@@ -726,8 +741,27 @@ mod tests {
         let request = BbsProofRequest::new(vec![0, 2], nonce.clone());
         let proof = BbsProof::create(&sig, &messages, &request, &kp).unwrap();
 
-        let valid = proof.verify(&kp.public_key_bytes(), &nonce).unwrap();
-        assert!(valid, "BBS+ derived proof should verify");
+        // A well-formed proof: structural checks pass, but verification is not
+        // implemented, so it returns an explicit error — never Ok(true).
+        let result = proof.verify(&kp.public_key_bytes(), &nonce);
+        assert!(
+            result.is_err(),
+            "unimplemented ZKP verify must error, not succeed"
+        );
+    }
+
+    #[test]
+    fn test_bbs_proof_verify_structurally_invalid_is_false() {
+        // A structurally-broken proof is definitively invalid (Ok(false)),
+        // exercised before we reach the not-implemented ZKP step.
+        let kp = create_test_keypair();
+        let messages: Vec<&[u8]> = vec![b"a", b"b"];
+        let sig = BbsPlusSignature::sign(&messages, &kp, None).unwrap();
+        let request = BbsProofRequest::new(vec![0], b"n".to_vec());
+        let mut proof = BbsProof::create(&sig, &messages, &request, &kp).unwrap();
+        proof.proof_bytes.clear(); // structurally invalid
+        let result = proof.verify(&kp.public_key_bytes(), b"n").unwrap();
+        assert!(!result, "empty proof bytes must be rejected as invalid");
     }
 
     #[test]

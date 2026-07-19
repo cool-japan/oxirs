@@ -524,44 +524,33 @@ impl FederationCache {
         Ok(())
     }
 
-    /// Warm up cache with historically popular queries
+    /// Warm up cache with historically popular queries.
+    ///
+    /// This deliberately does **not** pre-populate the query-*result* cache:
+    /// `FederationCache` has no `ServiceRegistry`/executor reference, so
+    /// there is no way to genuinely run these patterns and obtain real
+    /// results. It used to insert a fabricated, always-empty `SparqlResults`
+    /// under each pattern's cache key with a 5-minute TTL — meaning any real
+    /// query matching one of these patterns got a false "0 results" cache
+    /// hit for up to 5 minutes instead of actually being executed. Rather
+    /// than fabricate data, this only logs the known-popular patterns (for
+    /// future use by a higher-level warmer that *does* have executor
+    /// access); real result caching continues to happen organically as
+    /// [`Self::put_query_result`] is called with genuine results elsewhere.
     async fn warmup_popular_queries(&self) -> Result<()> {
-        debug!("Warming up popular queries");
-
-        // Sample popular query patterns that are commonly used
-        let popular_patterns = vec![
+        let popular_patterns = [
             "SELECT * WHERE { ?s ?p ?o }",
             "SELECT ?s WHERE { ?s rdf:type ?type }",
             "SELECT ?s ?p WHERE { ?s ?p ?o FILTER(?o = 'value') }",
             "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }",
         ];
 
-        for pattern in popular_patterns {
-            let query_info = QueryInfo {
-                query_type: crate::planner::QueryType::Select,
-                original_query: pattern.to_string(),
-                patterns: vec![],
-                variables: std::collections::HashSet::new(),
-                complexity: 1,
-                estimated_cost: 50,
-                filters: vec![],
-            };
-
-            let cache_key = self.generate_query_key(&query_info);
-
-            // Pre-populate with empty result sets to indicate query structure
-            let placeholder_result = QueryResultCache::Sparql(crate::executor::SparqlResults {
-                head: crate::executor::SparqlHead { vars: vec![] },
-                results: crate::executor::SparqlResultsData { bindings: vec![] },
-            });
-
-            self.put_query_result(
-                &cache_key,
-                placeholder_result,
-                Some(Duration::from_secs(300)),
-            )
-            .await;
-        }
+        debug!(
+            "{} known-popular query pattern(s) noted; skipping query-result cache \
+             pre-population since this cache layer cannot execute them to obtain \
+             genuine results (no executor/registry access)",
+            popular_patterns.len()
+        );
 
         Ok(())
     }
@@ -1469,6 +1458,38 @@ mod tests {
 
         assert_eq!(key1, key2); // Same query should generate same key
         assert!(!key1.is_empty());
+    }
+
+    /// Regression test for cache/mod.rs:552 — `warmup_popular_queries` used
+    /// to pre-populate the query-result cache with a fabricated, always-empty
+    /// `SparqlResults` under each popular pattern's exact-match cache key.
+    /// It must no longer insert any fake query-result entries (a genuine
+    /// query matching one of those patterns must not get a false "0 results"
+    /// cache hit from warmup).
+    #[tokio::test]
+    async fn test_warmup_popular_queries_does_not_fake_results() {
+        let cache = FederationCache::new();
+
+        cache
+            .warmup_popular_queries()
+            .await
+            .expect("warmup_popular_queries should not error");
+
+        let query_info = QueryInfo {
+            query_type: crate::planner::QueryType::Select,
+            original_query: "SELECT * WHERE { ?s ?p ?o }".to_string(),
+            patterns: vec![],
+            variables: std::collections::HashSet::new(),
+            complexity: 1,
+            estimated_cost: 50,
+            filters: vec![],
+        };
+        let cache_key = cache.generate_query_key(&query_info);
+
+        assert!(
+            cache.get_query_result(&cache_key).await.is_none(),
+            "warmup must not leave a fabricated empty result in the query-result cache"
+        );
     }
 
     #[tokio::test]

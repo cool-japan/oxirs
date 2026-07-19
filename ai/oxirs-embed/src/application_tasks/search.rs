@@ -6,7 +6,7 @@
 
 use super::ApplicationEvalConfig;
 use crate::{EmbeddingModel, Vector};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -57,6 +57,12 @@ pub struct QueryResults {
     pub num_relevant: usize,
     /// Query difficulty score
     pub difficulty_score: f64,
+    /// Average precision over the full ranked result list, for aggregating
+    /// into Mean Average Precision (MAP) across queries.
+    pub average_precision: f64,
+    /// Reciprocal rank of the first relevant result (0.0 if none), for
+    /// aggregating into Mean Reciprocal Rank (MRR) across queries.
+    pub reciprocal_rank: f64,
 }
 
 /// Query performance analysis
@@ -225,6 +231,29 @@ impl SearchEvaluator {
 
         let difficulty_score = self.calculate_query_difficulty(query, num_relevant);
 
+        // Average precision over the full ranked list (for MAP): the mean of
+        // precision@k evaluated at every rank that holds a relevant result.
+        let average_precision = if num_relevant > 0 {
+            let mut hits = 0usize;
+            let mut precision_sum = 0.0;
+            for (rank, &relevance) in relevance_scores.iter().enumerate() {
+                if relevance > 0 {
+                    hits += 1;
+                    precision_sum += hits as f64 / (rank + 1) as f64;
+                }
+            }
+            precision_sum / num_relevant as f64
+        } else {
+            0.0
+        };
+
+        // Reciprocal rank of the first relevant result (for MRR).
+        let reciprocal_rank = relevance_scores
+            .iter()
+            .position(|&relevance| relevance > 0)
+            .map(|rank| 1.0 / (rank + 1) as f64)
+            .unwrap_or(0.0);
+
         Ok(QueryResults {
             query: query.to_string(),
             precision_scores,
@@ -232,6 +261,8 @@ impl SearchEvaluator {
             ndcg_scores,
             num_relevant,
             difficulty_score,
+            average_precision,
+            reciprocal_rank,
         })
     }
 
@@ -336,6 +367,17 @@ impl SearchEvaluator {
                     .collect();
                 Ok(scores.iter().sum::<f64>() / scores.len() as f64)
             }
+            SearchMetric::RecallAtK(k) => {
+                let scores: Vec<f64> = per_query_results
+                    .values()
+                    .filter_map(|r| r.recall_scores.get(k))
+                    .cloned()
+                    .collect();
+                if scores.is_empty() {
+                    return Err(anyhow!("No recall@{k} scores available across queries"));
+                }
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
+            }
             SearchMetric::NDCG(k) => {
                 let scores: Vec<f64> = per_query_results
                     .values()
@@ -344,7 +386,24 @@ impl SearchEvaluator {
                     .collect();
                 Ok(scores.iter().sum::<f64>() / scores.len() as f64)
             }
-            _ => Ok(0.5), // Placeholder for other metrics
+            SearchMetric::MAP => {
+                let scores: Vec<f64> = per_query_results
+                    .values()
+                    .map(|r| r.average_precision)
+                    .collect();
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
+            }
+            SearchMetric::MRR => {
+                let scores: Vec<f64> = per_query_results
+                    .values()
+                    .map(|r| r.reciprocal_rank)
+                    .collect();
+                Ok(scores.iter().sum::<f64>() / scores.len() as f64)
+            }
+            SearchMetric::ERR | SearchMetric::CTR => Err(anyhow!(
+                "Search metric {metric:?} is not yet implemented: computing it requires a \
+                 graded-relevance cascade/click model that QueryResults does not currently track"
+            )),
         }
     }
 
@@ -415,5 +474,69 @@ impl SearchEvaluator {
 impl Default for SearchEvaluator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_query_results(average_precision: f64, reciprocal_rank: f64) -> QueryResults {
+        QueryResults {
+            query: "test query".to_string(),
+            precision_scores: HashMap::new(),
+            recall_scores: [(5usize, 0.5)].into_iter().collect(),
+            ndcg_scores: HashMap::new(),
+            num_relevant: 2,
+            difficulty_score: 0.0,
+            average_precision,
+            reciprocal_rank,
+        }
+    }
+
+    /// Regression test: MAP/MRR must be computed for real from
+    /// `average_precision`/`reciprocal_rank` instead of a hardcoded 0.5.
+    #[test]
+    fn test_calculate_search_metric_map_and_mrr_are_real() -> Result<()> {
+        let evaluator = SearchEvaluator::new();
+        let mut per_query = HashMap::new();
+        per_query.insert("q1".to_string(), sample_query_results(1.0, 1.0));
+        per_query.insert("q2".to_string(), sample_query_results(0.5, 0.5));
+
+        let map = evaluator.calculate_search_metric(&SearchMetric::MAP, &per_query)?;
+        assert!((map - 0.75).abs() < 1e-9, "map = {map}");
+
+        let mrr = evaluator.calculate_search_metric(&SearchMetric::MRR, &per_query)?;
+        assert!((mrr - 0.75).abs() < 1e-9, "mrr = {mrr}");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_search_metric_recall_at_k_is_real() -> Result<()> {
+        let evaluator = SearchEvaluator::new();
+        let mut per_query = HashMap::new();
+        per_query.insert("q1".to_string(), sample_query_results(0.0, 0.0));
+
+        let recall = evaluator.calculate_search_metric(&SearchMetric::RecallAtK(5), &per_query)?;
+        assert!((recall - 0.5).abs() < 1e-9, "recall = {recall}");
+
+        Ok(())
+    }
+
+    /// Metrics that genuinely cannot be computed from the tracked data must
+    /// fail loudly rather than return a fabricated placeholder score.
+    #[test]
+    fn test_calculate_search_metric_err_and_ctr_are_explicit_errors() {
+        let evaluator = SearchEvaluator::new();
+        let mut per_query = HashMap::new();
+        per_query.insert("q1".to_string(), sample_query_results(1.0, 1.0));
+
+        assert!(evaluator
+            .calculate_search_metric(&SearchMetric::ERR, &per_query)
+            .is_err());
+        assert!(evaluator
+            .calculate_search_metric(&SearchMetric::CTR, &per_query)
+            .is_err());
     }
 }

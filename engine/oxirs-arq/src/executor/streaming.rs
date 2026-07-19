@@ -712,12 +712,22 @@ impl SerializableTerm {
     }
 }
 
-/// Spillable hash join for memory-efficient joins
+/// Spillable grace hash join for memory-efficient joins.
+///
+/// When a build-side (left) bucket is spilled to disk, the corresponding
+/// probe-side (right) rows are partitioned and spilled alongside it so that
+/// the two partitions can be replayed and joined in the cleanup phase. This is
+/// a classic grace hash join: spilled buckets produce correct join output
+/// rather than unmatched left rows.
 pub struct SpillableHashJoin {
     config: StreamingConfig,
     memory_tracker: MemoryTracker,
     hash_buckets: Vec<HashMap<String, Vec<Solution>>>,
     spill_buckets: Vec<Vec<SpillFile>>,
+    /// Right-side rows deferred for spilled buckets (in-memory portion).
+    right_buffers: Vec<Vec<Solution>>,
+    /// Right-side rows spilled to disk for spilled buckets.
+    right_spill_buckets: Vec<Vec<SpillFile>>,
     num_buckets: usize,
 }
 
@@ -731,6 +741,8 @@ impl SpillableHashJoin {
             memory_tracker,
             hash_buckets: (0..num_buckets).map(|_| HashMap::new()).collect(),
             spill_buckets: (0..num_buckets).map(|_| Vec::new()).collect(),
+            right_buffers: (0..num_buckets).map(|_| Vec::new()).collect(),
+            right_spill_buckets: (0..num_buckets).map(|_| Vec::new()).collect(),
             num_buckets,
         }
     }
@@ -781,7 +793,15 @@ impl SpillableHashJoin {
         Ok(())
     }
 
-    /// Probe phase: join with right relations
+    /// Probe phase: join with right relations.
+    ///
+    /// For buckets that were never spilled the whole build side is in memory,
+    /// so we probe immediately. For buckets that spilled at least once the
+    /// in-memory build side is incomplete (part of it is on disk), so probing
+    /// it now would miss matches with the spilled rows AND double-count the
+    /// residual rows joined again in the cleanup phase. Instead we partition
+    /// the right row to the same bucket (buffering, then spilling under memory
+    /// pressure) and defer the join to [`Self::handle_spilled_buckets`].
     fn probe_phase(
         &mut self,
         right: Vec<Solution>,
@@ -792,42 +812,104 @@ impl SpillableHashJoin {
             let hash_key = self.create_hash_key(&right_solution, join_vars);
             let bucket_idx = self.hash_to_bucket(&hash_key);
 
-            // Check in-memory bucket
-            if let Some(left_solutions) = self.hash_buckets[bucket_idx].get(&hash_key) {
-                for left_solution in left_solutions {
-                    if let Some(joined) =
-                        self.join_solutions(left_solution, &right_solution, join_vars)
-                    {
-                        results.push(joined);
+            if self.spill_buckets[bucket_idx].is_empty() {
+                // Fully in-memory bucket: probe now.
+                if let Some(left_solutions) = self.hash_buckets[bucket_idx].get(&hash_key) {
+                    for left_solution in left_solutions {
+                        if let Some(joined) =
+                            self.join_solutions(left_solution, &right_solution, join_vars)
+                        {
+                            results.push(joined);
+                        }
                     }
                 }
+            } else {
+                // Spilled bucket: defer to grace-join over the full partition.
+                self.right_buffers[bucket_idx].push(right_solution);
+                if self.right_buffers[bucket_idx].len() >= self.config.buffer_size.max(1) {
+                    self.spill_right_buffer(bucket_idx)?;
+                }
             }
-
-            // Note: For spilled buckets, we'll handle them separately in handle_spilled_buckets
         }
 
         Ok(())
     }
 
-    /// Handle spilled buckets by loading them back and processing
+    /// Handle spilled buckets with a classic grace hash join.
+    ///
+    /// For every bucket that spilled at least once, the full left partition
+    /// (spilled files plus the in-memory residual) is loaded and hashed, then
+    /// the full right partition (spilled files plus the in-memory buffer) is
+    /// probed against it and joined. Both partitions' spill files are deleted
+    /// afterwards.
     fn handle_spilled_buckets(
         &mut self,
         join_vars: &[Variable],
         results: &mut Vec<Solution>,
     ) -> Result<()> {
         for bucket_idx in 0..self.num_buckets {
-            if !self.spill_buckets[bucket_idx].is_empty() {
-                // Process each spilled file for this bucket
-                for spill_file in &self.spill_buckets[bucket_idx] {
-                    let solutions = self.load_spilled_solutions(spill_file)?;
-                    // This is a simplified approach - in practice, you'd want to
-                    // handle cases where the spilled data is still too large
-                    self.process_spilled_bucket_solutions(solutions, join_vars, results)?;
-                }
+            if self.spill_buckets[bucket_idx].is_empty() {
+                // Never spilled: already fully joined in-memory during probe.
+                continue;
+            }
+
+            // Left partition: spilled files + in-memory residual.
+            let mut left_solutions = Vec::new();
+            for spill_file in &self.spill_buckets[bucket_idx] {
+                left_solutions.extend(self.load_spilled_solutions(spill_file)?);
+            }
+            for (_key, sols) in self.hash_buckets[bucket_idx].drain() {
+                left_solutions.extend(sols);
+            }
+
+            // Right partition: in-memory buffer + spilled files.
+            let mut right_solutions = std::mem::take(&mut self.right_buffers[bucket_idx]);
+            for spill_file in &self.right_spill_buckets[bucket_idx] {
+                right_solutions.extend(self.load_spilled_solutions(spill_file)?);
+            }
+
+            self.join_partition(&left_solutions, &right_solutions, join_vars, results);
+
+            // Delete this bucket's spill files now that it is fully joined.
+            for spill_file in self.spill_buckets[bucket_idx].drain(..) {
+                let _ = remove_file(&spill_file.path);
+            }
+            for spill_file in self.right_spill_buckets[bucket_idx].drain(..) {
+                let _ = remove_file(&spill_file.path);
             }
         }
 
         Ok(())
+    }
+
+    /// Join a fully-materialized left and right partition of a single spilled
+    /// bucket, appending matched rows to `results`. Left rows are indexed by
+    /// their join key so probing is O(right).
+    fn join_partition(
+        &self,
+        left: &[Solution],
+        right: &[Solution],
+        join_vars: &[Variable],
+        results: &mut Vec<Solution>,
+    ) {
+        let mut table: HashMap<String, Vec<&Solution>> = HashMap::new();
+        for left_solution in left {
+            let key = self.create_hash_key(left_solution, join_vars);
+            table.entry(key).or_default().push(left_solution);
+        }
+
+        for right_solution in right {
+            let key = self.create_hash_key(right_solution, join_vars);
+            if let Some(left_matches) = table.get(&key) {
+                for &left_solution in left_matches {
+                    if let Some(joined) =
+                        self.join_solutions(left_solution, right_solution, join_vars)
+                    {
+                        results.push(joined);
+                    }
+                }
+            }
+        }
     }
 
     /// Create hash key from solution using join variables
@@ -855,77 +937,74 @@ impl SpillableHashJoin {
         (hasher.finish() as usize) % self.num_buckets
     }
 
-    /// Spill a bucket to disk
-    fn spill_bucket(&mut self, bucket_idx: usize) -> Result<()> {
-        let bucket = &mut self.hash_buckets[bucket_idx];
-        if bucket.is_empty() {
-            return Ok(());
-        }
-
+    /// Serialize a batch of solutions to a persisted spill file on disk.
+    ///
+    /// The file is persisted via [`NamedTempFile::keep`] (not `into_parts`, whose
+    /// `TempPath` guard would delete the file as soon as it drops — before the
+    /// grace-join cleanup phase can read it back). Callers are responsible for
+    /// deleting the returned file once the partition has been joined.
+    fn write_solutions_to_spill(&self, solutions: &[Solution]) -> Result<SpillFile> {
         let temp_file = if let Some(ref temp_dir) = self.config.temp_dir {
             NamedTempFile::new_in(temp_dir)?
         } else {
             NamedTempFile::new()?
         };
 
-        let (file, path) = temp_file.into_parts();
-        let mut writer = BufWriter::new(file);
-
-        // Flatten bucket solutions for serialization
-        let mut all_solutions = Vec::new();
-        for solutions in bucket.values() {
-            all_solutions.extend(solutions.iter().cloned());
-        }
-
-        let serialized_solutions: Vec<SerializableSolution> = all_solutions
+        let serialized_solutions: Vec<SerializableSolution> = solutions
             .iter()
             .map(SerializableSolution::from_solution)
             .collect();
-
         let data =
             oxicode::serde::encode_to_vec(&serialized_solutions, oxicode::config::standard())?;
+
+        let (file, path) = temp_file
+            .keep()
+            .map_err(|e| anyhow!("failed to persist spill file: {e}"))?;
+        let mut writer = BufWriter::new(file);
         writer.write_all(&data)?;
         writer.flush()?;
 
-        // Track spill file
-        let spill_file = SpillFile {
-            path: path.to_path_buf(),
+        Ok(SpillFile {
+            path,
             size: data.len(),
-            compressed: false, // Can be made configurable
-        };
-        self.spill_buckets[bucket_idx].push(spill_file);
+            compressed: false,
+        })
+    }
 
-        // Calculate total size first, then clear the bucket and deallocate memory
+    /// Spill a build-side (left) bucket to disk, freeing its memory.
+    fn spill_bucket(&mut self, bucket_idx: usize) -> Result<()> {
+        if self.hash_buckets[bucket_idx].is_empty() {
+            return Ok(());
+        }
+
+        // Flatten bucket solutions for serialization.
+        let all_solutions: Vec<Solution> = self.hash_buckets[bucket_idx]
+            .values()
+            .flat_map(|solutions| solutions.iter().cloned())
+            .collect();
+
         let total_size: usize = all_solutions
             .iter()
-            .map(|sol| {
-                let mut size = std::mem::size_of::<Solution>();
-                for binding in sol {
-                    size += binding.len()
-                        * (std::mem::size_of::<Variable>() + std::mem::size_of::<Term>());
-                    size += binding
-                        .iter()
-                        .map(|(var, term)| {
-                            let term_size = match term {
-                                Term::Iri(iri) => iri.as_str().len(),
-                                Term::Literal(lit) => {
-                                    lit.value.len() + lit.language.as_ref().map_or(0, |l| l.len())
-                                }
-                                Term::BlankNode(bn) => bn.len(),
-                                Term::Variable(var) => var.as_str().len(),
-                                Term::QuotedTriple(_) => 100, // Estimate for quoted triple
-                                Term::PropertyPath(_) => 50,  // Estimate for property path
-                            };
-                            var.as_str().len() + term_size
-                        })
-                        .sum::<usize>();
-                }
-                size
-            })
+            .map(|sol| self.estimate_solution_size(sol))
             .sum();
-        self.memory_tracker.deallocate(total_size);
-        bucket.clear();
 
+        let spill_file = self.write_solutions_to_spill(&all_solutions)?;
+        self.spill_buckets[bucket_idx].push(spill_file);
+
+        self.memory_tracker.deallocate(total_size);
+        self.hash_buckets[bucket_idx].clear();
+
+        Ok(())
+    }
+
+    /// Spill the in-memory right-side buffer for a bucket to disk.
+    fn spill_right_buffer(&mut self, bucket_idx: usize) -> Result<()> {
+        if self.right_buffers[bucket_idx].is_empty() {
+            return Ok(());
+        }
+        let solutions = std::mem::take(&mut self.right_buffers[bucket_idx]);
+        let spill_file = self.write_solutions_to_spill(&solutions)?;
+        self.right_spill_buckets[bucket_idx].push(spill_file);
         Ok(())
     }
 
@@ -945,36 +1024,6 @@ impl SpillableHashJoin {
             .into_iter()
             .map(|s| s.to_solution())
             .collect())
-    }
-
-    /// Process solutions from spilled bucket
-    fn process_spilled_bucket_solutions(
-        &self,
-        solutions: Vec<Solution>,
-        join_vars: &[Variable],
-        results: &mut Vec<Solution>,
-    ) -> Result<()> {
-        // Rebuild hash table for this spilled bucket
-        let mut bucket_hash_table = HashMap::new();
-
-        for solution in solutions {
-            let hash_key = self.create_hash_key(&solution, join_vars);
-            bucket_hash_table
-                .entry(hash_key)
-                .or_insert_with(Vec::new)
-                .push(solution);
-        }
-
-        // Note: In a complete implementation, we would need to store the right-side
-        // solutions that correspond to this bucket and join them here.
-        // For now, we'll add the solutions to results as a placeholder.
-        // This represents the left-side solutions that would be joined.
-
-        for (_, bucket_solutions) in bucket_hash_table {
-            results.extend(bucket_solutions);
-        }
-
-        Ok(())
     }
 
     /// Join two solutions
@@ -1164,5 +1213,89 @@ mod tests {
         let results = join.execute(left, right, &join_vars).unwrap();
 
         assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn grace_hash_join_spilled_buckets_produce_correct_results() {
+        // Size the memory budget from one real solution so the build side is
+        // forced to spill, exercising the grace-hash-join replay path.
+        let mut sample = Solution::new();
+        let mut sample_binding = Binding::new();
+        sample_binding.insert(
+            Variable::new_unchecked("x"),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/x/1")),
+        );
+        sample_binding.insert(
+            Variable::new_unchecked("y"),
+            Term::Iri(NamedNode::new_unchecked("http://example.org/y/000")),
+        );
+        sample.push(sample_binding);
+
+        let sizer = SpillableHashJoin::new(StreamingConfig::default());
+        let one = sizer.estimate_solution_size(&sample).max(1);
+
+        let config = StreamingConfig {
+            memory_limit: one * 2, // holds ~2 rows -> 6 same-bucket rows must spill
+            buffer_size: 2,
+            ..Default::default()
+        };
+        let mut join = SpillableHashJoin::new(config);
+
+        // 6 left rows all sharing the join key x=1 -> one bucket -> spills.
+        let mut left = Vec::new();
+        for i in 0..6 {
+            let mut sol = Solution::new();
+            let mut binding = Binding::new();
+            binding.insert(
+                Variable::new_unchecked("x"),
+                Term::Iri(NamedNode::new_unchecked("http://example.org/x/1")),
+            );
+            binding.insert(
+                Variable::new_unchecked("y"),
+                Term::Iri(NamedNode::new_unchecked(format!(
+                    "http://example.org/y/{i:03}"
+                ))),
+            );
+            sol.push(binding);
+            left.push(sol);
+        }
+        // 3 right rows, same key.
+        let mut right = Vec::new();
+        for j in 0..3 {
+            let mut sol = Solution::new();
+            let mut binding = Binding::new();
+            binding.insert(
+                Variable::new_unchecked("x"),
+                Term::Iri(NamedNode::new_unchecked("http://example.org/x/1")),
+            );
+            binding.insert(
+                Variable::new_unchecked("z"),
+                Term::Iri(NamedNode::new_unchecked(format!(
+                    "http://example.org/z/{j:03}"
+                ))),
+            );
+            sol.push(binding);
+            right.push(sol);
+        }
+
+        let join_vars = vec![Variable::new_unchecked("x")];
+        let results = join
+            .execute(left, right, &join_vars)
+            .expect("grace hash join should succeed");
+
+        // Each of the 6 left rows joins each of the 3 right rows on x=1 => 18
+        // matched rows, each carrying both y and z. Before the fix, spilled
+        // left rows were emitted unmatched (wrong count, missing z bindings).
+        assert_eq!(
+            results.len(),
+            18,
+            "grace hash join must join spilled left and right partitions"
+        );
+        for sol in &results {
+            for binding in sol {
+                assert!(binding.contains_key(&Variable::new_unchecked("y")));
+                assert!(binding.contains_key(&Variable::new_unchecked("z")));
+            }
+        }
     }
 }

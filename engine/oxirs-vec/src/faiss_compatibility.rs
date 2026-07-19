@@ -160,7 +160,7 @@ impl FaissCompatibility {
     }
 
     /// Export an oxirs-vec index to FAISS format
-    pub fn export_to_faiss<T: VectorIndex>(
+    pub fn export_to_faiss<T: VectorIndex + 'static>(
         &mut self,
         index: &T,
         output_path: &Path,
@@ -317,7 +317,7 @@ impl FaissCompatibility {
         let mut index = HnswIndex::new(hnsw_config)?;
 
         // Read and import vectors in batches
-        self.import_vectors_batched(&mut reader, &mut index, config.batch_size)?;
+        self.import_vectors_batched(&mut reader, &mut index, metadata, config.batch_size)?;
 
         Ok(Box::new(index))
     }
@@ -344,8 +344,11 @@ impl FaissCompatibility {
         // Read centroids and structure
         self.read_ivf_structure(&mut reader, &mut index)?;
 
-        // Import vectors
-        self.import_vectors_batched(&mut reader, &mut index, config.batch_size)?;
+        // Import vectors. NOTE: `read_ivf_structure` (centroids) is still a
+        // placeholder, so a freshly-constructed `IvfIndex` here is untrained;
+        // `IvfIndex::insert` will return a clear "must be trained" error
+        // rather than silently accepting vectors into an untrained index.
+        self.import_vectors_batched(&mut reader, &mut index, metadata, config.batch_size)?;
 
         Ok(Box::new(index))
     }
@@ -493,22 +496,22 @@ impl FaissCompatibility {
         Ok(())
     }
 
-    /// Write vectors in chunks for memory efficiency
+    /// Write vectors in chunks for memory efficiency.
+    ///
+    /// Vectors are enumerated once via [`VectorIndex::iter_vectors`] (real
+    /// data, not a placeholder) and written out `chunk_size` at a time.
     fn write_vectors_chunked<T: VectorIndex>(
         &self,
         writer: &mut BufWriter<File>,
         index: &T,
         chunk_size: usize,
     ) -> Result<()> {
-        let total_vectors = self.get_index_size(index)?;
+        let vectors = index.iter_vectors();
+        let chunk_size = chunk_size.max(1);
 
-        for chunk_start in (0..total_vectors).step_by(chunk_size) {
-            let chunk_end = std::cmp::min(chunk_start + chunk_size, total_vectors);
-
-            for i in chunk_start..chunk_end {
-                if let Some(vector) = self.get_vector_at_index(index, i) {
-                    self.write_vector(writer, &vector)?;
-                }
+        for chunk in vectors.chunks(chunk_size) {
+            for (_uri, vector) in chunk {
+                self.write_vector(writer, vector)?;
             }
         }
 
@@ -536,26 +539,32 @@ impl FaissCompatibility {
         Ok(Vector::new(data))
     }
 
-    /// Utility methods for index introspection
-    fn get_index_dimension<T: VectorIndex>(&self, _index: &T) -> Result<usize> {
-        // This would need to be implemented based on the actual VectorIndex trait
-        // For now, return a default dimension
-        Ok(768) // Common dimension for transformer embeddings
+    /// Utility methods for index introspection.
+    ///
+    /// Derived from the real vector dimension of the first enumerable
+    /// vector (via [`VectorIndex::iter_vectors`]); falls back to the common
+    /// 768-dim transformer embedding size only when the index is empty (or
+    /// not enumerable) and there is genuinely nothing to introspect.
+    fn get_index_dimension<T: VectorIndex>(&self, index: &T) -> Result<usize> {
+        Ok(index
+            .iter_vectors()
+            .first()
+            .map(|(_, v)| v.dimensions)
+            .unwrap_or(768))
     }
 
-    fn get_index_size<T: VectorIndex>(&self, _index: &T) -> Result<usize> {
-        // This would need to be implemented based on the actual VectorIndex trait
-        Ok(0) // Placeholder
+    /// Real vector count via [`VectorIndex::iter_vectors`] (0 for index
+    /// types that don't support enumeration — see
+    /// [`VectorIndex::supports_enumeration`]).
+    fn get_index_size<T: VectorIndex>(&self, index: &T) -> Result<usize> {
+        Ok(index.iter_vectors().len())
     }
 
+    /// `VectorIndex` does not expose its configured similarity metric
+    /// generically (it isn't part of the trait), so this is a conservative,
+    /// clearly-documented default rather than a fabricated exact value.
     fn get_index_metric<T: VectorIndex>(&self, _index: &T) -> Result<SimilarityMetric> {
-        // This would need to be implemented based on the actual VectorIndex trait
-        Ok(SimilarityMetric::Cosine) // Default
-    }
-
-    fn get_vector_at_index<T: VectorIndex>(&self, _index: &T, _idx: usize) -> Option<Vector> {
-        // This would need to be implemented based on the actual VectorIndex trait
-        None // Placeholder
+        Ok(SimilarityMetric::Cosine) // Documented conservative default
     }
 
     /// Helper methods for format conversion
@@ -608,22 +617,72 @@ impl FaissCompatibility {
     }
 
     // Additional helper methods for reading configurations
+    /// Read the HNSW-specific parameter block written by
+    /// [`Self::write_hnsw_data`] (`m`, `m_l0`, `ef` as little-endian `u32`,
+    /// then `ml` as little-endian `f64`; 20 bytes total).
+    ///
+    /// This *must* consume exactly the bytes `write_hnsw_data` wrote, even
+    /// though only a subset of `HnswConfig`'s fields round-trip through the
+    /// FAISS file: leaving them unread (the previous placeholder returned
+    /// `HnswConfig::default()` without touching `reader` at all) shifts the
+    /// reader's cursor 20 bytes short of where the vector payload actually
+    /// starts, so every subsequent `read_vector` call reinterprets trailing
+    /// HNSW-parameter/vector bytes at the wrong offset — silently producing
+    /// garbage floats (e.g. subnormal/huge values from misaligned byte
+    /// patterns) instead of the original vectors.
     fn read_hnsw_config(
         &self,
-        _reader: &mut BufReader<File>,
+        reader: &mut BufReader<File>,
         _metadata: &FaissIndexMetadata,
     ) -> Result<HnswConfig> {
-        // Read HNSW-specific configuration from FAISS file
-        Ok(HnswConfig::default()) // Placeholder
+        let mut m_bytes = [0u8; 4];
+        reader.read_exact(&mut m_bytes)?;
+        let m = u32::from_le_bytes(m_bytes) as usize;
+
+        let mut m_l0_bytes = [0u8; 4];
+        reader.read_exact(&mut m_l0_bytes)?;
+        let m_l0 = u32::from_le_bytes(m_l0_bytes) as usize;
+
+        let mut ef_bytes = [0u8; 4];
+        reader.read_exact(&mut ef_bytes)?;
+        let ef = u32::from_le_bytes(ef_bytes) as usize;
+
+        let mut ml_bytes = [0u8; 8];
+        reader.read_exact(&mut ml_bytes)?;
+        let ml = f64::from_le_bytes(ml_bytes);
+
+        Ok(HnswConfig {
+            m,
+            m_l0,
+            ef,
+            ml,
+            ..HnswConfig::default()
+        })
     }
 
+    /// Read the IVF-specific parameter block written by
+    /// [`Self::write_ivf_data`] (`n_clusters`, `n_probes` as little-endian
+    /// `u32`; 8 bytes total). See [`Self::read_hnsw_config`] for why every
+    /// written byte must be consumed here regardless of how much of it
+    /// [`IvfConfig`] actually retains.
     fn read_ivf_config(
         &self,
-        _reader: &mut BufReader<File>,
+        reader: &mut BufReader<File>,
         _metadata: &FaissIndexMetadata,
     ) -> Result<IvfConfig> {
-        // Read IVF-specific configuration from FAISS file
-        Ok(IvfConfig::default()) // Placeholder
+        let mut n_clusters_bytes = [0u8; 4];
+        reader.read_exact(&mut n_clusters_bytes)?;
+        let n_clusters = u32::from_le_bytes(n_clusters_bytes) as usize;
+
+        let mut n_probes_bytes = [0u8; 4];
+        reader.read_exact(&mut n_probes_bytes)?;
+        let n_probes = u32::from_le_bytes(n_probes_bytes) as usize;
+
+        Ok(IvfConfig {
+            n_clusters,
+            n_probes,
+            ..IvfConfig::default()
+        })
     }
 
     fn write_ivf_structure(&self, _writer: &mut BufWriter<File>, _index: &IvfIndex) -> Result<()> {
@@ -640,30 +699,78 @@ impl FaissCompatibility {
         Ok(()) // Placeholder
     }
 
+    /// Import `metadata.num_vectors` vectors of `metadata.dimension` from
+    /// `reader` in batches of `batch_size`, inserting each into `index`
+    /// under a deterministic `faiss_vector_<i>` ID (matching
+    /// [`Self::import_flat_index`]'s naming scheme, since FAISS files carry
+    /// no per-vector ID/label of their own).
     fn import_vectors_batched<T: VectorIndex>(
         &self,
-        _reader: &mut BufReader<File>,
-        _index: &mut T,
-        _batch_size: usize,
+        reader: &mut BufReader<File>,
+        index: &mut T,
+        metadata: &FaissIndexMetadata,
+        batch_size: usize,
     ) -> Result<()> {
-        // Import vectors in batches for memory efficiency
-        Ok(()) // Placeholder
+        let batch_size = batch_size.max(1);
+        let mut imported = 0usize;
+
+        while imported < metadata.num_vectors {
+            let batch_end = (imported + batch_size).min(metadata.num_vectors);
+            for i in imported..batch_end {
+                let vector = self.read_vector(reader, metadata.dimension)?;
+                index.insert(format!("faiss_vector_{i}"), vector)?;
+            }
+            imported = batch_end;
+        }
+
+        Ok(())
     }
 
-    fn read_faiss_metadata(&self, _input_path: &Path) -> Result<FaissIndexMetadata> {
-        // Read and parse FAISS metadata from file
+    /// Read and parse the real FAISS header written by
+    /// [`Self::write_faiss_header`] (magic, version, type id, dimension,
+    /// vector count, metric id) — no longer a fabricated placeholder.
+    fn read_faiss_metadata(&self, input_path: &Path) -> Result<FaissIndexMetadata> {
+        let file = File::open(input_path)?;
+        let mut reader = BufReader::new(file);
+
+        let mut magic = [0u8; 5];
+        reader.read_exact(&mut magic)?;
+        if &magic != b"FAISS" {
+            return Err(anyhow!("Invalid FAISS file format: bad magic bytes"));
+        }
+
+        let mut version_bytes = [0u8; 4];
+        reader.read_exact(&mut version_bytes)?;
+        let _version = u32::from_le_bytes(version_bytes);
+
+        let mut type_bytes = [0u8; 4];
+        reader.read_exact(&mut type_bytes)?;
+        let index_type = self.faiss_id_to_type(u32::from_le_bytes(type_bytes))?;
+
+        let mut dim_bytes = [0u8; 4];
+        reader.read_exact(&mut dim_bytes)?;
+        let dimension = u32::from_le_bytes(dim_bytes) as usize;
+
+        let mut count_bytes = [0u8; 8];
+        reader.read_exact(&mut count_bytes)?;
+        let num_vectors = u64::from_le_bytes(count_bytes) as usize;
+
+        let mut metric_byte = [0u8; 1];
+        reader.read_exact(&mut metric_byte)?;
+        let metric_type = self.faiss_id_to_metric(metric_byte[0])?;
+
         Ok(FaissIndexMetadata {
-            index_type: FaissIndexType::IndexHNSWFlat,
-            dimension: 768,
-            num_vectors: 0,
-            metric_type: FaissMetricType::Cosine,
+            index_type,
+            dimension,
+            num_vectors,
+            metric_type,
             parameters: HashMap::new(),
             version: "1.0".to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
-        }) // Placeholder
+        })
     }
 
-    fn write_faiss_index<T: VectorIndex>(
+    fn write_faiss_index<T: VectorIndex + 'static>(
         &self,
         index: &T,
         output_path: &Path,
@@ -672,8 +779,8 @@ impl FaissCompatibility {
     ) -> Result<()> {
         match metadata.index_type {
             FaissIndexType::IndexHNSWFlat => {
-                // Cast to HnswIndex for HNSW export
-                // This is a simplified approach - in practice, you'd need proper type handling
+                // Real downcast via `Any` (VectorIndex: 'static is required
+                // for this, see the trait bound above).
                 if let Some(hnsw_index) = self.try_cast_to_hnsw(index) {
                     self.export_hnsw_to_faiss(hnsw_index, output_path, metadata, config)
                 } else {
@@ -681,7 +788,6 @@ impl FaissCompatibility {
                 }
             }
             FaissIndexType::IndexIVFFlat | FaissIndexType::IndexIVFPQ => {
-                // Cast to IvfIndex for IVF export
                 if let Some(ivf_index) = self.try_cast_to_ivf(index) {
                     self.export_ivf_to_faiss(ivf_index, output_path, metadata, config)
                 } else {
@@ -695,15 +801,44 @@ impl FaissCompatibility {
         }
     }
 
-    // Helper methods for type casting (simplified approach)
-    fn try_cast_to_hnsw<T: VectorIndex>(&self, _index: &T) -> Option<&HnswIndex> {
-        // In practice, this would require proper downcasting or a different approach
-        None // Placeholder
+    // Real `Any`-based downcasting: FAISS export needs concrete access to
+    // `HnswIndex`/`IvfIndex` internals (graph structure / centroids) that
+    // aren't part of the generic `VectorIndex` trait, so we downcast the
+    // generic `&T` back to the concrete type when it genuinely is one,
+    // rather than always returning `None`.
+    fn try_cast_to_hnsw<'a, T: VectorIndex + 'static>(
+        &self,
+        index: &'a T,
+    ) -> Option<&'a HnswIndex> {
+        (index as &dyn std::any::Any).downcast_ref::<HnswIndex>()
     }
 
-    fn try_cast_to_ivf<T: VectorIndex>(&self, _index: &T) -> Option<&IvfIndex> {
-        // In practice, this would require proper downcasting or a different approach
-        None // Placeholder
+    fn try_cast_to_ivf<'a, T: VectorIndex + 'static>(&self, index: &'a T) -> Option<&'a IvfIndex> {
+        (index as &dyn std::any::Any).downcast_ref::<IvfIndex>()
+    }
+
+    /// Inverse of [`Self::faiss_type_to_id`].
+    fn faiss_id_to_type(&self, id: u32) -> Result<FaissIndexType> {
+        match id {
+            0 => Ok(FaissIndexType::IndexFlatL2),
+            1 => Ok(FaissIndexType::IndexFlatIP),
+            2 => Ok(FaissIndexType::IndexIVFFlat),
+            3 => Ok(FaissIndexType::IndexIVFPQ),
+            4 => Ok(FaissIndexType::IndexHNSWFlat),
+            5 => Ok(FaissIndexType::IndexLSH),
+            6 => Ok(FaissIndexType::IndexPCAFlat),
+            other => Err(anyhow!("Unknown FAISS index type id: {}", other)),
+        }
+    }
+
+    /// Inverse of [`Self::faiss_metric_to_id`].
+    fn faiss_id_to_metric(&self, id: u8) -> Result<FaissMetricType> {
+        match id {
+            0 => Ok(FaissMetricType::L2),
+            1 => Ok(FaissMetricType::InnerProduct),
+            2 => Ok(FaissMetricType::Cosine),
+            other => Err(anyhow!("Unknown FAISS metric type id: {}", other)),
+        }
     }
 }
 
@@ -768,6 +903,18 @@ impl VectorIndex for SimpleVectorIndex {
             .iter()
             .position(|u| u == uri)
             .map(|i| &self.vectors[i])
+    }
+
+    fn iter_vectors(&self) -> Vec<(String, Vector)> {
+        self.uris
+            .iter()
+            .cloned()
+            .zip(self.vectors.iter().cloned())
+            .collect()
+    }
+
+    fn supports_enumeration(&self) -> bool {
+        true
     }
 }
 
@@ -915,5 +1062,83 @@ mod tests {
             recommend_faiss_format(50000, 2048, Some(512 * 1024 * 1024), 0.8),
             FaissIndexType::IndexIVFPQ
         );
+    }
+
+    /// Regression test for the P1 finding: `try_cast_to_hnsw`/`try_cast_to_ivf`
+    /// used to always return `None`, so HNSW export always failed with
+    /// "Index is not an HNSW index" even for real HNSW indexes. They must
+    /// now perform a real `Any`-based downcast.
+    #[test]
+    fn test_try_cast_to_hnsw_succeeds_for_real_hnsw_index() -> Result<()> {
+        use crate::hnsw::{HnswConfig, HnswIndex};
+
+        let faiss_compat = FaissCompatibility::new();
+        let index = HnswIndex::new(HnswConfig::default())?;
+
+        assert!(
+            faiss_compat.try_cast_to_hnsw(&index).is_some(),
+            "downcasting a real HnswIndex must succeed, not return None"
+        );
+
+        // A different concrete type must not be misidentified as HNSW.
+        let flat = SimpleVectorIndex::new(Vec::new(), Vec::new());
+        assert!(faiss_compat.try_cast_to_ivf(&index).is_none());
+        assert!(faiss_compat.try_cast_to_hnsw(&flat).is_none());
+        Ok(())
+    }
+
+    /// Regression test for the P0/P1 findings: `read_faiss_metadata` used to
+    /// always report `num_vectors: 0` regardless of file contents, and
+    /// `import_vectors_batched` was an empty no-op. A full
+    /// export -> import round trip through a real `HnswIndex` must now
+    /// recover the original vectors.
+    #[test]
+    fn test_faiss_export_import_round_trip_hnsw() -> Result<()> {
+        use crate::hnsw::{HnswConfig, HnswIndex};
+
+        let mut faiss_compat = FaissCompatibility::new();
+        let mut index = HnswIndex::new(HnswConfig::default())?;
+        index.insert("doc_a".to_string(), Vector::new(vec![1.0, 0.0, 0.0, 0.0]))?;
+        index.insert("doc_b".to_string(), Vector::new(vec![0.0, 1.0, 0.0, 0.0]))?;
+        index.insert("doc_c".to_string(), Vector::new(vec![0.0, 0.0, 1.0, 0.0]))?;
+
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs_vec_faiss_roundtrip_{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir)?;
+        let output_path = dir.join("index.faiss");
+
+        let export_config = FaissExportConfig::default(); // target_format: IndexHNSWFlat
+        let export_result = faiss_compat.export_to_faiss(&index, &output_path, &export_config)?;
+        assert!(export_result.success);
+        assert_eq!(export_result.metadata.num_vectors, 3);
+        assert_eq!(export_result.metadata.dimension, 4);
+
+        let import_config = FaissImportConfig::default();
+        let imported = faiss_compat.import_from_faiss(&output_path, &import_config)?;
+
+        // Real vectors must have round-tripped, not a fabricated empty index.
+        // FAISS files carry no per-vector ID, and `HnswIndex::iter_vectors`
+        // is not required to preserve insertion order (it walks a HashMap
+        // internally), so compare the *set* of recovered vector values
+        // rather than relying on ID or position.
+        let recovered = imported.iter_vectors();
+        assert_eq!(recovered.len(), 3);
+        let mut recovered_values: Vec<Vec<f32>> =
+            recovered.iter().map(|(_, v)| v.as_f32().to_vec()).collect();
+        recovered_values.sort_by(|a, b| a.partial_cmp(b).expect("no NaNs in test vectors"));
+
+        let mut expected_values = vec![
+            vec![1.0f32, 0.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0, 0.0],
+            vec![0.0, 0.0, 1.0, 0.0],
+        ];
+        expected_values.sort_by(|a, b| a.partial_cmp(b).expect("no NaNs in test vectors"));
+
+        assert_eq!(recovered_values, expected_values);
+
+        std::fs::remove_dir_all(&dir).ok();
+        Ok(())
     }
 }

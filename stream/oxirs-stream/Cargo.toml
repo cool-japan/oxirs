@@ -40,9 +40,9 @@ parking_lot.workspace = true
 bytes = { workspace = true }
 fastrand.workspace = true
 rayon.workspace = true
-aws-config = { version = "1.8", optional = true }
-aws-sdk-kinesis = { version = "1.109", optional = true }
-aws-smithy-types = { version = "1.5", optional = true }
+aws-config = { version = "1.9", optional = true }
+aws-sdk-kinesis = { version = "1.110", optional = true }
+aws-smithy-types = { version = "1.6", optional = true }
 redis = { workspace = true, features = ["tokio-comp", "connection-manager", "cluster-async", "streams"], optional = true }
 # NOTE: the Pulsar backend was quarantined into the `oxirs-stream-adapter-pulsar` crate
 # (publish=false) per COOLJAPAN Pure Rust Policy v2 — pulsar 6.x has no Pure-Rust TLS option
@@ -77,7 +77,7 @@ num-complex.workspace = true
 # OpenTelemetry for enhanced observability (optional)
 opentelemetry = { workspace = true, optional = true }
 sysinfo.workspace = true  # Updated to 0.33 to fix objc2-core-foundation conflict
-wasmparser = "0.252"
+wasmparser = "0.253"
 wasmtime = { version = "46", optional = true }  # Multiple CVE fixes (CVE-2024-xxxx series)
 ed25519-dalek.workspace = true
 rsa = { workspace = true, optional = true }  # RUSTSEC-2023-0071 (Marvin Attack): only enable via the `wasm-rsa` feature; orphaned wasm_edge_processor.rs uses this for WASM module signature verification

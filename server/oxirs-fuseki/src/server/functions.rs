@@ -149,10 +149,53 @@ pub async fn logs_config_update_handler(
 ) -> Result<axum::response::Response, handlers::request_log::LogError> {
     handlers::update_log_config(State(state.request_logger.clone()), Json(config)).await
 }
+/// `GET /$/stats` — dataset/triple statistics merged with a `"runtime"`
+/// object (uptime/requests/memory/cpu/active-connections).
+///
+/// Commit 7b32c39f removed a duplicate `GET /$/stats ->
+/// handlers::admin::server_stats` route registration (axum 0.8 panics on
+/// overlapping path+method routes), which silently changed this endpoint's
+/// response shape: existing consumers lost `uptime_seconds`,
+/// `total_requests`, `memory_usage_mb`, `cpu_usage_percent`, and
+/// `active_connections`. This handler restores those fields *additively* —
+/// the pre-existing `dataset_count`/`datasets`/`total_storage_bytes`/
+/// `version`/`collected_at`/`uptime_seconds` shape from
+/// [`handlers::dataset_stats::StatisticsCollector::collect_server_stats`] is
+/// unchanged, with a new `"runtime"` key nesting
+/// [`handlers::admin::collect_runtime_stats`]'s output. Both collectors are
+/// reused as-is rather than re-implemented here.
 pub async fn stats_server_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<axum::response::Response, handlers::dataset_stats::StatsError> {
-    handlers::get_server_stats(State(Arc::new(state.store.clone()))).await
+    let mut datasets: HashMap<String, Arc<crate::store::Store>> = HashMap::new();
+    datasets.insert("default".to_string(), Arc::new(state.store.clone()));
+
+    let dataset_stats =
+        handlers::dataset_stats::StatisticsCollector::collect_server_stats(&datasets, None)?;
+    let runtime_stats = handlers::admin::collect_runtime_stats(&state).await;
+
+    let mut value = serde_json::to_value(&dataset_stats).map_err(|e| {
+        handlers::dataset_stats::StatsError::Internal(format!(
+            "Failed to serialize dataset statistics: {e}"
+        ))
+    })?;
+    let runtime_value = serde_json::to_value(&runtime_stats).map_err(|e| {
+        handlers::dataset_stats::StatsError::Internal(format!(
+            "Failed to serialize runtime statistics: {e}"
+        ))
+    })?;
+    match value.as_object_mut() {
+        Some(map) => {
+            map.insert("runtime".to_string(), runtime_value);
+        }
+        None => {
+            return Err(handlers::dataset_stats::StatsError::Internal(
+                "Dataset statistics did not serialize to a JSON object".to_string(),
+            ));
+        }
+    }
+
+    Ok((StatusCode::OK, Json(value)).into_response())
 }
 pub async fn stats_dataset_handler(
     Path(dataset): Path<String>,
@@ -492,6 +535,7 @@ mod tests {
             batch_executor: None,
             stream_manager: None,
             dataset_manager: None,
+            api_key_service: None,
             security_auditor: None,
             ddos_protector: None,
             load_balancer: None,

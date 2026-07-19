@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use oxirs_core::model::Triple;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
@@ -156,6 +157,34 @@ impl TransactionCoordinator {
             transaction_log: Arc::new(Mutex::new(TransactionLog::new())),
             lock_manager: Arc::new(LockManager::new()),
             optimizer: crate::transaction_optimizer::TwoPhaseOptimizer::new(),
+        }
+    }
+
+    /// Register (or update) the network address of a participant node so
+    /// that this coordinator's prepare/commit/abort RPCs
+    /// ([`TransactionCoordinator::send_prepare_request`],
+    /// [`TransactionCoordinator::send_commit_request`],
+    /// [`TransactionCoordinator::send_abort_request`]) can actually reach it.
+    ///
+    /// This must be called for every node that can end up as a shard
+    /// participant (i.e. every node returned by
+    /// [`ShardManager::get_primary_node`] for shards this coordinator may
+    /// touch) **before** starting a transaction that spans it -- otherwise
+    /// the underlying [`NetworkService::send_message`] call fails loudly
+    /// with "no known network address for node N; register the peer before
+    /// sending" rather than silently dropping the 2PC message.
+    pub async fn register_peer(&self, node_id: OxirsNodeId, address: SocketAddr) {
+        self.network.register_peer(node_id, address).await;
+    }
+
+    /// Bulk-register participant addresses; see
+    /// [`TransactionCoordinator::register_peer`].
+    pub async fn register_peers<I>(&self, peers: I)
+    where
+        I: IntoIterator<Item = (OxirsNodeId, SocketAddr)>,
+    {
+        for (node_id, address) in peers {
+            self.register_peer(node_id, address).await;
         }
     }
 

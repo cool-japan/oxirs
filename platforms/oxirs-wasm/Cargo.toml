@@ -26,6 +26,9 @@ serde_json.workspace = true
 # Error handling
 thiserror.workspace = true
 
+# FILTER(regex(...)) support in the lightweight in-memory SPARQL executor
+regex.workspace = true
+
 # WASM bindings
 wasm-bindgen.workspace = true
 js-sys.workspace = true

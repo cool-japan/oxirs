@@ -25,10 +25,53 @@ pub struct ResearchNetworkAnalyzer {
     collaboration_network: Arc<RwLock<CollaborationNetwork>>,
     /// Topic models
     topic_models: Arc<RwLock<HashMap<String, TopicModel>>>,
+    /// Author profile records (name, affiliations) registered via
+    /// [`register_author_profile`](Self::register_author_profile). This is
+    /// the only source of author identity metadata: there is no external
+    /// author database wired into this analyzer, so
+    /// [`generate_author_embedding`](Self::generate_author_embedding) reads
+    /// from here rather than fabricating a name/affiliation.
+    author_profiles: Arc<RwLock<HashMap<String, AuthorProfile>>>,
+    /// Publication metadata records registered via
+    /// [`register_publication_metadata`](Self::register_publication_metadata).
+    /// The only source of publication bibliographic metadata: there is no
+    /// external publication database wired into this analyzer, so
+    /// [`generate_publication_embedding`](Self::generate_publication_embedding)
+    /// reads from here rather than fabricating a title/venue/year.
+    publication_metadata: Arc<RwLock<HashMap<String, PublicationMetadataInput>>>,
     /// Configuration
     config: ResearchNetworkConfig,
     /// Background analysis tasks
     analysis_tasks: Vec<JoinHandle<()>>,
+}
+
+/// Author identity metadata supplied by the caller (there is no external
+/// author database wired into [`ResearchNetworkAnalyzer`]).
+#[derive(Debug, Clone)]
+pub struct AuthorProfile {
+    /// Author's display name.
+    pub name: String,
+    /// Author's institutional affiliation(s).
+    pub affiliations: Vec<String>,
+}
+
+/// Publication bibliographic metadata supplied by the caller (there is no
+/// external publication database wired into [`ResearchNetworkAnalyzer`]).
+#[derive(Debug, Clone)]
+pub struct PublicationMetadataInput {
+    /// Publication title.
+    pub title: String,
+    /// Publication abstract, if available.
+    pub abstract_text: String,
+    /// Author identifiers (matching the `author_id` used elsewhere in this
+    /// analyzer), in author order.
+    pub authors: Vec<String>,
+    /// Venue (journal/conference) name.
+    pub venue: String,
+    /// Publication year.
+    pub year: u32,
+    /// DOI or other persistent identifier, if known.
+    pub doi: Option<String>,
 }
 
 /// Configuration for research network analysis
@@ -403,9 +446,72 @@ impl ResearchNetworkAnalyzer {
                 temporal_collaborations: HashMap::new(),
             })),
             topic_models: Arc::new(RwLock::new(HashMap::new())),
+            author_profiles: Arc::new(RwLock::new(HashMap::new())),
+            publication_metadata: Arc::new(RwLock::new(HashMap::new())),
             config,
             analysis_tasks: Vec::new(),
         }
+    }
+
+    /// Register (or replace) an author's identity metadata.
+    ///
+    /// [`generate_author_embedding`](Self::generate_author_embedding) reads
+    /// the author's name/affiliations from this registry — there is no
+    /// external author database to resolve them from otherwise, so a
+    /// profile must be registered before an embedding can be generated.
+    pub fn register_author_profile(&self, author_id: impl Into<String>, profile: AuthorProfile) {
+        self.author_profiles
+            .write()
+            .expect("rwlock should not be poisoned")
+            .insert(author_id.into(), profile);
+    }
+
+    /// Register (or replace) a publication's bibliographic metadata.
+    ///
+    /// [`generate_publication_embedding`](Self::generate_publication_embedding)
+    /// reads title/abstract/authors/venue/year/DOI from this registry —
+    /// there is no external publication database to resolve them from
+    /// otherwise, so metadata must be registered before an embedding can be
+    /// generated. Registering also makes the publication discoverable via
+    /// [`get_author_publications`](Self::get_author_publications) for every
+    /// author listed in `metadata.authors`.
+    pub fn register_publication_metadata(
+        &self,
+        publication_id: impl Into<String>,
+        metadata: PublicationMetadataInput,
+    ) {
+        self.publication_metadata
+            .write()
+            .expect("rwlock should not be poisoned")
+            .insert(publication_id.into(), metadata);
+    }
+
+    /// Record a collaboration edge between two authors.
+    ///
+    /// Stored bidirectionally so
+    /// [`get_author_collaborations`](Self::get_author_collaborations) can
+    /// look it up from either author's perspective. This is the real,
+    /// in-process data source backing collaboration-derived statistics
+    /// (e.g. `collaboration_score` in [`AuthorEmbedding`]) — nothing here
+    /// is synthesized.
+    pub async fn add_collaboration(&self, collaboration: Collaboration) -> Result<()> {
+        let mut network = self
+            .collaboration_network
+            .write()
+            .expect("rwlock should not be poisoned");
+        network
+            .collaborations
+            .entry(collaboration.author1.clone())
+            .or_default()
+            .push(collaboration.clone());
+        if collaboration.author2 != collaboration.author1 {
+            network
+                .collaborations
+                .entry(collaboration.author2.clone())
+                .or_default()
+                .push(collaboration);
+        }
+        Ok(())
     }
 
     /// Start background analysis tasks
@@ -458,6 +564,26 @@ impl ResearchNetworkAnalyzer {
 
         info!("Generating author embedding for: {}", author_id);
 
+        // Author identity metadata has no external database to resolve
+        // against in this analyzer; it must have been registered via
+        // `register_author_profile` beforehand. Failing loudly here avoids
+        // fabricating a name/affiliation that looks resolved but is not.
+        let profile = {
+            let profiles = self
+                .author_profiles
+                .read()
+                .expect("rwlock should not be poisoned");
+            profiles.get(author_id).cloned()
+        }
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No author profile registered for '{author_id}': \
+                 ResearchNetworkAnalyzer has no external author database to resolve \
+                 name/affiliations from. Call register_author_profile({author_id}, ...) \
+                 before generating an embedding."
+            )
+        })?;
+
         // Collect author's publications
         let author_publications = self.get_author_publications(author_id).await?;
 
@@ -491,8 +617,8 @@ impl ResearchNetworkAnalyzer {
 
         let author_embedding = AuthorEmbedding {
             author_id: author_id.to_string(),
-            name: format!("Author_{author_id}"), // Placeholder - would get from database
-            affiliations: vec!["Unknown".to_string()], // Placeholder
+            name: profile.name,
+            affiliations: profile.affiliations,
             research_topics,
             h_index,
             citation_count,
@@ -538,13 +664,34 @@ impl ResearchNetworkAnalyzer {
 
         info!("Generating publication embedding for: {}", publication_id);
 
-        // Get publication metadata (would come from database)
-        let title = format!("Publication_{publication_id}");
-        let abstract_text = format!("Abstract for publication {publication_id}");
-        let authors = vec![format!("author_{}", publication_id)];
-        let venue = "Unknown Venue".to_string();
-        let year = 2023; // Placeholder
-        let doi = Some(format!("10.1000/{publication_id}"));
+        // Publication metadata has no external database to resolve against
+        // in this analyzer; it must have been registered via
+        // `register_publication_metadata` beforehand. Failing loudly here
+        // avoids fabricating a title/venue/year that looks resolved but is
+        // not.
+        let metadata = {
+            let records = self
+                .publication_metadata
+                .read()
+                .expect("rwlock should not be poisoned");
+            records.get(publication_id).cloned()
+        }
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No metadata registered for publication '{publication_id}': \
+                 ResearchNetworkAnalyzer has no external publication database to resolve \
+                 title/venue/year from. Call register_publication_metadata({publication_id}, ...) \
+                 before generating an embedding."
+            )
+        })?;
+        let PublicationMetadataInput {
+            title,
+            abstract_text,
+            authors,
+            venue,
+            year,
+            doi,
+        } = metadata;
 
         // Get citation information
         let citation_count = self.get_publication_citation_count(publication_id).await?;
@@ -709,14 +856,45 @@ impl ResearchNetworkAnalyzer {
 
     // ===== PRIVATE HELPER METHODS =====
 
-    async fn get_author_publications(&self, _author_id: &str) -> Result<Vec<PublicationEmbedding>> {
-        // Placeholder - would query database
-        Ok(Vec::new())
+    /// Publications by `author_id`, drawn from
+    /// [`publication_metadata`](Self::publication_metadata) (real
+    /// registered data — nothing here is fabricated). An author with no
+    /// registered publications simply has none; that is a legitimate
+    /// (non-error) state, unlike missing identity metadata.
+    async fn get_author_publications(&self, author_id: &str) -> Result<Vec<PublicationEmbedding>> {
+        let publication_ids: Vec<String> = {
+            let records = self
+                .publication_metadata
+                .read()
+                .expect("rwlock should not be poisoned");
+            records
+                .iter()
+                .filter(|(_, metadata)| metadata.authors.iter().any(|a| a == author_id))
+                .map(|(id, _)| id.clone())
+                .collect()
+        };
+
+        let mut publications = Vec::with_capacity(publication_ids.len());
+        for publication_id in publication_ids {
+            publications.push(self.generate_publication_embedding(&publication_id).await?);
+        }
+        Ok(publications)
     }
 
-    async fn get_author_collaborations(&self, _author_id: &str) -> Result<Vec<Collaboration>> {
-        // Placeholder - would query collaboration network
-        Ok(Vec::new())
+    /// Collaboration edges for `author_id`, drawn from
+    /// [`collaboration_network`](Self::collaboration_network) as recorded
+    /// via [`add_collaboration`](Self::add_collaboration) (real in-process
+    /// data — nothing here is fabricated).
+    async fn get_author_collaborations(&self, author_id: &str) -> Result<Vec<Collaboration>> {
+        let network = self
+            .collaboration_network
+            .read()
+            .expect("rwlock should not be poisoned");
+        Ok(network
+            .collaborations
+            .get(author_id)
+            .cloned()
+            .unwrap_or_default())
     }
 
     async fn extract_author_topics(
@@ -1089,23 +1267,181 @@ impl ResearchNetworkAnalyzer {
             .map(|(id, _)| id)
             .collect();
 
+        let (network_density, clustering_coefficient, average_path_length) =
+            Self::compute_coauthorship_graph_metrics(&publication_embeddings);
+
         Ok(NetworkMetrics {
             total_authors,
             total_publications,
             total_citations,
             avg_citations_per_paper,
-            network_density: 0.1,        // Placeholder
-            clustering_coefficient: 0.3, // Placeholder
-            average_path_length: 4.5,    // Placeholder
+            network_density,
+            clustering_coefficient,
+            average_path_length,
             top_authors,
             trending_topics: vec!["machine_learning".to_string(), "deep_learning".to_string()],
         })
+    }
+
+    /// Compute real co-authorship graph statistics — network density, average
+    /// local clustering coefficient, and average shortest-path length —
+    /// from the authors actually listed on each cached publication, instead
+    /// of hardcoded placeholder constants.
+    fn compute_coauthorship_graph_metrics(
+        publication_embeddings: &HashMap<String, PublicationEmbedding>,
+    ) -> (f64, f64, f64) {
+        use std::collections::VecDeque;
+
+        let mut adjacency: HashMap<String, HashSet<String>> = HashMap::new();
+        for publication in publication_embeddings.values() {
+            for i in 0..publication.authors.len() {
+                for j in (i + 1)..publication.authors.len() {
+                    let a = &publication.authors[i];
+                    let b = &publication.authors[j];
+                    if a == b {
+                        continue;
+                    }
+                    adjacency.entry(a.clone()).or_default().insert(b.clone());
+                    adjacency.entry(b.clone()).or_default().insert(a.clone());
+                }
+            }
+        }
+
+        let node_count = adjacency.len();
+        if node_count < 2 {
+            return (0.0, 0.0, 0.0);
+        }
+
+        let edge_count: usize = adjacency
+            .values()
+            .map(|neighbors| neighbors.len())
+            .sum::<usize>()
+            / 2;
+        let max_edges = (node_count * (node_count - 1)) as f64 / 2.0;
+        let network_density = if max_edges > 0.0 {
+            edge_count as f64 / max_edges
+        } else {
+            0.0
+        };
+
+        // Average local clustering coefficient: for each node, the fraction
+        // of its neighbor-pairs that are themselves connected.
+        let mut clustering_sum = 0.0;
+        let mut clustering_count = 0usize;
+        for neighbors in adjacency.values() {
+            let degree = neighbors.len();
+            if degree < 2 {
+                continue;
+            }
+            let neighbor_list: Vec<&String> = neighbors.iter().collect();
+            let mut links = 0usize;
+            for i in 0..neighbor_list.len() {
+                for j in (i + 1)..neighbor_list.len() {
+                    if adjacency
+                        .get(neighbor_list[i].as_str())
+                        .is_some_and(|n| n.contains(neighbor_list[j].as_str()))
+                    {
+                        links += 1;
+                    }
+                }
+            }
+            let possible = (degree * (degree - 1)) / 2;
+            clustering_sum += links as f64 / possible as f64;
+            clustering_count += 1;
+        }
+        let clustering_coefficient = if clustering_count > 0 {
+            clustering_sum / clustering_count as f64
+        } else {
+            0.0
+        };
+
+        // Average shortest-path length via BFS, bounded to a deterministic
+        // sample of source nodes so this stays cheap on very large networks.
+        const MAX_BFS_SOURCES: usize = 200;
+        let mut node_ids: Vec<&String> = adjacency.keys().collect();
+        node_ids.sort();
+        node_ids.truncate(MAX_BFS_SOURCES);
+
+        let mut total_distance = 0.0f64;
+        let mut total_pairs = 0usize;
+        for source in &node_ids {
+            let mut visited: HashSet<&String> = HashSet::new();
+            visited.insert(source);
+            let mut queue: VecDeque<(&String, usize)> = VecDeque::new();
+            queue.push_back((source, 0));
+            while let Some((node, dist)) = queue.pop_front() {
+                if dist > 0 {
+                    total_distance += dist as f64;
+                    total_pairs += 1;
+                }
+                if let Some(neighbors) = adjacency.get(node.as_str()) {
+                    for neighbor in neighbors {
+                        if visited.insert(neighbor) {
+                            queue.push_back((neighbor, dist + 1));
+                        }
+                    }
+                }
+            }
+        }
+        let average_path_length = if total_pairs > 0 {
+            total_distance / total_pairs as f64
+        } else {
+            0.0
+        };
+
+        (network_density, clustering_coefficient, average_path_length)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_publication(id: &str, authors: &[&str]) -> PublicationEmbedding {
+        PublicationEmbedding {
+            publication_id: id.to_string(),
+            title: format!("Title {id}"),
+            abstract_text: String::new(),
+            authors: authors.iter().map(|a| a.to_string()).collect(),
+            venue: "Venue".to_string(),
+            year: 2024,
+            citation_count: 0,
+            topic_distribution: vec![],
+            embedding: Vector::new(vec![0.0; 4]),
+            predicted_impact: 0.0,
+            publication_type: PublicationType::JournalArticle,
+            doi: None,
+            last_updated: Utc::now(),
+        }
+    }
+
+    /// Regression test: co-authorship graph statistics must be computed for
+    /// real from actual publication author lists, instead of the hardcoded
+    /// (0.1, 0.3, 4.5) placeholder tuple.
+    #[test]
+    fn test_compute_coauthorship_graph_metrics_triangle() {
+        // A, B, C all co-author one paper together => a complete triangle:
+        // density = 1.0, clustering coefficient = 1.0, avg path length = 1.0.
+        let mut publications = HashMap::new();
+        publications.insert("p1".to_string(), make_publication("p1", &["A", "B", "C"]));
+
+        let (density, clustering, avg_path) =
+            ResearchNetworkAnalyzer::compute_coauthorship_graph_metrics(&publications);
+
+        assert!((density - 1.0).abs() < 1e-9, "density = {density}");
+        assert!((clustering - 1.0).abs() < 1e-9, "clustering = {clustering}");
+        assert!((avg_path - 1.0).abs() < 1e-9, "avg_path = {avg_path}");
+    }
+
+    #[test]
+    fn test_compute_coauthorship_graph_metrics_empty() {
+        let publications = HashMap::new();
+        let (density, clustering, avg_path) =
+            ResearchNetworkAnalyzer::compute_coauthorship_graph_metrics(&publications);
+        assert_eq!(density, 0.0);
+        assert_eq!(clustering, 0.0);
+        assert_eq!(avg_path, 0.0);
+    }
 
     #[tokio::test]
     async fn test_research_network_analyzer_creation() {
@@ -1131,24 +1467,83 @@ mod tests {
         );
     }
 
+    /// Regression: generating an embedding for an author with no registered
+    /// profile must fail loudly rather than fabricate a name/affiliation
+    /// (there is no external author database to resolve them from).
+    #[tokio::test]
+    async fn test_author_embedding_requires_registered_profile() {
+        let config = ResearchNetworkConfig::default();
+        let analyzer = ResearchNetworkAnalyzer::new(config);
+
+        let result = analyzer
+            .generate_author_embedding("unregistered_author")
+            .await;
+        assert!(result.is_err());
+        let msg = result.expect_err("must fail loudly").to_string();
+        assert!(msg.contains("unregistered_author"));
+        assert!(msg.contains("register_author_profile"));
+    }
+
     #[tokio::test]
     async fn test_author_embedding_generation() {
         let config = ResearchNetworkConfig::default();
         let analyzer = ResearchNetworkAnalyzer::new(config);
+        analyzer.register_author_profile(
+            "test_author",
+            AuthorProfile {
+                name: "Dr. Ada Example".to_string(),
+                affiliations: vec!["Example University".to_string()],
+            },
+        );
 
         let result = analyzer.generate_author_embedding("test_author").await;
         assert!(result.is_ok());
 
         let embedding = result.expect("should succeed");
         assert_eq!(embedding.author_id, "test_author");
+        // Real metadata, not the old `Author_{id}` / `Unknown` fabrication.
+        assert_eq!(embedding.name, "Dr. Ada Example");
+        assert_eq!(
+            embedding.affiliations,
+            vec!["Example University".to_string()]
+        );
         assert!(embedding.h_index >= 0.0);
         assert_eq!(embedding.embedding.values.len(), 512); // Default dimension
+    }
+
+    /// Regression: generating an embedding for a publication with no
+    /// registered metadata must fail loudly rather than fabricate a
+    /// title/venue/year (there is no external publication database to
+    /// resolve them from).
+    #[tokio::test]
+    async fn test_publication_embedding_requires_registered_metadata() {
+        let config = ResearchNetworkConfig::default();
+        let analyzer = ResearchNetworkAnalyzer::new(config);
+
+        let result = analyzer
+            .generate_publication_embedding("unregistered_publication")
+            .await;
+        assert!(result.is_err());
+        let msg = result.expect_err("must fail loudly").to_string();
+        assert!(msg.contains("unregistered_publication"));
+        assert!(msg.contains("register_publication_metadata"));
     }
 
     #[tokio::test]
     async fn test_publication_embedding_generation() {
         let config = ResearchNetworkConfig::default();
         let analyzer = ResearchNetworkAnalyzer::new(config);
+        analyzer.register_publication_metadata(
+            "test_publication",
+            PublicationMetadataInput {
+                title: "A Study of RDF Embeddings".to_string(),
+                abstract_text: "We study embeddings of RDF graphs.".to_string(),
+                authors: vec!["test_author".to_string()],
+                venue: "Journal of Semantic Web".to_string(),
+                year: 2025,
+                doi: Some("10.1234/example".to_string()),
+            },
+        );
 
         let result = analyzer
             .generate_publication_embedding("test_publication")
@@ -1157,8 +1552,73 @@ mod tests {
 
         let embedding = result.expect("should succeed");
         assert_eq!(embedding.publication_id, "test_publication");
+        // Real metadata, not the old `Publication_{id}` / "Unknown Venue" fabrication.
+        assert_eq!(embedding.title, "A Study of RDF Embeddings");
+        assert_eq!(embedding.venue, "Journal of Semantic Web");
+        assert_eq!(embedding.year, 2025);
         assert!(embedding.predicted_impact >= 0.0);
         assert!(embedding.predicted_impact <= 1.0);
+    }
+
+    /// Regression: an author's publications and collaborations are drawn
+    /// from real registered/recorded data, not fabricated.
+    #[tokio::test]
+    async fn test_author_publications_and_collaborations_are_real() {
+        let config = ResearchNetworkConfig::default();
+        let analyzer = ResearchNetworkAnalyzer::new(config);
+
+        analyzer.register_author_profile(
+            "author_a",
+            AuthorProfile {
+                name: "Author A".to_string(),
+                affiliations: vec!["Uni A".to_string()],
+            },
+        );
+        analyzer.register_publication_metadata(
+            "pub1",
+            PublicationMetadataInput {
+                title: "Paper One".to_string(),
+                abstract_text: String::new(),
+                authors: vec!["author_a".to_string()],
+                venue: "Venue".to_string(),
+                year: 2024,
+                doi: None,
+            },
+        );
+        analyzer
+            .add_collaboration(Collaboration {
+                author1: "author_a".to_string(),
+                author2: "author_b".to_string(),
+                joint_publications: 1,
+                strength: 0.8,
+                shared_topics: vec![],
+                first_collaboration: Utc::now(),
+                last_collaboration: Utc::now(),
+            })
+            .await
+            .expect("should succeed");
+
+        let publications = analyzer
+            .get_author_publications("author_a")
+            .await
+            .expect("should succeed");
+        assert_eq!(publications.len(), 1);
+        assert_eq!(publications[0].title, "Paper One");
+
+        let collaborations = analyzer
+            .get_author_collaborations("author_a")
+            .await
+            .expect("should succeed");
+        assert_eq!(collaborations.len(), 1);
+        assert_eq!(collaborations[0].author2, "author_b");
+
+        // The collaboration is also visible from the other author's side.
+        let collaborations_b = analyzer
+            .get_author_collaborations("author_b")
+            .await
+            .expect("should succeed");
+        assert_eq!(collaborations_b.len(), 1);
+        assert_eq!(collaborations_b[0].author1, "author_a");
     }
 
     #[tokio::test]
@@ -1232,6 +1692,24 @@ mod tests {
         let analyzer = ResearchNetworkAnalyzer::new(config);
 
         // Add some test data
+        analyzer.register_author_profile(
+            "test_author",
+            AuthorProfile {
+                name: "Test Author".to_string(),
+                affiliations: vec!["Test University".to_string()],
+            },
+        );
+        analyzer.register_publication_metadata(
+            "test_publication",
+            PublicationMetadataInput {
+                title: "Test Publication".to_string(),
+                abstract_text: String::new(),
+                authors: vec!["test_author".to_string()],
+                venue: "Test Venue".to_string(),
+                year: 2025,
+                doi: None,
+            },
+        );
         let _author_embedding = analyzer
             .generate_author_embedding("test_author")
             .await

@@ -11,10 +11,10 @@ use anyhow::{anyhow, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, RwLock as AsyncRwLock};
+use tokio::sync::{broadcast, RwLock};
 use tokio::time::interval;
 use tokio_tungstenite::{accept_async, tungstenite::Message, WebSocketStream};
 use tracing::{debug, error, info, warn};
@@ -101,7 +101,7 @@ pub enum SubscriptionEvent {
 #[derive(Debug)]
 pub struct WebSocketConnection {
     pub id: String,
-    pub socket: Arc<AsyncRwLock<WebSocketStream<TcpStream>>>,
+    pub socket: Arc<RwLock<WebSocketStream<TcpStream>>>,
     pub subscriptions: Arc<RwLock<HashMap<String, ActiveSubscription>>>,
     pub last_ping: Arc<RwLock<Instant>>,
     pub authenticated: Arc<RwLock<bool>>,
@@ -152,7 +152,7 @@ pub struct SubscriptionManager {
     connections: Arc<RwLock<HashMap<String, Arc<WebSocketConnection>>>>,
     active_subscriptions: Arc<RwLock<HashMap<String, ActiveSubscription>>>,
     event_sender: broadcast::Sender<SubscriptionEvent>,
-    schema: Arc<AsyncRwLock<Schema>>,
+    schema: Arc<RwLock<Schema>>,
     executor: Arc<QueryExecutor>,
     resolvers: Arc<RwLock<HashMap<String, Arc<dyn FieldResolver>>>>,
 }
@@ -166,7 +166,7 @@ impl SubscriptionManager {
             connections: Arc::new(RwLock::new(HashMap::new())),
             active_subscriptions: Arc::new(RwLock::new(HashMap::new())),
             event_sender,
-            schema: Arc::new(AsyncRwLock::new(schema)),
+            schema: Arc::new(RwLock::new(schema)),
             executor: Arc::new(executor),
             resolvers: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -203,7 +203,7 @@ impl SubscriptionManager {
 
         let connection = Arc::new(WebSocketConnection {
             id: connection_id.clone(),
-            socket: Arc::new(AsyncRwLock::new(ws_stream)),
+            socket: Arc::new(RwLock::new(ws_stream)),
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
             last_ping: Arc::new(RwLock::new(Instant::now())),
             authenticated: Arc::new(RwLock::new(!self.config.enable_authentication)),
@@ -211,7 +211,7 @@ impl SubscriptionManager {
 
         // Register connection
         {
-            let mut connections = self.connections.write().expect("lock poisoned");
+            let mut connections = self.connections.write().await;
             connections.insert(connection_id.clone(), connection.clone());
         }
 
@@ -298,7 +298,7 @@ impl SubscriptionManager {
             }
             Message::Pong(_) => {
                 // Update last ping time
-                *connection.last_ping.write().expect("lock poisoned") = Instant::now();
+                *connection.last_ping.write().await = Instant::now();
                 Ok(())
             }
             _ => Ok(()), // Ignore other message types
@@ -334,7 +334,7 @@ impl SubscriptionManager {
                 };
 
                 // Set authentication status
-                *connection.authenticated.write().expect("lock poisoned") = is_authenticated;
+                *connection.authenticated.write().await = is_authenticated;
 
                 // Send acknowledgment
                 let ack = SubscriptionMessage::ConnectionAck;
@@ -342,7 +342,7 @@ impl SubscriptionManager {
             }
 
             SubscriptionMessage::Start { id, payload } => {
-                if !*connection.authenticated.read().expect("lock poisoned") {
+                if !*connection.authenticated.read().await {
                     let error = SubscriptionMessage::ConnectionError {
                         payload: Some(serde_json::json!({"message": "Not authenticated"})),
                     };
@@ -379,7 +379,7 @@ impl SubscriptionManager {
     ) -> Result<()> {
         // Check subscription limits
         let connection_sub_count = {
-            let connection_subscriptions = connection.subscriptions.read().expect("lock poisoned");
+            let connection_subscriptions = connection.subscriptions.read().await;
             connection_subscriptions.len()
         };
 
@@ -393,7 +393,7 @@ impl SubscriptionManager {
         }
 
         let total_sub_count = {
-            let active_subscriptions = self.active_subscriptions.read().expect("lock poisoned");
+            let active_subscriptions = self.active_subscriptions.read().await;
             active_subscriptions.len()
         };
 
@@ -441,14 +441,12 @@ impl SubscriptionManager {
 
         // Register subscription
         {
-            let mut connection_subscriptions =
-                connection.subscriptions.write().expect("lock poisoned");
+            let mut connection_subscriptions = connection.subscriptions.write().await;
             connection_subscriptions.insert(subscription_id.to_string(), subscription.clone());
         }
 
         {
-            let mut active_subscriptions =
-                self.active_subscriptions.write().expect("lock poisoned");
+            let mut active_subscriptions = self.active_subscriptions.write().await;
             active_subscriptions.insert(subscription_id.to_string(), subscription.clone());
         }
 
@@ -470,15 +468,13 @@ impl SubscriptionManager {
     ) -> Result<()> {
         // Remove from connection
         {
-            let mut connection_subscriptions =
-                connection.subscriptions.write().expect("lock poisoned");
+            let mut connection_subscriptions = connection.subscriptions.write().await;
             connection_subscriptions.remove(subscription_id);
         }
 
         // Remove from active subscriptions
         {
-            let mut active_subscriptions =
-                self.active_subscriptions.write().expect("lock poisoned");
+            let mut active_subscriptions = self.active_subscriptions.write().await;
             active_subscriptions.remove(subscription_id);
         }
 
@@ -512,7 +508,7 @@ impl SubscriptionManager {
 
         // Find the connection
         let connection = {
-            let connections = self.connections.read().expect("lock poisoned");
+            let connections = self.connections.read().await;
             connections.get(&subscription.connection_id).cloned()
         };
 
@@ -533,8 +529,7 @@ impl SubscriptionManager {
 
             // Update subscription execution info
             {
-                let mut active_subscriptions =
-                    self.active_subscriptions.write().expect("lock poisoned");
+                let mut active_subscriptions = self.active_subscriptions.write().await;
                 if let Some(sub) = active_subscriptions.get_mut(&subscription.id) {
                     sub.last_execution = Some(Instant::now());
                     sub.execution_count += 1;
@@ -552,7 +547,7 @@ impl SubscriptionManager {
         event: &SubscriptionEvent,
     ) -> Result<()> {
         let subscriptions: Vec<ActiveSubscription> = {
-            let connection_subscriptions = connection.subscriptions.read().expect("lock poisoned");
+            let connection_subscriptions = connection.subscriptions.read().await;
             connection_subscriptions.values().cloned().collect()
         };
 
@@ -644,7 +639,7 @@ impl SubscriptionManager {
                 interval.tick().await;
 
                 let connections_to_ping: Vec<Arc<WebSocketConnection>> = {
-                    let connections = connections.read().expect("lock poisoned");
+                    let connections = connections.read().await;
                     connections.values().cloned().collect()
                 };
 
@@ -677,7 +672,7 @@ impl SubscriptionManager {
                 let mut expired_subscriptions = Vec::new();
 
                 {
-                    let subscriptions = active_subscriptions.read().expect("lock poisoned");
+                    let subscriptions = active_subscriptions.read().await;
                     for (id, subscription) in subscriptions.iter() {
                         if now.duration_since(subscription.created_at) > timeout {
                             expired_subscriptions.push(id.clone());
@@ -690,8 +685,7 @@ impl SubscriptionManager {
 
                     // Remove from active subscriptions
                     let connection_id = {
-                        let mut subscriptions =
-                            active_subscriptions.write().expect("lock poisoned");
+                        let mut subscriptions = active_subscriptions.write().await;
                         subscriptions
                             .remove(&subscription_id)
                             .map(|sub| sub.connection_id)
@@ -700,14 +694,14 @@ impl SubscriptionManager {
                     // Remove from connection and send completion message
                     if let Some(connection_id) = connection_id {
                         let connection_opt = {
-                            let connections = connections.read().expect("lock poisoned");
+                            let connections = connections.read().await;
                             connections.get(&connection_id).cloned()
                         };
 
                         if let Some(connection) = connection_opt {
                             {
                                 let mut connection_subscriptions =
-                                    connection.subscriptions.write().expect("lock poisoned");
+                                    connection.subscriptions.write().await;
                                 connection_subscriptions.remove(&subscription_id);
                             }
 
@@ -732,13 +726,13 @@ impl SubscriptionManager {
 
         // Remove connection
         {
-            let mut connections = self.connections.write().expect("lock poisoned");
+            let mut connections = self.connections.write().await;
             connections.remove(connection_id);
         }
 
         // Remove all subscriptions for this connection
         let subscription_ids: Vec<String> = {
-            let active_subscriptions = self.active_subscriptions.read().expect("lock poisoned");
+            let active_subscriptions = self.active_subscriptions.read().await;
             active_subscriptions
                 .iter()
                 .filter(|(_, sub)| sub.connection_id == connection_id)
@@ -747,8 +741,7 @@ impl SubscriptionManager {
         };
 
         {
-            let mut active_subscriptions =
-                self.active_subscriptions.write().expect("lock poisoned");
+            let mut active_subscriptions = self.active_subscriptions.write().await;
             for subscription_id in subscription_ids {
                 active_subscriptions.remove(&subscription_id);
                 info!(
@@ -760,9 +753,9 @@ impl SubscriptionManager {
     }
 
     /// Get subscription statistics
-    pub fn get_stats(&self) -> SubscriptionStats {
-        let connections = self.connections.read().expect("lock poisoned");
-        let active_subscriptions = self.active_subscriptions.read().expect("lock poisoned");
+    pub async fn get_stats(&self) -> SubscriptionStats {
+        let connections = self.connections.read().await;
+        let active_subscriptions = self.active_subscriptions.read().await;
 
         SubscriptionStats {
             total_connections: connections.len(),
@@ -947,7 +940,7 @@ mod tests {
         let executor = QueryExecutor::new(schema.clone());
 
         let manager = SubscriptionManager::new(config, schema, executor);
-        let stats = manager.get_stats();
+        let stats = manager.get_stats().await;
 
         assert_eq!(stats.total_connections, 0);
         assert_eq!(stats.total_subscriptions, 0);
@@ -982,5 +975,53 @@ mod tests {
         assert_eq!(subscription.id, "sub1");
         assert_eq!(subscription.connection_id, "conn1");
         assert_eq!(subscription.execution_count, 0);
+    }
+
+    /// Regression test: a panic while a writer holds `active_subscriptions`
+    /// must not poison the lock for the rest of the manager's lifetime.
+    /// This previously used `std::sync::RwLock` with `.expect("lock poisoned")`,
+    /// so a single panicking writer would cascade into every subsequent
+    /// subscribe/unsubscribe/broadcast call panicking too. The manager now
+    /// uses `tokio::sync::RwLock`, which has no poisoning concept at all.
+    #[tokio::test]
+    async fn test_lock_not_poisoned_after_writer_panic() {
+        let config = SubscriptionConfig::default();
+        let schema = create_test_schema();
+        let executor = QueryExecutor::new(schema.clone());
+        let manager = Arc::new(SubscriptionManager::new(config, schema, executor));
+
+        // Spawn a task that panics while holding the write lock.
+        let manager_clone = Arc::clone(&manager);
+        let handle = tokio::spawn(async move {
+            let _guard = manager_clone.active_subscriptions.write().await;
+            panic!("simulated writer panic while holding the lock");
+        });
+        // The panic is expected; the important assertion is what happens next.
+        assert!(handle.await.is_err());
+
+        // The manager must still be fully usable: no poisoning propagates.
+        let stats = manager.get_stats().await;
+        assert_eq!(stats.total_subscriptions, 0);
+
+        {
+            let mut active = manager.active_subscriptions.write().await;
+            active.insert(
+                "sub-after-panic".to_string(),
+                ActiveSubscription {
+                    id: "sub-after-panic".to_string(),
+                    connection_id: "conn-after-panic".to_string(),
+                    document: crate::ast::Document {
+                        definitions: vec![],
+                    },
+                    context: ExecutionContext::new(),
+                    created_at: Instant::now(),
+                    last_execution: None,
+                    execution_count: 0,
+                },
+            );
+        }
+
+        let stats = manager.get_stats().await;
+        assert_eq!(stats.total_subscriptions, 1);
     }
 }

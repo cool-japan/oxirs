@@ -447,7 +447,7 @@ pub async fn route_based_rbac(request: Request, next: Next) -> Response {
 /// Usage:
 /// ```ignore
 /// let app = Router::new()
-///     .route("/dataset/:name", get(handler))
+///     .route("/dataset/{name}", get(handler))
 ///     .layer(from_fn_with_state(policy_engine.clone(), rebac_middleware));
 /// ```
 pub async fn rebac_middleware(

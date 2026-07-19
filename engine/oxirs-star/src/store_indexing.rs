@@ -339,7 +339,11 @@ impl StarStore {
         triples: &[StarTriple],
         config: &BulkInsertConfig,
     ) -> StarResult<()> {
-        let chunk_size = triples.len() / config.worker_threads;
+        // Guard against config.worker_threads > triples.len() (or 0 worker
+        // threads), which would otherwise compute a chunk_size of 0 and make
+        // `.chunks(0)` panic.
+        let worker_threads = config.worker_threads.max(1);
+        let chunk_size = ((triples.len() + worker_threads - 1) / worker_threads).max(1);
         let mut handles = Vec::new();
 
         for chunk in triples.chunks(chunk_size) {
@@ -453,35 +457,34 @@ impl StarStore {
         subject_size + predicate_size + object_size + 100 // Base overhead
     }
 
-    /// Enable memory-mapped storage
+    /// Enable memory-mapped storage.
+    ///
+    /// `StarStore` keeps its triples in an in-process `Vec<StarTriple>` plus
+    /// B-tree indices; there is currently no disk-backed representation to
+    /// map into memory, so this cannot honestly reduce RAM usage for large
+    /// datasets. Rather than flip an `enabled` flag while silently keeping
+    /// everything fully resident in memory (misleading for memory-constrained
+    /// deployments), this fails loudly until real mmap-backed storage is
+    /// implemented.
+    ///
+    /// For genuine disk-backed / memory-mapped storage today, use
+    /// [`crate::storage_integration::StarStorageBackend::memory_mapped`],
+    /// which constructs a separate backend with real on-disk persistence
+    /// hooks, instead of retrofitting an existing in-memory `StarStore`.
     pub fn enable_memory_mapping(
         &self,
         file_path: &str,
-        enable_compression: bool,
+        _enable_compression: bool,
     ) -> StarResult<()> {
         let span = span!(Level::INFO, "enable_memory_mapping");
         let _enter = span.enter();
 
-        info!("Enabling memory-mapped storage at: {}", file_path);
-
-        {
-            let mut mm_state = self
-                .memory_mapped
-                .write()
-                .unwrap_or_else(|e| e.into_inner());
-            mm_state.enabled = true;
-            mm_state.file_path = Some(file_path.to_string());
-            mm_state.compression_enabled = enable_compression;
-            mm_state.last_sync = Some(Instant::now());
-        }
-
-        // In a full implementation, this would set up actual memory mapping
-        // For now, we just track the state
-        info!(
-            "Memory-mapped storage enabled with compression: {}",
-            enable_compression
-        );
-        Ok(())
+        Err(StarError::configuration_error(format!(
+            "Memory-mapped storage is not implemented for StarStore (requested path: \
+             '{file_path}'): triples are always held fully in memory. Use \
+             storage_integration::StarStorageBackend::memory_mapped for a disk-backed \
+             backend instead of enable_memory_mapping()."
+        )))
     }
 
     /// Get optimized triples using cache
@@ -505,15 +508,189 @@ impl StarStore {
         results
     }
 
-    /// Compute pattern results (placeholder implementation)
+    /// Compute pattern results by parsing `pattern` into subject/predicate/
+    /// object components and delegating to the store's (indexed) [`query`](Self::query).
+    ///
+    /// Supported syntax: three whitespace-separated terms
+    /// `SUBJECT PREDICATE OBJECT`, where each term is either `?` (wildcard,
+    /// matches anything) or an N-Triples-style term:
+    /// - `<http://example.org/iri>` for an IRI
+    /// - `_:label` for a blank node
+    /// - `"value"`, `"value"@lang`, or `"value"^^<datatype-iri>` for a literal
+    ///
+    /// The bare keyword `quoted` is retained for backward compatibility and
+    /// returns all triples containing at least one quoted triple. Patterns
+    /// that cannot be parsed fall back to a full scan (logged at debug
+    /// level) rather than silently returning the wrong result set.
     pub(crate) fn compute_pattern_results(&self, pattern: &str) -> Vec<StarTriple> {
-        // This is a simplified implementation
-        // In practice, this would parse the pattern and execute the query
-        if pattern.contains("quoted") {
-            self.find_triples_by_nesting_depth(1, None)
-        } else {
-            self.triples()
+        let trimmed = pattern.trim();
+
+        if trimmed == "quoted" {
+            return self.find_triples_by_nesting_depth(1, None);
         }
+
+        match Self::parse_triple_pattern(trimmed) {
+            Some((subject, predicate, object)) => self
+                .query(subject.as_ref(), predicate.as_ref(), object.as_ref())
+                .unwrap_or_default(),
+            None => {
+                debug!(
+                    "Could not parse triple pattern '{}'; falling back to full scan",
+                    pattern
+                );
+                self.triples()
+            }
+        }
+    }
+
+    /// Parse a `"SUBJECT PREDICATE OBJECT"` pattern string into optional
+    /// [`StarTerm`] filters (`None` = wildcard `?`). Returns `None` if the
+    /// pattern does not tokenize into exactly three well-formed terms.
+    fn parse_triple_pattern(
+        pattern: &str,
+    ) -> Option<(Option<StarTerm>, Option<StarTerm>, Option<StarTerm>)> {
+        let tokens = Self::tokenize_pattern(pattern)?;
+        if tokens.len() != 3 {
+            return None;
+        }
+
+        let subject = Self::parse_pattern_term(&tokens[0])?;
+        let predicate = Self::parse_pattern_term(&tokens[1])?;
+        let object = Self::parse_pattern_term(&tokens[2])?;
+        Some((subject, predicate, object))
+    }
+
+    /// Split a pattern string into whitespace-separated terms, treating
+    /// `<...>` IRIs and `"..."` literals (with optional `@lang`/`^^<dt>`
+    /// suffix) as atomic tokens even if they cannot contain whitespace
+    /// themselves (they never legally do for IRIs/simple literals here).
+    fn tokenize_pattern(pattern: &str) -> Option<Vec<String>> {
+        let chars: Vec<char> = pattern.chars().collect();
+        let mut tokens = Vec::new();
+        let mut i = 0;
+
+        while i < chars.len() {
+            while i < chars.len() && chars[i].is_whitespace() {
+                i += 1;
+            }
+            if i >= chars.len() {
+                break;
+            }
+
+            let start = i;
+            match chars[i] {
+                '<' => {
+                    while i < chars.len() && chars[i] != '>' {
+                        i += 1;
+                    }
+                    if i >= chars.len() {
+                        return None; // Unterminated IRI
+                    }
+                    i += 1; // include '>'
+                }
+                '"' => {
+                    i += 1;
+                    while i < chars.len() && chars[i] != '"' {
+                        if chars[i] == '\\' && i + 1 < chars.len() {
+                            i += 1;
+                        }
+                        i += 1;
+                    }
+                    if i >= chars.len() {
+                        return None; // Unterminated literal
+                    }
+                    i += 1; // include closing quote
+
+                    if i < chars.len() && chars[i] == '@' {
+                        i += 1;
+                        while i < chars.len() && !chars[i].is_whitespace() {
+                            i += 1;
+                        }
+                    } else if i + 1 < chars.len() && chars[i] == '^' && chars[i + 1] == '^' {
+                        i += 2;
+                        if i < chars.len() && chars[i] == '<' {
+                            while i < chars.len() && chars[i] != '>' {
+                                i += 1;
+                            }
+                            if i >= chars.len() {
+                                return None; // Unterminated datatype IRI
+                            }
+                            i += 1;
+                        }
+                    }
+                }
+                _ => {
+                    while i < chars.len() && !chars[i].is_whitespace() {
+                        i += 1;
+                    }
+                }
+            }
+
+            tokens.push(chars[start..i].iter().collect());
+        }
+
+        Some(tokens)
+    }
+
+    /// Parse a single pattern token into an optional [`StarTerm`] filter.
+    /// Returns `Some(None)` for the wildcard `?`, `Some(Some(term))` for a
+    /// successfully parsed term, and `None` if the token is malformed.
+    fn parse_pattern_term(token: &str) -> Option<Option<StarTerm>> {
+        if token == "?" {
+            return Some(None);
+        }
+
+        if let Some(iri) = token.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
+            return StarTerm::iri(iri).ok().map(Some);
+        }
+
+        if let Some(label) = token.strip_prefix("_:") {
+            return StarTerm::blank_node(label).ok().map(Some);
+        }
+
+        if token.starts_with('"') {
+            return Self::parse_literal_token(token).map(Some);
+        }
+
+        None
+    }
+
+    /// Parse a literal token (`"value"`, `"value"@lang`, or
+    /// `"value"^^<datatype-iri>`) into a [`StarTerm::Literal`].
+    fn parse_literal_token(token: &str) -> Option<StarTerm> {
+        let chars: Vec<char> = token.chars().collect();
+        if chars.first() != Some(&'"') {
+            return None;
+        }
+
+        let mut i = 1;
+        while i < chars.len() && chars[i] != '"' {
+            if chars[i] == '\\' && i + 1 < chars.len() {
+                i += 1;
+            }
+            i += 1;
+        }
+        if i >= chars.len() {
+            return None;
+        }
+
+        let value: String = chars[1..i].iter().collect();
+        let rest: String = chars[i + 1..].iter().collect();
+
+        if let Some(lang) = rest.strip_prefix('@') {
+            return StarTerm::literal_with_language(&value, lang).ok();
+        }
+
+        if let Some(dt) = rest.strip_prefix("^^") {
+            let dt_iri = dt.strip_prefix('<').and_then(|s| s.strip_suffix('>'))?;
+            return StarTerm::literal_with_datatype(&value, dt_iri).ok();
+        }
+
+        if rest.is_empty() {
+            return StarTerm::literal(&value).ok();
+        }
+
+        None
     }
 
     /// Get comprehensive storage statistics
@@ -553,17 +730,41 @@ impl StarStore {
         ConnectionPool::new(max_connections, config)
     }
 
-    /// Compress stored data (placeholder implementation)
+    /// Compress the store's serialized data and report the real number of
+    /// bytes saved.
+    ///
+    /// This serializes the current triple set with `oxicode` (per the
+    /// COOLJAPAN no-bincode policy) and compresses it with `oxiarc-zstd`
+    /// (per the COOLJAPAN compression policy), returning the actual
+    /// measured difference between the uncompressed and compressed byte
+    /// lengths rather than a fabricated estimate. This does not persist the
+    /// compressed bytes anywhere; it is a storage-savings measurement, not a
+    /// durable compaction operation.
     pub fn compress_storage(&self) -> StarResult<usize> {
         let span = span!(Level::INFO, "compress_storage");
         let _enter = span.enter();
 
-        // In a full implementation, this would compress the stored triples
-        let triple_count = self.len();
-        info!("Compressed storage for {} triples", triple_count);
+        let triples = self.triples();
+        let serialized = oxicode::serde::encode_to_vec(&triples, oxicode::config::standard())
+            .map_err(|e| {
+                StarError::query_error(format!("Failed to serialize triples for compression: {e}"))
+            })?;
 
-        // Return estimated space saved (placeholder)
-        Ok(triple_count * 50)
+        let compressed = oxiarc_zstd::encode_all(&serialized, 3).map_err(|e| {
+            StarError::query_error(format!("Failed to compress serialized triples: {e}"))
+        })?;
+
+        let space_saved = serialized.len().saturating_sub(compressed.len());
+
+        info!(
+            "Compressed storage for {} triples: {} bytes -> {} bytes ({} bytes saved)",
+            triples.len(),
+            serialized.len(),
+            compressed.len(),
+            space_saved
+        );
+
+        Ok(space_saved)
     }
 }
 
@@ -578,4 +779,137 @@ pub struct DetailedStorageStatistics {
     pub bulk_memory_usage: usize,
     pub memory_mapped_enabled: bool,
     pub memory_mapped_path: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{StarTerm, StarTriple};
+    use crate::store::StarStore;
+    use crate::StarResult;
+
+    /// Regression test: bulk_insert_parallel must not panic on
+    /// `.chunks(0)` when worker_threads exceeds the number of triples (or
+    /// is otherwise larger than what would produce a non-zero chunk size).
+    #[test]
+    fn test_bulk_insert_parallel_does_not_panic_with_few_triples() -> StarResult<()> {
+        let store = StarStore::new();
+
+        let triples: Vec<StarTriple> = (0..3)
+            .map(|i| {
+                StarTriple::new(
+                    StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
+                    StarTerm::iri("http://example.org/p").unwrap(),
+                    StarTerm::literal(&format!("o{i}")).unwrap(),
+                )
+            })
+            .collect();
+
+        let config = BulkInsertConfig {
+            batch_size: 1,
+            defer_index_updates: false,
+            memory_threshold: usize::MAX,
+            parallel_processing: true,
+            // More worker threads than triples: chunk_size used to compute
+            // to 3 / 16 == 0, which made `.chunks(0)` panic.
+            worker_threads: 16,
+        };
+
+        store.bulk_insert_parallel(&triples, &config)?;
+        assert_eq!(store.len(), 3);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_compute_pattern_results_parses_bound_pattern() -> StarResult<()> {
+        let store = StarStore::new();
+
+        let alice = StarTerm::iri("http://example.org/alice")?;
+        let knows = StarTerm::iri("http://example.org/knows")?;
+        let bob = StarTerm::iri("http://example.org/bob")?;
+        let matching = StarTriple::new(alice.clone(), knows.clone(), bob.clone());
+        let non_matching = StarTriple::new(
+            bob,
+            StarTerm::iri("http://example.org/likes")?,
+            alice.clone(),
+        );
+
+        store.insert(&matching)?;
+        store.insert(&non_matching)?;
+
+        // Bound subject+predicate, wildcard object: only `matching` triple.
+        let pattern = "<http://example.org/alice> <http://example.org/knows> ?";
+        let results = store.compute_pattern_results(pattern);
+        assert_eq!(results, vec![matching]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_compute_pattern_results_quoted_keyword_backward_compat() -> StarResult<()> {
+        let store = StarStore::new();
+
+        let inner = StarTriple::new(
+            StarTerm::iri("http://example.org/s1")?,
+            StarTerm::iri("http://example.org/p1")?,
+            StarTerm::literal("o1")?,
+        );
+        let quoted_triple = StarTriple::new(
+            StarTerm::quoted_triple(inner),
+            StarTerm::iri("http://example.org/certainty")?,
+            StarTerm::literal("0.9")?,
+        );
+        store.insert(&quoted_triple)?;
+
+        let results = store.compute_pattern_results("quoted");
+        assert_eq!(results, vec![quoted_triple]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_compute_pattern_results_unparseable_falls_back_to_full_scan() -> StarResult<()> {
+        let store = StarStore::new();
+        let triple = StarTriple::new(
+            StarTerm::iri("http://example.org/s")?,
+            StarTerm::iri("http://example.org/p")?,
+            StarTerm::literal("o")?,
+        );
+        store.insert(&triple)?;
+
+        // Malformed pattern (unterminated IRI): falls back to a full scan
+        // instead of silently returning an empty / wrong result set.
+        let results = store.compute_pattern_results("<http://example.org/s ? ?");
+        assert_eq!(results, vec![triple]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_compress_storage_reports_real_measurement() -> StarResult<()> {
+        let store = StarStore::new();
+        for i in 0..20 {
+            store.insert(&StarTriple::new(
+                StarTerm::iri(&format!("http://example.org/s{i}"))?,
+                StarTerm::iri("http://example.org/p")?,
+                StarTerm::literal("a moderately repetitive literal value for compression")?,
+            ))?;
+        }
+
+        // Highly repetitive data should compress to a non-trivial number of
+        // saved bytes (previously this was always `triple_count * 50`
+        // regardless of actual content).
+        let space_saved = store.compress_storage()?;
+        assert!(space_saved > 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_enable_memory_mapping_fails_loudly() {
+        let store = StarStore::new();
+        let result = store.enable_memory_mapping("/tmp/does-not-matter", false);
+        assert!(result.is_err());
+    }
 }

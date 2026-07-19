@@ -200,6 +200,20 @@ pub enum HistoryAction {
         #[arg(short, long)]
         dataset: Option<String>,
     },
+    /// Export the full query history to a CSV file
+    ExportCsv {
+        /// Output CSV file path
+        #[arg(short, long)]
+        output: PathBuf,
+    },
+    /// Find the queries in history most similar to a given query
+    Similar {
+        /// The query to compare against history (text)
+        query: String,
+        /// Number of most-similar queries to report
+        #[arg(short, long, default_value = "5")]
+        top: usize,
+    },
 }
 
 /// Migration actions for converting between databases and formats
@@ -998,6 +1012,9 @@ pub enum ProfilerAction {
         /// Show optimization suggestions
         #[arg(long)]
         suggestions: bool,
+        /// Write an SVG flame graph of the per-operator cost model to this path
+        #[arg(long)]
+        flamegraph: Option<PathBuf>,
     },
     /// Show optimization suggestions for a query
     Suggest {

@@ -1,6 +1,7 @@
 //! OxiRS GraphQL Server Binary
 
 use clap::Parser;
+use oxirs_gql::juniper_server::{GraphQLServerConfig, JuniperGraphQLServer};
 use oxirs_gql::{GraphQLConfig, GraphQLServer, RdfStore};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -89,27 +90,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🚀 Starting OxiRS GraphQL server on http://{addr}");
 
-    // Use the enhanced core GraphQL implementation with real SPARQL integration
-    println!("🔧 Using enhanced GraphQL implementation with real SPARQL query execution");
-
-    let config = GraphQLConfig {
-        enable_playground: args.playground,
-        enable_introspection: args.introspection,
-        ..Default::default()
-    };
-
-    let server = GraphQLServer::new(store_arc).with_config(config);
-
     if args.playground {
         println!("📊 GraphQL Playground available at http://{addr}/");
     }
-    if args.graphiql {
-        println!("📊 GraphiQL interface: planned for future release");
-    }
     println!("🔍 GraphQL endpoint: http://{addr}/graphql");
-    println!("✨ Enhancement: Real SPARQL query execution now implemented");
 
-    server.start(&addr.to_string()).await?;
+    if args.use_juniper {
+        // The Juniper/Hyper-based server: also honors `--graphiql`, unlike
+        // the manual server below which has no GraphiQL integration.
+        println!("🔧 Using the Juniper-based GraphQL server");
+        if args.graphiql {
+            println!("📊 GraphiQL interface available at http://{addr}/graphiql");
+        }
+
+        let juniper_config = GraphQLServerConfig {
+            enable_graphiql: args.graphiql,
+            enable_playground: args.playground,
+            enable_introspection: args.introspection,
+            ..Default::default()
+        };
+        let server = JuniperGraphQLServer::with_config(store_arc, juniper_config);
+        server.start(addr).await?;
+    } else {
+        // The manual, dependency-light server implementation.
+        println!("🔧 Using the built-in GraphQL implementation with real SPARQL query execution");
+        if args.graphiql {
+            println!(
+                "⚠️  --graphiql has no effect without --use-juniper=true; the built-in server has no GraphiQL integration"
+            );
+        }
+
+        let config = GraphQLConfig {
+            enable_playground: args.playground,
+            enable_introspection: args.introspection,
+            ..Default::default()
+        };
+        let server = GraphQLServer::new(store_arc).with_config(config);
+        server.start(&addr.to_string()).await?;
+    }
 
     Ok(())
 }

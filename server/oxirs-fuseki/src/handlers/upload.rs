@@ -384,39 +384,33 @@ fn parse_rdf_data(
     Ok((triples, named_quads))
 }
 
-/// Insert triples and quads into store
+/// Insert triples and quads into store.
+///
+/// Both the default-graph triples and the named-graph quads are accumulated
+/// into a single `Vec<Quad>` and handed to the shared batched ingest path in
+/// one call, rather than looping `insert_quad` per item across two loops.
 fn insert_data<S: Store>(
     store: &S,
     triples: &[oxirs_core::model::Triple],
     quads: &[oxirs_core::model::Quad],
     target_graph: &oxirs_core::model::GraphName,
 ) -> Result<usize, UploadError> {
-    let mut inserted = 0;
+    let mut batch: Vec<oxirs_core::model::Quad> = Vec::with_capacity(triples.len() + quads.len());
 
-    // Insert triples into target graph
+    // Default-graph triples are re-graphed to the requested target graph.
     for triple in triples {
-        let quad = oxirs_core::model::Quad::new(
+        batch.push(oxirs_core::model::Quad::new(
             triple.subject().clone(),
             triple.predicate().clone(),
             triple.object().clone(),
             target_graph.clone(),
-        );
-
-        store
-            .insert_quad(quad)
-            .map_err(|e| UploadError::StoreError(e.to_string()))?;
-        inserted += 1;
+        ));
     }
+    // Named-graph quads keep their original graph.
+    batch.extend(quads.iter().cloned());
 
-    // Insert quads (preserve their original graph)
-    for quad in quads {
-        store
-            .insert_quad(quad.clone())
-            .map_err(|e| UploadError::StoreError(e.to_string()))?;
-        inserted += 1;
-    }
-
-    Ok(inserted)
+    crate::store::bulk_insert_quads(store, batch)
+        .map_err(|e| UploadError::StoreError(e.to_string()))
 }
 
 /// Server-specific handler for direct upload (works with AppState)
@@ -426,6 +420,9 @@ pub async fn handle_upload_server(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    if let Err(e) = state.reject_if_read_only("default", "bulk upload") {
+        return e.into_response();
+    }
     match handle_upload(
         Query(params),
         State(Arc::new(state.store.clone())),
@@ -445,6 +442,9 @@ pub async fn handle_multipart_upload_server(
     State(state): State<Arc<crate::server::AppState>>,
     multipart: Multipart,
 ) -> Response {
+    if let Err(e) = state.reject_if_read_only("default", "bulk upload") {
+        return e.into_response();
+    }
     match handle_multipart_upload(
         Query(params),
         State(Arc::new(state.store.clone())),

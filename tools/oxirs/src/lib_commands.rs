@@ -75,6 +75,10 @@ pub enum Commands {
         /// Enable GraphQL endpoint
         #[arg(long)]
         graphql: bool,
+        /// Validate the server configuration and report the bind address
+        /// without opening any network sockets (does not start the server)
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Import RDF data
     Import {
@@ -91,6 +95,31 @@ pub enum Commands {
         /// Resume from previous checkpoint if interrupted
         #[arg(long)]
         resume: bool,
+        /// Maximum input file size in bytes (0 = unlimited)
+        #[arg(long, default_value_t = 10 * 1024 * 1024 * 1024)]
+        max_file_size: u64,
+        /// Storage backend: "memory" (in-RAM N-Quads log, default) or
+        /// "tdb2" (on-disk oxirs-tdb store; keeps RAM use bounded for large
+        /// bulk loads)
+        #[arg(long, alias = "backend", default_value = "memory")]
+        dataset_type: String,
+    },
+    /// Batch import multiple RDF files into a dataset in parallel
+    Batch {
+        /// Target dataset (alphanumeric, _, - only; no dots or extensions)
+        dataset: String,
+        /// Input file paths
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        /// Input format (turtle, ntriples, rdfxml, jsonld) - auto-detected per file if omitted
+        #[arg(short, long)]
+        format: Option<String>,
+        /// Named graph URI
+        #[arg(short, long)]
+        graph: Option<String>,
+        /// Number of files to process concurrently
+        #[arg(short, long, default_value = "4")]
+        parallel: usize,
     },
     /// Export RDF data
     Export {
@@ -530,7 +559,8 @@ pub enum Commands {
     SchemaGen {
         /// Input RDF data
         data: PathBuf,
-        /// Schema type (shacl, shex, owl)
+        /// Schema type (shacl, shex, owl). With `--advanced`, `owl`/`rdfs`
+        /// select the vocabulary flavour emitted by the inferencer.
         #[arg(long, default_value = "shacl")]
         schema_type: String,
         /// Output file
@@ -539,6 +569,10 @@ pub enum Commands {
         /// Include statistics
         #[arg(long)]
         stats: bool,
+        /// Use the advanced schema inferencer: subclass-hierarchy, domain/range,
+        /// and cardinality inference, emitting OWL/RDFS (instead of SHACL).
+        #[arg(long)]
+        advanced: bool,
     },
 
     /// SAMM Aspect Model tools (Java ESMF SDK compatible)
@@ -803,4 +837,187 @@ pub enum Commands {
         #[command(subcommand)]
         action: StreamAction,
     },
+
+    /// Lint an RDF/Turtle document for common issues (empty/undeclared prefixes,
+    /// duplicate triples, over-long literals, deprecated predicates)
+    Lint {
+        /// Turtle/RDF file to lint
+        file: PathBuf,
+        /// Input format hint (currently only turtle is linted)
+        #[arg(short, long, default_value = "turtle")]
+        format: String,
+        /// Maximum allowed string-literal length before warning
+        #[arg(long, default_value = "200")]
+        max_literal_length: usize,
+        /// Exit with an error status when any error-severity issue is found
+        #[arg(long)]
+        strict: bool,
+    },
+
+    /// Merge multiple RDF files into one (set-union with blank-node renaming,
+    /// conflict detection, and optional provenance tracking)
+    Merge {
+        /// Input RDF files (.ttl, .nt, .nq, .rdf/.xml)
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        /// Output file path (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Merge mode: set-union or with-provenance
+        #[arg(short, long, default_value = "set-union")]
+        mode: String,
+        /// Output format (turtle, ntriples, nquads, rdfxml)
+        #[arg(short, long, default_value = "turtle")]
+        format: String,
+        /// Compute and report the merge plan without writing output
+        #[arg(long)]
+        dry_run: bool,
+        /// Track which source each triple came from
+        #[arg(long)]
+        provenance: bool,
+    },
+
+    /// Report OxiRS vs. Apache Jena feature-parity summary (diagnostic)
+    JenaParity {
+        /// Output format: text (summary), markdown (full report), or json
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Monitor a REMOTE SPARQL endpoint's latency, uptime, and P95 by polling
+    /// it over HTTP (distinct from `oxirs performance monitor`, which samples
+    /// the LOCAL process/dataset)
+    Monitor {
+        /// Remote SPARQL endpoint URL, e.g. http://localhost:3030/ds/sparql
+        endpoint: String,
+        /// Seconds to wait between probes
+        #[arg(long, default_value = "30")]
+        interval: u64,
+        /// Number of probes to perform
+        #[arg(long, default_value = "10")]
+        count: usize,
+        /// Per-probe HTTP timeout in seconds
+        #[arg(long, default_value = "30")]
+        timeout: u64,
+        /// Latency threshold in milliseconds above which a probe is flagged slow
+        #[arg(long, default_value = "5000")]
+        threshold: u64,
+    },
+
+    /// Detect the RDF serialization format of a file (extension, content
+    /// analysis, and magic bytes) with a confidence score. Pass the global
+    /// `--verbose` flag for the detailed confidence/method report.
+    DetectFormat {
+        /// File whose RDF format should be detected
+        file: PathBuf,
+        /// Output format for the detailed report (table, json)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+
+    /// Inspect an RDF file: triple/subject/predicate counts, namespaces,
+    /// top predicates/classes, connectivity, object-type distribution, and
+    /// data-quality checks. Operates on a real file — a missing input is an
+    /// explicit error, never synthetic data.
+    Inspect {
+        /// RDF file to inspect (.ttl, .nt, .nq, .trig; format auto-detected)
+        file: PathBuf,
+        /// Report output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+        /// Write the report to a file instead of stdout
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Number of top-N items to report per category
+        #[arg(long, default_value = "20")]
+        top: usize,
+        /// Skip connectivity metrics (faster on large datasets)
+        #[arg(long)]
+        no_connectivity: bool,
+        /// Skip data-quality checks
+        #[arg(long)]
+        no_quality: bool,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `Cli`'s derived clap parser recurses through an unusually large
+    /// `Commands` enum (50+ variants, several with nested subcommand enums
+    /// of their own); in an unoptimized (debug/test) build this can exceed
+    /// the default 2-8 MiB thread stack. Run parsing on a thread with a
+    /// generous stack instead of fighting the default test-harness stack.
+    fn parse_cli_with_large_stack(args: &'static [&'static str]) -> Cli {
+        std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(move || Cli::parse_from(args))
+            .expect("failed to spawn CLI-parsing thread")
+            .join()
+            .expect("CLI-parsing thread panicked")
+    }
+
+    /// Regression test: the fully-implemented parallel `batch` import
+    /// command must be reachable from the CLI (previously there was no
+    /// `Commands::Batch` variant at all, so `oxirs batch ...` could not be
+    /// parsed despite `commands::batch::import_batch` being fully wired).
+    #[test]
+    fn test_batch_command_is_reachable_from_cli() {
+        let cli = parse_cli_with_large_stack(&[
+            "oxirs",
+            "batch",
+            "mydataset",
+            "a.ttl",
+            "b.ttl",
+            "--parallel",
+            "2",
+        ]);
+        match cli.command {
+            Commands::Batch {
+                dataset,
+                files,
+                parallel,
+                ..
+            } => {
+                assert_eq!(dataset, "mydataset");
+                assert_eq!(files.len(), 2);
+                assert_eq!(parallel, 2);
+            }
+            _ => panic!("expected Commands::Batch, got a different variant"),
+        }
+    }
+
+    /// Regression test: `oxirs import` must accept a configurable
+    /// `--max-file-size` (0 = unlimited) instead of a hardcoded 1 GiB cap
+    /// with no CLI override.
+    #[test]
+    fn test_import_max_file_size_flag_is_configurable() {
+        let cli = parse_cli_with_large_stack(&[
+            "oxirs",
+            "import",
+            "mydataset",
+            "data.ttl",
+            "--max-file-size",
+            "0",
+        ]);
+        match cli.command {
+            Commands::Import { max_file_size, .. } => {
+                assert_eq!(max_file_size, 0, "0 must be accepted to mean unlimited");
+            }
+            _ => panic!("expected Commands::Import, got a different variant"),
+        }
+
+        // Default must be raised well above the old hardcoded 1 GiB cap.
+        let cli = parse_cli_with_large_stack(&["oxirs", "import", "mydataset", "data.ttl"]);
+        match cli.command {
+            Commands::Import { max_file_size, .. } => {
+                assert!(
+                    max_file_size > 1_073_741_824,
+                    "default max_file_size should exceed the old 1 GiB hard cap"
+                );
+            }
+            _ => panic!("expected Commands::Import, got a different variant"),
+        }
+    }
 }

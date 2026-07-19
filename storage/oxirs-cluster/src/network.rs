@@ -12,6 +12,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::SystemTime;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tokio::time::timeout;
@@ -180,6 +181,11 @@ pub struct NetworkManager {
     config: NetworkConfig,
     node_id: OxirsNodeId,
     connections: Arc<RwLock<HashMap<OxirsNodeId, Connection>>>,
+    /// Statically known peer addresses, keyed by node id. Populated via
+    /// [`NetworkManager::register_peer`] so that address-less send paths
+    /// (e.g. [`NetworkService::send_message`]) can resolve a real endpoint
+    /// instead of silently dropping the message.
+    peer_addresses: Arc<RwLock<HashMap<OxirsNodeId, SocketAddr>>>,
     listener: Option<TcpListener>,
     running: Arc<RwLock<bool>>,
     tls_manager: Option<Arc<TlsManager>>,
@@ -229,6 +235,69 @@ impl Connection {
     }
 }
 
+/// Serialize an [`RpcMessage`] with oxicode (COOLJAPAN policy — not bincode) and
+/// write it to `stream` as a length-prefixed frame: a big-endian `u32` byte
+/// count followed by the serialized body. Returns the total number of bytes
+/// written (prefix + body). Fails loudly on serialization, oversize, or I/O
+/// errors — it never silently drops the message.
+async fn write_frame<W>(stream: &mut W, message: &RpcMessage, max_size: usize) -> Result<u64>
+where
+    W: AsyncWrite + Unpin,
+{
+    let body = oxicode::serde::encode_to_vec(message, oxicode::config::standard())
+        .map_err(|e| anyhow::anyhow!("failed to serialize RPC message: {e}"))?;
+    if body.len() > max_size {
+        return Err(anyhow::anyhow!(
+            "outgoing RPC frame ({} bytes) exceeds max_message_size ({} bytes)",
+            body.len(),
+            max_size
+        ));
+    }
+    let len = body.len() as u32;
+    stream
+        .write_all(&len.to_be_bytes())
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to write RPC length prefix: {e}"))?;
+    stream
+        .write_all(&body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to write RPC body: {e}"))?;
+    stream
+        .flush()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to flush RPC frame: {e}"))?;
+    Ok(4 + body.len() as u64)
+}
+
+/// Read a single length-prefixed frame written by [`write_frame`] from `stream`
+/// and deserialize it back into an [`RpcMessage`]. Enforces `max_size` on the
+/// advertised length so a malicious/corrupt peer cannot force an unbounded
+/// allocation. Returns the peer's actual message — never a fabricated response.
+async fn read_frame<R>(stream: &mut R, max_size: usize) -> Result<RpcMessage>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut len_buf = [0u8; 4];
+    stream
+        .read_exact(&mut len_buf)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to read RPC length prefix: {e}"))?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+    if len > max_size {
+        return Err(anyhow::anyhow!(
+            "incoming RPC frame ({len} bytes) exceeds max_message_size ({max_size} bytes)"
+        ));
+    }
+    let mut body = vec![0u8; len];
+    stream
+        .read_exact(&mut body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to read RPC body ({len} bytes): {e}"))?;
+    let (message, _) = oxicode::serde::decode_from_slice(&body, oxicode::config::standard())
+        .map_err(|e| anyhow::anyhow!("failed to deserialize RPC message: {e}"))?;
+    Ok(message)
+}
+
 impl NetworkManager {
     /// Create a new network manager
     pub fn new(node_id: OxirsNodeId, config: NetworkConfig) -> Self {
@@ -236,6 +305,7 @@ impl NetworkManager {
             config,
             node_id,
             connections: Arc::new(RwLock::new(HashMap::new())),
+            peer_addresses: Arc::new(RwLock::new(HashMap::new())),
             listener: None,
             running: Arc::new(RwLock::new(false)),
             tls_manager: None,
@@ -257,6 +327,7 @@ impl NetworkManager {
             config,
             node_id,
             connections: Arc::new(RwLock::new(HashMap::new())),
+            peer_addresses: Arc::new(RwLock::new(HashMap::new())),
             listener: None,
             running: Arc::new(RwLock::new(false)),
             tls_manager,
@@ -307,6 +378,26 @@ impl NetworkManager {
         Ok(())
     }
 
+    /// Register (or update) the network address of a peer node so that
+    /// address-less send paths can resolve a real endpoint.
+    pub async fn register_peer(&self, node_id: OxirsNodeId, address: SocketAddr) {
+        let mut addrs = self.peer_addresses.write().await;
+        addrs.insert(node_id, address);
+    }
+
+    /// Resolve the last-known address for `node_id`, consulting the static
+    /// registry first and then any live connection metadata.
+    async fn resolve_peer_address(&self, node_id: OxirsNodeId) -> Option<SocketAddr> {
+        if let Some(addr) = self.peer_addresses.read().await.get(&node_id).copied() {
+            return Some(addr);
+        }
+        self.connections
+            .read()
+            .await
+            .get(&node_id)
+            .map(|c| c.address)
+    }
+
     /// Send RPC message to a peer
     pub async fn send_rpc(
         &self,
@@ -314,17 +405,35 @@ impl NetworkManager {
         peer_address: SocketAddr,
         message: RpcMessage,
     ) -> Result<RpcMessage> {
-        // Get or create connection
-        let connection = self.get_or_create_connection(peer_id, peer_address).await?;
-
-        // Send message with timeout
+        // Perform the whole connect + write + read round trip under the request
+        // timeout so a stalled peer cannot block the caller indefinitely.
         let response = timeout(
             self.config.request_timeout,
-            self.send_message_to_connection(connection, message),
+            self.exchange_rpc(peer_id, peer_address, message),
         )
-        .await??;
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "RPC to peer {peer_id} at {peer_address} timed out after {:?}",
+                self.config.request_timeout
+            )
+        })??;
 
         Ok(response)
+    }
+
+    /// Send a message to `node_id` using a previously registered address (or a
+    /// live connection's address). Returns an explicit error when no address is
+    /// known — the message is never silently dropped or fabricated as delivered.
+    pub async fn send_message(&self, node_id: OxirsNodeId, message: RpcMessage) -> Result<()> {
+        let address = self.resolve_peer_address(node_id).await.ok_or_else(|| {
+            anyhow::anyhow!(
+                "no known network address for node {node_id}; register the peer before sending"
+            )
+        })?;
+        // Deliver for real and require a valid response frame from the peer.
+        self.send_rpc(node_id, address, message).await?;
+        Ok(())
     }
 
     /// Send request vote RPC
@@ -404,73 +513,68 @@ impl NetworkManager {
         }
     }
 
-    /// Get or create connection to peer
-    async fn get_or_create_connection(
+    /// Open a real TCP connection to `peer_address`, recording connection
+    /// metadata for statistics. Returns the live stream so the caller can
+    /// perform length-prefixed framing over it. Errors (refused/timeout) are
+    /// propagated so an unreachable peer is never mistaken for a live one.
+    async fn connect_to_peer(
         &self,
         peer_id: OxirsNodeId,
         peer_address: SocketAddr,
-    ) -> Result<Connection> {
-        {
-            let connections = self.connections.read().await;
-            if let Some(connection) = connections.get(&peer_id) {
-                if connection.is_connected && !connection.is_stale(self.config.connection_timeout) {
-                    return Ok(connection.clone());
-                }
-            }
-        }
-
-        // Create new connection
-        let _stream = timeout(
+    ) -> Result<TcpStream> {
+        let stream = timeout(
             self.config.connection_timeout,
             TcpStream::connect(peer_address),
         )
-        .await??;
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "timed out connecting to peer {peer_id} at {peer_address} after {:?}",
+                self.config.connection_timeout
+            )
+        })?
+        .map_err(|e| {
+            anyhow::anyhow!("failed to connect to peer {peer_id} at {peer_address}: {e}")
+        })?;
 
-        let mut connection = Connection::new(peer_id, peer_address);
-        connection.is_connected = true;
-        connection.update_activity();
-
-        // Store connection
+        // Record/refresh connection metadata used by get_stats().
         {
             let mut connections = self.connections.write().await;
-            connections.insert(peer_id, connection.clone());
+            let entry = connections
+                .entry(peer_id)
+                .or_insert_with(|| Connection::new(peer_id, peer_address));
+            entry.address = peer_address;
+            entry.is_connected = true;
+            entry.update_activity();
+        }
+        {
+            let mut stats = self.message_stats.write().await;
+            stats.connections_established += 1;
         }
 
-        Ok(connection)
+        Ok(stream)
     }
 
-    /// Send message to a specific connection
-    async fn send_message_to_connection(
+    /// Perform a full request/response RPC over a freshly opened TCP stream:
+    /// connect, write the length-prefixed request frame, then read and
+    /// deserialize the peer's actual response frame. No fabricated responses.
+    async fn exchange_rpc(
         &self,
-        mut connection: Connection,
+        peer_id: OxirsNodeId,
+        peer_address: SocketAddr,
         message: RpcMessage,
     ) -> Result<RpcMessage> {
-        // In a real implementation, this would serialize the message
-        // and send it over TCP, then wait for and deserialize the response.
-        // For now, we'll simulate the network communication.
+        let mut stream = self.connect_to_peer(peer_id, peer_address).await?;
 
-        connection.update_activity();
+        let sent = write_frame(&mut stream, &message, self.config.max_message_size).await?;
+        let response = read_frame(&mut stream, self.config.max_message_size).await?;
 
-        // Simulate network delay
-        tokio::time::sleep(Duration::from_millis(1)).await;
-
-        // For demonstration, echo back a default response
-        let response = match message {
-            RpcMessage::RequestVote { term, .. } => RpcMessage::VoteResponse {
-                term,
-                vote_granted: false, // Default deny
-            },
-            RpcMessage::AppendEntries { term, .. } => RpcMessage::AppendEntriesResponse {
-                term,
-                success: true, // Default success
-                last_log_index: 0,
-            },
-            RpcMessage::Heartbeat { term, .. } => RpcMessage::HeartbeatResponse { term },
-            RpcMessage::ClientRequest { .. } => RpcMessage::ClientResponse {
-                response: RdfResponse::Success,
-            },
-            _ => return Err(anyhow::anyhow!("Unexpected message type")),
-        };
+        {
+            let mut stats = self.message_stats.write().await;
+            stats.messages_sent += 1;
+            stats.bytes_sent += sent;
+            stats.messages_received += 1;
+        }
 
         Ok(response)
     }
@@ -539,7 +643,7 @@ impl NetworkManager {
             // Perform TLS handshake
             let server_name = rustls::pki_types::ServerName::try_from(format!("node-{peer_id}"))?;
 
-            let _tls_stream = connector.connect(server_name, tcp_stream).await?;
+            let mut tls_stream = connector.connect(server_name, tcp_stream).await?;
 
             // Update TLS statistics
             {
@@ -548,68 +652,32 @@ impl NetworkManager {
                 stats.connections_established += 1;
             }
 
-            // In a real implementation, we would serialize and send the message
-            // over the TLS stream. For now, simulate secure communication.
-            self.simulate_secure_communication(message).await
+            // Real length-prefixed framing over the established TLS stream:
+            // write the request, then read and return the peer's actual response.
+            let sent = write_frame(&mut tls_stream, &message, self.config.max_message_size).await?;
+            let response = timeout(
+                self.config.request_timeout,
+                read_frame(&mut tls_stream, self.config.max_message_size),
+            )
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "secure RPC to peer {peer_id} at {peer_address} timed out after {:?}",
+                    self.config.request_timeout
+                )
+            })??;
+
+            {
+                let mut stats = self.message_stats.write().await;
+                stats.messages_sent += 1;
+                stats.bytes_sent += sent;
+                stats.messages_received += 1;
+            }
+
+            Ok(response)
         } else {
             // Fall back to non-TLS communication
             self.send_rpc(peer_id, peer_address, message).await
-        }
-    }
-
-    /// Simulate secure communication for testing
-    async fn simulate_secure_communication(&self, message: RpcMessage) -> Result<RpcMessage> {
-        // Update message statistics
-        {
-            let mut stats = self.message_stats.write().await;
-            stats.messages_sent += 1;
-            stats.bytes_sent += self.estimate_message_size(&message);
-        }
-
-        // Simulate network delay
-        tokio::time::sleep(Duration::from_millis(5)).await;
-
-        // Echo back appropriate response
-        let response = match message {
-            RpcMessage::RequestVote { term, .. } => RpcMessage::VoteResponse {
-                term,
-                vote_granted: true,
-            },
-            RpcMessage::AppendEntries { term, .. } => RpcMessage::AppendEntriesResponse {
-                term,
-                success: true,
-                last_log_index: 0,
-            },
-            RpcMessage::Heartbeat { term, .. } => RpcMessage::HeartbeatResponse { term },
-            RpcMessage::ClientRequest { .. } => RpcMessage::ClientResponse {
-                response: RdfResponse::Success,
-            },
-            _ => return Err(anyhow::anyhow!("Unsupported message type")),
-        };
-
-        // Update received statistics
-        {
-            let mut stats = self.message_stats.write().await;
-            stats.messages_received += 1;
-            stats.bytes_received += self.estimate_message_size(&response);
-        }
-
-        Ok(response)
-    }
-
-    /// Estimate message size for statistics
-    fn estimate_message_size(&self, message: &RpcMessage) -> u64 {
-        // Simple estimation based on message content
-        match message {
-            RpcMessage::RequestVote { .. } => 64,
-            RpcMessage::VoteResponse { .. } => 32,
-            RpcMessage::AppendEntries { entries, .. } => 128 + entries.len() as u64 * 256,
-            RpcMessage::AppendEntriesResponse { .. } => 48,
-            RpcMessage::Heartbeat { .. } => 24,
-            RpcMessage::HeartbeatResponse { .. } => 16,
-            RpcMessage::ClientRequest { .. } => 512,
-            RpcMessage::ClientResponse { .. } => 256,
-            _ => 128,
         }
     }
 
@@ -688,6 +756,7 @@ impl Clone for NetworkManager {
             config: self.config.clone(),
             node_id: self.node_id,
             connections: Arc::clone(&self.connections),
+            peer_addresses: Arc::clone(&self.peer_addresses),
             listener: None, // Don't clone the listener
             running: Arc::clone(&self.running),
             tls_manager: self.tls_manager.clone(),
@@ -758,12 +827,31 @@ impl NetworkService {
         Ok(())
     }
 
-    /// Send a message to a specific node
+    /// Register (or update) the network address of a peer node so that
+    /// [`NetworkService::send_message`] can resolve a real endpoint for it.
+    pub async fn register_peer(&self, node_id: OxirsNodeId, address: SocketAddr) {
+        self.manager.register_peer(node_id, address).await;
+    }
+
+    /// Send an RPC to a peer and return the peer's actual response frame.
+    pub async fn send_rpc(
+        &self,
+        peer_id: OxirsNodeId,
+        peer_address: SocketAddr,
+        message: RpcMessage,
+    ) -> Result<RpcMessage> {
+        self.manager.send_rpc(peer_id, peer_address, message).await
+    }
+
+    /// Send a message to a specific node.
+    ///
+    /// Delivers the message over a real TCP connection via the network manager,
+    /// resolving the peer's address from the registry. If no address is known
+    /// (or the connection cannot be established), an explicit error is returned
+    /// — the message is never silently dropped nor reported as delivered.
     pub async fn send_message(&self, node_id: OxirsNodeId, message: RpcMessage) -> Result<()> {
-        // In a real implementation, this would use the network manager to send the message
-        // For now, we'll just log it
         tracing::debug!("Sending message to node {}: {:?}", node_id, message);
-        Ok(())
+        self.manager.send_message(node_id, message).await
     }
 
     /// Handle incoming RPC message
@@ -1307,5 +1395,193 @@ mod tests {
             RpcMessage::HeartbeatResponse { term: 8 } => {}
             other => panic!("unexpected: {:?}", other),
         }
+    }
+
+    // --- length-prefixed framing tests ---
+
+    #[tokio::test]
+    async fn test_frame_round_trip_identity() {
+        // encode -> decode must yield an identical RpcMessage, proving real
+        // oxicode (not bincode) serialization over the wire framing.
+        let original = RpcMessage::AppendEntries {
+            term: 42,
+            leader_id: 7,
+            prev_log_index: 3,
+            prev_log_term: 2,
+            entries: vec![LogEntry::new(
+                4,
+                42,
+                RdfCommand::Insert {
+                    subject: "s".to_string(),
+                    predicate: "p".to_string(),
+                    object: "o".to_string(),
+                },
+            )],
+            leader_commit: 3,
+        };
+
+        let (mut a, mut b) = tokio::io::duplex(64 * 1024);
+        let to_send = original.clone();
+        let writer = tokio::spawn(async move {
+            write_frame(&mut a, &to_send, 16 * 1024 * 1024)
+                .await
+                .expect("write_frame failed");
+        });
+
+        let decoded = read_frame(&mut b, 16 * 1024 * 1024)
+            .await
+            .expect("read_frame failed");
+        writer.await.expect("writer task panicked");
+
+        match decoded {
+            RpcMessage::AppendEntries {
+                term,
+                leader_id,
+                prev_log_index,
+                prev_log_term,
+                entries,
+                leader_commit,
+            } => {
+                assert_eq!(term, 42);
+                assert_eq!(leader_id, 7);
+                assert_eq!(prev_log_index, 3);
+                assert_eq!(prev_log_term, 2);
+                assert_eq!(leader_commit, 3);
+                assert_eq!(entries.len(), 1);
+                assert_eq!(entries[0].index, 4);
+                assert_eq!(entries[0].term, 42);
+            }
+            other => panic!("frame round trip changed the message: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_frame_rejects_oversize_message() {
+        let msg = RpcMessage::Heartbeat {
+            term: 1,
+            leader_id: 1,
+        };
+        let (mut a, _b) = tokio::io::duplex(1024);
+        // max_size of 1 byte forces the oversize guard to trip.
+        let err = write_frame(&mut a, &msg, 1)
+            .await
+            .expect_err("oversize frame must be rejected");
+        assert!(
+            err.to_string().contains("exceeds max_message_size"),
+            "unexpected error: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_send_rpc_round_trip_returns_peer_response() {
+        // Stand up a loopback server that reads the request frame and replies
+        // with a distinctive VoteResponse. The old fabricating transport always
+        // returned vote_granted:false regardless of the peer; a real transport
+        // must surface the peer's actual (vote_granted:true) response.
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind loopback listener");
+        let addr = listener.local_addr().expect("no local addr");
+
+        let server = tokio::spawn(async move {
+            let (mut socket, _peer) = listener.accept().await.expect("accept failed");
+            let request = read_frame(&mut socket, 16 * 1024 * 1024)
+                .await
+                .expect("server read_frame failed");
+            let term = match request {
+                RpcMessage::RequestVote { term, .. } => term,
+                other => panic!("server got unexpected request: {:?}", other),
+            };
+            let response = RpcMessage::VoteResponse {
+                term,
+                vote_granted: true,
+            };
+            write_frame(&mut socket, &response, 16 * 1024 * 1024)
+                .await
+                .expect("server write_frame failed");
+        });
+
+        let manager = NetworkManager::new(1, NetworkConfig::default());
+        let (term, granted) = manager
+            .send_request_vote(2, addr, 99, 5, 4)
+            .await
+            .expect("send_request_vote failed");
+
+        assert_eq!(term, 99, "response term must echo the request term");
+        assert!(
+            granted,
+            "must return the peer's actual vote (true), not a fabricated default"
+        );
+
+        server.await.expect("server task panicked");
+
+        // Connection metadata + byte counters must reflect a real exchange.
+        let stats = manager.get_message_stats().await;
+        assert_eq!(stats.messages_sent, 1);
+        assert_eq!(stats.messages_received, 1);
+        assert!(stats.bytes_sent > 0);
+    }
+
+    #[tokio::test]
+    async fn test_send_message_errors_without_known_address() {
+        // With no registered address and no live connection, delivery must fail
+        // loudly rather than silently reporting success.
+        let svc = NetworkService::new(1, NetworkConfig::default());
+        let err = svc
+            .send_message(
+                99,
+                RpcMessage::Heartbeat {
+                    term: 1,
+                    leader_id: 1,
+                },
+            )
+            .await
+            .expect_err("send_message must error when the peer address is unknown");
+        assert!(
+            err.to_string().contains("no known network address"),
+            "unexpected error: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_send_message_delivers_to_registered_peer() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind loopback listener");
+        let addr = listener.local_addr().expect("no local addr");
+
+        let server = tokio::spawn(async move {
+            let (mut socket, _peer) = listener.accept().await.expect("accept failed");
+            let request = read_frame(&mut socket, 16 * 1024 * 1024)
+                .await
+                .expect("server read_frame failed");
+            let term = match request {
+                RpcMessage::Heartbeat { term, .. } => term,
+                other => panic!("server got unexpected request: {:?}", other),
+            };
+            write_frame(
+                &mut socket,
+                &RpcMessage::HeartbeatResponse { term },
+                16 * 1024 * 1024,
+            )
+            .await
+            .expect("server write_frame failed");
+        });
+
+        let svc = NetworkService::new(1, NetworkConfig::default());
+        svc.register_peer(2, addr).await;
+        svc.send_message(
+            2,
+            RpcMessage::Heartbeat {
+                term: 11,
+                leader_id: 1,
+            },
+        )
+        .await
+        .expect("send_message to a registered, reachable peer must succeed");
+
+        server.await.expect("server task panicked");
     }
 }

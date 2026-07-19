@@ -41,6 +41,8 @@ fn make_assertion(email: &str) -> SamlAssertion {
         session_index: Some("session-123".to_string()),
         issuer: "https://idp.example.com".to_string(),
         attributes,
+        // Test fixture represents an assertion whose signature was verified.
+        signature_verified: true,
     }
 }
 
@@ -230,6 +232,7 @@ fn test_assertion_validity_window() {
         session_index: None,
         issuer: "test-issuer".to_string(),
         attributes: HashMap::new(),
+        signature_verified: true,
     };
     assert!(valid_assertion.is_valid(300));
 

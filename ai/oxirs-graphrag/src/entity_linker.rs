@@ -99,6 +99,14 @@ pub struct EntityLinker {
     entities: Vec<Entity>,
     /// label (lowercased) → list of entity indices
     label_index: HashMap<String, Vec<usize>>,
+    /// First character of every indexed surface form → list of entity
+    /// indices, used as a cheap candidate-generation blocking step for fuzzy
+    /// matching in [`link_mention`](Self::link_mention) so it need not score
+    /// every entity in the knowledge base.
+    first_char_index: HashMap<char, Vec<usize>>,
+    /// Longest indexed label/alias, in `char`s. Bounds the substring window
+    /// scanned at each text position in [`detect_mentions`](Self::detect_mentions).
+    max_label_chars: usize,
     /// Minimum character length of a text span to be considered as a mention.
     pub min_mention_len: usize,
     /// Minimum combined score for a candidate to be returned.
@@ -115,6 +123,8 @@ impl EntityLinker {
         Self {
             entities: Vec::new(),
             label_index: HashMap::new(),
+            first_char_index: HashMap::new(),
+            max_label_chars: 0,
             min_mention_len: 2,
             threshold,
         }
@@ -126,6 +136,17 @@ impl EntityLinker {
         // Index the label and all aliases
         let mut keys: Vec<String> = entity.aliases.iter().map(|a| a.to_lowercase()).collect();
         keys.push(entity.label.to_lowercase());
+
+        let mut first_chars: std::collections::HashSet<char> = std::collections::HashSet::new();
+        for key in &keys {
+            self.max_label_chars = self.max_label_chars.max(key.chars().count());
+            if let Some(c) = key.chars().next() {
+                first_chars.insert(c);
+            }
+        }
+        for c in first_chars {
+            self.first_char_index.entry(c).or_default().push(idx);
+        }
 
         for key in keys {
             self.label_index.entry(key).or_default().push(idx);
@@ -151,36 +172,56 @@ impl EntityLinker {
 
     /// Scan `text` for all known entity labels / aliases and return mentions.
     ///
-    /// Both exact (case-insensitive) and fuzzy (similarity ≥ 0.7) matches are
-    /// considered.  Overlapping spans from the same starting position are
+    /// Rather than scanning the whole text once per indexed label (which is
+    /// `O(vocabulary × text length)`), this walks the text once and, at every
+    /// character position, performs bounded `O(1)` hash lookups into
+    /// [`label_index`](Self::label_index) for substrings up to
+    /// [`max_label_chars`](Self::max_label_chars) long — giving
+    /// `O(text length × longest label)` overall, independent of vocabulary
+    /// size. Overlapping spans from the same starting position are
     /// de-duplicated in favour of the longer match.
     pub fn detect_mentions(&self, text: &str) -> Vec<EntityMention> {
         let text_lower = text.to_lowercase();
         let mut mentions: Vec<EntityMention> = Vec::new();
 
-        for (surface, indices) in &self.label_index {
-            if surface.len() < self.min_mention_len {
-                continue;
-            }
-            // Find all (non-overlapping) occurrences of `surface` in text_lower
-            let mut search_start = 0;
-            while let Some(pos) = text_lower[search_start..].find(surface.as_str()) {
-                let abs_start = search_start + pos;
-                let abs_end = abs_start + surface.len();
+        if self.label_index.is_empty() || self.max_label_chars == 0 {
+            return mentions;
+        }
 
-                // Collect candidates for this surface form
+        // Byte offset of every character boundary, plus one past the end, so
+        // substrings can be sliced without ever splitting a multi-byte UTF-8
+        // character.
+        let boundaries: Vec<usize> = text_lower
+            .char_indices()
+            .map(|(byte_idx, _)| byte_idx)
+            .chain(std::iter::once(text_lower.len()))
+            .collect();
+        let num_chars = boundaries.len() - 1;
+
+        for start in 0..num_chars {
+            let start_byte = boundaries[start];
+            let max_len = self.max_label_chars.min(num_chars - start);
+
+            for len in self.min_mention_len..=max_len {
+                let end_char = start + len;
+                let end_byte = boundaries[end_char];
+                let surface = &text_lower[start_byte..end_byte];
+
+                let Some(indices) = self.label_index.get(surface) else {
+                    continue;
+                };
+
                 let candidates = self.candidates_for_surface(surface, indices);
                 if !candidates.is_empty() {
                     // Use the original casing from the source text
-                    let original_text = &text[abs_start..abs_end];
+                    let original_text = &text[start_byte..end_byte];
                     mentions.push(EntityMention {
                         text: original_text.to_string(),
-                        start_char: abs_start,
-                        end_char: abs_end,
+                        start_char: start_byte,
+                        end_char: end_byte,
                         candidates,
                     });
                 }
-                search_start = abs_start + 1;
             }
         }
 
@@ -238,14 +279,31 @@ impl EntityLinker {
 
     /// Find all entity candidates for an arbitrary mention string.
     ///
-    /// Searches all entity labels and aliases using both exact (lowercase) and
-    /// fuzzy matching.  Results are sorted by `score` descending.
+    /// Uses [`first_char_index`](Self::first_char_index) as a candidate-
+    /// generation blocking step — a standard record-linkage technique — so
+    /// only entities sharing the mention's first character are scored,
+    /// instead of computing edit-distance similarity against the entire
+    /// knowledge base. Results are sorted by `score` descending.
     pub fn link_mention(&self, mention: &str) -> Vec<LinkCandidate> {
         let mention_lower = mention.to_lowercase();
+        let Some(first_char) = mention_lower.chars().next() else {
+            return Vec::new();
+        };
+        let Some(blocked_indices) = self.first_char_index.get(&first_char) else {
+            return Vec::new();
+        };
+
         let mut seen: std::collections::HashSet<usize> = std::collections::HashSet::new();
         let mut candidates: Vec<LinkCandidate> = Vec::new();
 
-        for (idx, entity) in self.entities.iter().enumerate() {
+        for &idx in blocked_indices {
+            if !seen.insert(idx) {
+                continue;
+            }
+            let Some(entity) = self.entities.get(idx) else {
+                continue;
+            };
+
             // Collect all surface forms of this entity
             let mut surfaces: Vec<String> =
                 entity.aliases.iter().map(|a| a.to_lowercase()).collect();
@@ -256,7 +314,7 @@ impl EntityLinker {
                 .map(|s| Self::string_similarity(&mention_lower, s))
                 .fold(0.0_f64, f64::max);
 
-            if best_sim > 0.0 && !seen.contains(&idx) {
+            if best_sim > 0.0 {
                 let score = Self::combined_score(best_sim, entity.popularity);
                 candidates.push(LinkCandidate {
                     entity: entity.clone(),
@@ -264,7 +322,6 @@ impl EntityLinker {
                     string_similarity: best_sim,
                     prior_probability: entity.popularity,
                 });
-                seen.insert(idx);
             }
         }
 
@@ -344,13 +401,27 @@ impl EntityLinker {
     // Internal helpers
     // -----------------------------------------------------------------------
 
-    /// Rebuild the label index from scratch.
+    /// Rebuild the label index (and the derived blocking indices) from scratch.
     #[allow(dead_code)]
     fn rebuild_index(&mut self) {
         self.label_index.clear();
+        self.first_char_index.clear();
+        self.max_label_chars = 0;
         for (idx, entity) in self.entities.iter().enumerate() {
             let mut keys: Vec<String> = entity.aliases.iter().map(|a| a.to_lowercase()).collect();
             keys.push(entity.label.to_lowercase());
+
+            let mut first_chars: std::collections::HashSet<char> = std::collections::HashSet::new();
+            for key in &keys {
+                self.max_label_chars = self.max_label_chars.max(key.chars().count());
+                if let Some(c) = key.chars().next() {
+                    first_chars.insert(c);
+                }
+            }
+            for c in first_chars {
+                self.first_char_index.entry(c).or_default().push(idx);
+            }
+
             for key in keys {
                 self.label_index.entry(key).or_default().push(idx);
             }
@@ -736,5 +807,64 @@ mod tests {
             "texts = {:?}",
             texts
         );
+    }
+
+    // --- Regression: indexed lookups (perf fix) ------------------------------
+
+    /// Regression test for the windowed hash-lookup rewrite of
+    /// `detect_mentions`: with a large number of unrelated entities in the
+    /// knowledge base, a mention of an entity added last must still be found
+    /// (this previously relied on scanning the whole text once per indexed
+    /// label; now it scans the text once and hash-probes the index).
+    #[test]
+    fn test_detect_mentions_indexed_lookup_with_many_entities() {
+        let mut linker = EntityLinker::new(0.3);
+        for i in 0..500 {
+            linker.add_entity(make_entity(
+                &format!("http://example.org/e{i}"),
+                &format!("Entity{i}"),
+                &[],
+                0.5,
+            ));
+        }
+        linker.add_entity(make_entity(
+            "http://example.org/einstein",
+            "Albert Einstein",
+            &["Einstein"],
+            0.95,
+        ));
+
+        let mentions = linker.detect_mentions("Albert Einstein was a physicist.");
+        let texts: Vec<&str> = mentions.iter().map(|m| m.text.as_str()).collect();
+        assert!(
+            texts.iter().any(|t| t.to_lowercase().contains("einstein")),
+            "mentions = {:?}",
+            texts
+        );
+    }
+
+    /// Regression test for the first-character blocking rewrite of
+    /// `link_mention`: the correct entity must still be found via its
+    /// blocking bucket.
+    #[test]
+    fn test_link_mention_blocking_matches_correct_entity() {
+        let linker = sample_linker();
+        let candidates = linker.link_mention("Curie");
+        assert!(
+            candidates
+                .iter()
+                .any(|c| c.entity.iri == "http://example.org/curie"),
+            "candidates = {:?}",
+            candidates.iter().map(|c| &c.entity.iri).collect::<Vec<_>>()
+        );
+    }
+
+    /// A mention whose first character matches no indexed surface form
+    /// should short-circuit to an empty result without scoring every entity.
+    #[test]
+    fn test_link_mention_blocking_no_match_for_unindexed_first_char() {
+        let linker = sample_linker();
+        let candidates = linker.link_mention("Zzzzz nonexistent name");
+        assert!(candidates.is_empty(), "candidates = {:?}", candidates);
     }
 }

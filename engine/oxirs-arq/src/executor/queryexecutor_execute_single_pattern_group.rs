@@ -24,6 +24,24 @@ impl QueryExecutor {
         pattern: &crate::algebra::TriplePattern,
         dataset: &dyn Dataset,
     ) -> Result<Solution> {
+        // A complex property path (`p1/p2`, `^p`, `p+`, `p*`, `p?`, `p1|p2`,
+        // `!p`) cannot be matched by a single triple lookup — `find_triples`
+        // only understands a plain IRI/variable predicate. Route it to the path
+        // engine (`execute_property_path`). A bare `Iri`/`Variable` property-path
+        // predicate stays on the fast triple-lookup path below.
+        if let crate::algebra::Term::PropertyPath(path) = &pattern.predicate {
+            if !matches!(
+                path,
+                crate::algebra::PropertyPath::Iri(_) | crate::algebra::PropertyPath::Variable(_)
+            ) {
+                return self.execute_property_path(
+                    &pattern.subject,
+                    path,
+                    &pattern.object,
+                    dataset,
+                );
+            }
+        }
         let access_path = self.select_access_path(pattern);
         let solution = match access_path {
             AccessPath::SubjectIndex => self.lookup_by_subject(pattern, dataset)?,
@@ -31,6 +49,18 @@ impl QueryExecutor {
             AccessPath::ObjectIndex => self.lookup_by_object(pattern, dataset)?,
             AccessPath::FullScan => self.full_scan_pattern(pattern, dataset)?,
         };
+
+        // Enforce the runtime triple-scan budget on the store hot path. Each
+        // matched triple counts as one scanned triple for this pattern; the
+        // check is incremental so a runaway scan is aborted before the whole
+        // result Solution is materialized further up the pipeline. This also
+        // surfaces any concurrent row-limit breach (see
+        // `ExecutionBudget::record_triple_scan`).
+        if let Some(ref budget) = self.execution_budget {
+            budget
+                .record_triple_scan(solution.len() as u64)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+        }
 
         // Feed actual cardinality back to the adaptive statistics store so
         // the optimizer can recalibrate future estimates for this pattern.

@@ -1,9 +1,9 @@
 //! # OxiRS Cluster
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-cluster/badge.svg)](https://docs.rs/oxirs-cluster)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Raft-backed distributed dataset for high availability and horizontal scaling.
@@ -64,6 +64,7 @@
 #![allow(clippy::derivable_impls)]
 #![allow(clippy::useless_conversion)]
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -117,6 +118,8 @@ pub mod partition_detection;
 pub mod performance_metrics;
 pub mod performance_monitor;
 pub mod raft;
+#[cfg(feature = "raft")]
+mod raft_network;
 pub mod raft_optimization;
 pub mod raft_profiling;
 pub mod raft_state;
@@ -378,12 +381,25 @@ pub struct NodeConfig {
     pub data_dir: String,
     /// List of peer node IDs
     pub peers: Vec<OxirsNodeId>,
+    /// Known network addresses of entries in `peers`, keyed by node id.
+    ///
+    /// Required (for every id in `peers`) to form a real multi-node Raft
+    /// cluster — `ClusterNode::new` feeds this straight into
+    /// `RaftNode::set_network` via `ConsensusManager::with_raft_network`, so
+    /// the Raft transport (`raft_network.rs`) knows where to dial each peer
+    /// and what address to advertise for itself. Left empty for a genuine
+    /// single-node deployment (`peers` empty), which never needs it.
+    pub peer_addresses: HashMap<OxirsNodeId, SocketAddr>,
     /// Discovery configuration
     pub discovery: Option<DiscoveryConfig>,
     /// Replication strategy
     pub replication_strategy: Option<ReplicationStrategy>,
-    /// Use Byzantine fault tolerance instead of Raft
-    #[cfg(feature = "bft")]
+    /// Use Byzantine fault tolerance instead of Raft.
+    ///
+    /// This field is always present so a caller can request BFT regardless of
+    /// how the crate was compiled; if it is `true` but the `bft` feature was
+    /// not enabled, [`ClusterNode::start`] fails loud rather than silently
+    /// running Raft.
     pub use_bft: bool,
     /// Multi-region deployment configuration
     pub region_config: Option<MultiRegionConfig>,
@@ -397,9 +413,9 @@ impl NodeConfig {
             address,
             data_dir: format!("./data/node-{node_id}"),
             peers: Vec::new(),
+            peer_addresses: HashMap::new(),
             discovery: Some(DiscoveryConfig::default()),
             replication_strategy: Some(ReplicationStrategy::default()),
-            #[cfg(feature = "bft")]
             use_bft: false,
             region_config: None,
         }
@@ -410,6 +426,14 @@ impl NodeConfig {
         if !self.peers.contains(&peer_id) && peer_id != self.node_id {
             self.peers.push(peer_id);
         }
+        self
+    }
+
+    /// Record (or update) the network address of a peer, so a multi-node
+    /// Raft cluster can be formed. Does not implicitly add `peer_id` to
+    /// `peers` — call `add_peer` too if it isn't already listed.
+    pub fn add_peer_address(&mut self, peer_id: OxirsNodeId, address: SocketAddr) -> &mut Self {
+        self.peer_addresses.insert(peer_id, address);
         self
     }
 
@@ -425,8 +449,11 @@ impl NodeConfig {
         self
     }
 
-    /// Enable Byzantine fault tolerance
-    #[cfg(feature = "bft")]
+    /// Enable Byzantine fault tolerance.
+    ///
+    /// Requesting BFT here always compiles; it only takes effect when the crate
+    /// is built with the `bft` feature. Otherwise [`ClusterNode::start`] returns
+    /// an explicit configuration error.
     pub fn with_bft(mut self, enable: bool) -> Self {
         self.use_bft = enable;
         self
@@ -473,6 +500,11 @@ pub struct ClusterNode {
     running: Arc<RwLock<bool>>,
     byzantine_mode: Arc<RwLock<bool>>,
     network_isolated: Arc<RwLock<bool>>,
+    /// Byzantine fault-tolerant consensus manager, present only when the node
+    /// was started with `use_bft = true` and the `bft` feature is enabled.
+    /// Held so its background tasks keep running for the node's lifetime.
+    #[cfg(feature = "bft")]
+    bft_manager: Option<Arc<bft_consensus::BftConsensusManager>>,
 }
 
 impl ClusterNode {
@@ -490,7 +522,16 @@ impl ClusterNode {
             .await
             .map_err(|e| ClusterError::Other(format!("Failed to create data directory: {e}")))?;
 
-        // Initialize consensus manager
+        // Initialize consensus manager. `with_raft_network` feeds this
+        // node's own address and its peers' known addresses down to
+        // `RaftNode::set_network`, so `ConsensusManager::init()` (called
+        // from `ClusterNode::start`) can construct a real multi-node Raft
+        // instance rather than failing with `NetworkNotConfigured` (only a
+        // genuine single-node peer set works without it).
+        #[cfg(feature = "raft")]
+        let consensus = ConsensusManager::new(config.node_id, config.peers.clone())
+            .with_raft_network(config.address, config.peer_addresses.clone());
+        #[cfg(not(feature = "raft"))]
         let consensus = ConsensusManager::new(config.node_id, config.peers.clone());
 
         // Initialize discovery service
@@ -591,7 +632,52 @@ impl ClusterNode {
             running: Arc::new(RwLock::new(false)),
             byzantine_mode: Arc::new(RwLock::new(false)),
             network_isolated: Arc::new(RwLock::new(false)),
+            #[cfg(feature = "bft")]
+            bft_manager: None,
         })
+    }
+
+    /// Access the Byzantine fault-tolerant consensus manager, if this node was
+    /// started with `use_bft = true` and the `bft` feature is enabled.
+    #[cfg(feature = "bft")]
+    pub fn bft_manager(&self) -> Option<&Arc<bft_consensus::BftConsensusManager>> {
+        self.bft_manager.as_ref()
+    }
+
+    /// Construct and start the Byzantine fault-tolerant consensus manager for
+    /// this node, binding it to a persistent state-machine backend rooted at the
+    /// node's data directory. Stores the manager so its background tasks stay
+    /// alive for the node's lifetime.
+    #[cfg(feature = "bft")]
+    async fn start_bft_consensus(&mut self) -> Result<()> {
+        use crate::bft_consensus::BftConsensusManager;
+        use crate::network::NetworkConfig;
+        use crate::storage::{PersistentStorage, StorageConfig};
+
+        let storage_config = StorageConfig {
+            data_dir: self.config.data_dir.clone(),
+            ..StorageConfig::default()
+        };
+        let storage = Arc::new(
+            PersistentStorage::new(self.config.node_id, storage_config)
+                .await
+                .map_err(|e| {
+                    ClusterError::Storage(format!("failed to open BFT storage backend: {e}"))
+                })?,
+        );
+
+        let peers: Vec<String> = self.config.peers.iter().map(|p| p.to_string()).collect();
+        let manager = BftConsensusManager::new(
+            self.config.node_id.to_string(),
+            peers,
+            storage,
+            NetworkConfig::default(),
+        )
+        .await?;
+        manager.start().await?;
+
+        self.bft_manager = Some(Arc::new(manager));
+        Ok(())
     }
 
     /// Start the cluster node
@@ -602,6 +688,33 @@ impl ClusterNode {
                 return Ok(());
             }
             *running = true;
+        }
+
+        // Byzantine fault-tolerant consensus is opt-in via `NodeConfig::use_bft`
+        // and replaces the Raft path. When requested but the crate was built
+        // without the `bft` feature, fail loud rather than silently running Raft
+        // under a caller who explicitly asked for BFT.
+        if self.config.use_bft {
+            #[cfg(feature = "bft")]
+            {
+                self.start_bft_consensus().await?;
+                tracing::info!(
+                    "Cluster node {} started in Byzantine fault-tolerant mode",
+                    self.config.node_id
+                );
+                return Ok(());
+            }
+            #[cfg(not(feature = "bft"))]
+            {
+                let mut running = self.running.write().await;
+                *running = false;
+                return Err(ClusterError::Config(format!(
+                    "node {} requested Byzantine fault tolerance (use_bft = true) but this build \
+                     was compiled without the 'bft' feature; refusing to silently fall back to \
+                     Raft",
+                    self.config.node_id
+                )));
+            }
         }
 
         tracing::info!(
@@ -647,7 +760,14 @@ impl ClusterNode {
         Ok(())
     }
 
-    /// Stop the cluster node
+    /// Stop the cluster node.
+    ///
+    /// Models a real node crash/stop (not a graceful departure): this
+    /// node's Raft participation is torn down abruptly via
+    /// `ConsensusManager::stop_raft` (no leadership transfer — contrast
+    /// `graceful_shutdown`), so peers stop hearing from it and a healthy
+    /// remaining majority can elect a new leader if it was one. A later
+    /// `start()` call rebuilds and rejoins Raft from scratch.
     pub async fn stop(&mut self) -> Result<()> {
         let mut running = self.running.write().await;
         if !*running {
@@ -661,6 +781,14 @@ impl ClusterNode {
             .stop()
             .await
             .map_err(|e| ClusterError::Other(format!("Failed to stop discovery service: {e}")))?;
+
+        // Abruptly stop Raft participation so peers actually notice this
+        // node is gone (see doc comment above) and free the Raft RPC
+        // listener's port for a later `start()` to rebind.
+        self.consensus
+            .stop_raft()
+            .await
+            .map_err(|e| ClusterError::Other(format!("Failed to stop consensus: {e}")))?;
 
         *running = false;
 

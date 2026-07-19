@@ -1,21 +1,28 @@
 //! JIT Compiler for SPARQL-star Queries
 //!
-//! This module implements actual JIT compilation using scirs2_core::jit to generate
-//! native code from SPARQL-star query patterns.
+//! This module compiles SPARQL-star query patterns into `scirs2_core::jit`
+//! kernels: parsing, IR construction, and kernel compilation
+//! ([`SparqlJitCompiler::compile_ir`]) are real and functional.
 //!
 //! ## Architecture
 //!
 //! 1. **Parse**: SPARQL-star string → IR (Intermediate Representation)
 //! 2. **Optimize**: IR transformations (constant folding, join reordering)
 //! 3. **Compile**: IR → Native code (via scirs2_core::jit LLVM backend)
-//! 4. **Execute**: Native code execution with StarStore binding
+//! 4. **Execute**: **Not yet implemented.** [`SparqlJitCompiler::execute_compiled`]
+//!    always returns a typed error — there is no integration with
+//!    `scirs2_core::jit::execute_kernel` to load the compiled kernel and
+//!    actually run it against a `StarStore` yet. A kernel ID is produced and
+//!    cached by step 3, but nothing consumes it end-to-end today.
 //!
 //! ## Performance
 //!
-//! Expected speedup: 5-20x for hot queries
-//! - Simple patterns: 5-8x
-//! - Complex joins: 10-15x
-//! - Aggregations: 15-20x
+//! No speedup claim applies until step 4 (execute) is implemented: today,
+//! every query — including ones that have been "compiled" — actually runs
+//! through the real interpreted BGP executor
+//! ([`crate::jit_query_engine::JitQueryEngine`] falls back automatically
+//! when compiled execution errors). Do not advertise this module as
+//! delivering JIT speedups until `execute_compiled` is real.
 
 use super::ir::*;
 use crate::{StarError, StarResult, StarStore, StarTriple};

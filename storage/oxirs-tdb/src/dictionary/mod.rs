@@ -14,9 +14,12 @@
 //! This eliminates dictionary lookups for ~30-40% of common RDF literals,
 //! significantly improving query performance and reducing memory pressure.
 
+#[allow(dead_code, unused_imports, unused_variables)]
 pub mod inline_values;
+#[allow(dead_code, unused_imports, unused_variables)]
 pub mod node_id;
 pub mod node_table;
+#[allow(dead_code, unused_imports, unused_variables)]
 pub mod term;
 
 pub use inline_values::{InlineType, InlineValueCodec, InlineValueStats};
@@ -25,7 +28,7 @@ pub use node_table::NodeTable;
 pub use term::Term;
 
 use crate::error::Result;
-use crate::storage::BufferPool;
+use crate::storage::{BufferPool, PageId};
 use std::sync::Arc;
 
 /// High-level dictionary interface for RDF term encoding
@@ -39,6 +42,39 @@ impl Dictionary {
         Dictionary {
             node_table: NodeTable::new(buffer_pool),
         }
+    }
+
+    /// Reconstruct a dictionary from persisted B+Tree roots and the next id to
+    /// allocate (used when reopening a store from its superblock).
+    pub fn from_roots(
+        buffer_pool: Arc<BufferPool>,
+        term_to_id_root: Option<PageId>,
+        id_to_term_root: Option<PageId>,
+        next_id: NodeId,
+    ) -> Self {
+        Dictionary {
+            node_table: NodeTable::from_roots(
+                buffer_pool,
+                term_to_id_root,
+                id_to_term_root,
+                next_id,
+            ),
+        }
+    }
+
+    /// Root page of the `term_to_id` (node → id) B+Tree, for the superblock.
+    pub fn node_to_id_root(&self) -> Option<PageId> {
+        self.node_table.term_to_id_root()
+    }
+
+    /// Root page of the `id_to_term` B+Tree, for the superblock.
+    pub fn id_to_term_root(&self) -> Option<PageId> {
+        self.node_table.id_to_term_root()
+    }
+
+    /// Next dictionary [`NodeId`] to be allocated, for the superblock.
+    pub fn next_id(&self) -> NodeId {
+        self.node_table.next_id_value()
     }
 
     /// Encode a term to a NodeId (creates new mapping if needed)

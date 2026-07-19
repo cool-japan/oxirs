@@ -54,7 +54,7 @@
 use crate::error::TurtleParseError;
 use crate::formats::nquads::{NQuadsParser, NQuadsSerializer};
 use crate::formats::ntriples::{NTriplesParser, NTriplesSerializer};
-use crate::formats::trig::TriGParser;
+use crate::formats::trig::{TriGParser, TriGSerializer};
 use crate::formats::turtle::{TurtleParser, TurtleSerializer};
 use crate::toolkit::{Parser, RdfFormat, SerializationConfig, Serializer};
 use oxirs_core::model::{Quad, Triple};
@@ -357,9 +357,7 @@ impl FormatConverter {
                     .map_err(|e| ConversionError::SerializationError(e.to_string()))?;
             }
             RdfFormat::TriG => {
-                // TriG serialization not yet implemented in serializer
-                // For now, serialize as N-Quads
-                let serializer = NQuadsSerializer::new();
+                let serializer = TriGSerializer::new();
                 serializer
                     .serialize(quads, output)
                     .map_err(|e| ConversionError::SerializationError(e.to_string()))?;
@@ -469,6 +467,32 @@ ex:subject ex:predicate "object" .
 
         let result = String::from_utf8(output).expect("valid UTF-8");
         assert!(result.contains("<http://s>"));
+    }
+
+    #[test]
+    fn test_nquads_to_trig_uses_real_trig_syntax() {
+        // Regression test: TriG output must use graph-block syntax (`{ ... }`),
+        // not silently fall back to flat N-Quads lines.
+        let converter = FormatConverter::new();
+        let nquads = "<http://example.org/s> <http://example.org/p> <http://example.org/o> <http://example.org/g> .\n";
+
+        let result = converter
+            .convert_string(nquads, RdfFormat::NQuads, RdfFormat::TriG)
+            .expect("conversion should succeed");
+
+        // TriG groups the quad's triples inside a graph block named by the graph IRI.
+        assert!(
+            result.contains('{') && result.contains('}'),
+            "TriG output should contain a graph block, got: {result}"
+        );
+        assert!(result.contains("http://example.org/g"));
+        // N-Quads syntax repeats the graph name as a fourth term on the same line
+        // as the triple and never uses graph-block braces; make sure we didn't just
+        // emit that.
+        assert!(
+            !result.contains("<http://example.org/o> <http://example.org/g> ."),
+            "TriG output should not be flat N-Quads syntax, got: {result}"
+        );
     }
 
     #[test]

@@ -318,6 +318,16 @@ pub struct SamlAssertion {
     pub issuer: String,
     /// Extracted attributes
     pub attributes: HashMap<String, Vec<String>>,
+    /// Whether this assertion's XML signature was cryptographically verified
+    /// against the IdP certificate (via
+    /// [`crate::sso::saml_sp::SamlSpHelper::parse_response`] or an equivalent
+    /// verified path). Identity derived from an *unverified* assertion must not
+    /// be treated as trusted (see [`SsoUserProfile::email_verified`]).
+    ///
+    /// Defaults to `false` so that assertions deserialized or constructed
+    /// without an explicit verification step are treated as untrusted.
+    #[serde(default)]
+    pub signature_verified: bool,
 }
 
 impl SamlAssertion {
@@ -997,11 +1007,14 @@ impl SsoAuthManager {
 
         let session_expires = assertion.not_on_or_after;
 
+        // Only trust the email when the assertion's signature was actually
+        // verified upstream. An unverified assertion (signature_verified=false)
+        // must not yield a "verified" identity — that would be an auth bypass.
         let user_profile = SsoUserProfile {
             subject_id: assertion.name_id.clone(),
             provider_id: provider_id.to_string(),
             email: email.clone(),
-            email_verified: true, // SAML assertions are trusted
+            email_verified: assertion.signature_verified,
             display_name,
             idp_groups,
             roles,

@@ -310,6 +310,57 @@ pub enum Aggregate {
     },
 }
 
+/// Canonicalize a function name to a SPARQL set-aggregate name, or `None` if it
+/// is not an aggregate.
+///
+/// The parser encodes an unprefixed function name as `":NAME"`, so the leading
+/// colon is stripped before matching, and matching is case-insensitive. The
+/// returned value is the canonical uppercase spelling used in arity error
+/// messages (`COUNT`, `SUM`, `MIN`, `MAX`, `AVG`, `SAMPLE`, `GROUP_CONCAT`).
+///
+/// This is the single source of truth for aggregate-name recognition shared by
+/// the parse-time `HAVING` arity validator and the executor's defense-in-depth
+/// check, so both agree on exactly which function calls are aggregates.
+pub fn aggregate_function_name(name: &str) -> Option<&'static str> {
+    match name.trim_start_matches(':').to_ascii_uppercase().as_str() {
+        "COUNT" => Some("COUNT"),
+        "SUM" => Some("SUM"),
+        "MIN" => Some("MIN"),
+        "MAX" => Some("MAX"),
+        "AVG" => Some("AVG"),
+        "SAMPLE" => Some("SAMPLE"),
+        "GROUP_CONCAT" => Some("GROUP_CONCAT"),
+        _ => None,
+    }
+}
+
+/// Validate the argument count of an aggregate function call as used in a
+/// `HAVING` condition.
+///
+/// `COUNT` accepts 0 or 1 argument; every other aggregate requires exactly one.
+/// A non-aggregate function name is not this helper's concern and returns
+/// `Ok(())`. The `Err` strings are the exact texts the executor's
+/// `function_to_aggregate` (and its tests) rely on, so the parser and the
+/// executor reject the same malformed queries with identical messages.
+pub fn check_aggregate_arity(name: &str, arg_count: usize) -> Result<(), String> {
+    let Some(canonical) = aggregate_function_name(name) else {
+        return Ok(());
+    };
+    match canonical {
+        "COUNT" => {
+            if arg_count > 1 {
+                return Err("COUNT in HAVING expects at most one argument".to_string());
+            }
+        }
+        other => {
+            if arg_count != 1 {
+                return Err(format!("{other} in HAVING expects exactly one argument"));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Variable binding
 pub type Binding = HashMap<Variable, Term>;
 

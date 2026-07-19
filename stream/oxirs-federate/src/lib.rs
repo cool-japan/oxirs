@@ -1,9 +1,9 @@
 //! # OxiRS Federation - Federated Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-federate/badge.svg)](https://docs.rs/oxirs-federate)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Federated query processing capabilities for SPARQL and GraphQL with service discovery,
@@ -837,11 +837,21 @@ impl FederationEngine {
         })
     }
 
-    /// Update service capabilities through discovery
+    /// Update service capabilities through discovery.
+    ///
+    /// Re-runs live capability detection (SPARQL Service Description probing
+    /// and GraphQL introspection, see [`ServiceRegistry::refresh_capabilities`])
+    /// against every currently registered service and updates the registry in
+    /// place. A single unreachable service does not fail the whole call (it
+    /// just keeps its last-known capabilities); this only errors if the
+    /// refresh could not run at all.
     pub async fn discover_services(&self) -> Result<()> {
-        // Fixed: lib.rs now uses FederatedServiceRegistry from service.rs
-        // discovery.rs uses ServiceRegistry from service_registry.rs - different purposes
-        warn!("Service discovery temporarily disabled due to type conflicts");
+        let registry = self.service_registry.read().await;
+        let stats = registry.refresh_capabilities().await?;
+        info!(
+            "Service discovery refresh complete: {}/{} services refreshed ({} failed)",
+            stats.refreshed, stats.total_services, stats.failed
+        );
         Ok(())
     }
 
@@ -1365,6 +1375,19 @@ mod tests {
             .expect("async operation should succeed");
 
         assert_eq!(stats.registry.total_sparql_endpoints, 0);
+    }
+
+    /// Regression test for lib.rs:841 — `discover_services()` used to always
+    /// short-circuit with `warn!("...disabled...") + Ok(())` regardless of
+    /// registry state. It now delegates to `ServiceRegistry::refresh_capabilities`,
+    /// so at minimum it must still complete successfully against an empty registry.
+    #[tokio::test]
+    async fn test_discover_services_delegates_to_registry_refresh() {
+        let engine = FederationEngine::new();
+        engine
+            .discover_services()
+            .await
+            .expect("discover_services should succeed against an empty registry");
     }
 
     #[tokio::test]

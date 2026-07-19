@@ -1,6 +1,7 @@
 //! Enhanced vector store with embedding management, advanced features, and persistence.
 
 use anyhow::Result;
+use parking_lot::Mutex;
 use std::collections::HashMap;
 
 use crate::embeddings;
@@ -30,7 +31,12 @@ impl Default for VectorStoreConfig {
 /// Enhanced vector store with embedding management and advanced features
 pub struct VectorStore {
     index: Box<dyn VectorIndex>,
-    embedding_manager: Option<embeddings::EmbeddingManager>,
+    /// Embedding manager guarded by a mutex for interior mutability: `get_embedding`
+    /// requires `&mut self` (it maintains an internal cache), but read-only search
+    /// APIs (`similarity_search`, `threshold_search`, `advanced_search`) only have
+    /// `&self`. Wrapping in a `Mutex` lets those paths compute *real* embeddings
+    /// instead of silently falling back to a hash-based pseudo-vector.
+    embedding_manager: Mutex<Option<embeddings::EmbeddingManager>>,
     config: VectorStoreConfig,
 }
 
@@ -39,7 +45,7 @@ impl VectorStore {
     pub fn new() -> Self {
         Self {
             index: Box::new(MemoryVectorIndex::new()),
-            embedding_manager: None,
+            embedding_manager: Mutex::new(None),
             config: VectorStoreConfig::default(),
         }
     }
@@ -50,7 +56,7 @@ impl VectorStore {
 
         Ok(Self {
             index: Box::new(MemoryVectorIndex::new()),
-            embedding_manager: Some(embedding_manager),
+            embedding_manager: Mutex::new(Some(embedding_manager)),
             config: VectorStoreConfig::default(),
         })
     }
@@ -59,7 +65,7 @@ impl VectorStore {
     pub fn with_index(index: Box<dyn VectorIndex>) -> Self {
         Self {
             index,
-            embedding_manager: None,
+            embedding_manager: Mutex::new(None),
             config: VectorStoreConfig::default(),
         }
     }
@@ -73,7 +79,7 @@ impl VectorStore {
 
         Ok(Self {
             index,
-            embedding_manager: Some(embedding_manager),
+            embedding_manager: Mutex::new(Some(embedding_manager)),
             config: VectorStoreConfig::default(),
         })
     }
@@ -86,12 +92,19 @@ impl VectorStore {
 
     /// Index a resource with automatic embedding generation
     pub fn index_resource(&mut self, uri: String, content: &str) -> Result<()> {
-        if let Some(ref mut embedding_manager) = self.embedding_manager {
+        let mut guard = self.embedding_manager.lock();
+        if let Some(ref mut embedding_manager) = *guard {
             let embeddable_content = embeddings::EmbeddableContent::Text(content.to_string());
             let vector = embedding_manager.get_embedding(&embeddable_content)?;
+            drop(guard);
             self.index.insert(uri, vector)
         } else {
-            // Generate a simple hash-based vector as fallback
+            drop(guard);
+            // No embedding manager configured: fall back to a hash-based vector.
+            tracing::warn!(
+                "index_resource: no embedding manager configured for '{}', using hash-based fallback vector",
+                uri
+            );
             let vector = self.generate_fallback_vector(content);
             self.index.insert(uri, vector)
         }
@@ -105,7 +118,8 @@ impl VectorStore {
         description: Option<String>,
         properties: std::collections::HashMap<String, Vec<String>>,
     ) -> Result<()> {
-        if let Some(ref mut embedding_manager) = self.embedding_manager {
+        let mut guard = self.embedding_manager.lock();
+        if let Some(ref mut embedding_manager) = *guard {
             let embeddable_content = embeddings::EmbeddableContent::RdfResource {
                 uri: uri.clone(),
                 label,
@@ -113,6 +127,7 @@ impl VectorStore {
                 properties,
             };
             let vector = embedding_manager.get_embedding(&embeddable_content)?;
+            drop(guard);
             self.index.insert(uri, vector)
         } else {
             Err(anyhow::anyhow!(
@@ -126,17 +141,26 @@ impl VectorStore {
         self.index.insert(uri, vector)
     }
 
+    /// Compute a query vector for `text`, using the configured embedding manager
+    /// when present (real embedding, including cache reuse) and only falling
+    /// back to a hash-based pseudo-vector when no manager is configured at all.
+    fn compute_query_vector(&self, text: &str) -> Result<Vector> {
+        let mut guard = self.embedding_manager.lock();
+        if let Some(ref mut embedding_manager) = *guard {
+            let embeddable_content = embeddings::EmbeddableContent::Text(text.to_string());
+            embedding_manager.get_embedding(&embeddable_content)
+        } else {
+            drop(guard);
+            tracing::warn!(
+                "similarity search: no embedding manager configured, using hash-based fallback vector for query"
+            );
+            Ok(self.generate_fallback_vector(text))
+        }
+    }
+
     /// Search for similar resources using text query
     pub fn similarity_search(&self, query: &str, limit: usize) -> Result<Vec<(String, f32)>> {
-        let query_vector = if let Some(ref _embedding_manager) = self.embedding_manager {
-            let _embeddable_content = embeddings::EmbeddableContent::Text(query.to_string());
-            // We need a mutable reference, but we only have an immutable one
-            // For now, generate a fallback vector
-            self.generate_fallback_vector(query)
-        } else {
-            self.generate_fallback_vector(query)
-        };
-
+        let query_vector = self.compute_query_vector(query)?;
         self.index.search_knn(&query_vector, limit)
     }
 
@@ -151,14 +175,14 @@ impl VectorStore {
 
     /// Find resources within similarity threshold
     pub fn threshold_search(&self, query: &str, threshold: f32) -> Result<Vec<(String, f32)>> {
-        let query_vector = self.generate_fallback_vector(query);
+        let query_vector = self.compute_query_vector(query)?;
         self.index.search_threshold(&query_vector, threshold)
     }
 
     /// Advanced search with multiple options
     pub fn advanced_search(&self, options: SearchOptions) -> Result<Vec<(String, f32)>> {
         let query_vector = match options.query {
-            SearchQuery::Text(text) => self.generate_fallback_vector(&text),
+            SearchQuery::Text(text) => self.compute_query_vector(&text)?,
             SearchQuery::Vector(vector) => vector,
         };
 
@@ -195,12 +219,15 @@ impl VectorStore {
 
     /// Get embedding manager statistics
     pub fn embedding_stats(&self) -> Option<(usize, usize)> {
-        self.embedding_manager.as_ref().map(|em| em.cache_stats())
+        self.embedding_manager
+            .lock()
+            .as_ref()
+            .map(|em| em.cache_stats())
     }
 
     /// Build vocabulary for TF-IDF embeddings
     pub fn build_vocabulary(&mut self, documents: &[String]) -> Result<()> {
-        if let Some(ref mut embedding_manager) = self.embedding_manager {
+        if let Some(ref mut embedding_manager) = *self.embedding_manager.lock() {
             embedding_manager.build_vocabulary(documents)
         } else {
             Ok(()) // No-op if no embedding manager
@@ -329,11 +356,23 @@ impl VectorStore {
     /// manager (in-memory cache only) is **not** persisted; call
     /// `with_embedding_strategy` again after loading if needed.
     ///
-    /// Only vectors held by index types that override
-    /// [`VectorIndex::iter_vectors`] (e.g. `MemoryVectorIndex`) are saved;
-    /// other index implementations return an empty list by default.
+    /// Only index types that report [`VectorIndex::supports_enumeration`] as
+    /// `true` (e.g. `MemoryVectorIndex`, `HnswIndex`, `IvfIndex`, `PQIndex`)
+    /// can be saved this way. Index types that cannot enumerate their vectors
+    /// cause this to return an error rather than silently persisting an
+    /// empty (and misleading) snapshot.
     pub fn save_to_disk(&self, path: &str) -> Result<()> {
         use anyhow::Context as _;
+
+        if !self.index.supports_enumeration() {
+            return Err(anyhow::anyhow!(
+                "save_to_disk: the configured index type does not support full \
+                 vector enumeration (VectorIndex::supports_enumeration() == false); \
+                 refusing to write a silently-empty vectors.json. Use an index type \
+                 that implements iter_vectors/supports_enumeration (e.g. \
+                 MemoryVectorIndex, HnswIndex, IvfIndex, PQIndex)."
+            ));
+        }
 
         std::fs::create_dir_all(path)
             .with_context(|| format!("Failed to create directory: {}", path))?;
@@ -390,7 +429,7 @@ impl VectorStore {
         // --- reconstruct ---
         let mut store = Self {
             index: Box::new(MemoryVectorIndex::new()),
-            embedding_manager: None,
+            embedding_manager: Mutex::new(None),
             config,
         };
 
@@ -435,9 +474,16 @@ impl VectorStoreTrait for VectorStore {
     }
 
     fn get_all_vector_ids(&self) -> Result<Vec<VectorId>> {
-        // For now, return empty vec as VectorIndex doesn't provide this method
-        // This could be enhanced if the underlying index supports it
-        Ok(Vec::new())
+        // Delegates to the same iter_vectors() enumeration used by
+        // save_to_disk/VectorStore::iter_vectors, so this only returns real
+        // IDs for index types that support enumeration; other index types
+        // return an empty list (consistent with `len()` below).
+        Ok(self
+            .index
+            .iter_vectors()
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect())
     }
 
     fn search_similar(&self, query: &Vector, k: usize) -> Result<Vec<(VectorId, f32)>> {
@@ -445,16 +491,18 @@ impl VectorStoreTrait for VectorStore {
     }
 
     fn remove_vector(&mut self, id: &VectorId) -> Result<bool> {
-        // VectorIndex trait doesn't have remove, so we'll return false for now
-        // This could be enhanced in the future if needed
-        let _ = id;
-        Ok(false)
+        // Delegate to the underlying VectorIndex::remove_vector, matching the
+        // crate's own inherent `VectorStore::remove_vector` method.
+        match self.index.remove_vector(id.clone()) {
+            Ok(()) => Ok(true),
+            Err(_) => Ok(false),
+        }
     }
 
     fn len(&self) -> usize {
-        // VectorIndex trait doesn't have len, so we'll return 0 for now
-        // This could be enhanced in the future if needed
-        0
+        // Consistent with get_all_vector_ids(): counts vectors via the same
+        // enumeration path so both agree for enumerable index types.
+        self.index.iter_vectors().len()
     }
 }
 

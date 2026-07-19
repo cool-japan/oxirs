@@ -37,7 +37,7 @@ use crate::{
     websocket::{SubscriptionManager, WebSocketConfig},
 };
 use axum::{
-    extract::{Path, Query, Request, State},
+    extract::{DefaultBodyLimit, Path, Query, Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Json, Response},
@@ -47,6 +47,7 @@ use axum::{
 #[cfg(feature = "rate-limit")]
 use governor::{Quota, RateLimiter};
 use oxirs_core::audit::InMemoryAuditLogger;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 #[cfg(feature = "rate-limit")]
 use std::num::NonZeroU32;
@@ -73,6 +74,7 @@ pub struct Runtime {
     batch_executor: Option<Arc<BatchExecutor>>,
     stream_manager: Option<Arc<StreamManager>>,
     dataset_manager: Option<Arc<DatasetManager>>,
+    api_key_service: Option<Arc<crate::handlers::api_keys::ApiKeyService>>,
     security_auditor: Option<Arc<SecurityAuditManager>>,
     ddos_protector: Option<Arc<DDoSProtectionManager>>,
     load_balancer: Option<Arc<LoadBalancer>>,
@@ -115,6 +117,7 @@ impl Runtime {
             batch_executor: None,
             stream_manager: None,
             dataset_manager: None,
+            api_key_service: None,
             security_auditor: None,
             ddos_protector: None,
             load_balancer: None,
@@ -148,8 +151,7 @@ impl Runtime {
             self.auth_service = Some(auth_service);
         }
         info!("Initializing ReBAC manager");
-        let rebac_manager = Arc::new(crate::auth::rebac::InMemoryRebacManager::new());
-        self.rebac_manager = Some(rebac_manager as Arc<dyn crate::auth::rebac::RebacEvaluator>);
+        self.rebac_manager = Some(build_rebac_manager(&self.config, self.store.clone()));
         if self.config.monitoring.metrics.enabled {
             info!("Initializing metrics service");
             let metrics_service = MetricsService::new(self.config.monitoring.clone())?;
@@ -282,6 +284,19 @@ impl Runtime {
         };
         let dataset_manager = DatasetManager::new(dataset_config).await?;
         self.dataset_manager = Some(dataset_manager);
+        info!("Initializing persistent API key service");
+        match crate::handlers::api_keys::ApiKeyService::open(
+            crate::handlers::api_keys::default_api_key_store_path(),
+        )
+        .await
+        {
+            Ok(service) => self.api_key_service = Some(Arc::new(service)),
+            Err(e) => warn!(
+                "Failed to initialize API key service ({}); /$/api-keys endpoints will report 503 \
+                 rather than silently accepting keys that can never be persisted",
+                e
+            ),
+        }
         info!("Beta.2 Performance & Scalability modules initialized successfully");
         info!("Initializing RC.1 Security Auditor");
         let audit_config = SecurityAuditConfig {
@@ -443,6 +458,56 @@ impl Runtime {
                             info!("Configuration hot-reload is now active");
                             self.config_reload_manager =
                                 Some(Arc::new(parking_lot::Mutex::new(manager)));
+                            // `shared_config` is the mutation target ConfigReloadManager
+                            // writes into on every file-watch-triggered reload, but
+                            // AppState::config is an immutable per-request snapshot
+                            // (see its docs) that most handlers read directly, so a
+                            // full live swap is out of scope here. What *is* safely
+                            // reconcilable without touching handler-visible config
+                            // reads is the dataset registry: `dataset_manager` is
+                            // already a real, shared, mutable store (see
+                            // `handlers::admin::reload_config` for the equivalent
+                            // logic on the `/$/reload` HTTP path). Poll for dataset
+                            // additions/removals so `shared_config` is not simply
+                            // logged as "reloaded" and then discarded.
+                            if let Some(dataset_manager) = self.dataset_manager.clone() {
+                                let watched_config = shared_config.clone();
+                                let mut known_datasets: std::collections::HashSet<String> =
+                                    self.config.datasets.keys().cloned().collect();
+                                tokio::spawn(async move {
+                                    let mut interval =
+                                        tokio::time::interval(Duration::from_secs(2));
+                                    loop {
+                                        interval.tick().await;
+                                        let current: std::collections::HashSet<String> =
+                                            watched_config
+                                                .read()
+                                                .await
+                                                .datasets
+                                                .keys()
+                                                .cloned()
+                                                .collect();
+                                        for name in current.difference(&known_datasets) {
+                                            if dataset_manager.get_dataset(name).await.is_err() {
+                                                match dataset_manager
+                                                    .create_dataset(name.clone(), None)
+                                                    .await
+                                                {
+                                                    Ok(_) => info!(
+                                                        "Hot-reload: applied new dataset '{}' from config file",
+                                                        name
+                                                    ),
+                                                    Err(e) => warn!(
+                                                        "Hot-reload: failed to create dataset '{}': {}",
+                                                        name, e
+                                                    ),
+                                                }
+                                            }
+                                        }
+                                        known_datasets = current;
+                                    }
+                                });
+                            }
                         }
                     }
                     Err(e) => {
@@ -472,6 +537,7 @@ impl Runtime {
         self.initialize_services().await?;
         let addr = self.addr;
         let config = self.config.clone();
+        warn_on_read_only_dataset_config(&config);
         let app_state = AppState {
             store: self.store.clone(),
             config: config.clone(),
@@ -487,6 +553,7 @@ impl Runtime {
             batch_executor: self.batch_executor.clone(),
             stream_manager: self.stream_manager.clone(),
             dataset_manager: self.dataset_manager.clone(),
+            api_key_service: self.api_key_service.clone(),
             security_auditor: self.security_auditor.clone(),
             ddos_protector: self.ddos_protector.clone(),
             load_balancer: self.load_balancer.clone(),
@@ -538,8 +605,15 @@ impl Runtime {
         info!("Server shutdown complete");
         Ok(())
     }
-    /// Build the application with all routes and middleware
-    async fn build_app(&self, state: Arc<AppState>) -> FusekiResult<Router> {
+    /// Build the application with all routes and middleware.
+    ///
+    /// `pub(crate)` (rather than private) so the real production router can
+    /// be exercised directly by regression tests (see
+    /// `production_router_tests` below) instead of only through a
+    /// hand-maintained parallel mock router — a revert that breaks route
+    /// registration (e.g. a re-introduced duplicate path+method pair, which
+    /// axum 0.8 panics on) would otherwise pass the whole test suite.
+    pub(crate) async fn build_app(&self, state: Arc<AppState>) -> FusekiResult<Router> {
         let mut app = Router::new();
         app = app.route(
             "/sparql",
@@ -563,7 +637,7 @@ impl Runtime {
                 get(prefix_list_handler).post(prefix_add_handler),
             )
             .route(
-                "/$/prefixes/:prefix",
+                "/$/prefixes/{prefix}",
                 get(prefix_get_handler)
                     .put(prefix_update_handler)
                     .delete(prefix_delete_handler),
@@ -573,10 +647,10 @@ impl Runtime {
             .route("/$/tasks", get(task_list_handler).post(task_create_handler))
             .route("/$/tasks/statistics", get(task_statistics_handler))
             .route(
-                "/$/tasks/:id",
+                "/$/tasks/{id}",
                 get(task_get_handler).delete(task_delete_handler),
             )
-            .route("/$/tasks/:id/cancel", post(task_cancel_handler));
+            .route("/$/tasks/{id}/cancel", post(task_cancel_handler));
         app = app
             .route("/$/logs", get(logs_get_handler).delete(logs_clear_handler))
             .route("/$/logs/statistics", get(logs_statistics_handler))
@@ -586,7 +660,7 @@ impl Runtime {
             );
         app = app
             .route("/$/stats", get(stats_server_handler))
-            .route("/$/stats/:dataset", get(stats_dataset_handler));
+            .route("/$/stats/{dataset}", get(stats_dataset_handler));
         app = app
             .route(
                 "/$/performance/stats",
@@ -631,7 +705,7 @@ impl Runtime {
                 get(handlers::production::list_backends).post(handlers::production::add_backend),
             )
             .route(
-                "/$/load-balancer/backends/:id",
+                "/$/load-balancer/backends/{id}",
                 axum::routing::delete(handlers::production::remove_backend),
             )
             .route(
@@ -654,7 +728,7 @@ impl Runtime {
         app = app
             .route("/$/cdn/config", get(handlers::production::cdn_config))
             .route(
-                "/static/*path",
+                "/static/{*path}",
                 get(handlers::production::serve_static_asset),
             );
         app = app
@@ -690,20 +764,20 @@ impl Runtime {
                 get(handlers::api_keys::list_api_keys).post(handlers::api_keys::create_api_key),
             )
             .route(
-                "/$/api-keys/:key_id",
+                "/$/api-keys/{key_id}",
                 get(handlers::api_keys::get_api_key)
                     .put(handlers::api_keys::update_api_key)
                     .delete(handlers::api_keys::revoke_api_key),
             )
             .route(
-                "/$/api-keys/:key_id/usage",
+                "/$/api-keys/{key_id}/usage",
                 get(handlers::api_keys::get_api_key_usage),
             );
         app = app.route("/update", post(handlers::sparql::update_handler));
         app = app
             .route("/$/datasets", get(handlers::admin::list_datasets))
             .route(
-                "/$/datasets/:name",
+                "/$/datasets/{name}",
                 get(handlers::admin::get_dataset)
                     .post(handlers::admin::create_dataset)
                     .delete(handlers::admin::delete_dataset),
@@ -724,9 +798,20 @@ impl Runtime {
         app = app
             .route("/$/ping", get(ping_handler))
             .route("/$/server", get(handlers::admin::server_info))
-            .route("/$/stats", get(handlers::admin::server_stats))
-            .route("/$/compact/:name", post(handlers::admin::compact_dataset))
-            .route("/$/backup/:name", post(handlers::admin::backup_dataset))
+            // NOTE: `GET /$/stats` is registered once, above via
+            // `.route("/$/stats", get(stats_server_handler))`.
+            // A second `GET /$/stats -> handlers::admin::server_stats`
+            // registration used to live here too; axum 0.8 panics on
+            // overlapping method+path routes, so the duplicate was removed
+            // rather than merged, which silently dropped
+            // `server_stats`'s uptime/requests/memory/cpu/connections
+            // fields from the response. `stats_server_handler` now calls
+            // `handlers::admin::collect_runtime_stats` itself and nests the
+            // result under a `"runtime"` key, so both shapes are present in
+            // the one surviving response — see `stats_server_handler` in
+            // `server/functions.rs`.
+            .route("/$/compact/{name}", post(handlers::admin::compact_dataset))
+            .route("/$/backup/{name}", post(handlers::admin::backup_dataset))
             .route("/$/backups-list", get(handlers::list_backups))
             .route("/$/reload", post(handlers::reload_config));
         app = app
@@ -798,12 +883,12 @@ impl Runtime {
                 app = app
                     .route("/auth/mfa/enroll", post(handlers::enroll_mfa))
                     .route(
-                        "/auth/mfa/challenge/:type",
+                        "/auth/mfa/challenge/{type}",
                         post(handlers::create_mfa_challenge),
                     )
                     .route("/auth/mfa/verify", post(handlers::verify_mfa))
                     .route("/auth/mfa/status", get(handlers::get_mfa_status))
-                    .route("/auth/mfa/disable/:type", delete(handlers::disable_mfa))
+                    .route("/auth/mfa/disable/{type}", delete(handlers::disable_mfa))
                     .route(
                         "/auth/mfa/backup-codes",
                         post(handlers::regenerate_backup_codes),
@@ -817,39 +902,16 @@ impl Runtime {
         if state.metrics_service.is_some() {
             app = app.route("/metrics", get(handlers::production::metrics_handler));
         }
+        // NOTE: /$/performance/{stats,memory,concurrency,memory/gc,health} (lines
+        // 658-677) and the /$/profiler/{report,query-stats,reset} trio (lines
+        // 679-690) are already registered unconditionally above; axum 0.8 panics
+        // on overlapping method+path routes. Keep only the paths not registered earlier.
         app = app
             .route(
                 "/$/performance",
                 get(handlers::performance::get_performance_stats),
             )
-            .route(
-                "/$/performance/memory",
-                get(handlers::performance::get_memory_stats),
-            )
-            .route(
-                "/$/performance/concurrency",
-                get(handlers::performance::get_concurrency_stats),
-            )
-            .route("/$/performance/gc", post(handlers::performance::trigger_gc))
-            .route(
-                "/$/performance/health",
-                get(handlers::performance::beta2_health_check),
-            );
-        if state.performance_profiler.is_some() {
-            app = app
-                .route(
-                    "/$/profiler/report",
-                    get(handlers::performance::profiler_report_handler),
-                )
-                .route(
-                    "/$/profiler/query-stats",
-                    get(handlers::performance::profiler_query_stats_handler),
-                )
-                .route(
-                    "/$/profiler/reset",
-                    post(handlers::performance::profiler_reset_handler),
-                );
-        }
+            .route("/$/performance/gc", post(handlers::performance::trigger_gc));
         if state.query_optimizer.is_some() {
             app = app
                 .route(
@@ -869,9 +931,13 @@ impl Runtime {
                     get(handlers::performance::database_statistics_handler),
                 );
         }
+        // Routed to the store/auth-integrated `crate::websocket::websocket_handler`
+        // (which owns the shared `AppState::subscription_manager`), not the
+        // quarantined `handlers::websocket::websocket_handler` — see that
+        // module's docs for why it must not be used here.
         app = app
-            .route("/$/ws", get(handlers::websocket_handler))
-            .route("/$/subscribe", get(handlers::websocket_handler));
+            .route("/$/ws", get(crate::websocket::websocket_handler))
+            .route("/$/subscribe", get(crate::websocket::websocket_handler));
         info!("Enabling GraphQL API routes");
         app = app
             .route(
@@ -888,16 +954,16 @@ impl Runtime {
                 get(handlers::ngsi_query_entities).post(handlers::ngsi_create_entity),
             )
             .route(
-                "/ngsi-ld/v1/entities/:id",
+                "/ngsi-ld/v1/entities/{id}",
                 get(handlers::ngsi_get_entity).delete(handlers::ngsi_delete_entity),
             )
             .route(
-                "/ngsi-ld/v1/entities/:id/attrs",
+                "/ngsi-ld/v1/entities/{id}/attrs",
                 post(handlers::ngsi_ld::append_entity_attrs_server)
                     .patch(handlers::ngsi_update_entity),
             )
             .route(
-                "/ngsi-ld/v1/entities/:id/attrs/:attrId",
+                "/ngsi-ld/v1/entities/{id}/attrs/{attrId}",
                 delete(handlers::ngsi_ld::delete_entity_attr_server),
             )
             .route(
@@ -905,7 +971,7 @@ impl Runtime {
                 get(handlers::ngsi_list_subscriptions).post(handlers::ngsi_create_subscription),
             )
             .route(
-                "/ngsi-ld/v1/subscriptions/:id",
+                "/ngsi-ld/v1/subscriptions/{id}",
                 get(handlers::ngsi_get_subscription)
                     .patch(handlers::ngsi_update_subscription)
                     .delete(handlers::ngsi_delete_subscription),
@@ -931,7 +997,7 @@ impl Runtime {
                 get(handlers::ngsi_query_temporal).post(handlers::ngsi_create_temporal),
             )
             .route(
-                "/ngsi-ld/v1/temporal/entities/:id",
+                "/ngsi-ld/v1/temporal/entities/{id}",
                 get(handlers::ngsi_get_temporal).delete(handlers::ngsi_delete_temporal),
             );
         app = crate::rest_api_v2::register_routes(app);
@@ -1028,6 +1094,23 @@ impl Runtime {
         } else {
             debug!("RBAC middleware disabled - authentication not required");
         }
+        // axum defaults every whole-body-buffering extractor (`Bytes`, `String`,
+        // `Json<T>`, ...) to a 2MiB request body cap. `/upload`, `/update`, and
+        // Graph Store Protocol PUT/POST all buffer the full body, so without an
+        // explicit override any bulk RDF load or SPARQL Update bigger than 2MiB
+        // is silently rejected. Default to a generous 1GiB, overridable via
+        // `OXIRS_MAX_BODY_BYTES` for deployments that need a stricter (or even
+        // larger) cap without a code change.
+        let max_body_bytes: usize = std::env::var("OXIRS_MAX_BODY_BYTES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|&n: &usize| n > 0)
+            .unwrap_or(1024 * 1024 * 1024);
+        info!(
+            "Request body size limit: {} bytes (override with OXIRS_MAX_BODY_BYTES)",
+            max_body_bytes
+        );
+        app = app.layer(DefaultBodyLimit::max(max_body_bytes));
         app = app.layer(SetRequestIdLayer::x_request_id(RequestIdGenerator));
         app = app.layer(TraceLayer::new_for_http());
         app = app.layer(TimeoutLayer::with_status_code(
@@ -1137,6 +1220,116 @@ impl Runtime {
         warn!("Graceful shutdown timeout reached, forcing exit");
     }
 }
+/// Decide whether at least one configured dataset has a non-empty on-disk
+/// `location`, i.e. whether this deployment persists data across restarts.
+///
+/// Extracted as a standalone, side-effect-free function so the ReBAC backend
+/// selection below is unit testable without spinning up a full `Runtime`.
+fn has_persistent_dataset_location(datasets: &HashMap<String, DatasetConfigAlias>) -> bool {
+    datasets.values().any(|d| !d.location.trim().is_empty())
+}
+
+/// Alias avoiding ambiguity between `crate::config::DatasetConfig` (used by
+/// `ServerConfig::datasets`) and `crate::dataset_management::DatasetConfig`
+/// (imported above as `DatasetConfig`) in this module.
+type DatasetConfigAlias = crate::config::DatasetConfig;
+
+/// Startup diagnostics for `read_only` dataset configuration versus what
+/// [`AppState::is_dataset_read_only`] can actually resolve.
+///
+/// [`AppState::is_dataset_read_only`] special-cases the single-dataset
+/// deployment: with exactly one configured dataset, any name a guard queries
+/// resolves to that one entry, so `read_only` is always honored regardless
+/// of naming. Once a *second* dataset is configured, resolution reverts to
+/// an exact per-key lookup — and most write guards in this crate (Graph
+/// Store Protocol, `/upload`, `/patch`, and the mutating `/$/...` admin
+/// endpoints that are not scoped to a single path-parameter dataset name)
+/// key that lookup on the literal string `"default"`. A `read_only = true`
+/// dataset configured under any other name in a multi-dataset deployment is
+/// therefore invisible to those guards. This function cannot fix that at
+/// runtime (each guard would need real per-request dataset routing, which is
+/// a larger change), but it makes the situation loud instead of silent:
+/// a WARN every time multiple datasets are configured with at least one
+/// `read_only`, escalating to ERROR when the specific "declared read_only
+/// but named such that the default-keyed guards can never see it"
+/// misconfiguration is detected.
+fn warn_on_read_only_dataset_config(config: &ServerConfig) {
+    if config.datasets.len() <= 1 {
+        // Zero or one dataset: `AppState::is_dataset_read_only` resolves any
+        // queried name to the sole entry (or to `false` when there is none),
+        // so every guard call site sees the correct effective flag no matter
+        // which literal key it happens to pass. Nothing to warn about.
+        return;
+    }
+
+    let mut read_only_datasets: Vec<&str> = config
+        .datasets
+        .iter()
+        .filter(|(_, cfg)| cfg.read_only)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    read_only_datasets.sort_unstable();
+
+    if read_only_datasets.is_empty() {
+        return;
+    }
+
+    warn!(
+        "{} datasets are configured and the following are marked read_only: {:?}. \
+         Write guards keyed on a specific request-provided dataset name (SPARQL \
+         UPDATE, and the `/$/datasets/{{name}}`, `/$/compact/{{name}}` admin \
+         endpoints) resolve correctly per-dataset, but the Graph Store Protocol, \
+         `/upload`, `/patch`, and `/$/reload` guards currently key their lookup on \
+         the literal string \"default\". Confirm every read_only dataset above that \
+         must be protected on those paths is reachable as \"default\"; otherwise \
+         writes to it via those specific endpoints are NOT blocked.",
+        config.datasets.len(),
+        read_only_datasets
+    );
+
+    if !read_only_datasets.contains(&"default") {
+        error!(
+            "Misconfiguration: dataset(s) {:?} are read_only, but none of them is \
+             named \"default\" and {} datasets are configured (multi-dataset mode). \
+             The Graph Store Protocol, `/upload`, `/patch`, and `/$/reload` write \
+             guards key their read_only lookup on the literal string \"default\" and \
+             will NEVER consult these datasets' read_only flag, leaving those write \
+             paths unprotected for them. Rename the intended read-only dataset to \
+             \"default\", or restrict write access to it through another mechanism.",
+            read_only_datasets,
+            config.datasets.len()
+        );
+    }
+}
+
+/// Build the ReBAC backend for `Runtime::initialize_services`.
+///
+/// When at least one configured dataset has a persistent (on-disk) location,
+/// relationship/ACL grants are stored durably in the RDF store itself via
+/// [`crate::auth::rdf_rebac::RdfRebacManagerProduction`] (SPARQL ASK/INSERT/
+/// DELETE against a dedicated `urn:oxirs:auth:relationships` graph), so they
+/// survive process restarts. Pure in-memory (ephemeral) deployments keep the
+/// lightweight `InMemoryRebacManager`, since there is no durable location to
+/// write to and paying the SPARQL round-trip cost would be pure overhead.
+fn build_rebac_manager(
+    config: &ServerConfig,
+    store: Store,
+) -> Arc<dyn crate::auth::rebac::RebacEvaluator> {
+    if has_persistent_dataset_location(&config.datasets) {
+        info!(
+            "Persistent dataset location configured; using SPARQL-store-backed \
+             RdfRebacManagerProduction so ReBAC grants survive restarts"
+        );
+        Arc::new(crate::auth::rdf_rebac::RdfRebacManager::with_store(store))
+    } else {
+        info!(
+            "No persistent dataset location configured; using in-memory ReBAC \
+             manager (relationship/ACL grants will not survive a restart)"
+        );
+        Arc::new(crate::auth::rebac::InMemoryRebacManager::new())
+    }
+}
+
 /// Request UUID generator for request IDs
 #[derive(Clone)]
 pub struct RequestIdGenerator;
@@ -1144,6 +1337,17 @@ pub struct RequestIdGenerator;
 #[derive(Clone)]
 pub struct AppState {
     pub store: Store,
+    /// Immutable snapshot of the server configuration taken at startup (or at
+    /// the last full server restart). Most handlers read this field directly
+    /// as plain data, so it is intentionally **not** wrapped in a lock —
+    /// making it live-mutable would require auditing every handler in the
+    /// crate for read consistency, which is out of scope for the current
+    /// hot-reload work. The one config subset that *is* safely hot-reloadable
+    /// today is the dataset registry, via the separately-shared, genuinely
+    /// mutable `dataset_manager` (see `handlers::admin::reload_config` and
+    /// the `#[cfg(feature = "hot-reload")]` file-watcher in
+    /// `Runtime::initialize_services`, both of which reconcile dataset
+    /// add/remove against this same `dataset_manager` instance).
     pub config: ServerConfig,
     pub auth_service: Option<AuthService>,
     pub metrics_service: Option<Arc<MetricsService>>,
@@ -1157,6 +1361,8 @@ pub struct AppState {
     pub batch_executor: Option<Arc<BatchExecutor>>,
     pub stream_manager: Option<Arc<StreamManager>>,
     pub dataset_manager: Option<Arc<DatasetManager>>,
+    /// Persistent JSON-backed API key store (see [`crate::handlers::api_keys::ApiKeyService`]).
+    pub api_key_service: Option<Arc<crate::handlers::api_keys::ApiKeyService>>,
     pub security_auditor: Option<Arc<SecurityAuditManager>>,
     pub ddos_protector: Option<Arc<DDoSProtectionManager>>,
     pub load_balancer: Option<Arc<LoadBalancer>>,
@@ -1180,4 +1386,277 @@ pub struct AppState {
     pub audit_logger: Arc<InMemoryAuditLogger>,
     #[cfg(feature = "rate-limit")]
     pub rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
+}
+
+impl AppState {
+    /// Whether the effective dataset resolved for `dataset` is configured
+    /// read-only (`datasets.<name>.read_only`).
+    ///
+    /// Resolution rules:
+    /// - **Exactly one** dataset is configured: that single entry's
+    ///   `read_only` flag is used *regardless of the name being queried*.
+    ///   This is name-agnostic single-dataset semantics — an operator who
+    ///   names their only dataset `[datasets.mydata]` (instead of the
+    ///   conventional `[datasets.default]`) still gets full write
+    ///   protection, even though every write guard in this crate passes the
+    ///   literal string `"default"`. Without this rule such a deployment got
+    ///   *zero* write protection with no indication anything was wrong.
+    /// - **Zero or two-or-more** datasets are configured: exact per-key
+    ///   lookup, same as before. A missing key still resolves to `false`
+    ///   ("no write protection declared for that key"); see
+    ///   [`Runtime::run`]'s startup diagnostics for a loud warning/error when
+    ///   this combination looks like a misconfiguration (a `read_only`
+    ///   dataset exists that no guard's literal key will ever reach).
+    pub fn is_dataset_read_only(&self, dataset: &str) -> bool {
+        if self.config.datasets.len() == 1 {
+            return self
+                .config
+                .datasets
+                .values()
+                .next()
+                .map(|d| d.read_only)
+                .unwrap_or(false);
+        }
+        self.config
+            .datasets
+            .get(dataset)
+            .map(|d| d.read_only)
+            .unwrap_or(false)
+    }
+
+    /// Reject the request with HTTP 403 if the dataset resolved for `dataset`
+    /// (see [`Self::is_dataset_read_only`]) is configured read-only.
+    ///
+    /// `operation` names the write being attempted (e.g. `"bulk upload"`,
+    /// `"RDF Patch"`, `"dataset creation"`) and is folded into the error
+    /// message. This is the single shared implementation for the read_only
+    /// guard that every mutating handler (SPARQL UPDATE, Graph Store
+    /// Protocol, `/upload`, `/patch`, and the mutating `/$/...` admin
+    /// endpoints) must call before parsing the request body or touching the
+    /// store, so the check logic — and its Task-1 name-agnostic
+    /// single-dataset resolution — lives in exactly one place instead of
+    /// being copy-pasted (and drifting) at each call site.
+    pub fn reject_if_read_only(&self, dataset: &str, operation: &str) -> FusekiResult<()> {
+        if self.is_dataset_read_only(dataset) {
+            return Err(FusekiError::forbidden(format!(
+                "Dataset is read-only; {operation} is not permitted"
+            )));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod rebac_and_config_tests {
+    use super::*;
+
+    fn dataset_config(location: &str) -> crate::config::DatasetConfig {
+        crate::config::DatasetConfig {
+            name: "ds".to_string(),
+            location: location.to_string(),
+            read_only: false,
+            text_index: None,
+            shacl_shapes: vec![],
+            services: vec![],
+            access_control: None,
+            backup: None,
+        }
+    }
+
+    #[test]
+    fn test_has_persistent_dataset_location_empty_map_is_false() {
+        assert!(!has_persistent_dataset_location(&HashMap::new()));
+    }
+
+    #[test]
+    fn test_has_persistent_dataset_location_all_in_memory_is_false() {
+        let mut datasets = HashMap::new();
+        datasets.insert("a".to_string(), dataset_config(""));
+        datasets.insert("b".to_string(), dataset_config("   "));
+        assert!(!has_persistent_dataset_location(&datasets));
+    }
+
+    /// Regression: `Runtime::initialize_services` previously always
+    /// constructed `InMemoryRebacManager`, even when a dataset declared a
+    /// real on-disk location. ReBAC grants for such a deployment must be
+    /// backed by the durable, SPARQL-store-based manager instead.
+    #[test]
+    fn test_has_persistent_dataset_location_detects_one_persistent_dataset() {
+        let mut datasets = HashMap::new();
+        datasets.insert("mem".to_string(), dataset_config(""));
+        datasets.insert("disk".to_string(), dataset_config("./data/disk-ds"));
+        assert!(has_persistent_dataset_location(&datasets));
+    }
+
+    #[test]
+    fn test_build_rebac_manager_selects_backend_by_persistence() {
+        let store = crate::store::Store::new().expect("in-memory store");
+
+        let mut ephemeral_config = ServerConfig::default();
+        ephemeral_config
+            .datasets
+            .insert("mem".to_string(), dataset_config(""));
+        // Both branches must at least construct without panicking; the
+        // concrete backend choice is exercised via `has_persistent_dataset_location`
+        // above (the evaluator trait object does not expose its concrete type).
+        let _ = build_rebac_manager(&ephemeral_config, store.clone());
+
+        let mut persistent_config = ServerConfig::default();
+        persistent_config
+            .datasets
+            .insert("disk".to_string(), dataset_config("./data/disk-ds"));
+        let _ = build_rebac_manager(&persistent_config, store);
+    }
+
+    fn read_only_dataset_config(name: &str, read_only: bool) -> crate::config::DatasetConfig {
+        crate::config::DatasetConfig {
+            name: name.to_string(),
+            location: String::new(),
+            read_only,
+            text_index: None,
+            shacl_shapes: vec![],
+            services: vec![],
+            access_control: None,
+            backup: None,
+        }
+    }
+
+    /// Task 1(a) regression: a single configured dataset named anything
+    /// other than "default" must still fully protect writes, since every
+    /// write guard in this crate keys its lookup on the literal string
+    /// "default". Before the name-agnostic single-dataset resolution fix,
+    /// `is_dataset_read_only("default")` returned `false` here (fail-open)
+    /// because `"default"` was simply absent from `config.datasets`.
+    #[test]
+    fn test_is_dataset_read_only_single_non_default_dataset_rejects_writes() {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = ServerConfig::default();
+        config.datasets.insert(
+            "mydata".to_string(),
+            read_only_dataset_config("mydata", true),
+        );
+        let state = crate::server::test_app::build_minimal_app_state(store, config);
+
+        assert!(
+            state.is_dataset_read_only("default"),
+            "a single read_only dataset must protect writes reached via the \
+             \"default\" key, regardless of the dataset's configured name"
+        );
+        assert!(state.is_dataset_read_only("mydata"));
+        assert!(
+            state.is_dataset_read_only("anything-else"),
+            "single-dataset resolution must be name-agnostic for every queried key"
+        );
+        assert!(
+            state.reject_if_read_only("default", "test write").is_err(),
+            "reject_if_read_only must also honor single-dataset name-agnostic resolution"
+        );
+    }
+
+    /// Task 1 regression: the conventional single-dataset "default" naming
+    /// must keep working exactly as before.
+    #[test]
+    fn test_is_dataset_read_only_default_path_still_works() {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = ServerConfig::default();
+        config.datasets.insert(
+            "default".to_string(),
+            read_only_dataset_config("default", true),
+        );
+        let state = crate::server::test_app::build_minimal_app_state(store, config);
+
+        assert!(state.is_dataset_read_only("default"));
+        assert!(state.reject_if_read_only("default", "test write").is_err());
+    }
+
+    /// Task 1(b): once a *second* dataset is configured, resolution must
+    /// revert to an exact per-key lookup (no name-agnostic fallback),
+    /// matching pre-existing multi-dataset behaviour.
+    #[test]
+    fn test_is_dataset_read_only_multi_dataset_uses_per_key_lookup() {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = ServerConfig::default();
+        config.datasets.insert(
+            "default".to_string(),
+            read_only_dataset_config("default", true),
+        );
+        config.datasets.insert(
+            "scratch".to_string(),
+            read_only_dataset_config("scratch", false),
+        );
+        let state = crate::server::test_app::build_minimal_app_state(store, config);
+
+        assert!(state.is_dataset_read_only("default"));
+        assert!(!state.is_dataset_read_only("scratch"));
+        assert!(
+            !state.is_dataset_read_only("nonexistent"),
+            "an unconfigured key in multi-dataset mode declares no write protection"
+        );
+    }
+
+    /// Smoke test: the startup diagnostics helper must not panic across the
+    /// single-dataset, multi-dataset-consistent, and multi-dataset-misconfigured
+    /// (Task 1(c)) shapes.
+    #[test]
+    fn test_warn_on_read_only_dataset_config_does_not_panic() {
+        let mut single = ServerConfig::default();
+        single
+            .datasets
+            .insert("only".to_string(), read_only_dataset_config("only", true));
+        warn_on_read_only_dataset_config(&single);
+
+        let mut multi_default_named = ServerConfig::default();
+        multi_default_named.datasets.insert(
+            "default".to_string(),
+            read_only_dataset_config("default", true),
+        );
+        multi_default_named.datasets.insert(
+            "other".to_string(),
+            read_only_dataset_config("other", false),
+        );
+        warn_on_read_only_dataset_config(&multi_default_named);
+
+        let mut multi_misconfigured = ServerConfig::default();
+        multi_misconfigured.datasets.insert(
+            "mydata".to_string(),
+            read_only_dataset_config("mydata", true),
+        );
+        multi_misconfigured.datasets.insert(
+            "other".to_string(),
+            read_only_dataset_config("other", false),
+        );
+        warn_on_read_only_dataset_config(&multi_misconfigured);
+    }
+}
+
+#[cfg(test)]
+mod production_router_tests {
+    use super::*;
+
+    /// Task 4(a) regression: build the *real* production router
+    /// (`Runtime::build_app`) with a minimal `AppState`, not a
+    /// hand-maintained parallel mock router (see
+    /// `server::test_app::build_jena_router`, which only covers a Jena
+    /// HTTP-parity subset). A reverted or re-introduced duplicate
+    /// path+method route registration makes axum 0.8 panic at router
+    /// construction time; this test is what would have caught that before
+    /// it reached a running server (see commit 7b32c39f's fix for exactly
+    /// this class of bug).
+    #[tokio::test]
+    async fn test_build_app_production_router_does_not_panic() {
+        let addr: SocketAddr = "127.0.0.1:0".parse().expect("valid loopback addr");
+        let store = crate::store::Store::new().expect("in-memory store");
+        let config = ServerConfig::default();
+        let runtime = Runtime::new(addr, store.clone(), config.clone());
+        let state = Arc::new(crate::server::test_app::build_minimal_app_state(
+            store, config,
+        ));
+
+        let result = runtime.build_app(state).await;
+        assert!(
+            result.is_ok(),
+            "production build_app() must construct the real router without error: {:?}",
+            result.err().map(|e| e.to_string())
+        );
+    }
 }

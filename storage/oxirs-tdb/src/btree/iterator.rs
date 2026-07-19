@@ -1,9 +1,8 @@
 //! B+Tree range scan iterator
 
-use super::node::{BTreeNode, LeafNode};
+use super::node::BTreeNode;
 use crate::error::Result;
 use crate::storage::{BufferPool, PageId};
-use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -63,7 +62,7 @@ where
     /// Load a leaf node and filter entries
     fn load_leaf(&mut self, leaf_id: PageId, start_key: Option<&K>) -> Result<()> {
         let guard = self.buffer_pool.fetch_page(leaf_id)?;
-        let page = guard.page();
+        let page = guard.page_checked()?;
         let page_ref = page
             .as_ref()
             .ok_or(crate::error::TdbError::PageNotFound(leaf_id))?;
@@ -154,8 +153,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{Allocator, FileManager, PageType, PAGE_SIZE};
-    use std::path::PathBuf;
+    use crate::btree::node::LeafNode;
+    use crate::storage::{FileManager, PageType};
     use tempfile::TempDir;
 
     #[test]

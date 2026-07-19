@@ -1,8 +1,10 @@
 //! # WASM SPARQL Query Executor
 //!
-//! In-memory, dependency-free SPARQL query executor for WebAssembly environments.
-//! Supports SELECT, ASK, CONSTRUCT, and DESCRIBE against an in-memory triple
-//! store, with basic FILTER support (regex stub and string equality).
+//! In-memory SPARQL query executor for WebAssembly environments. Supports
+//! SELECT, ASK, CONSTRUCT, and DESCRIBE against an in-memory triple store,
+//! with FILTER support for `regex(...)` (backed by a real regex engine) and
+//! string equality; any other FILTER form is rejected with an error rather
+//! than silently admitting every row.
 //!
 //! ## Example
 //!
@@ -308,36 +310,46 @@ struct TriplePattern {
 /// A simple FILTER expression
 #[derive(Debug, Clone)]
 enum FilterExpr {
-    /// FILTER(regex(?var, "pattern")) — stub: prefix match
+    /// FILTER(regex(?var, "pattern")) — evaluated with a real regex engine
     Regex { var: String, pattern: String },
     /// FILTER(?var = "value") — string equality on literal value
     StringEquals { var: String, value: String },
-    /// Unsupported / unknown filter (passes everything)
-    Unknown,
+    /// A FILTER expression the parser recognized but could not translate
+    /// into a supported form. Carries the raw expression text so
+    /// evaluation fails loudly (with a useful message) instead of
+    /// silently admitting every row, which would make query results
+    /// look correct while quietly ignoring the filter.
+    Unknown(String),
 }
 
 impl FilterExpr {
-    fn evaluate(&self, bindings: &Binding) -> bool {
+    fn evaluate(&self, bindings: &Binding) -> Result<bool, ExecutorError> {
         match self {
             FilterExpr::Regex { var, pattern } => {
                 let val = match bindings.get(var.as_str()) {
                     Some(v) => v.clone(),
-                    None => return true,
+                    None => return Ok(true),
                 };
                 // Strip literal quotes for comparison
                 let text = strip_literal(&val);
-                // Stub: check if text contains the pattern
-                text.contains(pattern.as_str())
+                let re = regex::Regex::new(pattern).map_err(|e| {
+                    ExecutorError::ParseError(format!(
+                        "Invalid FILTER regex pattern {pattern:?}: {e}"
+                    ))
+                })?;
+                Ok(re.is_match(&text))
             }
             FilterExpr::StringEquals { var, value } => {
                 let val = match bindings.get(var.as_str()) {
                     Some(v) => v.clone(),
-                    None => return false,
+                    None => return Ok(false),
                 };
                 let text = strip_literal(&val);
-                text == value.as_str()
+                Ok(text == value.as_str())
             }
-            FilterExpr::Unknown => true,
+            FilterExpr::Unknown(expr) => Err(ExecutorError::ParseError(format!(
+                "Unsupported FILTER expression: {expr}"
+            ))),
         }
     }
 }
@@ -618,7 +630,7 @@ fn parse_filter_expr(tokens: &[&str]) -> FilterExpr {
         }
     }
 
-    FilterExpr::Unknown
+    FilterExpr::Unknown(expr)
 }
 
 fn extract_var_from_expr(expr: &str) -> Option<String> {
@@ -840,12 +852,30 @@ impl SparqlExecutor {
         current
     }
 
-    /// Apply FILTER expressions to a set of bindings
-    fn apply_filters(&self, bindings: Vec<Binding>, filters: &[FilterExpr]) -> Vec<Binding> {
-        bindings
-            .into_iter()
-            .filter(|b| filters.iter().all(|f| f.evaluate(b)))
-            .collect()
+    /// Apply FILTER expressions to a set of bindings.
+    ///
+    /// Returns an error (rather than silently admitting rows) if any filter
+    /// expression cannot be evaluated, e.g. an unsupported FILTER form or an
+    /// invalid regex pattern.
+    fn apply_filters(
+        &self,
+        bindings: Vec<Binding>,
+        filters: &[FilterExpr],
+    ) -> Result<Vec<Binding>, ExecutorError> {
+        let mut result = Vec::with_capacity(bindings.len());
+        for b in bindings {
+            let mut keep = true;
+            for f in filters {
+                if !f.evaluate(&b)? {
+                    keep = false;
+                    break;
+                }
+            }
+            if keep {
+                result.push(b);
+            }
+        }
+        Ok(result)
     }
 
     /// Project SELECT variables from bindings
@@ -894,7 +924,7 @@ impl SparqlExecutor {
         match parsed.query_type {
             QueryType::Select => {
                 let mut bindings = self.evaluate_patterns(&parsed.patterns);
-                bindings = self.apply_filters(bindings, &parsed.filters);
+                bindings = self.apply_filters(bindings, &parsed.filters)?;
 
                 // Collect all variables if SELECT *
                 let variables: Vec<String> = if parsed.variables.is_empty() {
@@ -924,7 +954,7 @@ impl SparqlExecutor {
 
             QueryType::Ask => {
                 let mut bindings = self.evaluate_patterns(&parsed.patterns);
-                bindings = self.apply_filters(bindings, &parsed.filters);
+                bindings = self.apply_filters(bindings, &parsed.filters)?;
                 Ok(QueryResult {
                     query_type: QueryType::Ask,
                     variables: Vec::new(),
@@ -936,7 +966,7 @@ impl SparqlExecutor {
 
             QueryType::Construct => {
                 let mut bindings = self.evaluate_patterns(&parsed.patterns);
-                bindings = self.apply_filters(bindings, &parsed.filters);
+                bindings = self.apply_filters(bindings, &parsed.filters)?;
 
                 let mut out_triples: Vec<RdfTriple> = Vec::new();
                 for binding in &bindings {
@@ -1001,7 +1031,7 @@ impl SparqlExecutor {
                 } else {
                     // WHERE-based: evaluate patterns and return all triples about bound subjects
                     let mut bindings = self.evaluate_patterns(&parsed.patterns);
-                    bindings = self.apply_filters(bindings, &parsed.filters);
+                    bindings = self.apply_filters(bindings, &parsed.filters)?;
 
                     let mut subjects: HashSet<String> = HashSet::new();
                     for b in &bindings {
@@ -1294,17 +1324,52 @@ mod tests {
         // Select subjects whose name = "Alice"
         let query = format!(r#"SELECT ?s WHERE {{ ?s {NAME} ?name FILTER(?name = "Alice") }}"#);
         let res = ex.execute(&query).expect("ok");
-        // The filter is a stub, passes everything, but at least should not panic
         assert_eq!(res.query_type, QueryType::Select);
+        let subjects: Vec<&String> = res.rows.iter().filter_map(|r| r.get("s")).collect();
+        assert_eq!(subjects, vec![ALICE], "subjects = {subjects:?}");
     }
 
     #[test]
-    fn test_filter_regex_stub_contains() {
+    fn test_filter_string_equals_excludes_non_matching() {
         let ex = basic_store();
-        let query =
-            format!(r#"SELECT ?s WHERE {{ ?s {NAME} ?name FILTER(regex(?name, "Alice")) }}"#);
+        let query = format!(r#"SELECT ?s WHERE {{ ?s {NAME} ?name FILTER(?name = "Bob") }}"#);
         let res = ex.execute(&query).expect("ok");
-        assert_eq!(res.query_type, QueryType::Select);
+        let subjects: Vec<&String> = res.rows.iter().filter_map(|r| r.get("s")).collect();
+        assert_eq!(subjects, vec![BOB], "subjects = {subjects:?}");
+    }
+
+    #[test]
+    fn test_filter_regex_matches_real_pattern() {
+        let ex = basic_store();
+        // Anchored regex: only "Alice" starts with 'A', "Bob" must not match.
+        let query = format!(r#"SELECT ?s WHERE {{ ?s {NAME} ?name FILTER(regex(?name, "^A")) }}"#);
+        let res = ex.execute(&query).expect("ok");
+        let subjects: Vec<&String> = res.rows.iter().filter_map(|r| r.get("s")).collect();
+        assert_eq!(subjects, vec![ALICE], "subjects = {subjects:?}");
+    }
+
+    #[test]
+    fn test_filter_regex_rejects_invalid_pattern() {
+        let ex = basic_store();
+        // Unbalanced group is not a valid regex and must surface as an error,
+        // not be silently treated as "no match" or "match everything".
+        let query =
+            format!(r#"SELECT ?s WHERE {{ ?s {NAME} ?name FILTER(regex(?name, "(unclosed")) }}"#);
+        let result = ex.execute(&query);
+        assert!(result.is_err(), "invalid regex pattern must error");
+    }
+
+    #[test]
+    fn test_filter_unsupported_expression_errors_instead_of_passing_everything() {
+        let ex = basic_store();
+        // `?age > 18` is a comparison the lightweight parser does not
+        // understand; it must not silently admit every row.
+        let query = format!(r#"SELECT ?s WHERE {{ ?s {AGE} ?age FILTER(?age > "18") }}"#);
+        let result = ex.execute(&query);
+        assert!(
+            result.is_err(),
+            "unsupported FILTER expression must error, not pass through"
+        );
     }
 
     // ── Result formatting ──────────────────────────────────────────────────────

@@ -41,6 +41,73 @@ pub enum CompressionType {
     VectorQuantization,
 }
 
+/// Compress raw bytes with the given algorithm via OxiARC's Pure Rust
+/// compression crates (COOLJAPAN compression policy: oxiarc-* only, never
+/// flate2/zstd/zip/lz4/brotli/snap/tar from crates.io).
+///
+/// `level` is a generic 0-9 dial; it is remapped per algorithm (Zstd 1-22,
+/// Brotli quality 0-11, Gzip 0-9, LZ4 uses its default fast mode).
+///
+/// [`CompressionType::VectorQuantization`] is not a general-purpose byte
+/// compressor (it would require training a codebook over the *vectors*, not
+/// raw bytes) and is intentionally left unimplemented here: it fails loudly
+/// instead of silently returning uncompressed data.
+pub fn compress_bytes(data: &[u8], compression: CompressionType, level: u8) -> Result<Vec<u8>> {
+    match compression {
+        CompressionType::None => Ok(data.to_vec()),
+        CompressionType::Lz4 => {
+            oxiarc_lz4::compress_bytes(data).map_err(|e| anyhow!("LZ4 compression failed: {e}"))
+        }
+        CompressionType::Zstd => {
+            let zstd_level = (level as i32 * 2).clamp(1, 22);
+            oxiarc_zstd::compress_with_level(data, zstd_level)
+                .map_err(|e| anyhow!("Zstd compression failed: {e}"))
+        }
+        CompressionType::Brotli => {
+            let quality = (level as u32).min(11);
+            oxiarc_brotli::compress(data, quality)
+                .map_err(|e| anyhow!("Brotli compression failed: {e}"))
+        }
+        CompressionType::Gzip => oxiarc_deflate::gzip_compress(data, level.min(9))
+            .map_err(|e| anyhow!("Gzip compression failed: {e}")),
+        CompressionType::VectorQuantization => Err(anyhow!(
+            "CompressionType::VectorQuantization is not implemented as a raw-byte \
+             compressor; use CompressionType::None or a real byte codec \
+             (Lz4/Zstd/Brotli/Gzip) instead of silently storing uncompressed data"
+        )),
+    }
+}
+
+/// Decompress bytes previously produced by [`compress_bytes`] with the same
+/// `compression` algorithm.
+///
+/// `original_size` (the uncompressed length) is required for LZ4: its raw
+/// block format carries no length trailer of its own. Other algorithms are
+/// self-describing and ignore this parameter.
+pub fn decompress_bytes(
+    data: &[u8],
+    compression: CompressionType,
+    original_size: usize,
+) -> Result<Vec<u8>> {
+    match compression {
+        CompressionType::None => Ok(data.to_vec()),
+        CompressionType::Lz4 => oxiarc_lz4::decompress_bytes(data, original_size)
+            .map_err(|e| anyhow!("LZ4 decompression failed: {e}")),
+        CompressionType::Zstd => {
+            oxiarc_zstd::decompress(data).map_err(|e| anyhow!("Zstd decompression failed: {e}"))
+        }
+        CompressionType::Brotli => {
+            oxiarc_brotli::decompress(data).map_err(|e| anyhow!("Brotli decompression failed: {e}"))
+        }
+        CompressionType::Gzip => oxiarc_deflate::gzip_decompress(data)
+            .map_err(|e| anyhow!("Gzip decompression failed: {e}")),
+        CompressionType::VectorQuantization => Err(anyhow!(
+            "CompressionType::VectorQuantization is not implemented as a raw-byte \
+             compressor"
+        )),
+    }
+}
+
 /// Binary storage format configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct StorageConfig {
@@ -287,36 +354,9 @@ impl VectorWriter {
         Ok(())
     }
 
-    /// Compress data using configured algorithm
+    /// Compress data using the configured algorithm.
     fn compress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
-        match self.config.compression {
-            CompressionType::None => Ok(data.to_vec()),
-            CompressionType::Lz4 => {
-                // Placeholder for LZ4 compression
-                // In real implementation, use lz4_flex or similar crate
-                Ok(data.to_vec())
-            }
-            CompressionType::Zstd => {
-                // Placeholder for Zstandard compression
-                // In real implementation, use zstd crate
-                Ok(data.to_vec())
-            }
-            CompressionType::Brotli => {
-                // Placeholder for Brotli compression
-                // In real implementation, use brotli crate
-                Ok(data.to_vec())
-            }
-            CompressionType::Gzip => {
-                // Placeholder for Gzip compression
-                // In real implementation, use flate2 crate
-                Ok(data.to_vec())
-            }
-            CompressionType::VectorQuantization => {
-                // Placeholder for vector quantization
-                // In real implementation, use PQ or similar
-                Ok(data.to_vec())
-            }
-        }
+        compress_bytes(data, self.config.compression, self.config.compression_level)
     }
 
     /// Calculate checksum for data
@@ -639,7 +679,14 @@ impl StorageUtils {
         Ok(vectors)
     }
 
-    /// Estimate storage size for vectors
+    /// Rough *heuristic* storage-size estimate for capacity planning when no
+    /// actual vector data is available yet (only counts/dimensions are known).
+    ///
+    /// These ratios are empirical averages for typical dense f32 embedding
+    /// data; they are NOT measured against `vectors` (there are none to
+    /// measure here). For a real, measured ratio on actual data use
+    /// [`StorageUtils::benchmark_compression`], which drives the same
+    /// [`compress_bytes`] codepath used by [`VectorWriter`].
     pub fn estimate_storage_size(
         vector_count: usize,
         dimensions: usize,
@@ -650,20 +697,24 @@ impl StorageUtils {
 
         let compressed_size = match compression {
             CompressionType::None => raw_size,
-            CompressionType::Lz4 => (raw_size as f64 * 0.6) as usize, // ~40% compression
-            CompressionType::Zstd => (raw_size as f64 * 0.5) as usize, // ~50% compression
-            CompressionType::Brotli => (raw_size as f64 * 0.4) as usize, // ~60% compression
-            CompressionType::Gzip => (raw_size as f64 * 0.5) as usize, // ~50% compression
-            CompressionType::VectorQuantization => (raw_size as f64 * 0.25) as usize, // ~75% compression
+            CompressionType::Lz4 => (raw_size as f64 * 0.6) as usize, // ~40% compression (heuristic)
+            CompressionType::Zstd => (raw_size as f64 * 0.5) as usize, // ~50% compression (heuristic)
+            CompressionType::Brotli => (raw_size as f64 * 0.4) as usize, // ~60% compression (heuristic)
+            CompressionType::Gzip => (raw_size as f64 * 0.5) as usize, // ~50% compression (heuristic)
+            // VectorQuantization has no raw-byte compressor implementation
+            // (see `compress_bytes`); report as uncompressed rather than
+            // fabricating a ratio that `compress_bytes` cannot deliver.
+            CompressionType::VectorQuantization => raw_size,
         };
 
         header_size + compressed_size
     }
 
-    /// Benchmark compression algorithms
+    /// Benchmark compression algorithms by actually compressing `vectors`
+    /// through the same [`compress_bytes`] codepath used by [`VectorWriter`],
+    /// so the reported sizes and timings reflect real OxiARC output.
     pub fn benchmark_compression(vectors: &[Vector]) -> Result<Vec<(CompressionType, f64, usize)>> {
         let binary_data = Self::vectors_to_binary(vectors)?;
-        let original_size = binary_data.len();
 
         let algorithms = [
             CompressionType::None,
@@ -677,19 +728,9 @@ impl StorageUtils {
 
         for &algorithm in &algorithms {
             let start_time = std::time::Instant::now();
-
-            // Simulate compression (in real implementation, use actual compression)
-            let compressed_size = match algorithm {
-                CompressionType::None => original_size,
-                CompressionType::Lz4 => (original_size as f64 * 0.6) as usize,
-                CompressionType::Zstd => (original_size as f64 * 0.5) as usize,
-                CompressionType::Brotli => (original_size as f64 * 0.4) as usize,
-                CompressionType::Gzip => (original_size as f64 * 0.5) as usize,
-                CompressionType::VectorQuantization => (original_size as f64 * 0.25) as usize,
-            };
-
+            let compressed = compress_bytes(&binary_data, algorithm, 3)?;
             let duration = start_time.elapsed().as_secs_f64();
-            results.push((algorithm, duration, compressed_size));
+            results.push((algorithm, duration, compressed.len()));
         }
 
         Ok(results)
@@ -802,5 +843,55 @@ mod tests {
 
         assert!(zstd_size < none_size);
         Ok(())
+    }
+
+    /// Regression test for the P0 finding: `compress_data`/`compress_bytes`
+    /// used to be a no-op returning the input unchanged for every
+    /// `CompressionType` variant. Verify real compress/decompress round-trips
+    /// for every implemented algorithm, and that highly-repetitive data
+    /// actually shrinks (proving compression really ran, not just a copy).
+    #[test]
+    fn test_compress_bytes_round_trip_all_algorithms() -> Result<()> {
+        // Repetitive data compresses well and makes a no-op regression obvious.
+        let data: Vec<u8> = (0..8192u32).map(|i| (i % 7) as u8).collect();
+
+        for &algorithm in &[
+            CompressionType::None,
+            CompressionType::Lz4,
+            CompressionType::Zstd,
+            CompressionType::Brotli,
+            CompressionType::Gzip,
+        ] {
+            let compressed = compress_bytes(&data, algorithm, 5)?;
+            let restored = decompress_bytes(&compressed, algorithm, data.len())?;
+            assert_eq!(
+                restored, data,
+                "{:?} round-trip should reproduce the original bytes exactly",
+                algorithm
+            );
+
+            if algorithm != CompressionType::None {
+                assert!(
+                    compressed.len() < data.len(),
+                    "{:?} should actually shrink highly-repetitive data (no-op regression check)",
+                    algorithm
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// `VectorQuantization` is not a real byte-oriented compressor (see
+    /// `compress_bytes` docs); it must fail loudly instead of silently
+    /// returning the input unchanged.
+    #[test]
+    fn test_compress_bytes_vector_quantization_errors_loudly() {
+        let data = vec![1u8, 2, 3, 4, 5];
+        let result = compress_bytes(&data, CompressionType::VectorQuantization, 3);
+        assert!(
+            result.is_err(),
+            "VectorQuantization must error instead of silently passing data through"
+        );
     }
 }

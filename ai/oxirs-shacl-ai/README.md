@@ -1,8 +1,8 @@
 # OxiRS SHACL-AI - AI-Enhanced SHACL Validation
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.2 - Released 2026-07-12
+**Status**: v0.4.0 - Released 2026-07-19
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -369,7 +369,7 @@ let mut assistant = ShaclAiAssistant::with_config(config);
 
 ## Status
 
-### Production Release (v0.3.2)
+### Production Release (v0.4.0)
 - ✅ Shape learning (`ShapeLearner`) with store-parallel and pattern-driven discovery
 - ✅ ML model certification suite (`certification` module — precision/recall/F1/MCC vs. the deterministic engine)
 - ✅ Anomaly detection (statistical, autoencoder, drift, novelty, ensemble) via `AnomalyDetector`

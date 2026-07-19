@@ -63,15 +63,30 @@ impl AsyncRdfStore {
     }
 
     /// Insert quad asynchronously
+    ///
+    /// The persistent backend performs blocking disk IO on insert, so the
+    /// mutation runs on the blocking thread pool (like `query_async`) instead of
+    /// blocking a runtime worker while holding the async write lock.
     pub async fn insert_quad_async(&self, quad: Quad) -> Result<bool> {
-        let mut store = self.store.write().await;
-        store.insert_quad(quad)
+        let store = self.store.clone();
+        task::spawn_blocking(move || {
+            let mut store = futures::executor::block_on(store.write());
+            store.insert_quad(quad)
+        })
+        .await
+        .map_err(|e| crate::OxirsError::Io(format!("Task error: {}", e)))?
     }
 
     /// Remove quad asynchronously
     pub async fn remove_quad_async(&self, quad: &Quad) -> Result<bool> {
-        let mut store = self.store.write().await;
-        store.remove_quad(quad)
+        let store = self.store.clone();
+        let quad = quad.clone();
+        task::spawn_blocking(move || {
+            let mut store = futures::executor::block_on(store.write());
+            store.remove_quad(&quad)
+        })
+        .await
+        .map_err(|e| crate::OxirsError::Io(format!("Task error: {}", e)))?
     }
 
     /// Get quad count asynchronously
@@ -88,8 +103,25 @@ impl AsyncRdfStore {
 
     /// Clear store asynchronously
     pub async fn clear_async(&self) -> Result<()> {
-        let mut store = self.store.write().await;
-        store.clear()
+        let store = self.store.clone();
+        task::spawn_blocking(move || {
+            let mut store = futures::executor::block_on(store.write());
+            store.clear()
+        })
+        .await
+        .map_err(|e| crate::OxirsError::Io(format!("Task error: {}", e)))?
+    }
+
+    /// Flush pending writes / compact deletions asynchronously (persistent
+    /// backend). No-op for in-memory stores.
+    pub async fn flush_async(&self) -> Result<()> {
+        let store = self.store.clone();
+        task::spawn_blocking(move || {
+            let store = futures::executor::block_on(store.read());
+            store.flush()
+        })
+        .await
+        .map_err(|e| crate::OxirsError::Io(format!("Task error: {}", e)))?
     }
 
     /// Get all quads asynchronously

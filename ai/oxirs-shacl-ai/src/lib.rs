@@ -1,9 +1,9 @@
 //! # OxiRS SHACL-AI
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.

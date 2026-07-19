@@ -1,9 +1,9 @@
 //! # OxiRS Rule Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-rule/badge.svg)](https://docs.rs/oxirs-rule)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Forward/backward rule engine for RDFS, OWL, and SWRL reasoning with RETE optimization.
@@ -227,7 +227,19 @@ impl RuleEngine {
         self.rules.push(rule.clone());
         self.forward_chainer.add_rule(rule.clone());
         self.backward_chainer.add_rule(rule.clone());
-        let _ = self.rete_network.add_rule(&rule);
+        if let Err(e) = self.rete_network.add_rule(&rule) {
+            // The RETE network can reject a rule whose pattern it cannot compile
+            // (e.g. an unsupported atom shape). Surface this rather than silently
+            // dropping it: rete_forward_chain() would otherwise diverge from
+            // forward_chain()/backward_chain() for this rule with no signal to
+            // the caller.
+            tracing::warn!(
+                "RETE network rejected rule '{}': {}; rete_forward_chain results may \
+                 differ from forward_chain/backward_chain for this rule",
+                rule.name,
+                e
+            );
+        }
     }
 
     /// Add multiple rules

@@ -29,9 +29,7 @@ pub(super) fn evaluate_target_condition(
                 final_query = format!("{prefixes}\n{final_query}");
             }
 
-            tracing::warn!("SPARQL ASK condition evaluation not fully implemented yet");
-            tracing::debug!("Would execute SPARQL query: {}", final_query);
-            Ok(true)
+            execute_ask_query(store, &final_query, graph_name)
         }
         TargetCondition::PropertyExists {
             property,
@@ -521,16 +519,36 @@ pub(super) fn get_related_nodes(
     }
 }
 
-/// Evaluate a property path from a start node
+/// Evaluate a property path from a start node using the real property-path evaluator.
+///
+/// Delegates to [`crate::paths::PropertyPathEvaluator`], honoring the requested
+/// traversal direction: `Backward` wraps the path in an inverse path, and `Both`
+/// unions the forward and inverse traversals.
 pub(super) fn evaluate_property_path(
-    _store: &dyn Store,
-    _start_node: &Term,
-    _path: &crate::paths::PropertyPath,
-    _direction: &PathDirection,
-    _graph_name: Option<&str>,
+    store: &dyn Store,
+    start_node: &Term,
+    path: &crate::paths::PropertyPath,
+    direction: &PathDirection,
+    graph_name: Option<&str>,
 ) -> Result<Vec<Term>> {
-    tracing::warn!("Property path evaluation not fully implemented yet");
-    Ok(Vec::new())
+    use crate::paths::{PropertyPath, PropertyPathEvaluator};
+
+    let mut evaluator = PropertyPathEvaluator::new();
+
+    match direction {
+        PathDirection::Forward => evaluator.evaluate_path(store, start_node, path, graph_name),
+        PathDirection::Backward => {
+            let inverse = PropertyPath::Inverse(Box::new(path.clone()));
+            evaluator.evaluate_path(store, start_node, &inverse, graph_name)
+        }
+        PathDirection::Both => {
+            let mut results: HashSet<Term> = HashSet::new();
+            results.extend(evaluator.evaluate_path(store, start_node, path, graph_name)?);
+            let inverse = PropertyPath::Inverse(Box::new(path.clone()));
+            results.extend(evaluator.evaluate_path(store, start_node, &inverse, graph_name)?);
+            Ok(results.into_iter().collect())
+        }
+    }
 }
 
 /// Apply all path filters to a node
@@ -627,13 +645,117 @@ pub(super) fn evaluate_path_filter(
             Ok(!quads.is_empty())
         }
         PathFilter::SparqlCondition {
-            condition: _,
-            prefixes: _,
+            condition,
+            prefixes,
         } => {
-            tracing::debug!(
-                "SPARQL condition path filter requires query execution - not yet implemented"
-            );
-            Ok(true)
+            let node_sparql = format_term_for_sparql(node)?;
+
+            // A condition may be provided either as a full ASK query or as a
+            // bare graph-pattern body; wrap the latter in `ASK { ... }`.
+            let trimmed = condition.trim_start();
+            let mut query = if trimmed.len() >= 3 && trimmed[..3].eq_ignore_ascii_case("ask") {
+                condition.clone()
+            } else {
+                format!("ASK {{ {condition} }}")
+            };
+            query = query.replace("$this", &node_sparql);
+
+            if let Some(prefixes) = prefixes {
+                query = format!("{prefixes}\n{query}");
+            }
+
+            execute_ask_query(store, &query, graph_name)
         }
+    }
+}
+
+/// Execute a SPARQL ASK query against the store and return the boolean answer.
+///
+/// The query text is expected to have had `$this` (and any other placeholders)
+/// already substituted by the caller. A store answering an ASK with SELECT-style
+/// bindings is interpreted as `true` when at least one solution is returned. On
+/// execution failure this returns an error (fail closed) rather than silently
+/// widening the target/filter set.
+fn execute_ask_query(store: &dyn Store, query: &str, _graph_name: Option<&str>) -> Result<bool> {
+    use oxirs_core::rdf_store::QueryResults;
+
+    let results = store
+        .query(query)
+        .map_err(|e| ShaclError::TargetSelection(format!("SPARQL ASK evaluation failed: {e}")))?;
+
+    match results.results() {
+        QueryResults::Boolean(value) => Ok(*value),
+        QueryResults::Bindings(bindings) => Ok(!bindings.is_empty()),
+        QueryResults::Graph(quads) => Ok(!quads.is_empty()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paths::PropertyPath;
+    use oxirs_core::{
+        model::{GraphName, NamedNode, Quad},
+        ConcreteStore,
+    };
+
+    fn nn(iri: &str) -> NamedNode {
+        NamedNode::new(iri).expect("valid IRI")
+    }
+
+    /// A forward `sh:path` traversal must return the objects reachable via the
+    /// predicate — previously this stub always returned an empty vector.
+    #[test]
+    fn test_evaluate_property_path_forward_returns_objects() {
+        let store = ConcreteStore::new().expect("store");
+        let alice = nn("http://example.org/alice");
+        let knows = nn("http://example.org/knows");
+        let bob = nn("http://example.org/bob");
+        store
+            .insert_quad(Quad::new(
+                alice.clone(),
+                knows.clone(),
+                bob.clone(),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert");
+
+        let path = PropertyPath::Predicate(knows);
+        let start = Term::NamedNode(alice);
+        let results = evaluate_property_path(&store, &start, &path, &PathDirection::Forward, None)
+            .expect("evaluate path");
+
+        assert!(
+            results.contains(&Term::NamedNode(bob)),
+            "forward path should reach the object node, got {results:?}"
+        );
+    }
+
+    /// A backward traversal must return the subjects that reach the node via
+    /// the predicate.
+    #[test]
+    fn test_evaluate_property_path_backward_returns_subjects() {
+        let store = ConcreteStore::new().expect("store");
+        let alice = nn("http://example.org/alice");
+        let knows = nn("http://example.org/knows");
+        let bob = nn("http://example.org/bob");
+        store
+            .insert_quad(Quad::new(
+                alice.clone(),
+                knows.clone(),
+                bob.clone(),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert");
+
+        let path = PropertyPath::Predicate(knows);
+        let start = Term::NamedNode(bob);
+        let results = evaluate_property_path(&store, &start, &path, &PathDirection::Backward, None)
+            .expect("evaluate path");
+
+        assert!(
+            results.contains(&Term::NamedNode(alice)),
+            "backward path should reach the subject node, got {results:?}"
+        );
     }
 }

@@ -92,12 +92,28 @@ impl TurtleParser {
         context.prefixes = self.prefixes.clone();
         context.base_iri = self.base_iri.clone();
 
+        self.parse_document_with_context(content, &mut context)
+    }
+
+    /// Parse a Turtle document, reusing (and mutating in place) a caller-supplied
+    /// parsing context instead of starting from a fresh one.
+    ///
+    /// This lets callers that parse a single logical document across multiple
+    /// `parse_document`-style calls — e.g. [`crate::incremental::IncrementalParser`],
+    /// which feeds the parser one complete-statement chunk at a time — carry the
+    /// blank node counter (and explicit-label registry) forward between calls, so
+    /// anonymous blank nodes minted in different chunks never collide.
+    pub(crate) fn parse_document_with_context(
+        &self,
+        content: &str,
+        context: &mut TurtleParsingContext,
+    ) -> TurtleResult<Vec<Triple>> {
         let mut tokenizer = TurtleTokenizer::new(content);
         let mut triples = Vec::new();
         let mut errors = Vec::new();
 
         loop {
-            let statement_result = self.parse_statement(&mut tokenizer, &mut context);
+            let statement_result = self.parse_statement(&mut tokenizer, context);
 
             match statement_result {
                 Ok(Some(statement)) => match statement {
@@ -323,6 +339,7 @@ impl TurtleParser {
             }
             TokenKind::BlankNodeLabel(label) => {
                 let _ = tokenizer.consume_token();
+                context.register_blank_label(label);
                 let blank_node = BlankNode::new(label).map_err(TurtleParseError::model)?;
                 Ok(Subject::BlankNode(blank_node))
             }

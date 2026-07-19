@@ -686,9 +686,14 @@ pub mod compression {
         oxiarc_deflate::deflate(data, 6).map_err(|e| format!("Deflate compression error: {}", e))
     }
 
-    fn compress_brotli(_data: &[u8]) -> Result<Vec<u8>, String> {
-        // Placeholder - would need brotli crate
-        Err("Brotli compression not implemented".to_string())
+    fn compress_brotli(data: &[u8]) -> Result<Vec<u8>, String> {
+        // Brotli compression via Pure-Rust oxiarc-brotli. Quality 6 mirrors
+        // the "balanced default" used by the gzip/deflate paths above
+        // (oxiarc-brotli quality ranges 0-11, where 11 is maximum
+        // compression / slowest).
+        const BROTLI_QUALITY: u32 = 6;
+        oxiarc_brotli::compress(data, BROTLI_QUALITY)
+            .map_err(|e| format!("Brotli compression error: {}", e))
     }
 }
 
@@ -917,6 +922,29 @@ mod tests {
         assert!(compressed.len() < data.len());
 
         let decompressed = oxiarc_deflate::inflate(&compressed).expect("inflate failed");
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_brotli_compression_roundtrip() {
+        // Regression test: CompressionType::Brotli used to unconditionally
+        // return Err("Brotli compression not implemented"). It must now
+        // actually compress via the Pure-Rust oxiarc-brotli backend and
+        // round-trip through oxiarc_brotli::decompress.
+        let data: Vec<u8> = b"oxirs-gql streamed response brotli body "
+            .iter()
+            .cycle()
+            .take(4096)
+            .copied()
+            .collect();
+
+        let compressed = compression::compress(&data, CompressionType::Brotli)
+            .expect("brotli compression should now be implemented");
+        assert!(!compressed.is_empty());
+        assert!(compressed.len() < data.len());
+
+        let decompressed =
+            oxiarc_brotli::decompress(&compressed).expect("brotli decompression failed");
         assert_eq!(decompressed, data);
     }
 }

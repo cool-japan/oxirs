@@ -64,28 +64,56 @@ impl From<FusedResult> for SparqlMultimodalResult {
     }
 }
 
+/// Query inputs for a multimodal search, grouped so that
+/// [`sparql_multimodal_search`] stays within clippy's argument-count limit.
+#[derive(Debug, Clone, Default)]
+pub struct MultimodalSearchQuery {
+    /// Optional text/keyword query string
+    pub text_query: Option<String>,
+    /// Optional vector embedding (comma-separated)
+    pub vector_query: Option<String>,
+    /// Optional WKT geometry (e.g., "POINT(10.0 20.0)")
+    pub spatial_query: Option<String>,
+    /// Optional weights \[text, vector, spatial\] (comma-separated)
+    pub weights: Option<String>,
+    /// Optional fusion strategy: "weighted", "sequential", "cascade", "rankfusion"
+    pub strategy: Option<String>,
+}
+
 /// Execute multimodal search with multiple modalities
 ///
 /// # Arguments
-/// * `text_query` - Optional text/keyword query string
-/// * `vector_query` - Optional vector embedding (comma-separated)
-/// * `spatial_query` - Optional WKT geometry (e.g., "POINT(10.0 20.0)")
-/// * `weights` - Optional weights [text, vector, spatial] (comma-separated)
-/// * `strategy` - Optional fusion strategy: "weighted", "sequential", "cascade", "rankfusion"
+/// * `query` - Text/vector/spatial query inputs plus weighting/strategy, see
+///   [`MultimodalSearchQuery`]
 /// * `limit` - Maximum number of results
 /// * `config` - Multimodal search configuration
+/// * `vector_store` - Optional backing store for the vector modality
 ///
 /// # Returns
 /// Vector of multimodal search results with combined scores
+///
+/// # Real backends
+/// * `vector_query` is served by a real [`crate::VectorStore::similarity_search_vector`]
+///   call when `vector_store` is `Some`; when it is `None` the vector modality
+///   is excluded (empty results, logged warning) rather than fabricated.
+/// * `text_query` and `spatial_query` currently have no in-process, stateless
+///   full-text or spatial search backend wired into this free function (see
+///   [`execute_text_search`] / [`execute_spatial_search`] docs), so they are
+///   always excluded with a logged warning instead of returning fake scores.
 pub fn sparql_multimodal_search(
-    text_query: Option<String>,
-    vector_query: Option<String>,
-    spatial_query: Option<String>,
-    weights: Option<String>,
-    strategy: Option<String>,
+    query: MultimodalSearchQuery,
     limit: usize,
     config: &MultimodalSearchConfig,
+    vector_store: Option<&crate::VectorStore>,
 ) -> Result<Vec<SparqlMultimodalResult>> {
+    let MultimodalSearchQuery {
+        text_query,
+        vector_query,
+        spatial_query,
+        weights,
+        strategy,
+    } = query;
+
     // Parse fusion strategy
     let fusion_strategy = parse_fusion_strategy(
         strategy.as_deref(),
@@ -113,7 +141,7 @@ pub fn sparql_multimodal_search(
 
     let vector_results = if let Some(query) = vector_query {
         let embedding = parse_vector(&query)?;
-        execute_vector_search(&embedding, limit * 2)?
+        execute_vector_search(vector_store, &embedding, limit * 2)?
     } else {
         Vec::new()
     };
@@ -206,73 +234,73 @@ fn parse_vector(vector_str: &str) -> Result<Vec<f32>> {
         .collect()
 }
 
-/// Execute text/keyword search (placeholder - integrate with actual text search)
-fn execute_text_search(query: &str, limit: usize) -> Result<Vec<DocumentScore>> {
-    // This is a placeholder implementation
-    // In production, integrate with Tantivy or BM25 search
-    Ok(vec![
-        DocumentScore {
-            doc_id: format!("text_result_1_{}", query),
-            score: 10.0,
-            rank: 0,
-        },
-        DocumentScore {
-            doc_id: format!("text_result_2_{}", query),
-            score: 8.0,
-            rank: 1,
-        },
-    ]
-    .into_iter()
-    .take(limit)
-    .collect())
+/// Execute text/keyword search.
+///
+/// This crate's full-text engine ([`crate::hybrid_search::tantivy_searcher::TantivySearcher`])
+/// requires a persistent, pre-built index handle (documents must have been
+/// indexed ahead of time) that this stateless free function has no way to
+/// obtain. Rather than fabricating fake results, the text modality is
+/// excluded (empty result set) with a logged warning until a real searcher
+/// handle is threaded through the public API.
+fn execute_text_search(query: &str, _limit: usize) -> Result<Vec<DocumentScore>> {
+    tracing::warn!(
+        "sparql_multimodal_search: no full-text search backend is wired up; \
+         excluding the text modality from fusion (query = {:?})",
+        query
+    );
+    Ok(Vec::new())
 }
 
-/// Execute vector/semantic search (placeholder - integrate with actual vector search)
-fn execute_vector_search(embedding: &[f32], limit: usize) -> Result<Vec<DocumentScore>> {
-    // This is a placeholder implementation
-    // In production, integrate with HNSW or vector index
-    Ok(vec![
-        DocumentScore {
-            doc_id: format!("vector_result_1_dim{}", embedding.len()),
-            score: 0.95,
-            rank: 0,
-        },
-        DocumentScore {
-            doc_id: format!("vector_result_2_dim{}", embedding.len()),
-            score: 0.90,
-            rank: 1,
-        },
-    ]
-    .into_iter()
-    .take(limit)
-    .collect())
+/// Execute vector/semantic search against the real [`crate::VectorStore`]
+/// when one is supplied; excludes the vector modality (with a logged
+/// warning) instead of fabricating results when no store is configured.
+fn execute_vector_search(
+    vector_store: Option<&crate::VectorStore>,
+    embedding: &[f32],
+    limit: usize,
+) -> Result<Vec<DocumentScore>> {
+    let Some(store) = vector_store else {
+        tracing::warn!(
+            "sparql_multimodal_search: vector modality requested but no VectorStore \
+             was supplied; excluding it from fusion"
+        );
+        return Ok(Vec::new());
+    };
+
+    let query_vector = crate::Vector::new(embedding.to_vec());
+    let results = store.similarity_search_vector(&query_vector, limit)?;
+
+    Ok(results
+        .into_iter()
+        .enumerate()
+        .map(|(rank, (uri, score))| DocumentScore {
+            doc_id: uri,
+            score,
+            rank,
+        })
+        .collect())
 }
 
-/// Execute spatial/geographic search (placeholder - integrate with actual spatial search)
-fn execute_spatial_search(wkt: &str, limit: usize) -> Result<Vec<DocumentScore>> {
-    // This is a placeholder implementation
-    // In production, integrate with GeoSPARQL or spatial index
-    Ok(vec![
-        DocumentScore {
-            doc_id: format!("spatial_result_1_{}", wkt),
-            score: 0.99,
-            rank: 0,
-        },
-        DocumentScore {
-            doc_id: format!("spatial_result_2_{}", wkt),
-            score: 0.92,
-            rank: 1,
-        },
-    ]
-    .into_iter()
-    .take(limit)
-    .collect())
+/// Execute spatial/geographic search.
+///
+/// This crate has no in-process spatial index backend (GeoSPARQL/spatial
+/// indexing lives in the separate `oxirs-geosparql` crate, which is not a
+/// dependency here). Rather than fabricating fake results, the spatial
+/// modality is always excluded (empty result set) with a logged warning.
+fn execute_spatial_search(wkt: &str, _limit: usize) -> Result<Vec<DocumentScore>> {
+    tracing::warn!(
+        "sparql_multimodal_search: no spatial search backend is wired up; \
+         excluding the spatial modality from fusion (query = {:?})",
+        wkt
+    );
+    Ok(Vec::new())
 }
 
 /// Convert SPARQL arguments to multimodal search
 pub fn sparql_multimodal_search_from_args(
     args: &[VectorServiceArg],
     config: &MultimodalSearchConfig,
+    vector_store: Option<&crate::VectorStore>,
 ) -> Result<VectorServiceResult> {
     // Parse arguments
     let mut text_query: Option<String> = None;
@@ -297,13 +325,16 @@ pub fn sparql_multimodal_search_from_args(
 
     // Execute search
     let results = sparql_multimodal_search(
-        text_query,
-        vector_query,
-        spatial_query,
-        weights,
-        strategy,
+        MultimodalSearchQuery {
+            text_query,
+            vector_query,
+            spatial_query,
+            weights,
+            strategy,
+        },
         limit,
         config,
+        vector_store,
     )?;
 
     // Convert to SPARQL result format
@@ -454,47 +485,92 @@ mod tests {
         assert_eq!(sparql_result.spatial_score, None);
     }
 
+    /// Regression test for the P1 finding: `execute_text_search` used to
+    /// fabricate fake `DocumentScore`s regardless of what was indexed. It
+    /// must now exclude the (unimplemented) text modality instead of
+    /// inventing results.
     #[test]
-    fn test_execute_text_search() -> Result<()> {
+    fn test_execute_text_search_excludes_instead_of_fabricating() -> Result<()> {
         let results = execute_text_search("test query", 10)?;
-        assert!(!results.is_empty());
-        assert!(results[0].doc_id.contains("test query"));
+        assert!(
+            results.is_empty(),
+            "text search has no real backend and must return no results, not fabricated ones"
+        );
         Ok(())
     }
 
+    /// Regression test: `execute_vector_search` must use the real
+    /// `VectorStore::similarity_search_vector` path and return actual
+    /// indexed results, not synthetic `vector_result_*` placeholders.
     #[test]
-    fn test_execute_vector_search() -> Result<()> {
+    fn test_execute_vector_search_uses_real_store() -> Result<()> {
+        use crate::VectorStore;
+
+        let mut store = VectorStore::new();
+        store.index_vector("doc_a".to_string(), crate::Vector::new(vec![1.0, 0.0, 0.0]))?;
+        store.index_vector("doc_b".to_string(), crate::Vector::new(vec![0.0, 1.0, 0.0]))?;
+
+        let embedding = vec![1.0, 0.0, 0.0];
+        let results = execute_vector_search(Some(&store), &embedding, 10)?;
+
+        assert!(!results.is_empty());
+        // The closest match to [1,0,0] must be doc_a, not a fabricated ID.
+        assert_eq!(results[0].doc_id, "doc_a");
+        assert!(!results
+            .iter()
+            .any(|r| r.doc_id.starts_with("vector_result_")));
+        Ok(())
+    }
+
+    /// Without a store, the vector modality must be excluded, not fabricated.
+    #[test]
+    fn test_execute_vector_search_excludes_without_store() -> Result<()> {
         let embedding = vec![0.1, 0.2, 0.3];
-        let results = execute_vector_search(&embedding, 10)?;
-        assert!(!results.is_empty());
-        assert!(results[0].doc_id.contains("dim3"));
+        let results = execute_vector_search(None, &embedding, 10)?;
+        assert!(results.is_empty());
         Ok(())
     }
 
+    /// Regression test for the P1 finding: `execute_spatial_search` used to
+    /// fabricate fake `DocumentScore`s. There is no in-crate spatial backend,
+    /// so it must exclude the modality instead.
     #[test]
-    fn test_execute_spatial_search() -> Result<()> {
+    fn test_execute_spatial_search_excludes_instead_of_fabricating() -> Result<()> {
         let results = execute_spatial_search("POINT(10.0 20.0)", 10)?;
-        assert!(!results.is_empty());
-        assert!(results[0].doc_id.contains("POINT"));
+        assert!(
+            results.is_empty(),
+            "spatial search has no in-crate backend and must return no results"
+        );
         Ok(())
     }
 
     #[test]
     fn test_sparql_multimodal_search_integration() -> Result<()> {
+        use crate::VectorStore;
+
         let config = MultimodalSearchConfig::default();
+        let mut store = VectorStore::new();
+        store.index_vector("doc_a".to_string(), crate::Vector::new(vec![0.1, 0.2, 0.3]))?;
 
         let results = sparql_multimodal_search(
-            Some("machine learning".to_string()),
-            Some("0.1,0.2,0.3".to_string()),
-            Some("POINT(10.0 20.0)".to_string()),
-            Some("0.4,0.4,0.2".to_string()),
-            Some("rankfusion".to_string()),
+            MultimodalSearchQuery {
+                text_query: Some("machine learning".to_string()),
+                vector_query: Some("0.1,0.2,0.3".to_string()),
+                spatial_query: Some("POINT(10.0 20.0)".to_string()),
+                weights: Some("0.4,0.4,0.2".to_string()),
+                strategy: Some("rankfusion".to_string()),
+            },
             10,
             &config,
+            Some(&store),
         )?;
 
+        // Only the real (vector) modality contributes; text/spatial are
+        // excluded rather than fabricated, so results come solely from the
+        // indexed vector store.
         assert!(!results.is_empty());
         assert!(results[0].score > 0.0);
+        assert_eq!(results[0].uri, "doc_a");
         Ok(())
     }
 

@@ -1,24 +1,70 @@
 //! Pedersen Commitment Scheme for ZKP selective disclosure
 //!
-//! This module implements a Pedersen commitment scheme over a hash-based simulated
-//! prime-order group (using SHA-256 as a random oracle for group elements), providing:
+//! This module implements a **cryptographically sound** Pedersen commitment
+//! scheme over the Ristretto255 prime-order group (via `curve25519-dalek`),
+//! together with a real Schnorr proof-of-knowledge of the commitment opening:
 //!
-//! - `PedersenParams`: public parameters (generators G, H)
-//! - `AttributeCommitment`: Pedersen commitment to a single attribute
-//! - `SchnorrProof`: Non-interactive Schnorr proof-of-knowledge (Fiat-Shamir)
+//! - `PedersenParams`: public parameters / generator domain separation
+//! - `AttributeCommitment`: Pedersen commitment `C = m·G + r·H` to a single
+//!   attribute (stored as a 32-byte compressed Ristretto point)
+//! - `SchnorrProof`: non-interactive (Fiat-Shamir) Schnorr proof of knowledge of
+//!   `(m, r)` such that `C = m·G + r·H`. Verification checks the algebraic
+//!   relation `z_m·G + z_r·H == A + c·C`, so a proof cannot be forged without
+//!   knowing the witness (this is a real proof of knowledge, not a hash echo).
 //! - `SelectiveDisclosureRequest`: list of attribute paths to reveal
-//! - `SelectiveDisclosureProof` (Pedersen variant): revealed claims + ZKP proofs
+//! - `PedersenSelectiveDisclosureProof`: revealed claims + ZKP proofs
 //! - `prove_selective(credential, request) -> DidResult<PedersenSelectiveDisclosureProof>`
 //! - `verify_selective(proof, public_key) -> DidResult<bool>`
 //!
-//! The scheme uses CSPRNG blinding factors derived from OS entropy and
-//! Schnorr-style proof-of-knowledge for the commitment openings.
+//! Blinding factors are drawn from OS entropy (CSPRNG).
 
 use crate::zkp::selective_disclosure::{CredentialAttribute, SelectiveDisclosureCredential};
 use crate::{DidError, DidResult};
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::traits::MultiscalarMul;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha512};
 use std::collections::HashMap;
+
+// ── Ristretto Pedersen primitives ──────────────────────────────────────────────
+
+/// Reduce arbitrary bytes to a Ristretto scalar (uniform via SHA-512 wide reduce).
+fn ped_scalar_from_bytes(data: &[u8]) -> Scalar {
+    let hash = Sha512::digest(data);
+    let mut wide = [0u8; 64];
+    wide.copy_from_slice(&hash);
+    Scalar::from_bytes_mod_order_wide(&wide)
+}
+
+/// Hash a domain label to an independent Ristretto generator point.
+fn ped_hash_to_point(label: &[u8]) -> RistrettoPoint {
+    let hash = Sha512::digest(label);
+    let mut wide = [0u8; 64];
+    wide.copy_from_slice(&hash);
+    RistrettoPoint::from_uniform_bytes(&wide)
+}
+
+/// The two independent generators (G, H) for a given parameter domain.
+///
+/// `G` is the Ristretto basepoint; `H` is derived by hashing a domain-separated
+/// label to the curve, so `log_G(H)` is unknown (required for binding).
+fn ped_generators(params: &PedersenParams) -> (RistrettoPoint, RistrettoPoint) {
+    let g = RISTRETTO_BASEPOINT_POINT;
+    let h = ped_hash_to_point(format!("{}/Ristretto-H-v1", params.domain).as_bytes());
+    (g, h)
+}
+
+/// Decode a 32-byte canonical scalar; `None` if not canonical.
+fn ped_decode_scalar(bytes: &[u8; 32]) -> Option<Scalar> {
+    Option::<Scalar>::from(Scalar::from_canonical_bytes(*bytes))
+}
+
+/// Decode a 32-byte compressed Ristretto point; `None` if invalid.
+fn ped_decode_point(bytes: &[u8; 32]) -> Option<RistrettoPoint> {
+    CompressedRistretto(*bytes).decompress()
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -28,35 +74,41 @@ fn sha256(data: &[u8]) -> [u8; 32] {
 
 /// CSPRNG blinding: 32 random bytes from OS entropy XOR-ed with a deterministic
 /// seed (index + name) to ensure distinctness per attribute.
-fn generate_blinding(index: usize, name: &str) -> [u8; 32] {
+///
+/// Fails closed (returns an error) if the OS entropy source is unavailable — a
+/// predictable blinding factor would break the hiding property of the
+/// commitment, so no weak fallback is used.
+fn generate_blinding(index: usize, name: &str) -> DidResult<[u8; 32]> {
     // Deterministic component
     let det = sha256(&{
         let mut buf = index.to_be_bytes().to_vec();
         buf.extend_from_slice(name.as_bytes());
         buf
     });
-    // OS-entropy component
-    let mut rng_bytes = [0u8; 32];
-    use p256::elliptic_curve::rand_core::RngCore;
-    p256::elliptic_curve::rand_core::OsRng.fill_bytes(&mut rng_bytes);
+    // OS-entropy component (oxicrypto-rand → getrandom).
+    let rng_bytes = oxicrypto_rand::random_nonce::<32>()
+        .map_err(|e| DidError::InternalError(format!("OS entropy source failed: {e}")))?;
     // XOR
     let mut result = [0u8; 32];
     for (i, r) in result.iter_mut().enumerate() {
         *r = det[i] ^ rng_bytes[i];
     }
-    result
+    Ok(result)
 }
 
 // ── PedersenParams ────────────────────────────────────────────────────────────
 
 /// Public parameters for the Pedersen commitment scheme.
 ///
-/// G and H are "generators" represented as SHA-256 digests of fixed domain strings.
+/// The actual group generators are derived from `domain`: `G` is the Ristretto
+/// basepoint and `H` is a hash-to-curve point (see [`ped_generators`]). The
+/// `g`/`h` byte fields carry the compressed generator points for reference /
+/// serialization.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PedersenParams {
-    /// Generator G (32-byte hash of domain string)
+    /// Compressed Ristretto generator G (basepoint).
     pub g: [u8; 32],
-    /// Generator H (blinding generator — linearly independent of G)
+    /// Compressed Ristretto blinding generator H (independent of G).
     pub h: [u8; 32],
     /// Domain separation string
     pub domain: String,
@@ -65,36 +117,34 @@ pub struct PedersenParams {
 impl PedersenParams {
     /// Create the standard OxiRS parameters
     pub fn standard() -> Self {
-        let g = sha256(b"OxiRS-Pedersen-G-v1");
-        let h = sha256(b"OxiRS-Pedersen-H-v1");
-        Self {
-            g,
-            h,
-            domain: "oxirs-pedersen-v1".to_string(),
-        }
+        Self::from_domain("oxirs-pedersen-v1")
     }
 
     /// Create custom params from a domain string
     pub fn from_domain(domain: &str) -> Self {
-        let g = sha256(format!("{domain}/G").as_bytes());
-        let h = sha256(format!("{domain}/H").as_bytes());
-        Self {
-            g,
-            h,
+        let mut params = Self {
+            g: [0u8; 32],
+            h: [0u8; 32],
             domain: domain.to_string(),
-        }
+        };
+        let (g, h) = ped_generators(&params);
+        params.g = g.compress().to_bytes();
+        params.h = h.compress().to_bytes();
+        params
     }
 
-    /// Commit to a message `m` with blinding factor `r`:
-    /// `C = SHA-256(domain || G || m || H || r)`
+    /// Commit to a `message` with blinding factor `blinding`.
+    ///
+    /// Returns the compressed Ristretto point `C = m·G + r·H` (32 bytes), where
+    /// `m = H(message)` and `r = H(blinding)` are reduced to scalars. This is a
+    /// perfectly-hiding, computationally-binding Pedersen commitment.
     pub fn commit(&self, message: &[u8], blinding: &[u8; 32]) -> [u8; 32] {
-        let mut hasher = Sha256::new();
-        hasher.update(self.domain.as_bytes());
-        hasher.update(self.g);
-        hasher.update(message);
-        hasher.update(self.h);
-        hasher.update(blinding);
-        hasher.finalize().into()
+        let (g, h) = ped_generators(self);
+        let m = ped_scalar_from_bytes(message);
+        let r = ped_scalar_from_bytes(blinding);
+        RistrettoPoint::multiscalar_mul([m, r], [g, h])
+            .compress()
+            .to_bytes()
     }
 
     /// Verify an opening: re-compute the commitment and compare
@@ -125,16 +175,19 @@ pub struct AttributeCommitment {
 }
 
 impl AttributeCommitment {
-    /// Create a new commitment with a fresh blinding factor
-    pub fn commit_attr(params: &PedersenParams, attr: &CredentialAttribute) -> Self {
-        let blinding = generate_blinding(attr.index, &attr.name);
+    /// Create a new commitment with a fresh blinding factor.
+    ///
+    /// Fails closed if the OS entropy source needed for the blinding factor is
+    /// unavailable.
+    pub fn commit_attr(params: &PedersenParams, attr: &CredentialAttribute) -> DidResult<Self> {
+        let blinding = generate_blinding(attr.index, &attr.name)?;
         let commitment = params.commit(&attr.value, &blinding);
-        Self {
+        Ok(Self {
             index: attr.index,
             name: attr.name.clone(),
             commitment,
             blinding: Some(blinding),
-        }
+        })
     }
 
     /// Create a public commitment (no blinding factor)
@@ -150,143 +203,118 @@ impl AttributeCommitment {
 
 // ── Schnorr proof-of-knowledge ────────────────────────────────────────────────
 
-/// Non-interactive Schnorr-style proof-of-knowledge for a committed value.
+/// Non-interactive Schnorr proof of knowledge of a Pedersen commitment opening.
 ///
-/// Proves knowledge of (message, blinding) such that `C = Commit(message, blinding)`.
-/// Uses a hash-based simulation of the Fiat-Shamir transform with SHA-256.
+/// Proves knowledge of `(m, r)` such that `C = m·G + r·H` (Ristretto255),
+/// without revealing `m` or `r`. Fiat-Shamir transform over SHA-256.
 ///
-/// The proof is self-verifying: all values needed for verification are stored.
+/// Protocol (prover): pick random `t_m, t_r`; `A = t_m·G + t_r·H`;
+/// `c = H(domain || C || A || nonce)`; `z_m = t_m + c·m`, `z_r = t_r + c·r`.
+/// Proof = `(C, A, z_m, z_r)` (`c` is stored for consistency checking).
+///
+/// Verifier checks `z_m·G + z_r·H == A + c·C`. Forging a valid proof without
+/// knowing `(m, r)` requires solving the discrete logarithm — so, unlike the
+/// previous hash-echo construction, this proof cannot be fabricated.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchnorrProof {
-    /// The commitment being proved: C = Commit(message, blinding)
+    /// The commitment being proved: `C = m·G + r·H` (compressed Ristretto).
     pub commitment: [u8; 32],
-    /// Fiat-Shamir challenge: c = H(domain || C || A || nonce)
+    /// Fiat-Shamir challenge bytes `c = H(domain || C || A || nonce)`.
     pub challenge: [u8; 32],
-    /// Nonce commitment: A = H("nonce_commit" || t_m || t_r || commitment)
+    /// Nonce commitment `A = t_m·G + t_r·H` (compressed Ristretto).
     pub nonce_commit: [u8; 32],
-    /// Response binding tag: H("binding" || t_m || message || challenge)
+    /// Response scalar `z_m = t_m + c·m` (canonical 32-byte scalar).
     pub response_m: [u8; 32],
-    /// Response binding tag: H("binding_r" || t_r || blinding || challenge)
+    /// Response scalar `z_r = t_r + c·r` (canonical 32-byte scalar).
     pub response_r: [u8; 32],
-    /// Verification tag stored by prover: H("verify" || nonce_commit || challenge)
-    pub verify_tag: [u8; 32],
 }
 
 impl SchnorrProof {
-    /// Generate a hash-based Schnorr proof-of-knowledge for `(message, blinding)`.
-    ///
-    /// Protocol:
-    /// 1. Pick fresh random t_m, t_r
-    /// 2. nonce_commit = H("nonce_commit" || t_m || t_r || commitment)
-    /// 3. challenge    = H(domain || commitment || nonce_commit || nonce)
-    /// 4. response_m   = H("binding"   || t_m || message  || challenge)
-    /// 5. response_r   = H("binding_r" || t_r || blinding || challenge)
-    /// 6. verify_tag   = H("verify" || nonce_commit || response_m || response_r || challenge)
-    ///
-    /// The prover stores (commitment, nonce_commit, challenge, response_m, response_r, verify_tag).
-    /// The verifier reconstructs the challenge and verify_tag from the stored values.
+    /// Fiat-Shamir challenge bytes `H(domain || C || A || nonce)`.
+    fn challenge_bytes(
+        params: &PedersenParams,
+        commitment: &[u8; 32],
+        nonce_commit: &[u8; 32],
+        nonce: &[u8],
+    ) -> [u8; 32] {
+        let mut h = Sha256::new();
+        h.update(params.domain.as_bytes());
+        h.update(commitment);
+        h.update(nonce_commit);
+        h.update(nonce);
+        h.finalize().into()
+    }
+
+    /// Generate a Schnorr proof of knowledge of the opening `(message, blinding)`
+    /// of `commitment = C = m·G + r·H`.
     pub fn prove(
         params: &PedersenParams,
         commitment: [u8; 32],
         message: &[u8],
         blinding: &[u8; 32],
         nonce: &[u8],
-    ) -> Self {
-        let t_m = generate_blinding(0, "schnorr-nonce-m");
-        let t_r = generate_blinding(0, "schnorr-nonce-r");
+    ) -> DidResult<Self> {
+        let (g, h) = ped_generators(params);
+        let m = ped_scalar_from_bytes(message);
+        let r = ped_scalar_from_bytes(blinding);
+        let t_m = ped_scalar_from_bytes(&generate_blinding(0, "schnorr-nonce-m")?);
+        let t_r = ped_scalar_from_bytes(&generate_blinding(0, "schnorr-nonce-r")?);
 
-        // Nonce commitment: binds t_m, t_r and the target commitment
-        let nonce_commit: [u8; 32] = {
-            let mut h = Sha256::new();
-            h.update(b"nonce_commit");
-            h.update(t_m);
-            h.update(t_r);
-            h.update(commitment);
-            h.finalize().into()
-        };
+        // Nonce commitment A = t_m·G + t_r·H
+        let nonce_commit = RistrettoPoint::multiscalar_mul([t_m, t_r], [g, h])
+            .compress()
+            .to_bytes();
 
         // Fiat-Shamir challenge
-        let challenge: [u8; 32] = {
-            let mut h = Sha256::new();
-            h.update(params.domain.as_bytes());
-            h.update(commitment);
-            h.update(nonce_commit);
-            h.update(nonce);
-            h.finalize().into()
-        };
+        let challenge = Self::challenge_bytes(params, &commitment, &nonce_commit, nonce);
+        let c = ped_scalar_from_bytes(&challenge);
 
-        // Response bindings — these bind the witness into the proof
-        let response_m: [u8; 32] = {
-            let mut h = Sha256::new();
-            h.update(b"binding");
-            h.update(t_m);
-            h.update(message);
-            h.update(challenge);
-            h.finalize().into()
-        };
-        let response_r: [u8; 32] = {
-            let mut h = Sha256::new();
-            h.update(b"binding_r");
-            h.update(t_r);
-            h.update(blinding);
-            h.update(challenge);
-            h.finalize().into()
-        };
+        // Responses z_m = t_m + c·m, z_r = t_r + c·r
+        let z_m = t_m + c * m;
+        let z_r = t_r + c * r;
 
-        // Verification tag: H(nonce_commit || z_m || z_r || challenge)
-        // The verifier will recompute this from the stored components.
-        let verify_tag: [u8; 32] = {
-            let mut h = Sha256::new();
-            h.update(b"verify");
-            h.update(nonce_commit);
-            h.update(response_m);
-            h.update(response_r);
-            h.update(challenge);
-            h.finalize().into()
-        };
-
-        Self {
+        Ok(Self {
             commitment,
             challenge,
             nonce_commit,
-            response_m,
-            response_r,
-            verify_tag,
-        }
+            response_m: z_m.to_bytes(),
+            response_r: z_r.to_bytes(),
+        })
     }
 
-    /// Verify a Schnorr proof.
-    ///
-    /// Checks:
-    /// 1. Challenge consistency: c == H(domain || C || A || nonce)
-    /// 2. Verification tag consistency: stored_tag == H("verify" || A || z_m || z_r || c)
+    /// Verify the Schnorr proof: checks `z_m·G + z_r·H == A + c·C` with the
+    /// canonical Fiat-Shamir challenge. Returns `false` for any malformed or
+    /// forged proof.
     pub fn verify(&self, params: &PedersenParams, nonce: &[u8]) -> bool {
-        // Re-derive challenge from stored nonce_commit
-        let expected_challenge: [u8; 32] = {
-            let mut h = Sha256::new();
-            h.update(params.domain.as_bytes());
-            h.update(self.commitment);
-            h.update(self.nonce_commit);
-            h.update(nonce);
-            h.finalize().into()
-        };
-
+        // Recompute the canonical challenge and require it to match the stored one.
+        let expected_challenge =
+            Self::challenge_bytes(params, &self.commitment, &self.nonce_commit, nonce);
         if expected_challenge != self.challenge {
             return false;
         }
 
-        // Re-derive verification tag from stored components
-        let expected_verify_tag: [u8; 32] = {
-            let mut h = Sha256::new();
-            h.update(b"verify");
-            h.update(self.nonce_commit);
-            h.update(self.response_m);
-            h.update(self.response_r);
-            h.update(self.challenge);
-            h.finalize().into()
+        let (g, h) = ped_generators(params);
+        let c = ped_scalar_from_bytes(&expected_challenge);
+
+        let (z_m, z_r) = match (
+            ped_decode_scalar(&self.response_m),
+            ped_decode_scalar(&self.response_r),
+        ) {
+            (Some(a), Some(b)) => (a, b),
+            _ => return false,
+        };
+        let (c_point, a_point) = match (
+            ped_decode_point(&self.commitment),
+            ped_decode_point(&self.nonce_commit),
+        ) {
+            (Some(cp), Some(ap)) => (cp, ap),
+            _ => return false,
         };
 
-        expected_verify_tag == self.verify_tag
+        // z_m·G + z_r·H == A + c·C
+        let lhs = RistrettoPoint::multiscalar_mul([z_m, z_r], [g, h]);
+        let rhs = a_point + c_point * c;
+        lhs == rhs
     }
 }
 
@@ -419,7 +447,7 @@ pub fn prove_selective(
         .attributes
         .iter()
         .map(|attr| AttributeCommitment::commit_attr(&params, attr))
-        .collect();
+        .collect::<DidResult<Vec<_>>>()?;
 
     // Root commitment = SHA-256 of all individual Pedersen commitment bytes
     let root_commitment = pedersen_root_commitment(&attr_commits);
@@ -443,7 +471,7 @@ pub fn prove_selective(
                 &attr.value,
                 &blinding,
                 &request.nonce,
-            );
+            )?;
             schnorr_proofs.push(proof);
             hidden_commitments.push(AttributeCommitment::public_only(
                 attr.index,
@@ -893,7 +921,7 @@ mod tests {
     fn test_attribute_commitment_has_blinding() {
         let p = PedersenParams::standard();
         let attr = CredentialAttribute::new("name", "Alice", 0);
-        let c = AttributeCommitment::commit_attr(&p, &attr);
+        let c = AttributeCommitment::commit_attr(&p, &attr).expect("commit");
         assert!(c.blinding.is_some());
     }
 
@@ -901,7 +929,7 @@ mod tests {
     fn test_attribute_commitment_verify_opening() {
         let p = PedersenParams::standard();
         let attr = CredentialAttribute::new("age", "25", 1);
-        let c = AttributeCommitment::commit_attr(&p, &attr);
+        let c = AttributeCommitment::commit_attr(&p, &attr).expect("commit");
         let blinding = c.blinding.unwrap();
         assert!(p.verify_opening(&c.commitment, &attr.value, &blinding));
     }
@@ -922,7 +950,7 @@ mod tests {
         let commitment = p.commit(msg, &blinding);
         let nonce = b"verifier-nonce";
 
-        let proof = SchnorrProof::prove(&p, commitment, msg, &blinding, nonce);
+        let proof = SchnorrProof::prove(&p, commitment, msg, &blinding, nonce).expect("prove");
         assert!(proof.verify(&p, nonce));
     }
 
@@ -933,7 +961,7 @@ mod tests {
         let blinding = [3u8; 32];
         let commitment = p.commit(msg, &blinding);
 
-        let proof = SchnorrProof::prove(&p, commitment, msg, &blinding, b"nonce1");
+        let proof = SchnorrProof::prove(&p, commitment, msg, &blinding, b"nonce1").expect("prove");
         assert!(!proof.verify(&p, b"nonce2"));
     }
 
@@ -944,10 +972,53 @@ mod tests {
         let blinding = [1u8; 32];
         let commitment = p.commit(msg, &blinding);
 
-        let mut proof = SchnorrProof::prove(&p, commitment, msg, &blinding, b"n");
+        let mut proof = SchnorrProof::prove(&p, commitment, msg, &blinding, b"n").expect("prove");
         // Tamper the commitment in the proof
         proof.commitment[0] ^= 0xFF;
         assert!(!proof.verify(&p, b"n"));
+    }
+
+    #[test]
+    fn test_schnorr_forged_proof_from_scratch_rejected() {
+        // An attacker who does not know any opening fabricates proof fields.
+        // The algebraic relation z_m·G + z_r·H == A + c·C cannot hold, so verify
+        // must reject (this is the core anti-forgery property).
+        let p = PedersenParams::standard();
+        let commitment = p.commit(b"real secret", &[9u8; 32]);
+        let forged = SchnorrProof {
+            commitment,
+            challenge: [0u8; 32],
+            nonce_commit: [1u8; 32],
+            response_m: [2u8; 32],
+            response_r: [3u8; 32],
+        };
+        assert!(!forged.verify(&p, b"verifier-nonce"));
+    }
+
+    #[test]
+    fn test_schnorr_proof_not_transferable_to_other_commitment() {
+        // A valid proof for commitment C1 must not verify against a different
+        // commitment C2 (to a different message).
+        let p = PedersenParams::standard();
+        let b1 = [4u8; 32];
+        let c1 = p.commit(b"message-one", &b1);
+        let mut proof = SchnorrProof::prove(&p, c1, b"message-one", &b1, b"n").expect("prove");
+
+        let c2 = p.commit(b"message-two", &[5u8; 32]);
+        proof.commitment = c2;
+        assert!(!proof.verify(&p, b"n"));
+    }
+
+    #[test]
+    fn test_schnorr_forged_responses_rejected() {
+        // Keep a genuine challenge/nonce_commit but swap the response scalars:
+        // the verification equation fails.
+        let p = PedersenParams::standard();
+        let b = [6u8; 32];
+        let c = p.commit(b"val", &b);
+        let mut proof = SchnorrProof::prove(&p, c, b"val", &b, b"nn").expect("prove");
+        proof.response_m[0] ^= 0x01;
+        assert!(!proof.verify(&p, b"nn"));
     }
 
     // ── SelectiveDisclosureRequest ────────────────────────────────────────────

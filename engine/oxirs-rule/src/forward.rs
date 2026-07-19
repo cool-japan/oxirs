@@ -21,6 +21,40 @@ static ACTIVE_SUBSTITUTIONS: Lazy<Gauge> =
 /// Variable substitution mapping
 pub type Substitution = HashMap<String, Term>;
 
+/// Predicate-keyed index over ground triple facts.
+///
+/// Groups facts by their predicate term so a body atom with a bound predicate
+/// only scans facts sharing that predicate instead of the entire fact set.
+/// Non-triple atoms are never facts and are not indexed.
+#[derive(Debug, Default)]
+struct PredicateIndex {
+    by_predicate: HashMap<Term, Vec<RuleAtom>>,
+}
+
+impl PredicateIndex {
+    /// Build an index from an iterator of facts.
+    fn from_facts<'a, I>(facts: I) -> Self
+    where
+        I: IntoIterator<Item = &'a RuleAtom>,
+    {
+        let mut index = PredicateIndex::default();
+        for fact in facts {
+            index.insert(fact);
+        }
+        index
+    }
+
+    /// Insert a fact into the index (no-op for non-triple atoms).
+    fn insert(&mut self, fact: &RuleAtom) {
+        if let RuleAtom::Triple { predicate, .. } = fact {
+            self.by_predicate
+                .entry(predicate.clone())
+                .or_default()
+                .push(fact.clone());
+        }
+    }
+}
+
 /// Forward chaining inference engine
 #[derive(Debug)]
 pub struct ForwardChainer {
@@ -101,11 +135,16 @@ impl ForwardChainer {
         self.facts.clear();
     }
 
-    /// Perform forward chaining inference
+    /// Perform forward chaining inference.
+    ///
+    /// Uses **semi-naive** evaluation: facts are indexed by predicate so each
+    /// body atom only scans candidate facts sharing its predicate (rather than
+    /// the whole fact set), and each iteration joins only against the *delta*
+    /// of facts derived in the previous round instead of re-deriving everything
+    /// over the entire set. This computes the same least fixpoint as the naive
+    /// algorithm but avoids the O(rules * facts * iterations) blow-up.
     pub fn infer(&mut self) -> Result<Vec<RuleAtom>> {
         let initial_fact_count = self.facts.len();
-        let mut iteration = 0;
-        let mut new_facts_added = true;
 
         info!(
             "Starting forward chaining with {} initial facts and {} rules",
@@ -113,34 +152,48 @@ impl ForwardChainer {
             self.rules.len()
         );
 
-        while new_facts_added && iteration < self.max_iterations {
-            new_facts_added = false;
+        // Build a predicate index over the current facts.
+        let mut index = PredicateIndex::from_facts(self.facts.iter());
+
+        // Semi-naive delta: facts newly derived in the previous round. Seed it
+        // with every current fact so the first round considers the full set
+        // (equivalent to the naive first pass).
+        let mut delta: Vec<RuleAtom> = self.facts.iter().cloned().collect();
+
+        let mut iteration = 0;
+        while !delta.is_empty() && iteration < self.max_iterations {
             iteration += 1;
 
             if self.debug_mode {
                 debug!(
-                    "Forward chaining iteration {} with {} facts",
+                    "Forward chaining iteration {} with {} facts ({} in delta)",
                     iteration,
-                    self.facts.len()
+                    self.facts.len(),
+                    delta.len()
                 );
             }
 
-            // Apply all rules to current facts
+            let delta_index = PredicateIndex::from_facts(delta.iter());
+            let mut next_delta: Vec<RuleAtom> = Vec::new();
+
             for rule in &self.rules {
-                let new_facts = self.apply_rule(rule)?;
-                for fact in new_facts {
+                let derived = self.apply_rule_semi_naive(rule, &index, &delta_index, iteration)?;
+                for fact in derived {
                     if !self.facts.contains(&fact) {
                         if self.debug_mode {
                             trace!("Derived new fact from rule '{}': {:?}", rule.name, fact);
                         }
-                        self.facts.insert(fact);
-                        new_facts_added = true;
+                        index.insert(&fact);
+                        self.facts.insert(fact.clone());
+                        next_delta.push(fact);
                     }
                 }
             }
+
+            delta = next_delta;
         }
 
-        if iteration >= self.max_iterations {
+        if iteration >= self.max_iterations && !delta.is_empty() {
             warn!(
                 "Forward chaining reached maximum iterations ({}), may not have reached fixpoint",
                 self.max_iterations
@@ -156,30 +209,99 @@ impl ForwardChainer {
         Ok(self.get_facts())
     }
 
-    /// Apply a single rule to current facts
-    fn apply_rule(&self, rule: &Rule) -> Result<Vec<RuleAtom>> {
+    /// Apply a single rule under semi-naive evaluation.
+    ///
+    /// For a rule whose body contains fact-consuming (triple) atoms, this fires
+    /// the rule once per triple-atom position, drawing that position from the
+    /// `delta` index and all other positions from the `full` index. The union
+    /// over positions yields exactly the derivations that use at least one
+    /// newly-derived fact — derivations that use only older facts were already
+    /// produced in an earlier round. Rules with no triple atoms in their body
+    /// (pure builtin/constraint bodies) are evaluated once, in the first round.
+    fn apply_rule_semi_naive(
+        &self,
+        rule: &Rule,
+        full: &PredicateIndex,
+        delta: &PredicateIndex,
+        iteration: usize,
+    ) -> Result<Vec<RuleAtom>> {
+        let triple_positions: Vec<usize> = rule
+            .body
+            .iter()
+            .enumerate()
+            .filter(|(_, atom)| matches!(atom, RuleAtom::Triple { .. }))
+            .map(|(i, _)| i)
+            .collect();
+
         let mut new_facts = Vec::new();
 
-        // Find all possible substitutions that satisfy the rule body
-        let substitutions = self.find_substitutions(&rule.body)?;
+        if triple_positions.is_empty() {
+            // No fact-consuming atoms: the body depends only on builtins /
+            // constraints over ground terms, so it can only fire once. Evaluate
+            // it in the first round against the full fact set.
+            if iteration == 1 {
+                let substitutions = self.find_substitutions(&rule.body)?;
+                for substitution in substitutions {
+                    for head_atom in &rule.head {
+                        new_facts.push(self.apply_substitution(head_atom, &substitution)?);
+                    }
+                }
+            }
+            return Ok(new_facts);
+        }
 
-        // Apply each substitution to the rule head
-        for substitution in substitutions {
-            for head_atom in &rule.head {
-                let instantiated = self.apply_substitution(head_atom, &substitution)?;
-                new_facts.push(instantiated);
+        for &delta_pos in &triple_positions {
+            let substitutions =
+                self.find_substitutions_semi_naive(&rule.body, full, delta, delta_pos)?;
+            for substitution in substitutions {
+                for head_atom in &rule.head {
+                    new_facts.push(self.apply_substitution(head_atom, &substitution)?);
+                }
             }
         }
 
         if self.debug_mode && !new_facts.is_empty() {
             debug!(
-                "Rule '{}' produced {} new facts",
+                "Rule '{}' produced {} candidate facts",
                 rule.name,
                 new_facts.len()
             );
         }
 
         Ok(new_facts)
+    }
+
+    /// Find substitutions satisfying `body`, drawing the atom at `delta_pos`
+    /// from the `delta` index and all other atoms from the `full` index.
+    fn find_substitutions_semi_naive(
+        &self,
+        body: &[RuleAtom],
+        full: &PredicateIndex,
+        delta: &PredicateIndex,
+        delta_pos: usize,
+    ) -> Result<Vec<Substitution>> {
+        if body.is_empty() {
+            return Ok(vec![HashMap::new()]);
+        }
+
+        let source_for = |i: usize| if i == delta_pos { delta } else { full };
+
+        let mut substitutions =
+            self.match_atom_indexed(&body[0], &HashMap::new(), source_for(0))?;
+        ACTIVE_SUBSTITUTIONS.set(substitutions.len() as f64);
+
+        for (i, atom) in body.iter().enumerate().skip(1) {
+            let source = source_for(i);
+            let mut new_substitutions = Vec::new();
+            for substitution in substitutions {
+                let extended = self.match_atom_indexed(atom, &substitution, source)?;
+                new_substitutions.extend(extended);
+            }
+            substitutions = new_substitutions;
+            ACTIVE_SUBSTITUTIONS.set(substitutions.len() as f64);
+        }
+
+        Ok(substitutions)
     }
 
     /// Find all substitutions that satisfy the rule body
@@ -210,17 +332,18 @@ impl ForwardChainer {
         Ok(substitutions)
     }
 
-    /// Match an atom against facts with a given partial substitution
+    /// Match an atom against all facts with a given partial substitution.
+    ///
+    /// Retained for bodies evaluated outside the predicate-indexed path (e.g.
+    /// pure builtin/constraint bodies via [`find_substitutions`]).
     fn match_atom(&self, atom: &RuleAtom, partial_sub: &Substitution) -> Result<Vec<Substitution>> {
-        let mut substitutions = Vec::new();
-
         match atom {
             RuleAtom::Triple {
                 subject,
                 predicate,
                 object,
             } => {
-                // Match against all facts
+                let mut substitutions = Vec::new();
                 for fact in &self.facts {
                     if let RuleAtom::Triple {
                         subject: fact_subject,
@@ -228,28 +351,104 @@ impl ForwardChainer {
                         object: fact_object,
                     } = fact
                     {
-                        // OPTIMIZED: Only clone inside unify_triple if unification succeeds
                         if let Some(substitution) = self.unify_triple(
                             (subject, predicate, object),
                             (fact_subject, fact_predicate, fact_object),
                             partial_sub,
                         )? {
-                            // Track successful unification (clone happened inside unify_triple)
                             SUBSTITUTION_CLONES.inc();
                             substitutions.push(substitution);
                         }
                     }
                 }
+                Ok(substitutions)
+            }
+            _ => self.match_filter_atom(atom, partial_sub),
+        }
+    }
+
+    /// Match a triple atom against a predicate-indexed fact set, or evaluate a
+    /// builtin/constraint filter atom. Only candidate facts sharing the atom's
+    /// (substituted) predicate are scanned; an unbound predicate falls back to
+    /// scanning every bucket.
+    fn match_atom_indexed(
+        &self,
+        atom: &RuleAtom,
+        partial_sub: &Substitution,
+        index: &PredicateIndex,
+    ) -> Result<Vec<Substitution>> {
+        match atom {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
+                let mut substitutions = Vec::new();
+                let pred_term = self.substitute_term(predicate, partial_sub);
+                let pattern = (subject, predicate, object);
+                if matches!(pred_term, Term::Variable(_)) {
+                    for bucket in index.by_predicate.values() {
+                        self.unify_bucket(pattern, bucket, partial_sub, &mut substitutions)?;
+                    }
+                } else if let Some(bucket) = index.by_predicate.get(&pred_term) {
+                    self.unify_bucket(pattern, bucket, partial_sub, &mut substitutions)?;
+                }
+                Ok(substitutions)
+            }
+            _ => self.match_filter_atom(atom, partial_sub),
+        }
+    }
+
+    /// Unify a triple pattern against every fact in a candidate bucket,
+    /// pushing successful extended substitutions.
+    fn unify_bucket(
+        &self,
+        pattern: (&Term, &Term, &Term),
+        bucket: &[RuleAtom],
+        partial_sub: &Substitution,
+        substitutions: &mut Vec<Substitution>,
+    ) -> Result<()> {
+        for fact in bucket {
+            if let RuleAtom::Triple {
+                subject: fact_subject,
+                predicate: fact_predicate,
+                object: fact_object,
+            } = fact
+            {
+                if let Some(substitution) = self.unify_triple(
+                    pattern,
+                    (fact_subject, fact_predicate, fact_object),
+                    partial_sub,
+                )? {
+                    SUBSTITUTION_CLONES.inc();
+                    substitutions.push(substitution);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Evaluate a non-triple (builtin / constraint) body atom against a partial
+    /// substitution. These atoms filter or bind variables but never consult the
+    /// fact store.
+    fn match_filter_atom(
+        &self,
+        atom: &RuleAtom,
+        partial_sub: &Substitution,
+    ) -> Result<Vec<Substitution>> {
+        let mut substitutions = Vec::new();
+
+        match atom {
+            RuleAtom::Triple { .. } => {
+                // Triples are handled by the fact-matching paths, not here.
             }
             RuleAtom::Builtin { name, args } => {
-                // OPTIMIZED: Only clone if predicate succeeds
                 if let Some(substitution) = self.evaluate_builtin(name, args, partial_sub)? {
                     SUBSTITUTION_CLONES.inc();
                     substitutions.push(substitution);
                 }
             }
             RuleAtom::NotEqual { left, right } => {
-                // Handle not-equal constraint
                 let left_term = self.substitute_term(left, partial_sub);
                 let right_term = self.substitute_term(right, partial_sub);
                 if !self.terms_equal(&left_term, &right_term) {
@@ -258,7 +457,6 @@ impl ForwardChainer {
                 }
             }
             RuleAtom::GreaterThan { left, right } => {
-                // Handle greater-than constraint
                 let left_term = self.substitute_term(left, partial_sub);
                 let right_term = self.substitute_term(right, partial_sub);
                 if self.compare_terms(&left_term, &right_term) > 0 {
@@ -267,7 +465,6 @@ impl ForwardChainer {
                 }
             }
             RuleAtom::LessThan { left, right } => {
-                // Handle less-than constraint
                 let left_term = self.substitute_term(left, partial_sub);
                 let right_term = self.substitute_term(right, partial_sub);
                 if self.compare_terms(&left_term, &right_term) < 0 {
@@ -919,6 +1116,132 @@ mod tests {
             subject: Term::Constant("john".to_string()),
             predicate: Term::Constant("ancestor".to_string()),
             object: Term::Constant("bob".to_string()),
+        }));
+        Ok(())
+    }
+
+    /// Semi-naive evaluation must still reach the full transitive closure over
+    /// a multi-hop chain that requires several iterations to saturate.
+    #[test]
+    fn test_semi_naive_deep_transitive_closure() -> Result<(), Box<dyn std::error::Error>> {
+        let mut chainer = ForwardChainer::new();
+
+        // path(X,Z) :- edge(X,Y), path(Y,Z)
+        chainer.add_rule(Rule {
+            name: "transitive_path".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("edge".to_string()),
+                    object: Term::Variable("Y".to_string()),
+                },
+                RuleAtom::Triple {
+                    subject: Term::Variable("Y".to_string()),
+                    predicate: Term::Constant("path".to_string()),
+                    object: Term::Variable("Z".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("path".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
+        });
+        // path(X,Y) :- edge(X,Y)
+        chainer.add_rule(Rule {
+            name: "base_path".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("edge".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("path".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        });
+
+        // Chain n0 -> n1 -> n2 -> n3 -> n4
+        let nodes = ["n0", "n1", "n2", "n3", "n4"];
+        for pair in nodes.windows(2) {
+            chainer.add_fact(RuleAtom::Triple {
+                subject: Term::Constant(pair[0].to_string()),
+                predicate: Term::Constant("edge".to_string()),
+                object: Term::Constant(pair[1].to_string()),
+            });
+        }
+
+        let facts = chainer.infer()?;
+
+        // Every ordered pair (ni, nj) with i < j must be reachable.
+        for i in 0..nodes.len() {
+            for j in (i + 1)..nodes.len() {
+                let expected = RuleAtom::Triple {
+                    subject: Term::Constant(nodes[i].to_string()),
+                    predicate: Term::Constant("path".to_string()),
+                    object: Term::Constant(nodes[j].to_string()),
+                };
+                assert!(
+                    facts.contains(&expected),
+                    "missing transitive path {} -> {}",
+                    nodes[i],
+                    nodes[j]
+                );
+            }
+        }
+        // 5 nodes -> 10 ordered reachable pairs.
+        let path_count = facts
+            .iter()
+            .filter(|f| matches!(f, RuleAtom::Triple { predicate: Term::Constant(p), .. } if p == "path"))
+            .count();
+        assert_eq!(path_count, 10);
+        Ok(())
+    }
+
+    /// A body atom with an unbound (variable) predicate must still match facts
+    /// across all predicate buckets under the indexed evaluation path.
+    #[test]
+    fn test_semi_naive_variable_predicate() -> Result<(), Box<dyn std::error::Error>> {
+        let mut chainer = ForwardChainer::new();
+
+        // related(X,Y) :- link(X, P, Y)  -- here the predicate position is a variable
+        chainer.add_rule(Rule {
+            name: "variable_predicate".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Variable("P".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("related".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        });
+
+        chainer.add_fact(RuleAtom::Triple {
+            subject: Term::Constant("a".to_string()),
+            predicate: Term::Constant("knows".to_string()),
+            object: Term::Constant("b".to_string()),
+        });
+        chainer.add_fact(RuleAtom::Triple {
+            subject: Term::Constant("c".to_string()),
+            predicate: Term::Constant("likes".to_string()),
+            object: Term::Constant("d".to_string()),
+        });
+
+        let facts = chainer.infer()?;
+
+        assert!(facts.contains(&RuleAtom::Triple {
+            subject: Term::Constant("a".to_string()),
+            predicate: Term::Constant("related".to_string()),
+            object: Term::Constant("b".to_string()),
+        }));
+        assert!(facts.contains(&RuleAtom::Triple {
+            subject: Term::Constant("c".to_string()),
+            predicate: Term::Constant("related".to_string()),
+            object: Term::Constant("d".to_string()),
         }));
         Ok(())
     }

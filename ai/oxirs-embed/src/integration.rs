@@ -2,6 +2,8 @@
 
 use crate::{EmbeddingModel, Vector};
 use anyhow::{anyhow, Result};
+use oxirs_vec::index::{AdvancedVectorIndex, IndexConfig, IndexType};
+use oxirs_vec::VectorIndex as OxirsVectorIndex;
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
@@ -10,6 +12,20 @@ pub struct VectorStoreBridge {
     entity_mappings: HashMap<String, String>,
     relation_mappings: HashMap<String, String>,
     prefix_config: PrefixConfig,
+    /// Flat (brute-force) vector index over synced entity embeddings, keyed
+    /// by the same URI stored in `entity_mappings`, backing
+    /// [`find_similar_entities`](Self::find_similar_entities).
+    entity_index: AdvancedVectorIndex,
+    /// Same as `entity_index` but for relation embeddings, backing
+    /// [`find_similar_relations`](Self::find_similar_relations).
+    relation_index: AdvancedVectorIndex,
+}
+
+fn flat_index() -> AdvancedVectorIndex {
+    AdvancedVectorIndex::new(IndexConfig {
+        index_type: IndexType::Flat,
+        ..IndexConfig::default()
+    })
 }
 
 /// Configuration for URI prefixes in vector store
@@ -37,6 +53,8 @@ impl VectorStoreBridge {
             entity_mappings: HashMap::new(),
             relation_mappings: HashMap::new(),
             prefix_config: PrefixConfig::default(),
+            entity_index: flat_index(),
+            relation_index: flat_index(),
         }
     }
 
@@ -46,6 +64,8 @@ impl VectorStoreBridge {
             entity_mappings: HashMap::new(),
             relation_mappings: HashMap::new(),
             prefix_config,
+            entity_index: flat_index(),
+            relation_index: flat_index(),
         }
     }
 
@@ -60,8 +80,18 @@ impl VectorStoreBridge {
         let entities = model.get_entities();
         for entity in &entities {
             match model.get_entity_embedding(entity) {
-                Ok(_embedding) => {
+                Ok(embedding) => {
                     let uri = self.generate_entity_uri(entity);
+                    if let Err(e) = self
+                        .entity_index
+                        .insert(uri.clone(), embedding.into_inner())
+                    {
+                        warn!("Failed to index embedding for entity {}: {}", entity, e);
+                        sync_stats
+                            .errors
+                            .push(format!("Entity {entity} (indexing): {e}"));
+                        continue;
+                    }
                     self.entity_mappings.insert(entity.clone(), uri);
                     sync_stats.entities_synced += 1;
                 }
@@ -76,8 +106,18 @@ impl VectorStoreBridge {
         let relations = model.get_relations();
         for relation in &relations {
             match model.get_relation_embedding(relation) {
-                Ok(_embedding) => {
+                Ok(embedding) => {
                     let uri = self.generate_relation_uri(relation);
+                    if let Err(e) = self
+                        .relation_index
+                        .insert(uri.clone(), embedding.into_inner())
+                    {
+                        warn!("Failed to index embedding for relation {}: {}", relation, e);
+                        sync_stats
+                            .errors
+                            .push(format!("Relation {relation} (indexing): {e}"));
+                        continue;
+                    }
                     self.relation_mappings.insert(relation.clone(), uri);
                     sync_stats.relations_synced += 1;
                 }
@@ -99,26 +139,67 @@ impl VectorStoreBridge {
         Ok(sync_stats)
     }
 
-    /// Find similar entities using vector similarity
-    pub fn find_similar_entities(&self, entity: &str, _k: usize) -> Result<Vec<(String, f32)>> {
-        if let Some(_uri) = self.entity_mappings.get(entity) {
-            // This would require extending VectorStore to support querying by URI
-            // For now, we return empty results
-            debug!("Searching for entities similar to: {}", entity);
-            Ok(vec![])
-        } else {
-            Err(anyhow!("Entity not found in mappings: {}", entity))
-        }
+    /// Find entities most similar to `entity` by cosine/L2 distance (per the
+    /// index's configured metric) between their synced embeddings. `entity`
+    /// itself is excluded from the results.
+    pub fn find_similar_entities(&self, entity: &str, k: usize) -> Result<Vec<(String, f32)>> {
+        let uri = self
+            .entity_mappings
+            .get(entity)
+            .ok_or_else(|| anyhow!("Entity not found in mappings: {}", entity))?;
+        let query = self
+            .entity_index
+            .get_vector(uri)
+            .ok_or_else(|| anyhow!("Entity '{}' is mapped but has no indexed embedding", entity))?;
+
+        debug!("Searching for entities similar to: {}", entity);
+        let results = self.entity_index.search_knn(query, k + 1)?;
+        Ok(results
+            .into_iter()
+            .filter(|(result_uri, _)| result_uri != uri)
+            .take(k)
+            .map(|(result_uri, distance)| (self.entity_name_from_uri(&result_uri), distance))
+            .collect())
     }
 
-    /// Find similar relations using vector similarity
-    pub fn find_similar_relations(&self, relation: &str, _k: usize) -> Result<Vec<(String, f32)>> {
-        if let Some(_uri) = self.relation_mappings.get(relation) {
-            debug!("Searching for relations similar to: {}", relation);
-            Ok(vec![])
-        } else {
-            Err(anyhow!("Relation not found in mappings: {}", relation))
-        }
+    /// Find relations most similar to `relation`, analogous to
+    /// [`find_similar_entities`](Self::find_similar_entities).
+    pub fn find_similar_relations(&self, relation: &str, k: usize) -> Result<Vec<(String, f32)>> {
+        let uri = self
+            .relation_mappings
+            .get(relation)
+            .ok_or_else(|| anyhow!("Relation not found in mappings: {}", relation))?;
+        let query = self.relation_index.get_vector(uri).ok_or_else(|| {
+            anyhow!(
+                "Relation '{}' is mapped but has no indexed embedding",
+                relation
+            )
+        })?;
+
+        debug!("Searching for relations similar to: {}", relation);
+        let results = self.relation_index.search_knn(query, k + 1)?;
+        Ok(results
+            .into_iter()
+            .filter(|(result_uri, _)| result_uri != uri)
+            .take(k)
+            .map(|(result_uri, distance)| (self.relation_name_from_uri(&result_uri), distance))
+            .collect())
+    }
+
+    /// Recover the original entity name from a generated URI (inverse of
+    /// [`generate_entity_uri`](Self::generate_entity_uri)).
+    fn entity_name_from_uri(&self, uri: &str) -> String {
+        uri.strip_prefix(&self.prefix_config.entity_prefix)
+            .unwrap_or(uri)
+            .to_string()
+    }
+
+    /// Recover the original relation name from a generated URI (inverse of
+    /// [`generate_relation_uri`](Self::generate_relation_uri)).
+    fn relation_name_from_uri(&self, uri: &str) -> String {
+        uri.strip_prefix(&self.prefix_config.relation_prefix)
+            .unwrap_or(uri)
+            .to_string()
     }
 
     /// Generate URI for entity
@@ -212,39 +293,103 @@ impl ChatIntegration {
         self
     }
 
-    /// Extract relevant entities from a query
+    /// Extract entities from the model's vocabulary that appear as a
+    /// substring of `query` (case-insensitive).
+    ///
+    /// Rather than scanning the whole query once per known entity (`O(entities
+    /// × query length)`), this builds a lowercase-name index once and scans
+    /// the query a single time for bounded-length substring windows against
+    /// that index (`O(entities + query length × longest entity name)`).
     pub fn extract_relevant_entities(&self, query: &str) -> Result<Vec<String>> {
-        // This is a simplified implementation
-        // In practice, this would use NLP techniques to identify entities
         let entities = self.model.get_entities();
-        let mut relevant = Vec::new();
+        if entities.is_empty() {
+            return Ok(Vec::new());
+        }
 
+        let query_lower = query.to_lowercase();
+
+        let mut entity_index: HashMap<String, String> = HashMap::new();
+        let mut max_entity_chars = 0usize;
         for entity in entities {
-            // Simple substring matching - would be replaced with proper NLP
-            if query.to_lowercase().contains(&entity.to_lowercase()) {
-                relevant.push(entity);
+            let lower = entity.to_lowercase();
+            max_entity_chars = max_entity_chars.max(lower.chars().count());
+            entity_index.insert(lower, entity);
+        }
+        if max_entity_chars == 0 {
+            return Ok(Vec::new());
+        }
+
+        // Byte offset of every character boundary in the query (plus one past
+        // the end) so substrings never split a multi-byte UTF-8 character.
+        let boundaries: Vec<usize> = query_lower
+            .char_indices()
+            .map(|(byte_idx, _)| byte_idx)
+            .chain(std::iter::once(query_lower.len()))
+            .collect();
+        let num_chars = boundaries.len() - 1;
+
+        let mut relevant = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for start in 0..num_chars {
+            let start_byte = boundaries[start];
+            let max_len = max_entity_chars.min(num_chars - start);
+            for len in 1..=max_len {
+                let end_byte = boundaries[start + len];
+                let window = &query_lower[start_byte..end_byte];
+                if let Some(original) = entity_index.get(window) {
+                    if seen.insert(original.clone()) {
+                        relevant.push(original.clone());
+                    }
+                }
             }
         }
 
         Ok(relevant)
     }
 
-    /// Generate context embeddings for a conversation
-    pub fn generate_context_embedding(&self, messages: &[String]) -> Result<Vector> {
+    /// Generate a context embedding for a conversation by encoding the most
+    /// recent messages (bounded by `context_window`) with the held model and
+    /// averaging the resulting vectors component-wise.
+    pub async fn generate_context_embedding(&self, messages: &[String]) -> Result<Vector> {
         if messages.is_empty() {
             return Err(anyhow!("No messages provided"));
         }
 
         // Take the last N messages based on context window
-        let _recent_messages: Vec<&String> =
-            messages.iter().rev().take(self.context_window).collect();
+        let recent_messages: Vec<String> = messages
+            .iter()
+            .rev()
+            .take(self.context_window)
+            .cloned()
+            .collect();
 
-        // For now, just return a dummy embedding
-        // In practice, this would combine message embeddings intelligently
-        let dummy_values = vec![0.0; 100]; // Would be model's dimension
-        Ok(Vector::new(
-            dummy_values.into_iter().map(|x| x as f32).collect(),
-        ))
+        let encoded = self.model.encode(&recent_messages).await?;
+        let dim = encoded
+            .iter()
+            .map(|v| v.len())
+            .find(|&len| len > 0)
+            .ok_or_else(|| anyhow!("Model returned no non-empty encodings for these messages"))?;
+
+        let mut combined = vec![0.0f32; dim];
+        let mut count = 0usize;
+        for vector in &encoded {
+            if vector.len() != dim {
+                // Defensively skip any encoding with a mismatched dimension
+                // rather than corrupting the running average.
+                continue;
+            }
+            for (acc, value) in combined.iter_mut().zip(vector.iter()) {
+                *acc += value;
+            }
+            count += 1;
+        }
+
+        for value in combined.iter_mut() {
+            *value /= count as f32;
+        }
+
+        Ok(Vector::new(combined))
     }
 
     /// Generate personalized embeddings for a user
@@ -916,6 +1061,206 @@ mod tests {
 
         let relation_uri = bridge.generate_relation_uri("test_relation");
         assert!(relation_uri.starts_with("kg:relation:"));
+    }
+
+    /// Regression test: `find_similar_entities`/`find_similar_relations` must
+    /// return real nearest-neighbor results from the synced embeddings
+    /// instead of always an empty `Vec`.
+    #[tokio::test]
+    async fn test_vector_store_bridge_find_similar_returns_real_results() -> Result<()> {
+        let config = ModelConfig::default().with_dimensions(8);
+        let mut model = TransE::new(config);
+
+        for (s, p, o) in [
+            ("alice", "knows", "bob"),
+            ("bob", "knows", "carol"),
+            ("carol", "knows", "alice"),
+        ] {
+            model.add_triple(crate::Triple::new(
+                crate::NamedNode::new(s)?,
+                crate::NamedNode::new(p)?,
+                crate::NamedNode::new(o)?,
+            ))?;
+        }
+        model.train(Some(1)).await?;
+
+        let mut bridge = VectorStoreBridge::new();
+        let stats = bridge.sync_model_embeddings(&model)?;
+        assert_eq!(stats.entities_synced, 3);
+        assert_eq!(stats.relations_synced, 1);
+        assert!(stats.errors.is_empty(), "errors = {:?}", stats.errors);
+
+        // Every other entity should be a candidate neighbor for "alice".
+        let similar = bridge.find_similar_entities("alice", 2)?;
+        assert!(!similar.is_empty(), "expected at least one similar entity");
+        assert!(
+            similar.iter().all(|(name, _)| name != "alice"),
+            "the query entity itself must not appear in its own results: {:?}",
+            similar
+        );
+
+        // Unknown entity must error rather than silently return empty.
+        assert!(bridge.find_similar_entities("nobody", 2).is_err());
+
+        Ok(())
+    }
+
+    /// A minimal `EmbeddingModel` whose `encode` deterministically maps text
+    /// length to vector values, used to exercise `ChatIntegration` methods
+    /// that need real (if simple) text encoding — unlike the KGE models in
+    /// `crate::models`, which all reject `encode` outright.
+    struct MockTextModel {
+        config: ModelConfig,
+        model_id: uuid::Uuid,
+        entities: Vec<String>,
+    }
+
+    impl MockTextModel {
+        fn new(dimensions: usize, entities: Vec<String>) -> Self {
+            Self {
+                config: ModelConfig::default().with_dimensions(dimensions),
+                model_id: uuid::Uuid::new_v4(),
+                entities,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl EmbeddingModel for MockTextModel {
+        fn config(&self) -> &ModelConfig {
+            &self.config
+        }
+        fn model_id(&self) -> &uuid::Uuid {
+            &self.model_id
+        }
+        fn model_type(&self) -> &'static str {
+            "MockText"
+        }
+        fn add_triple(&mut self, _triple: crate::Triple) -> Result<()> {
+            Ok(())
+        }
+        async fn train(&mut self, _epochs: Option<usize>) -> Result<crate::TrainingStats> {
+            Ok(crate::TrainingStats {
+                epochs_completed: 1,
+                final_loss: 0.0,
+                training_time_seconds: 0.0,
+                convergence_achieved: true,
+                loss_history: vec![0.0],
+            })
+        }
+        fn get_entity_embedding(&self, entity: &str) -> Result<Vector> {
+            Ok(Vector::new(vec![
+                entity.len() as f32;
+                self.config.dimensions
+            ]))
+        }
+        fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+            Ok(Vector::new(vec![
+                relation.len() as f32;
+                self.config.dimensions
+            ]))
+        }
+        fn score_triple(&self, _subject: &str, _predicate: &str, _object: &str) -> Result<f64> {
+            Ok(0.0)
+        }
+        fn predict_objects(
+            &self,
+            _subject: &str,
+            _predicate: &str,
+            _k: usize,
+        ) -> Result<Vec<(String, f64)>> {
+            Ok(vec![])
+        }
+        fn predict_subjects(
+            &self,
+            _predicate: &str,
+            _object: &str,
+            _k: usize,
+        ) -> Result<Vec<(String, f64)>> {
+            Ok(vec![])
+        }
+        fn predict_relations(
+            &self,
+            _subject: &str,
+            _object: &str,
+            _k: usize,
+        ) -> Result<Vec<(String, f64)>> {
+            Ok(vec![])
+        }
+        fn get_entities(&self) -> Vec<String> {
+            self.entities.clone()
+        }
+        fn get_relations(&self) -> Vec<String> {
+            vec![]
+        }
+        fn get_stats(&self) -> crate::ModelStats {
+            crate::ModelStats {
+                num_entities: self.entities.len(),
+                dimensions: self.config.dimensions,
+                is_trained: true,
+                ..Default::default()
+            }
+        }
+        fn save(&self, _path: &str) -> Result<()> {
+            Ok(())
+        }
+        fn load(&mut self, _path: &str) -> Result<()> {
+            Ok(())
+        }
+        fn clear(&mut self) {}
+        fn is_trained(&self) -> bool {
+            true
+        }
+        async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+            Ok(texts
+                .iter()
+                .map(|t| vec![t.len() as f32; self.config.dimensions])
+                .collect())
+        }
+    }
+
+    /// Regression test: `extract_relevant_entities` must find entities that
+    /// appear as a substring of the query using the windowed-index rewrite.
+    #[test]
+    fn test_extract_relevant_entities_finds_substring_matches() -> Result<()> {
+        let model = MockTextModel::new(
+            4,
+            vec!["alice".to_string(), "bob".to_string(), "carol".to_string()],
+        );
+        let integration = ChatIntegration::new(Box::new(model));
+
+        let relevant = integration.extract_relevant_entities("Alice met Bob yesterday.")?;
+        assert!(relevant.contains(&"alice".to_string()));
+        assert!(relevant.contains(&"bob".to_string()));
+        assert!(!relevant.contains(&"carol".to_string()));
+
+        Ok(())
+    }
+
+    /// Regression test: `generate_context_embedding` must actually encode and
+    /// combine the recent messages via the model, instead of returning a
+    /// fixed all-zero placeholder vector regardless of input.
+    #[tokio::test]
+    async fn test_generate_context_embedding_reflects_message_content() -> Result<()> {
+        let model = MockTextModel::new(4, vec![]);
+        let integration = ChatIntegration::new(Box::new(model));
+
+        let short = integration
+            .generate_context_embedding(&["hi".to_string()])
+            .await?;
+        let long = integration
+            .generate_context_embedding(&["a much longer message here".to_string()])
+            .await?;
+
+        assert_eq!(short.values.len(), 4);
+        assert_ne!(
+            short.values, long.values,
+            "different message content should produce different context embeddings"
+        );
+
+        assert!(integration.generate_context_embedding(&[]).await.is_err());
+
+        Ok(())
     }
 
     #[test]

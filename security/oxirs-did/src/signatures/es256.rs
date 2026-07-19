@@ -12,8 +12,31 @@ use crate::{DidError, DidResult};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use p256::ecdsa::signature::{Signer as P256Signer, Verifier as P256Verifier};
 use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
-use p256::elliptic_curve::rand_core::OsRng;
 use serde::{Deserialize, Serialize};
+
+/// Sample a valid P-256 ECDSA signing key from OS entropy.
+///
+/// Draws 32 bytes from the OS CSPRNG (`oxicrypto-rand` → `getrandom`) and
+/// constructs a `SigningKey` via rejection sampling: a uniformly random 32-byte
+/// string is a valid P-256 scalar (in `[1, n-1]`) with overwhelming probability,
+/// and on the negligible chance it is not (value ≥ curve order, or zero) a fresh
+/// draw is taken. Returns an error only if the OS entropy source itself fails,
+/// so key generation fails closed rather than producing a weak or predictable key.
+///
+/// This replaces `SigningKey::random(&mut OsRng)` after `p256` 0.14 moved to
+/// `rand_core` 0.9 (which no longer provides `OsRng`).
+pub(crate) fn generate_p256_signing_key() -> DidResult<SigningKey> {
+    for _ in 0..8 {
+        let bytes = oxicrypto_rand::random_nonce::<32>()
+            .map_err(|e| DidError::InternalError(format!("OS entropy source failed: {e}")))?;
+        if let Ok(signing_key) = SigningKey::from_slice(&bytes) {
+            return Ok(signing_key);
+        }
+    }
+    Err(DidError::InternalError(
+        "failed to sample a valid P-256 scalar from OS entropy".to_string(),
+    ))
+}
 
 /// A P-256 (secp256r1) key pair for ES256 signing
 #[derive(Clone)]
@@ -22,10 +45,13 @@ pub struct P256KeyPair {
 }
 
 impl P256KeyPair {
-    /// Generate a new random P-256 key pair using OS entropy
-    pub fn generate() -> Self {
-        let signing_key = SigningKey::random(&mut OsRng);
-        Self { signing_key }
+    /// Generate a new random P-256 key pair using OS entropy.
+    ///
+    /// Fails closed (returns an error) if the OS entropy source is unavailable,
+    /// rather than falling back to a weaker RNG.
+    pub fn generate() -> DidResult<Self> {
+        let signing_key = generate_p256_signing_key()?;
+        Ok(Self { signing_key })
     }
 
     /// Create from raw 32-byte private key scalar
@@ -35,7 +61,7 @@ impl P256KeyPair {
                 "P-256 private key must be 32 bytes".to_string(),
             ));
         }
-        let signing_key = SigningKey::from_bytes(bytes.into())
+        let signing_key = SigningKey::from_slice(bytes)
             .map_err(|e| DidError::InvalidKey(format!("Invalid P-256 key: {}", e)))?;
         Ok(Self { signing_key })
     }
@@ -47,17 +73,15 @@ impl P256KeyPair {
 
     /// Get the compressed public key (33 bytes)
     pub fn public_key_compressed(&self) -> Vec<u8> {
-        use p256::elliptic_curve::sec1::ToEncodedPoint;
         let vk = self.signing_key.verifying_key();
-        let encoded = vk.to_encoded_point(true);
+        let encoded = vk.to_sec1_point(true);
         encoded.as_bytes().to_vec()
     }
 
     /// Get the uncompressed public key (65 bytes: 0x04 || x || y)
     pub fn public_key_uncompressed(&self) -> Vec<u8> {
-        use p256::elliptic_curve::sec1::ToEncodedPoint;
         let vk = self.signing_key.verifying_key();
-        let encoded = vk.to_encoded_point(false);
+        let encoded = vk.to_sec1_point(false);
         encoded.as_bytes().to_vec()
     }
 
@@ -155,30 +179,23 @@ pub struct Es256Verifier {
 impl Es256Verifier {
     /// Create from compressed public key bytes (33 bytes)
     pub fn from_compressed(bytes: &[u8]) -> DidResult<Self> {
-        use p256::elliptic_curve::sec1::FromEncodedPoint;
-        use p256::EncodedPoint;
-
-        let encoded = EncodedPoint::from_bytes(bytes)
+        // `from_sec1_bytes` parses the SEC1 point encoding and validates that it
+        // lies on the curve in a single step (replaces the p256 0.13
+        // `EncodedPoint::from_bytes` + `VerifyingKey::from_encoded_point` pair).
+        let vk = VerifyingKey::from_sec1_bytes(bytes)
             .map_err(|e| DidError::InvalidKey(format!("Invalid P-256 compressed key: {}", e)))?;
-        let vk = VerifyingKey::from_encoded_point(&encoded)
-            .map_err(|e| DidError::InvalidKey(format!("Invalid P-256 verifying key: {}", e)))?;
         Ok(Self { verifying_key: vk })
     }
 
     /// Create from uncompressed public key bytes (65 bytes)
     pub fn from_uncompressed(bytes: &[u8]) -> DidResult<Self> {
-        use p256::elliptic_curve::sec1::FromEncodedPoint;
-        use p256::EncodedPoint;
-
         if bytes.len() != 65 || bytes[0] != 0x04 {
             return Err(DidError::InvalidKey(
                 "Uncompressed P-256 key must be 65 bytes starting with 0x04".to_string(),
             ));
         }
-        let encoded = EncodedPoint::from_bytes(bytes)
+        let vk = VerifyingKey::from_sec1_bytes(bytes)
             .map_err(|e| DidError::InvalidKey(format!("Invalid P-256 point: {}", e)))?;
-        let vk = VerifyingKey::from_encoded_point(&encoded)
-            .map_err(|e| DidError::InvalidKey(format!("Invalid P-256 verifying key: {}", e)))?;
         Ok(Self { verifying_key: vk })
     }
 
@@ -224,7 +241,7 @@ impl Es256Verifier {
                 signature_bytes.len()
             )));
         }
-        let sig = Signature::from_bytes(signature_bytes.into()).map_err(|e| {
+        let sig = Signature::from_slice(signature_bytes).map_err(|e| {
             DidError::InvalidProof(format!("Invalid ES256 signature encoding: {}", e))
         })?;
 
@@ -263,7 +280,7 @@ mod tests {
     use super::*;
 
     fn generate_keypair() -> P256KeyPair {
-        P256KeyPair::generate()
+        P256KeyPair::generate().expect("generate P-256 keypair")
     }
 
     #[test]

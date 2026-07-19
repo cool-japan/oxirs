@@ -1,6 +1,21 @@
 //! Constraint validation implementations
 //!
 //! This module contains the actual validation logic for different types of SHACL constraints.
+//!
+//! # Not wired into the production validation engine
+//!
+//! [`ConstraintValidatorFactory`] and the per-constraint validators below
+//! (only [`ConstraintValidator`] — the trait — is used elsewhere, via
+//! `SparqlConstraint`'s implementation in `sparql::mod`) are reference/example
+//! code: nothing in this crate calls `ConstraintValidatorFactory::create_validator`.
+//! The real SHACL constraint dispatch lives in the constraint evaluation engine
+//! (see `crate::validation::engine` / `crate::constraints`).
+//!
+//! In particular, [`DefaultConstraintValidator`] **fails open**: it reports
+//! every constraint it is asked to check as `satisfied()` unconditionally.
+//! Do not wire it into a real validation path — a shape using any constraint
+//! type this factory doesn't have a specific validator for would silently
+//! pass instead of being rejected or erroring.
 
 use std::collections::HashSet;
 

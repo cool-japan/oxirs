@@ -298,6 +298,7 @@ mod tests {
             batch_executor: None,
             stream_manager: None,
             dataset_manager: None,
+            api_key_service: None,
             // RC.1 Production & Advanced Features
             security_auditor: None,
             ddos_protector: None,
@@ -350,6 +351,7 @@ mod tests {
             batch_executor: None,
             stream_manager: None,
             dataset_manager: None,
+            api_key_service: None,
             // RC.1 Production & Advanced Features
             security_auditor: None,
             ddos_protector: None,

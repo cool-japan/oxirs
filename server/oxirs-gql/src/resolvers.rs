@@ -14,7 +14,11 @@ use async_trait::async_trait;
 use oxirs_core::query::QueryResults;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+/// Default timeout applied to raw SPARQL passthrough queries (the `sparql`
+/// GraphQL field) when the resolver isn't given an explicit override.
+const DEFAULT_SPARQL_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Enhanced RDF-based resolver with performance optimizations
 pub struct RdfResolver {
@@ -23,6 +27,15 @@ pub struct RdfResolver {
     predicate_loader: Option<DataLoader<String, Vec<String>>>,
     cache: Option<Arc<AdvancedCache>>,
     performance_tracker: Option<Arc<PerformanceTracker>>,
+    /// Whether the raw, unauthenticated SPARQL passthrough field
+    /// (`sparql(query: String!): String`) is allowed to execute at all.
+    /// Defaults to `false`: this field bypasses all GraphQL-level
+    /// depth/complexity limits and lets a client run arbitrary SPARQL, so
+    /// it must be explicitly opted into via
+    /// `GraphQLConfig::enable_sparql_field`.
+    enable_sparql_field: bool,
+    /// Wall-clock timeout applied to each raw SPARQL passthrough query.
+    sparql_query_timeout: Duration,
 }
 
 impl RdfResolver {
@@ -33,6 +46,8 @@ impl RdfResolver {
             predicate_loader: None,
             cache: None,
             performance_tracker: None,
+            enable_sparql_field: false,
+            sparql_query_timeout: DEFAULT_SPARQL_QUERY_TIMEOUT,
         }
     }
 
@@ -48,6 +63,8 @@ impl RdfResolver {
             predicate_loader: Some(predicate_loader),
             cache: None,
             performance_tracker: None,
+            enable_sparql_field: false,
+            sparql_query_timeout: DEFAULT_SPARQL_QUERY_TIMEOUT,
         }
     }
 
@@ -69,7 +86,23 @@ impl RdfResolver {
             predicate_loader: Some(predicate_loader),
             cache,
             performance_tracker,
+            enable_sparql_field: false,
+            sparql_query_timeout: DEFAULT_SPARQL_QUERY_TIMEOUT,
         }
+    }
+
+    /// Explicitly opt into (or out of) the raw SPARQL passthrough field.
+    /// Disabled by default: see [`Self::enable_sparql_field`].
+    pub fn with_sparql_enabled(mut self, enabled: bool) -> Self {
+        self.enable_sparql_field = enabled;
+        self
+    }
+
+    /// Set the wall-clock timeout applied to each raw SPARQL passthrough
+    /// query executed via the `sparql` field.
+    pub fn with_sparql_query_timeout(mut self, timeout: Duration) -> Self {
+        self.sparql_query_timeout = timeout;
+        self
     }
 }
 
@@ -128,8 +161,20 @@ impl FieldResolver for RdfResolver {
                 self.resolve_objects(args).await
             }
             "sparql" => {
-                // Execute raw SPARQL query with caching
-                self.resolve_sparql_query_cached(args, &cache_key).await
+                if !self.enable_sparql_field {
+                    // The raw SPARQL passthrough bypasses all GraphQL-level
+                    // depth/complexity limits and lets a client run
+                    // arbitrary SPARQL against the store, so it is disabled
+                    // by default. This check is defense-in-depth: callers
+                    // should also avoid advertising the field in the schema
+                    // at all when it's disabled (see GraphQLServer::start).
+                    Err(anyhow!(
+                        "The 'sparql' field is disabled by default; set GraphQLConfig::enable_sparql_field = true to opt in"
+                    ))
+                } else {
+                    // Execute raw SPARQL query with caching and a bounded timeout
+                    self.resolve_sparql_query_cached(args, &cache_key).await
+                }
             }
             _ => {
                 tracing::warn!("Unknown field '{}' requested", field_name);
@@ -216,82 +261,67 @@ impl RdfResolver {
     }
 
     /// Optimized subjects resolver using DataLoader
+    ///
+    /// The DataLoader batches/caches *per-subject detail* queries (it looks
+    /// up the triples for a given subject IRI); it has no way to invent or
+    /// enumerate subject IRIs on its own. So we always fetch the real,
+    /// distinct subject IRIs from the store first via [`Self::resolve_subjects`],
+    /// then warm the DataLoader's cache with those real keys so that any
+    /// subsequent per-subject detail resolution (e.g. resolving nested
+    /// fields for each subject) benefits from batching instead of issuing
+    /// one SPARQL query per field.
     async fn resolve_subjects_optimized(&self, args: &HashMap<String, Value>) -> Result<Value> {
-        // Extract limit argument if provided
-        let limit = args.get("limit").and_then(|v| match v {
-            Value::IntValue(i) => Some(*i as usize),
-            _ => None,
-        });
+        let result = self.resolve_subjects(args).await?;
 
-        // If DataLoader is available, use it for optimization
-        if let Some(ref loader) = self.subject_loader {
-            // For subject loading, we need to generate keys to load
-            // This is a simplified implementation - in practice you'd want to
-            // optimize based on actual query patterns
-            let keys: Vec<String> = (0..limit.unwrap_or(10))
-                .map(|i| format!("subject_{i}"))
+        if let (Some(ref loader), Value::ListValue(ref subjects)) = (&self.subject_loader, &result)
+        {
+            let keys: Vec<String> = subjects
+                .iter()
+                .filter_map(|v| match v {
+                    Value::StringValue(s) => Some(s.clone()),
+                    _ => None,
+                })
                 .collect();
 
-            match loader.load_many(keys).await {
-                Ok(loaded_data) => {
-                    let graphql_subjects: Vec<Value> = loaded_data
-                        .values()
-                        .filter_map(|v| v.get("subject"))
-                        .filter_map(|v| v.as_str())
-                        .map(|s| Value::StringValue(s.to_string()))
-                        .collect();
-                    Ok(Value::ListValue(graphql_subjects))
-                }
-                Err(_) => {
-                    // Fallback to direct store access
-                    self.resolve_subjects(args).await
+            if !keys.is_empty() {
+                if let Err(e) = loader.load_many(keys).await {
+                    tracing::debug!("Subject DataLoader prefetch failed: {}", e);
                 }
             }
-        } else {
-            // Fallback to original implementation
-            self.resolve_subjects(args).await
         }
+
+        Ok(result)
     }
 
     /// Optimized predicates resolver using DataLoader
+    ///
+    /// As with subjects, the DataLoader batches/caches per-predicate detail
+    /// queries; it cannot enumerate predicates itself. We fetch the real
+    /// `DISTINCT` predicate IRIs from the store first via
+    /// [`Self::resolve_predicates`], then warm the DataLoader's cache with
+    /// those real keys instead of a hardcoded, dataset-independent list.
     async fn resolve_predicates_optimized(&self, args: &HashMap<String, Value>) -> Result<Value> {
-        let limit = args.get("limit").and_then(|v| match v {
-            Value::IntValue(i) => Some(*i as usize),
-            _ => None,
-        });
+        let result = self.resolve_predicates(args).await?;
 
-        // If DataLoader is available, use it for optimization
-        if let Some(ref loader) = self.predicate_loader {
-            // Generate predicate keys to load
-            let keys: Vec<String> = vec![
-                "http://xmlns.com/foaf/0.1/name".to_string(),
-                "http://xmlns.com/foaf/0.1/knows".to_string(),
-                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
-            ];
+        if let (Some(ref loader), Value::ListValue(ref predicates)) =
+            (&self.predicate_loader, &result)
+        {
+            let keys: Vec<String> = predicates
+                .iter()
+                .filter_map(|v| match v {
+                    Value::StringValue(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .collect();
 
-            match loader.load_many(keys).await {
-                Ok(loaded_data) => {
-                    let mut predicates: Vec<Value> = Vec::new();
-                    for (predicate, _subjects) in loaded_data {
-                        predicates.push(Value::StringValue(predicate));
-                    }
-
-                    // Apply limit if specified
-                    if let Some(limit) = limit {
-                        predicates.truncate(limit);
-                    }
-
-                    Ok(Value::ListValue(predicates))
-                }
-                Err(_) => {
-                    // Fallback to direct store access
-                    self.resolve_predicates(args).await
+            if !keys.is_empty() {
+                if let Err(e) = loader.load_many(keys).await {
+                    tracing::debug!("Predicate DataLoader prefetch failed: {}", e);
                 }
             }
-        } else {
-            // Fallback to original implementation
-            self.resolve_predicates(args).await
         }
+
+        Ok(result)
     }
 
     /// Cached SPARQL query resolver
@@ -318,8 +348,25 @@ impl RdfResolver {
             }
         }
 
-        // Execute query if not cached
-        let results = self.store.query(query)?;
+        // Execute query if not cached, bounded by a wall-clock timeout so a
+        // pathological or malicious query can't tie up the server
+        // indefinitely. RdfStore::query is a blocking call (it takes a
+        // std::sync::Mutex and runs the query synchronously), so it is run
+        // on a blocking-pool thread rather than the async executor.
+        let store = Arc::clone(&self.store);
+        let owned_query = query.to_string();
+        let timeout_duration = self.sparql_query_timeout;
+
+        let join_result = tokio::time::timeout(
+            timeout_duration,
+            tokio::task::spawn_blocking(move || store.query(&owned_query)),
+        )
+        .await
+        .map_err(|_| anyhow!("SPARQL query exceeded the {:?} timeout", timeout_duration))?;
+
+        let results =
+            join_result.map_err(|join_err| anyhow!("SPARQL query task failed: {}", join_err))??;
+
         let converted_results = self.convert_sparql_results_sync(results)?;
 
         // Cache SPARQL results with special handling
@@ -481,7 +528,18 @@ impl RdfResolver {
     }
 }
 
-/// Introspection resolver for GraphQL schema introspection
+/// Minimal introspection resolver used only by [`ResolverRegistry`]'s
+/// `FieldResolver`-trait wiring (itself exercised only in this crate's
+/// tests, not by the production `GraphQLServer`/`Server` request paths).
+///
+/// This is **not** the schema introspection engine: it always reports an
+/// empty `types` list and `null` for `__type` regardless of the real
+/// schema. Real `__schema`/`__type` introspection is served by
+/// [`crate::introspection::IntrospectionResolver`] (built from an
+/// `Arc<Schema>`) together with [`crate::type_introspection`]; use those
+/// for anything that needs accurate schema data. This stub is kept only so
+/// `ResolverRegistry::setup_default_resolvers` has a type to register
+/// under the `__Schema`/`__Type` type names in tests.
 pub struct IntrospectionResolver;
 
 impl IntrospectionResolver {
@@ -536,6 +594,23 @@ impl QueryResolvers {
     pub fn new(store: Arc<RdfStore>) -> Self {
         Self {
             rdf_resolver: Arc::new(RdfResolver::new(store)),
+            introspection_resolver: Arc::new(IntrospectionResolver::new()),
+        }
+    }
+
+    /// Create query resolvers with explicit control over the raw SPARQL
+    /// passthrough field's availability and timeout (see
+    /// `GraphQLConfig::enable_sparql_field`/`sparql_query_timeout`).
+    pub fn new_with_sparql_config(
+        store: Arc<RdfStore>,
+        enable_sparql_field: bool,
+        sparql_query_timeout: std::time::Duration,
+    ) -> Self {
+        let rdf_resolver = RdfResolver::new(store)
+            .with_sparql_enabled(enable_sparql_field)
+            .with_sparql_query_timeout(sparql_query_timeout);
+        Self {
+            rdf_resolver: Arc::new(rdf_resolver),
             introspection_resolver: Arc::new(IntrospectionResolver::new()),
         }
     }
@@ -604,5 +679,165 @@ impl ResolverRegistry {
         // For backward compatibility during transition
         let rdf_store = Arc::new(RdfStore::new().expect("Failed to create RDF store"));
         self.setup_default_resolvers(rdf_store);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn build_test_store() -> Arc<RdfStore> {
+        let mut store = RdfStore::new().expect("failed to create test store");
+        store
+            .insert_triple(
+                "http://example.org/alice",
+                "http://xmlns.com/foaf/0.1/name",
+                "\"Alice\"",
+            )
+            .expect("insert triple should succeed");
+        store
+            .insert_triple(
+                "http://example.org/bob",
+                "http://xmlns.com/foaf/0.1/name",
+                "\"Bob\"",
+            )
+            .expect("insert triple should succeed");
+        Arc::new(store)
+    }
+
+    /// Regression test for the "subjects" DataLoader resolver: it used to
+    /// generate fake placeholder keys ("subject_0", "subject_1", ...) and
+    /// look up a nonexistent "subject" JSON field, always returning an
+    /// empty list regardless of what was in the store.
+    #[tokio::test]
+    async fn test_resolve_subjects_optimized_returns_real_iris() {
+        let store = build_test_store();
+        let resolver = RdfResolver::with_dataloader(store);
+
+        let args = HashMap::new();
+        let result = resolver
+            .resolve_subjects_optimized(&args)
+            .await
+            .expect("resolve_subjects_optimized should succeed");
+
+        let Value::ListValue(subjects) = result else {
+            panic!("expected ListValue, got {result:?}");
+        };
+        let subjects: HashSet<String> = subjects
+            .into_iter()
+            .filter_map(|v| match v {
+                Value::StringValue(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(subjects.len(), 2);
+        assert!(subjects.contains("http://example.org/alice"));
+        assert!(subjects.contains("http://example.org/bob"));
+        // Guard against the old bug reappearing: no fabricated placeholder keys.
+        assert!(!subjects.iter().any(|s| s.starts_with("subject_")));
+    }
+
+    /// Regression test for the "predicates" DataLoader resolver: it used to
+    /// hardcode three fixed predicate URIs (foaf:name, foaf:knows, rdf:type)
+    /// regardless of the store's actual contents.
+    #[tokio::test]
+    async fn test_resolve_predicates_optimized_queries_store_not_hardcoded() {
+        let store = build_test_store();
+        let resolver = RdfResolver::with_dataloader(store);
+
+        let args = HashMap::new();
+        let result = resolver
+            .resolve_predicates_optimized(&args)
+            .await
+            .expect("resolve_predicates_optimized should succeed");
+
+        let Value::ListValue(predicates) = result else {
+            panic!("expected ListValue, got {result:?}");
+        };
+        let predicates: HashSet<String> = predicates
+            .into_iter()
+            .filter_map(|v| match v {
+                Value::StringValue(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(predicates.len(), 1);
+        assert!(predicates.contains("http://xmlns.com/foaf/0.1/name"));
+        // Guard against the old bug reappearing: no hardcoded predicates
+        // that aren't actually present in the store.
+        assert!(!predicates.contains("http://xmlns.com/foaf/0.1/knows"));
+        assert!(!predicates.contains("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"));
+    }
+
+    /// Regression test: the raw SPARQL passthrough field must refuse to run
+    /// unless explicitly opted into, since it bypasses all GraphQL-level
+    /// depth/complexity limits and lets a client run arbitrary SPARQL.
+    #[tokio::test]
+    async fn test_sparql_field_disabled_by_default() {
+        let store = build_test_store();
+        let resolver = RdfResolver::new(store);
+        let context = ExecutionContext::new();
+
+        let mut args = HashMap::new();
+        args.insert(
+            "query".to_string(),
+            Value::StringValue("SELECT * WHERE { ?s ?p ?o }".to_string()),
+        );
+
+        let result = resolver.resolve_field("sparql", &args, &context).await;
+        assert!(
+            result.is_err(),
+            "expected the sparql field to be disabled by default"
+        );
+    }
+
+    /// Once explicitly opted in via `with_sparql_enabled(true)`, the field
+    /// must execute the query and return real results.
+    #[tokio::test]
+    async fn test_sparql_field_executes_when_explicitly_enabled() {
+        let store = build_test_store();
+        let resolver = RdfResolver::new(store).with_sparql_enabled(true);
+        let context = ExecutionContext::new();
+
+        let mut args = HashMap::new();
+        args.insert(
+            "query".to_string(),
+            Value::StringValue("SELECT ?s WHERE { ?s ?p ?o }".to_string()),
+        );
+
+        let result = resolver
+            .resolve_field("sparql", &args, &context)
+            .await
+            .expect("sparql field should execute once enabled");
+
+        match result {
+            Value::ListValue(rows) => assert_eq!(rows.len(), 2),
+            other => panic!("expected ListValue of solutions, got {other:?}"),
+        }
+    }
+
+    /// A raw SPARQL query that exceeds the configured timeout must fail
+    /// with an error rather than hang the resolver indefinitely.
+    #[tokio::test]
+    async fn test_sparql_field_respects_query_timeout() {
+        let store = build_test_store();
+        let resolver = RdfResolver::new(store)
+            .with_sparql_enabled(true)
+            .with_sparql_query_timeout(Duration::from_nanos(1));
+        let context = ExecutionContext::new();
+
+        let mut args = HashMap::new();
+        args.insert(
+            "query".to_string(),
+            Value::StringValue("SELECT ?s WHERE { ?s ?p ?o }".to_string()),
+        );
+
+        let result = resolver.resolve_field("sparql", &args, &context).await;
+        assert!(
+            result.is_err(),
+            "expected an effectively-zero timeout to trip, got {result:?}"
+        );
     }
 }

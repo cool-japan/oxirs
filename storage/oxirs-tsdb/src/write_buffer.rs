@@ -240,6 +240,7 @@ impl WalSink for NoopWalSink {
 // ---------------------------------------------------------------------------
 
 /// In-memory write buffer for time-series data points.
+#[derive(Debug)]
 pub struct WriteBuffer {
     config: WriteBufferConfig,
     points: Vec<DataPoint>,
@@ -293,6 +294,15 @@ impl WriteBuffer {
     /// True if the buffer has reached maximum capacity.
     pub fn is_full(&self) -> bool {
         self.points.len() >= self.config.max_capacity
+    }
+
+    /// Iterate over the currently buffered points without draining them.
+    ///
+    /// Useful for callers that need a read-only view of not-yet-flushed
+    /// data (e.g. to merge into a query result alongside already-durable
+    /// data) without disturbing the buffer's flush state.
+    pub fn iter(&self) -> impl Iterator<Item = &DataPoint> {
+        self.points.iter()
     }
 
     // ------------------------------------------------------------------
@@ -416,13 +426,25 @@ impl WriteBuffer {
             points.sort_unstable();
         }
 
-        // WAL integration.
+        // WAL integration. `wal_entries` must only ever count entries that
+        // were actually handed to a durable sink -- incrementing it when no
+        // sink was supplied would make `flush()` silently report a WAL
+        // write that never happened (see write_buffer.rs P2 finding).
         if self.config.enable_wal {
             let entry = self.build_wal_entry(&points);
-            if let Some(sink) = wal {
-                sink.write_entry(entry)?;
+            match wal {
+                Some(sink) => {
+                    sink.write_entry(entry)?;
+                    self.stats.wal_entries += 1;
+                }
+                None => {
+                    tracing::warn!(
+                        point_count = entry.point_count,
+                        "WAL is enabled but flush() was called without a WalSink: this batch \
+                         is NOT durably logged. Use flush_with_wal() to guarantee WAL durability."
+                    );
+                }
             }
-            self.stats.wal_entries += 1;
         }
 
         // Update statistics.
@@ -823,7 +845,7 @@ mod tests {
     // -- WAL integration ----------------------------------------------------
 
     #[test]
-    fn test_wal_entry_count_increments_on_flush() {
+    fn test_wal_entry_count_increments_on_flush_with_wal() {
         let config = WriteBufferConfig {
             max_capacity: 10_000,
             flush_policy: FlushPolicy::Explicit,
@@ -832,8 +854,47 @@ mod tests {
         };
         let mut buf = WriteBuffer::new(config);
         buf.push(make_point(1, 100, 1.0)).expect("push");
-        buf.flush().expect("flush");
+        let mut sink = NoopWalSink;
+        buf.flush_with_wal(&mut sink).expect("flush_with_wal");
         assert_eq!(buf.stats().wal_entries, 1);
+    }
+
+    /// Regression test: `flush()` (no WalSink) with `enable_wal: true` must
+    /// NOT report a phantom WAL entry -- nothing was actually durably
+    /// logged, so `wal_entries` must stay at 0. See P2 durability finding
+    /// on write_buffer.rs.
+    #[test]
+    fn test_flush_without_sink_does_not_count_phantom_wal_entry() {
+        let config = WriteBufferConfig {
+            max_capacity: 10_000,
+            flush_policy: FlushPolicy::Explicit,
+            enable_wal: true,
+            ..Default::default()
+        };
+        let mut buf = WriteBuffer::new(config);
+        buf.push(make_point(1, 100, 1.0)).expect("push");
+        // No sink provided: this flush is not durably logged.
+        let flushed = buf.flush().expect("flush should still succeed");
+        assert_eq!(flushed.len(), 1, "points are still returned to the caller");
+        assert_eq!(
+            buf.stats().wal_entries,
+            0,
+            "no WAL entry should be counted without a real sink"
+        );
+    }
+
+    /// Regression test: the new read-only `iter()` accessor exposes
+    /// buffered points without draining the buffer.
+    #[test]
+    fn test_iter_does_not_drain_buffer() {
+        let mut buf = size_buffer(10);
+        buf.push(make_point(1, 100, 1.0)).expect("push");
+        buf.push(make_point(2, 200, 2.0)).expect("push");
+
+        let values: Vec<f64> = buf.iter().map(|p| p.value).collect();
+        assert_eq!(values, vec![1.0, 2.0]);
+        // Buffer must be unchanged after iterating.
+        assert_eq!(buf.len(), 2);
     }
 
     #[test]

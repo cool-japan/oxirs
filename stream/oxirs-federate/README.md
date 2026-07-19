@@ -1,8 +1,8 @@
 # OxiRS Federate - Federated Query Processing
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.2 - Released 2026-07-12
+**Status**: v0.4.0 - Released 2026-07-19
 
 ✨ **Features Complete!** All Release Targets implemented. APIs stable. Ready for promotion.
 

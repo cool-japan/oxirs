@@ -1,13 +1,13 @@
 # OxiRS-Star ⭐
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
-[![Tests](https://img.shields.io/badge/tests-1%2C680%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
+[![Tests](https://img.shields.io/badge/tests-1%2C702%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
 
-**Status**: v0.3.2 - Released 2026-07-12
+**Status**: v0.4.0 - Released 2026-07-19
 
-✅ **Production Ready**: Feature-complete with 1,680 passing tests. Enterprise-ready RDF-star capabilities with comprehensive tooling for compliance, migration, distributed processing, and analysis.
+✅ **Production Ready**: Feature-complete with 1,702 passing tests. Enterprise-ready RDF-star capabilities with comprehensive tooling for compliance, migration, distributed processing, and analysis.
 
 **RDF-star and SPARQL-star implementation providing support for quoted triples, reification, and advanced semantic metadata processing.**
 
@@ -232,8 +232,8 @@ cargo nextest run --features "reification,sparql-star" --no-fail-fast
 
 ## Roadmap
 
-### v0.3.2 (Current Release - Feature Complete ✅)
-All core features implemented and tested (1,680/1,680 tests passing):
+### v0.4.0 (Current Release - Feature Complete ✅)
+All core features implemented and tested (1,702/1,702 tests passing):
 - ✅ Complete RDF-star specification compliance
 - ✅ All serialization formats (Turtle-star, N-Triples-star, TriG-star, N-Quads-star, JSON-LD-star)
 - ✅ Advanced annotation and provenance features

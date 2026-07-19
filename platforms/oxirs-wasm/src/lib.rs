@@ -1,8 +1,8 @@
 //! # OxiRS WASM
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Development Release (v0.3.2)
+//! **Status**: Development Release (v0.3.3)
 //!
 //! WebAssembly bindings for OxiRS - Run RDF/SPARQL in the browser.
 //!

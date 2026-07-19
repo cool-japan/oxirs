@@ -203,29 +203,39 @@ impl VerifiableCredential {
 
 // ─── Presentation Proof ───────────────────────────────────────────────────────
 
-/// Proof stub attached to a Verifiable Presentation
+/// Proof object attached to a Verifiable Presentation.
+///
+/// NOTE: this crate's presenter does not yet perform real VP signing. The
+/// [`PresentationProof::placeholder`] constructor produces an explicitly
+/// UNSIGNED placeholder (its `proof_type`/`proof_value` announce that fact), so
+/// a verifier cannot mistake it for a real cryptographic proof. To attach a real
+/// proof, construct this struct from a genuine signature over the canonicalized
+/// presentation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PresentationProof {
-    /// Proof type (e.g. `"Ed25519Signature2020"`)
+    /// Proof type (e.g. `"Ed25519Signature2020"`, or the placeholder marker).
     pub proof_type: String,
     /// ISO 8601 creation timestamp
     pub created: String,
     /// Verification method reference DID URL
     pub verification_method: String,
-    /// Placeholder proof value (base58 / base64url encoded signature)
+    /// Proof value (base58 / base64url encoded signature), or a placeholder marker.
     pub proof_value: String,
     /// Proof purpose (e.g. `"authentication"`)
     pub proof_purpose: String,
 }
 
 impl PresentationProof {
-    /// Create a stub proof for a holder DID
-    pub fn stub(holder_did: &str) -> Self {
+    /// Create an explicitly UNSIGNED placeholder proof for a holder DID.
+    ///
+    /// This does NOT sign anything; both `proof_type` and `proof_value` make the
+    /// unsigned status unmistakable so it cannot be confused with a real proof.
+    pub fn placeholder(holder_did: &str) -> Self {
         Self {
-            proof_type: "Ed25519Signature2020".to_string(),
-            created: "2024-01-01T00:00:00Z".to_string(),
+            proof_type: "UnsignedPlaceholderProof".to_string(),
+            created: "1970-01-01T00:00:00Z".to_string(),
             verification_method: format!("{holder_did}#key-1"),
-            proof_value: "zStubProofValue000000000000000000000000000000000".to_string(),
+            proof_value: "PLACEHOLDER-NOT-A-REAL-SIGNATURE".to_string(),
             proof_purpose: "authentication".to_string(),
         }
     }
@@ -576,7 +586,7 @@ impl VcPresenter {
 
         // Build proof
         let proof = if request.include_proof {
-            Some(PresentationProof::stub(&self.holder_did))
+            Some(PresentationProof::placeholder(&self.holder_did))
         } else {
             None
         };
@@ -824,8 +834,8 @@ mod tests {
 
     #[test]
     fn test_stub_proof_fields() {
-        let proof = PresentationProof::stub("did:example:alice");
-        assert_eq!(proof.proof_type, "Ed25519Signature2020");
+        let proof = PresentationProof::placeholder("did:example:alice");
+        assert_eq!(proof.proof_type, "UnsignedPlaceholderProof");
         assert_eq!(proof.verification_method, "did:example:alice#key-1");
         assert!(!proof.proof_value.is_empty());
         assert_eq!(proof.proof_purpose, "authentication");
@@ -924,9 +934,9 @@ mod tests {
 
     #[test]
     fn test_proof_to_json() {
-        let proof = PresentationProof::stub("did:example:alice");
+        let proof = PresentationProof::placeholder("did:example:alice");
         let json = proof.to_json();
-        assert!(json.contains("Ed25519Signature2020"));
+        assert!(json.contains("UnsignedPlaceholderProof"));
         assert!(json.contains("authentication"));
     }
 
@@ -1097,7 +1107,7 @@ mod tests {
         let req = VpRequest::new("did:example:alice").with_proof();
         let vp = p.build_presentation(&req).expect("build ok");
         let json = vp.to_json();
-        assert!(json.contains("Ed25519Signature2020"), "json = {json}");
+        assert!(json.contains("UnsignedPlaceholderProof"), "json = {json}");
     }
 
     #[test]

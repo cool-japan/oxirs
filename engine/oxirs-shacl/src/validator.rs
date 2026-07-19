@@ -141,6 +141,15 @@ impl Validator {
             self.add_shape(shape)?;
         }
 
+        // Warn loudly if a non-empty store yielded no shapes: otherwise every
+        // subsequent validate() call would trivially conform (a silent false negative).
+        if count == 0 && !store.is_empty().unwrap_or(true) {
+            tracing::warn!(
+                "load_shapes_from_store discovered 0 shapes from a non-empty store; \
+                 validation against this shape set will trivially conform"
+            );
+        }
+
         Ok(count)
     }
 

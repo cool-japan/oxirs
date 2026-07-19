@@ -111,9 +111,12 @@ pub fn extract_and_expand_prefixes(sparql: &str) -> Result<(HashMap<String, Stri
 pub fn extract_select_variables(sparql: &str) -> Result<Vec<String>> {
     let mut variables = Vec::new();
 
-    if let Some(select_start) = sparql.to_uppercase().find("SELECT") {
-        if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
-            let select_clause = &sparql[select_start + 6..where_start];
+    if let Some(select_start) = super::query_locator::find_keyword(sparql, "SELECT") {
+        // The `WHERE` keyword is optional per SPARQL 1.1; the projection clause
+        // ends at `WHERE` if present, otherwise at the graph pattern's `{`.
+        if let Some(clause_end) = super::query_locator::select_projection_end(sparql, select_start)
+        {
+            let select_clause = &sparql[select_start + 6..clause_end];
 
             for token in select_clause.split_whitespace() {
                 // Skip DISTINCT keyword

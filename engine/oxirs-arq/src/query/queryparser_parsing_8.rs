@@ -15,7 +15,12 @@ impl QueryParser {
     /// Parse property path sequences
     pub(super) fn parse_property_path_sequence(&mut self) -> Result<PropertyPath> {
         let mut left = self.parse_property_path_postfix()?;
-        while self.match_token(&Token::Slash) {
+        // The lexer emits `/` as `Token::Divide` (its arithmetic spelling); in a
+        // property-path position it is the sequence operator, never division, so
+        // accept it here. (`Token::Slash` is retained for safety though the
+        // current lexer never produces it.)
+        while matches!(self.peek(), Some(Token::Slash) | Some(Token::Divide)) {
+            self.advance();
             let right = self.parse_property_path_postfix()?;
             left = PropertyPath::sequence(left, right);
         }

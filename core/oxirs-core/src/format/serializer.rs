@@ -315,6 +315,107 @@ impl LineEnding {
     }
 }
 
+/// A [`Write`] adapter that buffers all output in memory so it can be
+/// re-sorted (line-wise) and/or re-terminated with a custom line ending
+/// before being flushed to the wrapped writer on [`finalize`](Self::finalize).
+pub struct PostProcessingWriter<W: Write> {
+    inner: W,
+    buffer: Vec<u8>,
+    line_ending: LineEnding,
+    sort_output: bool,
+}
+
+impl<W: Write> PostProcessingWriter<W> {
+    fn new(inner: W, line_ending: LineEnding, sort_output: bool) -> Self {
+        Self {
+            inner,
+            buffer: Vec::new(),
+            line_ending,
+            sort_output,
+        }
+    }
+
+    /// Flush the buffered output (optionally sorted) to the inner writer,
+    /// using this instance's configured line ending, and return the inner
+    /// writer.
+    fn finalize(mut self) -> std::io::Result<W> {
+        let text = String::from_utf8_lossy(&self.buffer);
+        // Split into logical lines, dropping a single trailing empty
+        // segment produced by a final line terminator.
+        let mut lines: Vec<&str> = text.lines().collect();
+        if self.sort_output {
+            lines.sort_unstable();
+        }
+        let ending = self.line_ending.as_str();
+        for line in &lines {
+            self.inner.write_all(line.as_bytes())?;
+            self.inner.write_all(ending.as_bytes())?;
+        }
+        self.inner.flush()?;
+        Ok(self.inner)
+    }
+}
+
+impl<W: Write> Write for PostProcessingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.buffer.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        // Nothing is written to the inner writer until finalize(); this is
+        // intentional since output must be fully buffered before it can be
+        // sorted or re-terminated.
+        Ok(())
+    }
+}
+
+/// A quad serializer returned by [`ConfigurableSerializer::for_writer`].
+///
+/// Wraps either a direct [`WriterQuadSerializer`] (when no post-processing
+/// is required) or one operating over a [`PostProcessingWriter`] (when
+/// `sort_output` and/or a custom `line_ending` was requested).
+pub enum ConfiguredQuadSerializer<W: Write> {
+    /// No post-processing: writes flow straight through to `W`.
+    Direct(WriterQuadSerializer<W>),
+    /// Buffered: writes are collected, then sorted/re-terminated and
+    /// flushed to `W` on `finish()`.
+    Buffered(WriterQuadSerializer<PostProcessingWriter<W>>),
+}
+
+impl<W: Write + 'static> ConfiguredQuadSerializer<W> {
+    /// Serialize a quad.
+    pub fn serialize_quad<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> QuadSerializeResult {
+        match self {
+            Self::Direct(s) => s.serialize_quad(quad),
+            Self::Buffered(s) => s.serialize_quad(quad),
+        }
+    }
+
+    /// Serialize a triple (placed in default graph).
+    pub fn serialize_triple<'a>(
+        &mut self,
+        triple: impl Into<TripleRef<'a>>,
+    ) -> QuadSerializeResult {
+        match self {
+            Self::Direct(s) => s.serialize_triple(triple),
+            Self::Buffered(s) => s.serialize_triple(triple),
+        }
+    }
+
+    /// Finish serialization, applying any configured post-processing, and
+    /// return the original writer.
+    pub fn finish(self) -> SerializeResult<W> {
+        match self {
+            Self::Direct(s) => s.finish(),
+            Self::Buffered(s) => {
+                let post_writer = s.finish()?;
+                post_writer.finalize()
+            }
+        }
+    }
+}
+
 /// Advanced serializer with configuration support
 pub struct ConfigurableSerializer {
     serializer: RdfSerializer,
@@ -342,8 +443,22 @@ impl ConfigurableSerializer {
         self
     }
 
-    /// Create a writer with configuration
-    pub fn for_writer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
+    /// Create a writer with configuration.
+    ///
+    /// When `sort_output` is enabled or a non-platform `line_ending` is
+    /// requested, output is buffered line-by-line so it can be reordered
+    /// and re-terminated before being flushed to `writer` on `finish()`.
+    /// Line-oriented formats (N-Triples/N-Quads/Turtle/TriG/N3) benefit
+    /// from this; structural formats (RDF/XML, JSON-LD) do not have a
+    /// meaningful "line" concept, so `sort_output` is a no-op for them
+    /// (their statements are not one-per-line) while `line_ending` still
+    /// normalizes the terminator of whatever lines they do emit.
+    ///
+    /// `indent`, `max_line_length`, and `include_comments` remain
+    /// reserved: applying them safely requires format-aware rendering
+    /// (e.g. re-wrapping Turtle predicate lists) rather than a
+    /// post-processing pass, and are tracked as follow-up work.
+    pub fn for_writer<W: Write + 'static>(self, writer: W) -> ConfiguredQuadSerializer<W> {
         // Apply configuration settings and create serializer
         let mut serializer = self.serializer;
 
@@ -352,19 +467,16 @@ impl ConfigurableSerializer {
             serializer = serializer.pretty();
         }
 
-        // Note: The following configuration options are defined in SerializeConfig
-        // but not yet fully supported by all underlying format serializers:
-        // - indent: Custom indentation strings (currently using format defaults)
-        // - line_ending: Custom line endings (currently using platform defaults)
-        // - max_line_length: Line wrapping (reserved for future implementation)
-        // - sort_output: Output ordering (reserved for future implementation)
-        // - include_comments: Comment generation (reserved for future implementation)
-        // - validate_output: Currently handled by individual serializers
-        //
-        // These options are preserved for backward compatibility and future enhancement.
-        // For now, compact/pretty formatting is the primary configurable option.
+        let needs_post_processing =
+            self.config.sort_output || self.config.line_ending != LineEnding::Platform;
 
-        serializer.for_writer(writer)
+        if needs_post_processing {
+            let post_writer =
+                PostProcessingWriter::new(writer, self.config.line_ending, self.config.sort_output);
+            ConfiguredQuadSerializer::Buffered(serializer.for_writer(post_writer))
+        } else {
+            ConfiguredQuadSerializer::Direct(serializer.for_writer(writer))
+        }
     }
 
     /// Get the configuration
@@ -490,5 +602,59 @@ mod tests {
         assert_eq!(LineEnding::Windows.as_str(), "\r\n");
         assert_eq!(LineEnding::Mac.as_str(), "\r");
         // Platform depends on the compilation target
+    }
+
+    #[test]
+    fn test_configurable_serializer_sort_output_applied() {
+        use crate::model::{NamedNode, Triple};
+
+        let s = |n: &str| NamedNode::new(format!("http://example.org/{n}")).unwrap();
+        let triples = vec![
+            Triple::new(s("c"), s("p"), s("z")),
+            Triple::new(s("a"), s("p"), s("z")),
+            Triple::new(s("b"), s("p"), s("z")),
+        ];
+
+        let config = SerializeConfig {
+            sort_output: true,
+            line_ending: LineEnding::Unix,
+            ..Default::default()
+        };
+        let mut serializer =
+            ConfigurableSerializer::new(RdfFormat::NTriples, config).for_writer(Vec::new());
+        for triple in &triples {
+            serializer.serialize_triple(triple.as_ref()).unwrap();
+        }
+        let buffer = serializer.finish().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        let lines: Vec<&str> = output.lines().collect();
+
+        // Output must be sorted lexicographically, not insertion order.
+        let mut expected = lines.clone();
+        expected.sort_unstable();
+        assert_eq!(lines, expected);
+        assert!(lines[0].contains("/a>"));
+        assert!(lines[2].contains("/c>"));
+        // Custom line ending was honored (Unix => bare \n, no \r).
+        assert!(!output.contains('\r'));
+    }
+
+    #[test]
+    fn test_configurable_serializer_windows_line_ending() {
+        use crate::model::{NamedNode, Triple};
+
+        let s = |n: &str| NamedNode::new(format!("http://example.org/{n}")).unwrap();
+        let triple = Triple::new(s("s"), s("p"), s("o"));
+
+        let config = SerializeConfig {
+            line_ending: LineEnding::Windows,
+            ..Default::default()
+        };
+        let mut serializer =
+            ConfigurableSerializer::new(RdfFormat::NTriples, config).for_writer(Vec::new());
+        serializer.serialize_triple(triple.as_ref()).unwrap();
+        let buffer = serializer.finish().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert!(output.ends_with("\r\n"));
     }
 }

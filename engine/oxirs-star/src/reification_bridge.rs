@@ -206,7 +206,7 @@ impl ReificationBridge {
             if record.is_complete() {
                 let triples = record.to_star_triples(self.config.assert_base_triple)?;
                 for t in triples {
-                    let _ = star_graph.insert(t);
+                    star_graph.insert(t)?;
                 }
             }
         }
@@ -214,7 +214,7 @@ impl ReificationBridge {
         // Copy non-reification triples.
         for triple in reif_graph.triples() {
             if !is_reification_triple(triple, &reification_nodes) {
-                let _ = star_graph.insert(triple.clone());
+                star_graph.insert(triple.clone())?;
             }
         }
 
@@ -244,39 +244,39 @@ impl ReificationBridge {
                         .or_insert_with(|| stmt_iri.clone());
 
                     // rdf:type rdf:Statement
-                    let _ = reif_graph.insert(StarTriple::new(
+                    reif_graph.insert(StarTriple::new(
                         StarTerm::iri(&stmt_iri)?,
                         StarTerm::iri(vocab::RDF_TYPE)?,
                         StarTerm::iri(vocab::RDF_STATEMENT)?,
-                    ));
+                    ))?;
                     // rdf:subject
-                    let _ = reif_graph.insert(StarTriple::new(
+                    reif_graph.insert(StarTriple::new(
                         StarTerm::iri(&stmt_iri)?,
                         StarTerm::iri(vocab::RDF_SUBJECT)?,
                         inner.subject.clone(),
-                    ));
+                    ))?;
                     // rdf:predicate
-                    let _ = reif_graph.insert(StarTriple::new(
+                    reif_graph.insert(StarTriple::new(
                         StarTerm::iri(&stmt_iri)?,
                         StarTerm::iri(vocab::RDF_PREDICATE)?,
                         inner.predicate.clone(),
-                    ));
+                    ))?;
                     // rdf:object
-                    let _ = reif_graph.insert(StarTriple::new(
+                    reif_graph.insert(StarTriple::new(
                         StarTerm::iri(&stmt_iri)?,
                         StarTerm::iri(vocab::RDF_OBJECT)?,
                         inner.object.clone(),
-                    ));
+                    ))?;
                     // Annotation triple.
-                    let _ = reif_graph.insert(StarTriple::new(
+                    reif_graph.insert(StarTriple::new(
                         StarTerm::iri(&stmt_iri)?,
                         triple.predicate.clone(),
                         triple.object.clone(),
-                    ));
+                    ))?;
                 }
                 _ => {
                     // Regular triple — copy as-is.
-                    let _ = reif_graph.insert(triple.clone());
+                    reif_graph.insert(triple.clone())?;
                 }
             }
         }
@@ -541,6 +541,56 @@ mod tests {
             "http://ex.org/30",
         );
         assert!(star.contains(&base), "base triple should be asserted");
+    }
+
+    /// Regression test: `reification_to_star` must propagate `insert()`
+    /// validation failures instead of silently discarding them with
+    /// `let _ = ...`. A reified statement whose `rdf:predicate` value is a
+    /// literal (legal as the *object* of an `rdf:predicate` triple, but not
+    /// a legal RDF-star predicate) must surface as an `Err` when
+    /// `assert_base_triple` is enabled, rather than silently vanishing from
+    /// the output graph.
+    #[test]
+    fn test_reification_to_star_propagates_insert_errors() {
+        let mut g = StarGraph::new();
+        g.insert(StarTriple::new(
+            iri("http://ex.org/stmt1"),
+            iri(vocab::RDF_TYPE),
+            iri(vocab::RDF_STATEMENT),
+        ))
+        .expect("insert ok");
+        g.insert(StarTriple::new(
+            iri("http://ex.org/stmt1"),
+            iri(vocab::RDF_SUBJECT),
+            iri("http://ex.org/alice"),
+        ))
+        .expect("insert ok");
+        // A literal is a legal *object* here, even though it can never be a
+        // legal predicate for the reconstructed base triple.
+        g.insert(StarTriple::new(
+            iri("http://ex.org/stmt1"),
+            iri(vocab::RDF_PREDICATE),
+            lit("not-a-valid-predicate"),
+        ))
+        .expect("insert ok");
+        g.insert(StarTriple::new(
+            iri("http://ex.org/stmt1"),
+            iri(vocab::RDF_OBJECT),
+            iri("http://ex.org/30"),
+        ))
+        .expect("insert ok");
+
+        let cfg = BridgeConfig {
+            assert_base_triple: true,
+            ..BridgeConfig::default()
+        };
+        let bridge = ReificationBridge::new(cfg);
+
+        let result = bridge.reification_to_star(&g);
+        assert!(
+            result.is_err(),
+            "conversion must fail loudly instead of silently dropping the invalid triple"
+        );
     }
 
     #[test]

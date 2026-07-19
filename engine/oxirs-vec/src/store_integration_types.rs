@@ -437,8 +437,17 @@ impl crate::VectorStoreTrait for VectorStoreWrapper {
 }
 
 pub struct WriteAheadLog {
+    /// In-memory ring of recently-appended entries (fast reads); always
+    /// populated regardless of durability mode.
     pub log_entries: Arc<RwLock<VecDeque<LogEntry>>>,
-    pub log_file: Option<String>,
+    /// Path to the durable append-only WAL file, if file-backed durability
+    /// is enabled via [`WriteAheadLog::with_file`]. `None` means
+    /// in-memory-only (see [`WriteAheadLog::new`]): entries are lost on
+    /// process crash/exit.
+    pub log_file: Option<std::path::PathBuf>,
+    /// Open handle to `log_file`, guarded for concurrent `append()` callers.
+    /// `None` in in-memory-only mode.
+    pub(crate) file_handle: Option<Arc<parking_lot::Mutex<std::fs::File>>>,
     pub checkpoint_interval: Duration,
     pub last_checkpoint: Arc<RwLock<SystemTime>>,
 }

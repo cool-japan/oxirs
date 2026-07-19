@@ -8,7 +8,7 @@
 //! implemented against the live [`Store`]. OWL 2 QL/EL/Full and several custom
 //! rules are honest stubs, returning no inferences until a future round.
 
-use crate::{Result, Shape};
+use crate::{Result, ShaclError, Shape};
 use oxirs_core::{
     model::{NamedNode, Object, Predicate, Subject, Term},
     Store,
@@ -886,43 +886,61 @@ impl ReasoningValidator {
     // -----------------------------------------------------------------------
 
     /// Compute OWL 2 QL entailment.
+    ///
+    /// Not yet implemented. Rather than silently returning zero inferences
+    /// (which would let reasoning-aware validation trivially pass triples that
+    /// OWL 2 QL entailment should have surfaced), this fails loudly so callers
+    /// select a supported regime (e.g. `OWL2RL`) or handle the unsupported case.
     fn compute_owl2_ql_entailment(
         &mut self,
         _focus_node: &Term,
         _store: &dyn Store,
     ) -> Result<Vec<InferredTriple>> {
-        // Deferred to a future round: OWL 2 QL requires the QL-specific
-        // existential subclass-axiom rewriting (query rewriting / first-order
-        // rewritability), which is a substantial subsystem of its own.
-        tracing::debug!("OWL 2 QL entailment not yet implemented — requires QL axiom rewriting");
-        Ok(Vec::new())
+        // OWL 2 QL requires the QL-specific existential subclass-axiom rewriting
+        // (query rewriting / first-order rewritability), a substantial subsystem
+        // of its own that is not yet available in this crate.
+        Err(ShaclError::UnsupportedOperation(
+            "OWL 2 QL entailment is not implemented (requires QL axiom rewriting); \
+             use EntailmentRegime::OWL2RL or RDFS instead"
+                .to_string(),
+        ))
     }
 
     /// Compute OWL 2 EL entailment.
+    ///
+    /// Not yet implemented; fails loudly instead of masking missing inferences
+    /// (see [`Self::compute_owl2_ql_entailment`]).
     fn compute_owl2_el_entailment(
         &mut self,
         _focus_node: &Term,
         _store: &dyn Store,
     ) -> Result<Vec<InferredTriple>> {
-        // Deferred to a future round: OWL 2 EL needs the EL completion
-        // algorithm (existential restrictions, role chains), a dedicated
-        // saturation procedure beyond simple triple rules.
-        tracing::debug!("OWL 2 EL entailment not yet implemented — requires EL completion rules");
-        Ok(Vec::new())
+        // OWL 2 EL needs the EL completion algorithm (existential restrictions,
+        // role chains), a dedicated saturation procedure beyond simple triple
+        // rules.
+        Err(ShaclError::UnsupportedOperation(
+            "OWL 2 EL entailment is not implemented (requires EL completion rules); \
+             use EntailmentRegime::OWL2RL or RDFS instead"
+                .to_string(),
+        ))
     }
 
     /// Compute OWL 2 Full entailment.
+    ///
+    /// Not yet implemented; fails loudly instead of masking missing inferences
+    /// (see [`Self::compute_owl2_ql_entailment`]).
     fn compute_owl2_full_entailment(
         &mut self,
         _focus_node: &Term,
         _store: &dyn Store,
     ) -> Result<Vec<InferredTriple>> {
-        // Deferred to a future round: OWL 2 Full RDF-Based Semantics is
-        // undecidable in general and needs a dedicated incomplete reasoner.
-        tracing::debug!(
-            "OWL 2 Full entailment not yet implemented — requires RDF-Based Semantics reasoner"
-        );
-        Ok(Vec::new())
+        // OWL 2 Full RDF-Based Semantics is undecidable in general and needs a
+        // dedicated incomplete reasoner.
+        Err(ShaclError::UnsupportedOperation(
+            "OWL 2 Full entailment is not implemented (requires an RDF-Based Semantics \
+             reasoner); use EntailmentRegime::OWL2RL or RDFS instead"
+                .to_string(),
+        ))
     }
 
     // -----------------------------------------------------------------------
@@ -978,47 +996,51 @@ impl ReasoningValidator {
     }
 
     /// Apply transitive closure for custom reasoning.
-    fn apply_transitive_closure(&self, _store: &dyn Store) -> Result<Vec<InferredTriple>> {
-        // Deferred to a future round: the standalone CustomReasoner needs a
-        // configurable property-set selector (which predicates to treat as
-        // transitive) before this can run without an OWL vocabulary. Use
-        // EntailmentRegime::OWL2RL for owl:TransitiveProperty inference today.
-        tracing::debug!(
-            "Custom transitive closure not yet implemented — requires custom property selector"
-        );
-        Ok(Vec::new())
+    ///
+    /// `CustomReasoning` has no dedicated property-set selector, so — like
+    /// `EntailmentRegime::OWL2RL` — this treats every `?p rdf:type
+    /// owl:TransitiveProperty` declaration in `store` as the property
+    /// selector and delegates to the same closure computation OWL 2 RL uses.
+    fn apply_transitive_closure(&self, store: &dyn Store) -> Result<Vec<InferredTriple>> {
+        let owl_transitive_property = NamedNode::new_unchecked(OWL_TRANSITIVE_PROPERTY);
+        let rdf_type = NamedNode::new_unchecked(RDF_TYPE);
+        self.infer_transitive_properties(store, &owl_transitive_property, &rdf_type)
     }
 
     /// Apply symmetric property inference for custom reasoning.
-    fn apply_symmetric_inference(&self, _store: &dyn Store) -> Result<Vec<InferredTriple>> {
-        // Deferred to a future round: needs a custom symmetric-property
-        // selector. Use EntailmentRegime::OWL2RL for owl:SymmetricProperty.
-        tracing::debug!(
-            "Custom symmetric inference not yet implemented — requires custom property selector"
-        );
-        Ok(Vec::new())
+    ///
+    /// Uses `?p rdf:type owl:SymmetricProperty` declarations as the property
+    /// selector, mirroring `apply_transitive_closure`.
+    fn apply_symmetric_inference(&self, store: &dyn Store) -> Result<Vec<InferredTriple>> {
+        let owl_symmetric_property = NamedNode::new_unchecked(OWL_SYMMETRIC_PROPERTY);
+        let rdf_type = NamedNode::new_unchecked(RDF_TYPE);
+        self.infer_symmetric_properties(store, &owl_symmetric_property, &rdf_type)
     }
 
     /// Apply inverse property inference for custom reasoning.
-    fn apply_inverse_inference(&self, _store: &dyn Store) -> Result<Vec<InferredTriple>> {
-        // Deferred to a future round: needs a custom inverse-property pair
-        // selector. Use EntailmentRegime::OWL2RL for owl:inverseOf.
-        tracing::debug!(
-            "Custom inverse inference not yet implemented — requires custom property selector"
-        );
-        Ok(Vec::new())
+    ///
+    /// Uses `?p1 owl:inverseOf ?p2` declarations as the property-pair
+    /// selector, mirroring `apply_transitive_closure`.
+    fn apply_inverse_inference(&self, store: &dyn Store) -> Result<Vec<InferredTriple>> {
+        let owl_inverse_of = NamedNode::new_unchecked(OWL_INVERSE_OF);
+        self.infer_inverse_properties(store, &owl_inverse_of)
     }
 
     /// Apply functional property inference for custom reasoning.
     fn apply_functional_inference(&self, _store: &dyn Store) -> Result<Vec<InferredTriple>> {
-        // Deferred to a future round: functional-property reasoning derives
-        // owl:sameAs equalities between the multiple objects of a functional
-        // property, which in turn requires equality (sameAs) materialisation —
-        // a larger subsystem than triple-pattern rules.
-        tracing::debug!(
-            "Custom functional inference not yet implemented — requires owl:sameAs materialisation"
-        );
-        Ok(Vec::new())
+        // Functional-property reasoning derives owl:sameAs equalities between
+        // the multiple objects of a functional property, which in turn
+        // requires equality (sameAs) materialisation — a subsystem that does
+        // not exist yet anywhere in this reasoner (OWL 2 RL doesn't implement
+        // it either; see the `_owl_functional_property` placeholders in
+        // `compute_owl2_rl_entailment`). Rather than silently reporting zero
+        // inferred triples for a flag the caller explicitly enabled, fail
+        // loudly so callers know functional-property closure did not run.
+        Err(ShaclError::UnsupportedOperation(
+            "Custom functional-property inference is not implemented (requires owl:sameAs \
+             materialisation); disable CustomReasoning::functional or avoid relying on it"
+                .to_string(),
+        ))
     }
 
     // -----------------------------------------------------------------------

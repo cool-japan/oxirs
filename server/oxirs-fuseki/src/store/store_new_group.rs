@@ -43,6 +43,65 @@ impl Store {
             })),
         })
     }
+    /// Open a store whose default dataset uses an explicit backend
+    /// [`StoreType`](crate::dataset_manager::StoreType) at `location`.
+    ///
+    /// This is how a server selects a durable on-disk backend for its default
+    /// dataset: `StoreType::TDB2` opens a [`TdbStoreAdapter`](crate::store::TdbStoreAdapter)
+    /// rooted at `location`, while `StoreType::InMemory` keeps the
+    /// [`RdfStore`]-backed store. An unknown/unsupported type is rejected by
+    /// [`StoreFactory`](crate::store::StoreFactory) rather than silently falling
+    /// back to memory.
+    pub fn open_with_store_type(
+        store_type: &crate::dataset_manager::StoreType,
+        location: &str,
+    ) -> FusekiResult<Self> {
+        let default_store = StoreFactory::create_backend(store_type, location)?;
+        Ok(Store {
+            default_store,
+            datasets: Arc::new(RwLock::new(HashMap::new())),
+            query_engine: Arc::new(QueryEngine::new()),
+            metadata: Arc::new(RwLock::new(StoreMetadata {
+                created_at: Some(Instant::now()),
+                ..Default::default()
+            })),
+        })
+    }
+
+    /// Create a named dataset with an explicit backend
+    /// [`StoreType`](crate::dataset_manager::StoreType).
+    ///
+    /// Unlike [`create_dataset`](Store::create_dataset) (which always uses the
+    /// in-memory [`RdfStore`] backend), this selects the backend through
+    /// [`StoreFactory`](crate::store::StoreFactory): a `StoreType::TDB2` dataset
+    /// becomes a durable on-disk store rooted at `location`. `StoreType::External`
+    /// is rejected; an unknown type string must be rejected earlier via
+    /// [`StoreFactory::store_type_from_str`](crate::store::StoreFactory::store_type_from_str).
+    pub fn create_dataset_with_type(
+        &self,
+        name: &str,
+        location: &str,
+        store_type: &crate::dataset_manager::StoreType,
+    ) -> FusekiResult<()> {
+        let mut datasets = self
+            .datasets
+            .write()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire write lock: {e}")))?;
+        if datasets.contains_key(name) {
+            return Err(FusekiError::store(format!(
+                "Dataset '{name}' already exists"
+            )));
+        }
+        let backend = StoreFactory::create_backend(store_type, location)?;
+        datasets.insert(name.to_string(), backend);
+        info!(
+            "Created dataset '{}' with backend '{}'",
+            name,
+            store_type.label()
+        );
+        Ok(())
+    }
+
     /// Create a named dataset
     pub fn create_dataset(&self, name: &str, config: DatasetConfig) -> FusekiResult<()> {
         let mut datasets = self
@@ -209,16 +268,16 @@ impl Store {
     ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         info!("Executing LOAD operation: {}", sparql.trim());
         let (source_iri, target_graph) = self.parse_load_statement(sparql)?;
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| FusekiError::update_execution(format!("Failed to create runtime: {e}")))?;
-        let (data, content_type) =
-            runtime.block_on(async { self.fetch_rdf_from_url(&source_iri).await })?;
+        // Fetch on a dedicated thread with its own runtime. Building a nested
+        // `tokio::runtime::Runtime` here and calling `block_on` would panic with
+        // "Cannot start a runtime from within a runtime" because SPARQL `LOAD`
+        // is reached synchronously from inside the async `/update` handler.
+        let (data, content_type) = self.fetch_rdf_blocking(&source_iri)?;
         let format = self.detect_rdf_format(&source_iri, content_type.as_deref())?;
         let parser = Parser::new(format);
         let quads = parser.parse_str_to_quads(&data).map_err(|e| {
             FusekiError::parse(format!("Failed to parse RDF from '{}': {e}", source_iri))
         })?;
-        let mut inserted_count = 0;
         let target_graph_name = if let Some(graph_iri) = target_graph {
             let named_node = oxirs_core::model::NamedNode::new(&graph_iri).map_err(|e| {
                 FusekiError::update_execution(format!(
@@ -229,24 +288,25 @@ impl Store {
         } else {
             None
         };
-        for quad in quads {
-            let final_quad = if let Some(ref target) = target_graph_name {
-                oxirs_core::model::Quad::new(
-                    quad.subject().clone(),
-                    quad.predicate().clone(),
-                    quad.object().clone(),
-                    target.clone(),
-                )
-            } else {
-                quad
-            };
-            if store
-                .insert_quad(final_quad)
-                .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {e}")))?
-            {
-                inserted_count += 1;
-            }
-        }
+        // Re-graph each quad to the target (if any) and insert the whole batch
+        // through the single batched ingest path instead of a per-quad loop.
+        let final_quads: Vec<Quad> = quads
+            .into_iter()
+            .map(|quad| {
+                if let Some(ref target) = target_graph_name {
+                    oxirs_core::model::Quad::new(
+                        quad.subject().clone(),
+                        quad.predicate().clone(),
+                        quad.object().clone(),
+                        target.clone(),
+                    )
+                } else {
+                    quad
+                }
+            })
+            .collect();
+        let inserted_count = bulk_insert_quads(&*store, final_quads)
+            .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {e}")))?;
         info!(
             "LOAD operation completed: loaded {} triples from '{}'",
             inserted_count, source_iri
@@ -269,6 +329,34 @@ impl Store {
         };
         Ok(("LOAD", inserted_count, 0, affected_graphs))
     }
+    /// Fetch RDF from a URL from a synchronous context that may itself be
+    /// running inside a tokio runtime (the async `/update` handler drives
+    /// SPARQL `LOAD` through the synchronous update dispatcher).
+    ///
+    /// The fetch runs on a dedicated scoped thread with its own current-thread
+    /// runtime, so it never nests a `block_on` inside the ambient runtime (which
+    /// panics) and works regardless of the ambient runtime flavor
+    /// (multi-thread server vs. current-thread `#[tokio::test]`).
+    fn fetch_rdf_blocking(&self, url: &str) -> FusekiResult<(String, Option<String>)> {
+        std::thread::scope(|scope| {
+            let handle = scope.spawn(|| {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| {
+                        FusekiError::update_execution(format!("Failed to build LOAD runtime: {e}"))
+                    })?;
+                rt.block_on(self.fetch_rdf_from_url(url))
+            });
+            match handle.join() {
+                Ok(result) => result,
+                Err(_) => Err(FusekiError::update_execution(
+                    "LOAD fetch thread panicked".to_string(),
+                )),
+            }
+        })
+    }
+
     /// Execute COPY operation (SPARQL 1.1)
     /// Syntax: COPY [SILENT] (GRAPH <sourceIRI> | DEFAULT) TO (GRAPH <targetIRI> | DEFAULT)
     pub(super) fn execute_copy_operation(
@@ -424,10 +512,18 @@ impl Store {
             Ok(oxirs_core::model::GraphName::NamedNode(named_node))
         }
     }
-    /// Parse data block into quads using simple N-Triples-like parsing
-    /// Handles both plain triples and GRAPH <iri> { triples } syntax
+    /// Parse data block into quads using N-Triples parsing.
+    /// Handles both plain triples and `GRAPH <iri> { triples }` syntax.
+    ///
+    /// The block is parsed as a **whole document**, not line by line. The old
+    /// line-by-line loop treated each source line as exactly one triple and
+    /// *silently discarded* (only `warn!`) every triple after the first on a
+    /// line — so `INSERT DATA { <a> <b> <c> . <d> <e> <f> . }` written on a
+    /// single line inserted zero (or one) triples with no error. Parsing the
+    /// entire block at once captures every `.`-terminated statement regardless
+    /// of line breaks, and a genuine parse failure is now surfaced as an error
+    /// instead of being swallowed.
     pub(super) fn parse_data_block(&self, data_block: &str) -> FusekiResult<Vec<Quad>> {
-        let mut quads = Vec::new();
         let data_block = data_block.trim();
         let data_upper = data_block.to_uppercase();
         if data_upper.starts_with("GRAPH") {
@@ -438,41 +534,25 @@ impl Store {
                         &after_graph[open_bracket + 1..open_bracket + 1 + close_bracket];
                     if let Some(open_brace) = after_graph.find('{') {
                         if let Some(close_brace) = after_graph.rfind('}') {
-                            let triples_block = &after_graph[open_brace + 1..close_brace].trim();
+                            let triples_block = after_graph[open_brace + 1..close_brace].trim();
                             let graph_name =
                                 oxirs_core::model::NamedNode::new(graph_iri).map_err(|e| {
                                     FusekiError::update_execution(format!("Invalid graph IRI: {e}"))
                                 })?;
                             let graph_name_obj =
                                 oxirs_core::model::GraphName::NamedNode(graph_name);
-                            let parser = Parser::new(CoreRdfFormat::NTriples);
-                            for line in triples_block.lines() {
-                                let line = line.trim();
-                                if line.is_empty() || line.starts_with('#') {
-                                    continue;
-                                }
-                                let line_with_period = if line.ends_with('.') {
-                                    line.to_string()
-                                } else {
-                                    format!("{line}.")
-                                };
-                                match parser.parse_str_to_quads(&line_with_period) {
-                                    Ok(parsed_quads) => {
-                                        for quad in parsed_quads {
-                                            let new_quad = oxirs_core::model::Quad::new(
-                                                quad.subject().clone(),
-                                                quad.predicate().clone(),
-                                                quad.object().clone(),
-                                                graph_name_obj.clone(),
-                                            );
-                                            quads.push(new_quad);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        warn!("Failed to parse line '{}': {}", line, e);
-                                    }
-                                }
-                            }
+                            let parsed = Self::parse_ntriples_document(triples_block)?;
+                            let quads = parsed
+                                .into_iter()
+                                .map(|quad| {
+                                    oxirs_core::model::Quad::new(
+                                        quad.subject().clone(),
+                                        quad.predicate().clone(),
+                                        quad.object().clone(),
+                                        graph_name_obj.clone(),
+                                    )
+                                })
+                                .collect();
                             return Ok(quads);
                         }
                     }
@@ -482,26 +562,124 @@ impl Store {
                 "Invalid GRAPH syntax in data block".to_string(),
             ));
         }
+        Self::parse_ntriples_document(data_block)
+    }
+
+    /// Parse an N-Triples data block (multiple `.`-terminated statements,
+    /// possibly several per physical line, with `#` comments) into quads.
+    ///
+    /// The block is first split into individual triple statements on top-level
+    /// `.` terminators, then each statement is parsed on its own. This is
+    /// required because the underlying N-Triples parser accepts only **one
+    /// triple per call** (it rejects `<a> <p> <b> . <c> <p> <d> .` with
+    /// "Expected 3 tokens, found 7"); the previous line-by-line loop therefore
+    /// silently dropped every triple after the first on a shared line. Any
+    /// statement that fails to parse aborts the whole block with an error rather
+    /// than being discarded, so a bad payload can never appear as a silent
+    /// zero-row success.
+    fn parse_ntriples_document(block: &str) -> FusekiResult<Vec<Quad>> {
+        let block = block.trim();
+        if block.is_empty() {
+            return Ok(Vec::new());
+        }
         let parser = Parser::new(CoreRdfFormat::NTriples);
-        for line in data_block.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            let line_with_period = if line.ends_with('.') {
-                line.to_string()
-            } else {
-                format!("{line}.")
-            };
-            match parser.parse_str_to_quads(&line_with_period) {
-                Ok(parsed_quads) => {
-                    quads.extend(parsed_quads);
-                }
-                Err(e) => {
-                    warn!("Failed to parse line '{}': {}", line, e);
-                }
-            }
+        let mut quads = Vec::new();
+        for stmt in Self::split_ntriples_statements(block) {
+            let line = format!("{stmt} .");
+            let parsed = parser.parse_str_to_quads(&line).map_err(|e| {
+                FusekiError::update_execution(format!(
+                    "Failed to parse triple '{stmt}' in data block (no triples were applied): {e}"
+                ))
+            })?;
+            quads.extend(parsed);
         }
         Ok(quads)
+    }
+
+    /// Split an N-Triples data block into individual triple statements on
+    /// top-level `.` terminators — a `.` that is not inside an `<IRI>`, a quoted
+    /// literal (`"…"` / `'…'`, honouring `\` escapes), or a `#` comment. This is
+    /// what lets several `.`-separated triples share one physical line. The
+    /// returned statements are trimmed and do not include the terminating `.`.
+    fn split_ntriples_statements(block: &str) -> Vec<String> {
+        let mut statements = Vec::new();
+        let mut current = String::new();
+        let mut in_iri = false;
+        let mut in_dquote = false;
+        let mut in_squote = false;
+        let mut escaped = false;
+        let mut in_comment = false;
+        for ch in block.chars() {
+            if in_comment {
+                if ch == '\n' {
+                    in_comment = false;
+                }
+                continue;
+            }
+            if escaped {
+                current.push(ch);
+                escaped = false;
+                continue;
+            }
+            match ch {
+                '\\' if in_dquote || in_squote => {
+                    current.push(ch);
+                    escaped = true;
+                }
+                '#' if !in_iri && !in_dquote && !in_squote => {
+                    in_comment = true;
+                }
+                '"' if !in_squote && !in_iri => {
+                    in_dquote = !in_dquote;
+                    current.push(ch);
+                }
+                '\'' if !in_dquote && !in_iri => {
+                    in_squote = !in_squote;
+                    current.push(ch);
+                }
+                '<' if !in_dquote && !in_squote && !in_iri => {
+                    in_iri = true;
+                    current.push(ch);
+                }
+                '>' if in_iri => {
+                    in_iri = false;
+                    current.push(ch);
+                }
+                '.' if !in_iri && !in_dquote && !in_squote => {
+                    let trimmed = current.trim();
+                    if !trimmed.is_empty() {
+                        statements.push(trimmed.to_string());
+                    }
+                    current.clear();
+                }
+                _ => current.push(ch),
+            }
+        }
+        let trimmed = current.trim();
+        if !trimmed.is_empty() {
+            statements.push(trimmed.to_string());
+        }
+        statements
+    }
+}
+
+#[cfg(test)]
+mod load_runtime_tests {
+    use crate::store::Store;
+
+    /// Regression: SPARQL `LOAD` is dispatched synchronously from within the
+    /// async `/update` handler's tokio runtime. A prior implementation built a
+    /// nested `tokio::runtime::Runtime` and called `block_on`, which panics with
+    /// "Cannot start a runtime from within a runtime". This test drives `LOAD`
+    /// from inside a tokio runtime (as the real handler does) and asserts it
+    /// returns a clean error for an unreachable source instead of panicking.
+    #[tokio::test]
+    async fn load_from_unreachable_source_errors_without_panicking() {
+        let store = Store::new().expect("create store");
+        let result = store.update("LOAD <file:///definitely/nonexistent/oxirs-load-test.ttl>");
+        assert!(
+            result.is_err(),
+            "LOAD of an unreachable source must return an error, got: {result:?}"
+        );
     }
 }

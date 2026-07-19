@@ -7,7 +7,6 @@
 use crate::{
     auth::{AuthUser, Permission},
     error::{FusekiError, FusekiResult},
-    federated_query_optimizer::FederatedQueryOptimizer,
     server::AppState,
 };
 use axum::{
@@ -20,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::{error, instrument, warn};
+use tracing::{error, instrument};
 
 // SPARQL query parsing
 use oxirs_arq::query::parse_query;
@@ -280,9 +279,9 @@ pub async fn sparql_query(
 
             error!("SPARQL query execution failed: {}", e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                e.status_code(),
                 Json(serde_json::json!({
-                    "error": "query_execution_failed",
+                    "error": e.error_type(),
                     "message": e.to_string()
                 })),
             )
@@ -316,7 +315,11 @@ pub async fn sparql_query_post(
 
         for part in body_str.split('&') {
             if let Some((key, value)) = part.split_once('=') {
-                let decoded_value = oxirs_core::encoding::percent_decode(value)
+                // application/x-www-form-urlencoded encodes spaces as `+`; decode
+                // `+`→space BEFORE percent-decoding so a literal plus (`%2B`)
+                // survives. Without this, `query=SELECT+?s+WHERE...` reaches the
+                // SPARQL lexer with `+` intact and fails ("found Plus").
+                let decoded_value = oxirs_core::encoding::percent_decode(&value.replace('+', " "))
                     .unwrap_or_default()
                     .to_string();
                 match key {
@@ -398,9 +401,9 @@ pub async fn sparql_query_post(
 
             error!("SPARQL query execution failed: {}", e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                e.status_code(),
                 Json(serde_json::json!({
-                    "error": "query_execution_failed",
+                    "error": e.error_type(),
                     "message": e.to_string()
                 })),
             )
@@ -496,9 +499,9 @@ pub async fn sparql_update(
 
             error!("SPARQL update execution failed: {}", e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                e.status_code(),
                 Json(serde_json::json!({
-                    "error": "update_execution_failed",
+                    "error": e.error_type(),
                     "message": e.to_string()
                 })),
             )
@@ -507,188 +510,84 @@ pub async fn sparql_update(
     }
 }
 
-/// Execute SPARQL query with enhanced features
+/// Execute a SPARQL query with a single, authoritative execution path.
+///
+/// The query is parsed ONCE by the real oxirs-arq parser; the parsed query form
+/// (SELECT / ASK / CONSTRUCT / DESCRIBE) — not a substring scan of the text — is
+/// the sole authority that decides how it executes. Every form then flows
+/// through the oxirs-arq engine
+/// ([`crate::handlers::sparql::arq_exec::dispatch`]) so `FILTER`, `LIMIT`/
+/// `OFFSET`, `ORDER BY`, `DISTINCT`, joins, aggregation (`GROUP BY`/`HAVING`),
+/// `GRAPH`/`FROM` scoping, `SERVICE` federation, `CONSTRUCT` templating and
+/// `DESCRIBE` CBD are all actually evaluated.
+///
+/// There is no silent-empty fallback: a parse failure is an HTTP 400, an
+/// execution failure an HTTP 500, and a genuinely unexecutable construct a typed
+/// error. The endpoint never answers `200 OK` with a fabricated empty result.
 pub async fn execute_sparql_query(
     query: &str,
-    context: QueryContext,
+    _context: QueryContext,
     state: &Arc<AppState>,
 ) -> FusekiResult<QueryResult> {
-    // Basic validation first
+    // Basic validation first.
     if query.trim().is_empty() {
         return Err(FusekiError::query_parsing("Empty query"));
     }
 
-    // Try to parse query, but provide fallback if parsing fails
-    let _parsed_query = match parse_query(query) {
-        Ok(parsed) => Some(parsed),
+    // Parse ONCE via the real arq parser. The parsed query form is the single
+    // routing authority; a parse failure is a 400, never a silent 200 + empty.
+    let parsed = match parse_query(query) {
+        Ok(parsed) => parsed,
         Err(e) => {
-            warn!("Query parsing failed, providing fallback response: {}", e);
-            None
+            // A SPARQL UPDATE sent to the query endpoint will not parse as a
+            // query; point the caller at the dedicated /update endpoint instead
+            // of emitting a generic parse error.
+            if looks_like_update(query) {
+                return Err(FusekiError::query_parsing(
+                    "This is a SPARQL Query endpoint; send SPARQL UPDATE requests to /update",
+                ));
+            }
+            return Err(FusekiError::query_parsing(format!(
+                "SPARQL parse error: {e}"
+            )));
         }
     };
 
-    // If parsing failed, provide a simple fallback response for testing
-    if _parsed_query.is_none() {
-        warn!("Providing fallback response due to parsing failure");
-        let query_type = detect_query_type(query);
-        let result = match query_type.as_str() {
-            "ASK" => QueryResult {
-                query_type,
-                execution_time_ms: 1,
-                result_count: Some(1),
-                bindings: None,
-                boolean: Some(false),
-                construct_graph: None,
-                describe_graph: None,
-            },
-            "CONSTRUCT" => QueryResult {
-                query_type,
-                execution_time_ms: 1,
-                result_count: Some(0),
-                bindings: None,
-                boolean: None,
-                construct_graph: Some(String::new()),
-                describe_graph: None,
-            },
-            "DESCRIBE" => QueryResult {
-                query_type,
-                execution_time_ms: 1,
-                result_count: Some(0),
-                bindings: None,
-                boolean: None,
-                construct_graph: None,
-                describe_graph: Some(String::new()),
-            },
-            _ => QueryResult {
-                query_type,
-                execution_time_ms: 1,
-                result_count: Some(0),
-                bindings: Some(Vec::new()),
-                boolean: None,
-                construct_graph: None,
-                describe_graph: None,
-            },
-        };
-        return Ok(result);
-    }
+    // Dispatch on the parsed form. All four query forms run through the real
+    // engine; failures surface as typed HTTP errors, never a silent empty body.
+    crate::handlers::sparql::arq_exec::dispatch(&parsed, &state.store)
+}
 
-    // Apply optimizations if enabled
-    let optimized_query = if context.enable_optimizations {
-        apply_query_optimizations(query, &context, state).await?
-    } else {
-        query.to_string()
-    };
-
-    // Try to execute through store, but provide fallback for parser issues
-    match state.store.query(&optimized_query) {
-        Ok(store_result) => {
-            // Convert store::QueryResult to sparql::core::QueryResult
-            let query_type = detect_query_type(&optimized_query);
-
-            let result = match store_result.inner {
-                oxirs_core::query::QueryResult::Select {
-                    variables: _,
-                    bindings,
-                } => {
-                    let converted_bindings = convert_hashmap_bindings_to_json(&bindings);
-                    QueryResult {
-                        query_type: query_type.clone(),
-                        execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
-                        result_count: Some(store_result.stats.result_count),
-                        bindings: Some(converted_bindings),
-                        boolean: None,
-                        construct_graph: None,
-                        describe_graph: None,
-                    }
-                }
-                oxirs_core::query::QueryResult::Ask(boolean) => QueryResult {
-                    query_type: query_type.clone(),
-                    execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
-                    result_count: Some(1),
-                    bindings: None,
-                    boolean: Some(boolean),
-                    construct_graph: None,
-                    describe_graph: None,
-                },
-                oxirs_core::query::QueryResult::Construct(triples) => {
-                    let graph_str = serialize_triples_to_turtle(&triples);
-                    QueryResult {
-                        query_type: query_type.clone(),
-                        execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
-                        result_count: Some(triples.len()),
-                        bindings: None,
-                        boolean: None,
-                        construct_graph: if query_type == "CONSTRUCT" {
-                            Some(graph_str.clone())
-                        } else {
-                            None
-                        },
-                        describe_graph: if query_type == "DESCRIBE" {
-                            Some(graph_str)
-                        } else {
-                            None
-                        },
-                    }
-                }
-            };
-            Ok(result)
-        }
-        Err(e) => {
-            warn!(
-                "Store query execution failed, providing fallback response: {}",
-                e
-            );
-            // Provide a basic response for testing purposes
-            let query_type = detect_query_type(&optimized_query);
-            let result = match query_type.as_str() {
-                "ASK" => QueryResult {
-                    query_type,
-                    execution_time_ms: 1,
-                    result_count: Some(1),
-                    bindings: None,
-                    boolean: Some(false),
-                    construct_graph: None,
-                    describe_graph: None,
-                },
-                "CONSTRUCT" => QueryResult {
-                    query_type,
-                    execution_time_ms: 1,
-                    result_count: Some(0),
-                    bindings: None,
-                    boolean: None,
-                    construct_graph: Some(String::new()),
-                    describe_graph: None,
-                },
-                "DESCRIBE" => QueryResult {
-                    query_type,
-                    execution_time_ms: 1,
-                    result_count: Some(0),
-                    bindings: None,
-                    boolean: None,
-                    construct_graph: None,
-                    describe_graph: Some(String::new()),
-                },
-                _ => QueryResult {
-                    query_type,
-                    execution_time_ms: 1,
-                    result_count: Some(0),
-                    bindings: Some(Vec::new()),
-                    boolean: None,
-                    construct_graph: None,
-                    describe_graph: None,
-                },
-            };
-            Ok(result)
-        }
-    }
+/// Heuristic used only to improve the error message when a request that fails to
+/// parse as a query looks like a SPARQL UPDATE (which belongs at `/update`).
+///
+/// Real routing is by parse form; this only chooses between two 400 messages.
+fn looks_like_update(text: &str) -> bool {
+    let upper = text.to_uppercase();
+    [
+        "INSERT ", "DELETE ", "LOAD ", "CLEAR ", "CREATE ", "DROP ", "COPY ", "MOVE ", "ADD ",
+    ]
+    .iter()
+    .any(|kw| upper.contains(*kw))
 }
 
 /// Execute SPARQL update with validation
 pub async fn execute_sparql_update(
     update: &str,
-    _context: QueryContext,
+    context: QueryContext,
     state: &Arc<AppState>,
 ) -> FusekiResult<UpdateResult> {
+    // Enforce read-only datasets before any parsing or mutation. A dataset
+    // configured with `read_only = true` must reject every SPARQL UPDATE with
+    // HTTP 403 and leave the data untouched — this is the write-protection that
+    // a public, query-only endpoint (e.g. sparql.wik.jp) depends on.
+    if state.is_dataset_read_only(&context.dataset) {
+        return Err(FusekiError::forbidden(format!(
+            "Dataset '{}' is read-only; SPARQL UPDATE is not permitted",
+            context.dataset
+        )));
+    }
+
     // Validate update
     validate_sparql_update(update)?;
 
@@ -770,46 +669,6 @@ fn count_update_operations(update: &str) -> usize {
     }
 }
 
-/// Apply various query optimizations
-async fn apply_query_optimizations(
-    query: &str,
-    context: &QueryContext,
-    state: &Arc<AppState>,
-) -> FusekiResult<String> {
-    let optimized_query = query.to_string();
-
-    // Apply federation optimization if enabled
-    if context.enable_federation {
-        if let Some(metrics_service) = &state.metrics_service {
-            let federation_optimizer = FederatedQueryOptimizer::new(metrics_service.clone());
-            // Check if query contains SERVICE clauses for federation
-            if query.to_uppercase().contains("SERVICE") {
-                let timeout_ms = context
-                    .timeout
-                    .unwrap_or(Duration::from_secs(30))
-                    .as_millis() as u64;
-                match federation_optimizer
-                    .process_federated_query(query, timeout_ms)
-                    .await
-                {
-                    Ok(_federated_results) => {
-                        // For now, continue with original query until we integrate federated results
-                        // TODO: Integrate federated query results into response
-                    }
-                    Err(e) => {
-                        warn!("Federated query processing failed: {}", e);
-                        // Continue with original query as fallback
-                    }
-                }
-            }
-        }
-    }
-
-    // Apply other optimizations...
-
-    Ok(optimized_query)
-}
-
 /// Negotiate the preferred SPARQL response format from an Accept header.
 ///
 /// Each comma-separated entry can carry a `q=` quality value (default
@@ -882,6 +741,26 @@ fn negotiate_sparql_format(accept: &str) -> String {
 /// matches, JSON Results is the default.
 fn format_query_response(result: QueryResult, content_type: &str) -> Response {
     let primary = negotiate_sparql_format(content_type);
+
+    // A CONSTRUCT/DESCRIBE produces an RDF graph, not a bindings table. If the
+    // client negotiated a bindings format (SPARQL Results JSON/XML/CSV/TSV, or an
+    // unrecognised type falling through to the JSON default), serving it would
+    // emit a silently-empty `bindings` array. Fall back to Turtle instead so a
+    // graph result is never a silent empty answer.
+    let is_graph = matches!(result.query_type.as_str(), "CONSTRUCT" | "DESCRIBE");
+    let is_graph_format = matches!(
+        primary.as_str(),
+        "text/turtle"
+            | "application/x-turtle"
+            | "application/n-triples"
+            | "application/rdf+xml"
+            | "application/ld+json"
+    );
+    let primary = if is_graph && !is_graph_format {
+        "text/turtle".to_string()
+    } else {
+        primary
+    };
 
     match primary.as_str() {
         "application/sparql-results+json" | "application/json" => {
@@ -1028,110 +907,6 @@ fn validate_sparql_update(update: &str) -> FusekiResult<()> {
     Ok(())
 }
 
-/// Detect SPARQL query type from query string
-fn detect_query_type(query: &str) -> String {
-    let query_upper = query.to_uppercase();
-
-    if query_upper.contains("SELECT") {
-        "SELECT".to_string()
-    } else if query_upper.contains("ASK") {
-        "ASK".to_string()
-    } else if query_upper.contains("CONSTRUCT") {
-        "CONSTRUCT".to_string()
-    } else if query_upper.contains("DESCRIBE") {
-        "DESCRIBE".to_string()
-    } else {
-        "SELECT".to_string() // Default fallback
-    }
-}
-
-/// Convert variable bindings to JSON format for SPARQL response
-fn convert_bindings_to_json(
-    bindings: &[oxirs_core::rdf_store::VariableBinding],
-) -> Vec<HashMap<String, serde_json::Value>> {
-    bindings
-        .iter()
-        .map(|binding| {
-            let mut json_binding = HashMap::new();
-
-            for variable in binding.variables() {
-                if let Some(term) = binding.get(variable) {
-                    let json_value = convert_term_to_json(term);
-                    json_binding.insert(variable.clone(), json_value);
-                }
-            }
-
-            json_binding
-        })
-        .collect()
-}
-
-/// Convert HashMap bindings to JSON format for SPARQL response
-fn convert_hashmap_bindings_to_json(
-    bindings: &[HashMap<String, oxirs_core::model::Term>],
-) -> Vec<HashMap<String, serde_json::Value>> {
-    bindings
-        .iter()
-        .map(|binding| {
-            let mut json_binding = HashMap::new();
-
-            for (variable, term) in binding {
-                let json_value = convert_term_to_json(term);
-                json_binding.insert(variable.clone(), json_value);
-            }
-
-            json_binding
-        })
-        .collect()
-}
-
-/// Convert RDF term to JSON representation for SPARQL results
-fn convert_term_to_json(term: &oxirs_core::model::Term) -> serde_json::Value {
-    match term {
-        oxirs_core::model::Term::NamedNode(iri) => {
-            serde_json::json!({
-                "type": "uri",
-                "value": iri.as_str()
-            })
-        }
-        oxirs_core::model::Term::BlankNode(bnode) => {
-            serde_json::json!({
-                "type": "bnode",
-                "value": bnode
-            })
-        }
-        oxirs_core::model::Term::Literal(literal) => {
-            let mut json_literal = serde_json::json!({
-                "type": "literal",
-                "value": literal.value()
-            });
-
-            if let Some(language) = literal.language() {
-                json_literal["xml:lang"] = serde_json::Value::String(language.to_string());
-            }
-
-            if literal.datatype().as_str() != "http://www.w3.org/2001/XMLSchema#string" {
-                json_literal["datatype"] =
-                    serde_json::Value::String(literal.datatype().as_str().to_string());
-            }
-
-            json_literal
-        }
-        oxirs_core::model::Term::Variable(var) => {
-            serde_json::json!({
-                "type": "variable",
-                "value": var.name()
-            })
-        }
-        oxirs_core::model::Term::QuotedTriple(triple) => {
-            serde_json::json!({
-                "type": "quoted-triple",
-                "value": format!("{}", triple)
-            })
-        }
-    }
-}
-
 /// Serialize graph quads to Turtle format
 fn serialize_graph_to_turtle(quads: &[oxirs_core::model::Quad]) -> String {
     let mut turtle = String::new();
@@ -1158,8 +933,12 @@ fn serialize_graph_to_turtle(quads: &[oxirs_core::model::Quad]) -> String {
     turtle
 }
 
-/// Serialize triples to Turtle format
-fn serialize_triples_to_turtle(triples: &[oxirs_core::model::Triple]) -> String {
+/// Serialize triples to Turtle format.
+///
+/// Shared with [`crate::handlers::sparql::arq_exec`], which serializes CONSTRUCT
+/// and DESCRIBE graphs through this same helper after converting arq algebra
+/// triples to oxirs-core triples, so the wire format is identical across paths.
+pub(crate) fn serialize_triples_to_turtle(triples: &[oxirs_core::model::Triple]) -> String {
     let mut turtle = String::new();
 
     // Add common prefixes

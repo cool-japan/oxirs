@@ -216,8 +216,8 @@ mod tests {
         let allocator = Allocator::new();
 
         let page1 = allocator.allocate().unwrap();
-        let page2 = allocator.allocate().unwrap();
-        let page3 = allocator.allocate().unwrap();
+        let _page2 = allocator.allocate().unwrap();
+        let _page3 = allocator.allocate().unwrap();
 
         assert_eq!(allocator.allocated_pages(), 3);
 

@@ -10,23 +10,12 @@
 //! - Progress tracking and error recovery
 
 use crate::dictionary::Term;
-use crate::error::{Result, TdbError};
+use crate::error::Result;
 use crate::store::TdbStore;
-use scirs2_core::parallel_ops::{par_chunks, par_join};
 use scirs2_core::profiling::Profiler;
-use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
-
-/// Convert a Term to its string representation
-fn term_to_string(term: &Term) -> String {
-    match term {
-        Term::Iri(iri) => iri.clone(),
-        Term::Literal { value, .. } => value.clone(),
-        Term::BlankNode(id) => id.clone(),
-    }
-}
 
 /// Bulk loader configuration
 #[derive(Debug, Clone)]
@@ -169,14 +158,11 @@ impl BulkLoader {
             // Begin transaction for batch
             let txn_id = store.begin_transaction()?;
 
-            // Insert triples in batch
+            // Insert triples in batch, preserving Term variants (IRIs,
+            // literals with datatype/language, blank nodes) end-to-end instead
+            // of collapsing everything to an IRI via a string round-trip.
             for (s, p, o) in batch {
-                // Convert Terms to strings for insertion
-                let s_str = term_to_string(s);
-                let p_str = term_to_string(p);
-                let o_str = term_to_string(o);
-
-                match store.insert(&s_str, &p_str, &o_str) {
+                match store.insert_triple(s, p, o) {
                     Ok(_) => {
                         self.triples_loaded.fetch_add(1, Ordering::Relaxed);
                     }
@@ -247,16 +233,14 @@ impl BulkLoader {
 
         log::info!("Found {} unique terms to pre-populate", unique_terms.len());
 
-        // Pre-populate dictionary in a single transaction
-        let txn_id = store.begin_transaction()?;
-
-        for term in unique_terms {
-            // Insert dummy triple to populate dictionary with this term
-            let term_str = term_to_string(&term);
-            let _ = store.insert(&term_str, &term_str, &term_str);
+        // Intern each unique term into the dictionary WITHOUT inserting any
+        // triple. The previous implementation wrote a fabricated
+        // (term, term, term) triple per term into the live SPO/POS/OSP indexes
+        // (inflating triple_count with garbage) and swallowed errors with
+        // `let _`; both are fixed here.
+        for term in &unique_terms {
+            store.encode_term(term)?;
         }
-
-        store.commit_transaction(txn_id)?;
 
         log::info!("Dictionary pre-population completed");
 
@@ -338,7 +322,6 @@ impl BulkLoaderFactory {
 mod tests {
     use super::*;
     use crate::dictionary::Term;
-    use crate::store::TdbConfig;
     use std::env;
 
     fn create_test_store() -> TdbStore {

@@ -350,8 +350,7 @@ impl EnhancedNodeDiscovery {
         // Construct SRV query: _service._proto.domain
         let srv_query = format!("_{service_name}._{protocol}.{domain}");
 
-        // In production, use a proper DNS library like trust-dns
-        // For now, simulate with static data
+        // Not implemented in this build; see `simulate_dns_srv_lookup` for details
         let discovered_nodes = self.simulate_dns_srv_lookup(&srv_query).await?;
 
         // Update nodes cache
@@ -377,8 +376,7 @@ impl EnhancedNodeDiscovery {
             namespace, service_name
         );
 
-        // In production, use kube-rs or k8s-openapi
-        // For now, simulate pod discovery
+        // Not implemented in this build; see `simulate_k8s_discovery` for details
         let discovered_nodes = self
             .simulate_k8s_discovery(namespace, service_name, label_selector)
             .await?;
@@ -405,7 +403,7 @@ impl EnhancedNodeDiscovery {
             cluster_name, service_name, region
         );
 
-        // In production, use aws-sdk-rust
+        // Not implemented in this build; see `simulate_aws_ecs_discovery` for details
         let discovered_nodes = self
             .simulate_aws_ecs_discovery(cluster_name, service_name, region)
             .await?;
@@ -912,60 +910,92 @@ impl EnhancedNodeDiscovery {
         *self.stats.write().await = EnhancedDiscoveryStats::default();
     }
 
-    // Simulation methods (replace with real implementations in production)
+    // Discovery backends.
+    //
+    // None of DNS SRV / Kubernetes / AWS ECS / AWS EC2 / Consul / Etcd
+    // discovery is implemented in this build: the required client
+    // libraries (a DNS resolver such as hickory-resolver, kube-rs, an AWS
+    // SDK, a Consul/etcd client) are not workspace dependencies, and this
+    // pass intentionally does not add a new heavyweight dependency just to
+    // wire one backend up. Every backend therefore returns an explicit,
+    // typed-by-message `Err` instead of a silently-empty `Ok(vec![])` —
+    // the previous behavior was indistinguishable from "discovery ran and
+    // legitimately found zero peers", which is a dangerous failure mode
+    // for cluster formation.
 
-    async fn simulate_dns_srv_lookup(&self, _query: &str) -> Result<Vec<NodeInfo>, String> {
-        // Simulate DNS SRV lookup
-        Ok(vec![])
+    async fn simulate_dns_srv_lookup(&self, query: &str) -> Result<Vec<NodeInfo>, String> {
+        Err(format!(
+            "DNS SRV discovery is not implemented in this build (no DNS resolver client is a \
+             workspace dependency); cannot resolve '{query}'. Configure a different discovery \
+             strategy, or provide peers explicitly, rather than relying on DNS SRV discovery."
+        ))
     }
 
     async fn simulate_k8s_discovery(
         &self,
-        _namespace: &str,
-        _service_name: &str,
-        _label_selector: Option<&str>,
+        namespace: &str,
+        service_name: &str,
+        label_selector: Option<&str>,
     ) -> Result<Vec<NodeInfo>, String> {
-        // Simulate Kubernetes pod discovery
-        Ok(vec![])
+        Err(format!(
+            "Kubernetes service discovery is not implemented in this build (no Kubernetes API \
+             client such as kube-rs is a workspace dependency); cannot query {namespace}/{service_name} \
+             (label selector: {}). Configure a different discovery strategy, or provide peers \
+             explicitly.",
+            label_selector.unwrap_or("<none>")
+        ))
     }
 
     async fn simulate_aws_ecs_discovery(
         &self,
-        _cluster_name: &str,
-        _service_name: &str,
-        _region: &str,
+        cluster_name: &str,
+        service_name: &str,
+        region: &str,
     ) -> Result<Vec<NodeInfo>, String> {
-        // Simulate AWS ECS task discovery
-        Ok(vec![])
+        Err(format!(
+            "AWS ECS discovery is not implemented in this build (no AWS SDK client is a workspace \
+             dependency); cannot query {cluster_name}/{service_name} in {region}. Configure a \
+             different discovery strategy, or provide peers explicitly."
+        ))
     }
 
     async fn simulate_aws_ec2_discovery(
         &self,
-        _region: &str,
-        _tag_key: &str,
-        _tag_value: &str,
+        region: &str,
+        tag_key: &str,
+        tag_value: &str,
     ) -> Result<Vec<NodeInfo>, String> {
-        // Simulate AWS EC2 instance discovery
-        Ok(vec![])
+        Err(format!(
+            "AWS EC2 tag-based discovery is not implemented in this build (no AWS SDK client is a \
+             workspace dependency); cannot query {tag_key}={tag_value} in {region}. Configure a \
+             different discovery strategy, or provide peers explicitly."
+        ))
     }
 
     async fn simulate_consul_discovery(
         &self,
-        _consul_address: &str,
-        _service_name: &str,
-        _datacenter: Option<&str>,
+        consul_address: &str,
+        service_name: &str,
+        datacenter: Option<&str>,
     ) -> Result<Vec<NodeInfo>, String> {
-        // Simulate Consul service discovery
-        Ok(vec![])
+        Err(format!(
+            "Consul service discovery is not implemented in this build (no Consul client is a \
+             workspace dependency); cannot query '{service_name}' at {consul_address} (datacenter: \
+             {}). Configure a different discovery strategy, or provide peers explicitly.",
+            datacenter.unwrap_or("<none>")
+        ))
     }
 
     async fn simulate_etcd_discovery(
         &self,
-        _endpoints: &[String],
-        _key_prefix: &str,
+        endpoints: &[String],
+        key_prefix: &str,
     ) -> Result<Vec<NodeInfo>, String> {
-        // Simulate Etcd key-value discovery
-        Ok(vec![])
+        Err(format!(
+            "Etcd key-value discovery is not implemented in this build (no etcd client is a \
+             workspace dependency); cannot query prefix '{key_prefix}' at {endpoints:?}. Configure \
+             a different discovery strategy, or provide peers explicitly."
+        ))
     }
 }
 
@@ -984,8 +1014,12 @@ mod tests {
         assert_eq!(stats.total_nodes_discovered, 0);
     }
 
+    /// Regression test for the fake-success finding: DNS SRV discovery is
+    /// not implemented in this build, so `discover()` must fail loudly
+    /// with a clear message instead of returning `Ok(vec![])` dressed up
+    /// as "found zero nodes".
     #[tokio::test]
-    async fn test_dns_srv_discovery() {
+    async fn test_dns_srv_discovery_is_explicit_unsupported_error() {
         let config = EnhancedDiscoveryConfig {
             strategy: EnhancedDiscoveryStrategy::DnsSrv {
                 service_name: "oxirs".to_string(),
@@ -998,13 +1032,20 @@ mod tests {
         let discovery = EnhancedNodeDiscovery::new(1, config);
         let result = discovery.discover().await;
 
-        assert!(result.is_ok());
+        let err = result.expect_err("DNS SRV discovery must not fabricate a successful result");
+        assert!(
+            err.contains("not implemented"),
+            "error should clearly state the backend is unimplemented: {err}"
+        );
+
         let stats = discovery.get_stats().await;
         assert_eq!(stats.total_discoveries, 1);
+        assert_eq!(stats.failed_discoveries, 1);
+        assert_eq!(stats.successful_discoveries, 0);
     }
 
     #[tokio::test]
-    async fn test_kubernetes_discovery() {
+    async fn test_kubernetes_discovery_is_explicit_unsupported_error() {
         let config = EnhancedDiscoveryConfig {
             strategy: EnhancedDiscoveryStrategy::Kubernetes {
                 namespace: "default".to_string(),
@@ -1017,11 +1058,12 @@ mod tests {
         let discovery = EnhancedNodeDiscovery::new(1, config);
         let result = discovery.discover().await;
 
-        assert!(result.is_ok());
+        let err = result.expect_err("Kubernetes discovery must not fabricate a successful result");
+        assert!(err.contains("not implemented"));
     }
 
     #[tokio::test]
-    async fn test_aws_ecs_discovery() {
+    async fn test_aws_ecs_discovery_is_explicit_unsupported_error() {
         let config = EnhancedDiscoveryConfig {
             strategy: EnhancedDiscoveryStrategy::AwsEcs {
                 cluster_name: "oxirs-cluster".to_string(),
@@ -1034,11 +1076,12 @@ mod tests {
         let discovery = EnhancedNodeDiscovery::new(1, config);
         let result = discovery.discover().await;
 
-        assert!(result.is_ok());
+        let err = result.expect_err("AWS ECS discovery must not fabricate a successful result");
+        assert!(err.contains("not implemented"));
     }
 
     #[tokio::test]
-    async fn test_aws_ec2_discovery() {
+    async fn test_aws_ec2_discovery_is_explicit_unsupported_error() {
         let config = EnhancedDiscoveryConfig {
             strategy: EnhancedDiscoveryStrategy::AwsEc2 {
                 region: "us-west-2".to_string(),
@@ -1051,11 +1094,12 @@ mod tests {
         let discovery = EnhancedNodeDiscovery::new(1, config);
         let result = discovery.discover().await;
 
-        assert!(result.is_ok());
+        let err = result.expect_err("AWS EC2 discovery must not fabricate a successful result");
+        assert!(err.contains("not implemented"));
     }
 
     #[tokio::test]
-    async fn test_consul_discovery() {
+    async fn test_consul_discovery_is_explicit_unsupported_error() {
         let config = EnhancedDiscoveryConfig {
             strategy: EnhancedDiscoveryStrategy::Consul {
                 consul_address: "localhost:8500".to_string(),
@@ -1068,11 +1112,12 @@ mod tests {
         let discovery = EnhancedNodeDiscovery::new(1, config);
         let result = discovery.discover().await;
 
-        assert!(result.is_ok());
+        let err = result.expect_err("Consul discovery must not fabricate a successful result");
+        assert!(err.contains("not implemented"));
     }
 
     #[tokio::test]
-    async fn test_etcd_discovery() {
+    async fn test_etcd_discovery_is_explicit_unsupported_error() {
         let config = EnhancedDiscoveryConfig {
             strategy: EnhancedDiscoveryStrategy::Etcd {
                 endpoints: vec!["localhost:2379".to_string()],
@@ -1084,7 +1129,8 @@ mod tests {
         let discovery = EnhancedNodeDiscovery::new(1, config);
         let result = discovery.discover().await;
 
-        assert!(result.is_ok());
+        let err = result.expect_err("Etcd discovery must not fabricate a successful result");
+        assert!(err.contains("not implemented"));
     }
 
     #[tokio::test]
@@ -1178,13 +1224,68 @@ mod tests {
         let config = EnhancedDiscoveryConfig::default();
         let discovery = EnhancedNodeDiscovery::new(1, config);
 
-        // Perform discovery
-        let _result = discovery.discover().await;
+        // Perform discovery. The default strategy (DNS SRV) is not
+        // implemented in this build, so this is expected to fail loudly
+        // rather than fabricate a successful discovery.
+        let result = discovery.discover().await;
+        assert!(result.is_err());
 
         let stats = discovery.get_stats().await;
         assert_eq!(stats.total_discoveries, 1);
-        assert_eq!(stats.successful_discoveries, 1);
-        assert!(stats.last_discovery.is_some());
+        assert_eq!(stats.failed_discoveries, 1);
+        assert_eq!(stats.successful_discoveries, 0);
+        assert!(stats.last_discovery.is_none());
         assert!(stats.avg_discovery_latency_ms >= 0.0);
+    }
+
+    /// Every unconfigured discovery backend must fail with a message that
+    /// mentions the specific parameters it could not resolve, so operators
+    /// can tell which strategy was attempted and why it did not run.
+    #[tokio::test]
+    async fn test_all_backends_return_explicit_errors_not_empty_success() {
+        let strategies = vec![
+            EnhancedDiscoveryStrategy::DnsSrv {
+                service_name: "svc".to_string(),
+                protocol: "tcp".to_string(),
+                domain: "local".to_string(),
+            },
+            EnhancedDiscoveryStrategy::Kubernetes {
+                namespace: "ns".to_string(),
+                service_name: "svc".to_string(),
+                label_selector: None,
+            },
+            EnhancedDiscoveryStrategy::AwsEcs {
+                cluster_name: "c".to_string(),
+                service_name: "svc".to_string(),
+                region: "r".to_string(),
+            },
+            EnhancedDiscoveryStrategy::AwsEc2 {
+                region: "r".to_string(),
+                tag_key: "k".to_string(),
+                tag_value: "v".to_string(),
+            },
+            EnhancedDiscoveryStrategy::Consul {
+                consul_address: "addr".to_string(),
+                service_name: "svc".to_string(),
+                datacenter: None,
+            },
+            EnhancedDiscoveryStrategy::Etcd {
+                endpoints: vec!["e1".to_string()],
+                key_prefix: "/p".to_string(),
+            },
+        ];
+
+        for strategy in strategies {
+            let config = EnhancedDiscoveryConfig {
+                strategy: strategy.clone(),
+                ..Default::default()
+            };
+            let discovery = EnhancedNodeDiscovery::new(1, config);
+            let result = discovery.discover().await;
+            assert!(
+                result.is_err(),
+                "strategy {strategy:?} must return an explicit error, not Ok(vec![])"
+            );
+        }
     }
 }

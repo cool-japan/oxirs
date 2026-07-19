@@ -695,6 +695,28 @@ impl QueryTimePredictor {
     pub fn sample_count(&self) -> usize {
         self.sample_count
     }
+
+    /// Base (feature-independent) latency in milliseconds — the model's bias
+    /// term, attributable to parsing/planning setup overhead.
+    pub fn base_latency_ms(&self) -> f64 {
+        self.bias
+    }
+
+    /// Per-feature predicted cost contribution (ms), in
+    /// [`QueryProfileFeatures::feature_names`] order. Each entry is
+    /// `weight[i] * feature_value[i]`; the sum plus [`base_latency_ms`] equals
+    /// [`predict`]. Values may be negative for cost-reducing features
+    /// (LIMIT, higher selectivity).
+    ///
+    /// [`base_latency_ms`]: Self::base_latency_ms
+    /// [`predict`]: Self::predict
+    pub fn feature_contributions(&self, features: &QueryProfileFeatures) -> Vec<f64> {
+        let x = features.to_array();
+        x.iter()
+            .zip(self.weights.iter())
+            .map(|(a, b)| a * b)
+            .collect()
+    }
 }
 
 impl Default for QueryTimePredictor {
@@ -786,6 +808,95 @@ impl QueryProfileStore {
     }
 }
 
+/// Map a query-profile feature to its flame-graph `(phase, folded stack)`.
+///
+/// Each SPARQL structural feature is treated as an "operator" whose folded
+/// stack places it under its execution phase, so shared prefixes (`execute;…`)
+/// collapse into a single subtree in the rendered graph.
+fn feature_stack(
+    feature_name: &str,
+) -> (crate::profiling::flamegraph::ExecutionPhase, &'static str) {
+    use crate::profiling::flamegraph::ExecutionPhase::{Execution, Optimization};
+    match feature_name {
+        "Triple Patterns" => (Execution, "execute;scan;triple_patterns"),
+        "OPTIONAL Clauses" => (Execution, "execute;join;optional"),
+        "UNION Clauses" => (Execution, "execute;union"),
+        "FILTER Expressions" => (Execution, "execute;filter"),
+        "ORDER BY" => (Execution, "execute;order_by"),
+        "GROUP BY" => (Execution, "execute;group_by"),
+        "Subqueries" => (Optimization, "optimize;subquery"),
+        "Aggregations" => (Execution, "execute;aggregation"),
+        "Has DISTINCT" => (Execution, "execute;distinct"),
+        "Path Complexity" => (Execution, "execute;property_path"),
+        "BIND Clauses" => (Execution, "execute;bind"),
+        "SERVICE Calls" => (Execution, "execute;service"),
+        "Named Graphs" => (Execution, "execute;named_graph"),
+        // Cost-reducing / structural-only features (Has LIMIT, Selectivity) fall
+        // here; their negative/zero contributions are filtered out anyway.
+        _ => (Execution, "execute;other"),
+    }
+}
+
+/// Build a flame graph from a query's model-based per-operator cost breakdown.
+///
+/// The [`QueryTimePredictor`] decomposes the query into per-feature cost
+/// contributions (ms); each positive contribution becomes a folded stack sample
+/// (value in microseconds) under its execution phase, and the model's base
+/// latency becomes a `parse` sample. This maps the profiler's cost
+/// representation directly onto the folded-stack model consumed by
+/// [`FlameGraphGenerator`]. Cost-reducing features are omitted (flame-graph
+/// values are unsigned). The returned generator always carries at least the
+/// base sample, so an SVG can always be produced.
+pub fn build_query_flamegraph(
+    features: &QueryProfileFeatures,
+) -> crate::profiling::flamegraph::FlameGraphGenerator {
+    use crate::profiling::flamegraph::{ExecutionPhase, FlameGraphGenerator};
+
+    let predictor = QueryTimePredictor::new();
+    let contributions = predictor.feature_contributions(features);
+    let names = QueryProfileFeatures::feature_names();
+
+    let mut generator = FlameGraphGenerator::new();
+
+    // Base parsing/setup overhead (model bias term).
+    let base_us = (predictor.base_latency_ms().max(0.0) * 1000.0).round() as u64;
+    if base_us > 0 {
+        generator.add_sample("parse", ExecutionPhase::Parsing, base_us);
+    }
+
+    for (name, ms) in names.iter().zip(contributions.iter()) {
+        if *ms <= 0.0 {
+            continue;
+        }
+        let value_us = (*ms * 1000.0).round() as u64;
+        if value_us == 0 {
+            continue;
+        }
+        let (phase, stack) = feature_stack(name);
+        generator.add_sample(stack, phase, value_us);
+    }
+
+    generator
+}
+
+/// Build the flame-graph SVG for a query and write it to `output`.
+fn write_query_flamegraph(features: &QueryProfileFeatures, output: &std::path::Path) -> Result<()> {
+    use crate::profiling::flamegraph::FlameGraphOptions;
+
+    let generator = build_query_flamegraph(features);
+    let options = FlameGraphOptions {
+        title: "SPARQL Query Cost Profile".to_string(),
+        subtitle: Some("Model-estimated per-operator cost breakdown".to_string()),
+        ..FlameGraphOptions::default()
+    };
+    let svg = generator
+        .generate_svg(options)
+        .map_err(|e| anyhow!("Failed to generate flame graph: {e}"))?;
+    std::fs::write(output, svg)
+        .map_err(|e| anyhow!("Failed to write flame graph '{}': {e}", output.display()))?;
+    Ok(())
+}
+
 /// CLI profile command implementation
 pub async fn run_profile_command(
     dataset: String,
@@ -793,6 +904,7 @@ pub async fn run_profile_command(
     is_file: bool,
     iterations: usize,
     show_suggestions: bool,
+    flamegraph: Option<std::path::PathBuf>,
 ) -> Result<()> {
     let ctx = crate::cli::CliContext::new();
     ctx.info(&format!("Profiling query on dataset '{}'", dataset));
@@ -918,6 +1030,14 @@ pub async fn run_profile_command(
                 );
             }
         }
+    }
+
+    // Optionally emit a flame graph of the per-operator cost breakdown.
+    if let Some(ref path) = flamegraph {
+        write_query_flamegraph(&features, path)?;
+        println!();
+        println!("{}", "Flame graph written to:".bold());
+        println!("  {}", path.display());
     }
 
     Ok(())
@@ -1270,5 +1390,50 @@ mod tests {
 
         // Should not exceed max
         assert!(profile.history.len() <= MAX_HISTORY_PER_QUERY);
+    }
+
+    // ── Flame graph integration ──
+
+    #[test]
+    fn test_feature_contributions_sum_matches_predict() {
+        let predictor = QueryTimePredictor::new();
+        let features = QueryProfileFeatures::extract(complex_query());
+        let contributions: f64 = predictor.feature_contributions(&features).iter().sum();
+        let expected = predictor.predict(&features);
+        // predict clamps to a 0.5ms floor; complex query is well above it.
+        assert!((predictor.base_latency_ms() + contributions - expected).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_build_query_flamegraph_has_samples() {
+        let features = QueryProfileFeatures::extract(complex_query());
+        let generator = build_query_flamegraph(&features);
+        // At least the base parse sample plus several operator samples.
+        assert!(generator.total_samples() > 0);
+        assert!(generator.unique_stacks() >= 2);
+    }
+
+    #[test]
+    fn test_build_query_flamegraph_svg_wellformed() {
+        use crate::profiling::flamegraph::FlameGraphOptions;
+
+        let features = QueryProfileFeatures::extract(complex_query());
+        let generator = build_query_flamegraph(&features);
+        let svg = generator
+            .generate_svg(FlameGraphOptions::default())
+            .expect("svg generation");
+
+        // Well-formedness: an <svg element and recognizable operator sample names.
+        assert!(svg.contains("<svg"));
+        assert!(svg.contains("execute") || svg.contains("parse"));
+
+        // Round-trip through a temp file to exercise the write path.
+        let path =
+            std::env::temp_dir().join(format!("oxirs_flamegraph_test_{}.svg", std::process::id()));
+        write_query_flamegraph(&features, &path).expect("write flamegraph");
+        let read = std::fs::read_to_string(&path).expect("read flamegraph");
+        let _ = std::fs::remove_file(&path);
+        assert!(read.contains("<svg"));
+        assert!(read.contains("execute;service") || read.contains("execute"));
     }
 }

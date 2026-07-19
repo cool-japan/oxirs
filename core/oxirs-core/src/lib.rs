@@ -1,9 +1,9 @@
 //! # OxiRS Core - RDF and SPARQL Foundation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Public APIs are stabilizing. Production-ready for RDF/SPARQL core operations.
 //!
 //! ## Overview
@@ -256,7 +256,10 @@
 //! - **Stable APIs**: Store operations (`RdfStore`, `insert`, `query`, `remove`)
 //! - **Stable APIs**: Parser and serializer interfaces
 //! - **Unstable APIs**: Advanced optimization features (may change)
-//! - **Experimental**: Consciousness, molecular, and quantum modules
+//! - **Experimental (`experimental-ai` feature, off by default)**: Consciousness, molecular,
+//!   and quantum modules. These are unvalidated research prototypes that derive results from
+//!   randomly-initialized, untrained weights — they are not production AI features and should
+//!   not be relied on for correctness.
 //!
 //! See [MIGRATION_GUIDE.md](../MIGRATION_GUIDE.md) for migration from alpha versions.
 //!
@@ -286,7 +289,12 @@ pub mod config_types_core;
 pub mod config_types_network;
 pub mod config_types_storage;
 pub mod config_validation;
-pub mod consciousness; // Consciousness-inspired computing for intuitive query optimization
+/// Experimental, unvalidated research prototype: consciousness-inspired computing for
+/// intuitive query optimization. Scores are produced by an untrained network seeded with
+/// random weights and must not be treated as a real learned optimization signal.
+/// Gated behind the `experimental-ai` feature (off by default, no other crate depends on it).
+#[cfg(feature = "experimental-ai")]
+pub mod consciousness;
 pub mod crypto_provider; // Installs the Pure Rust rustls CryptoProvider as the process default (binaries + tests)
 pub mod distributed;
 pub mod encoding; // RFC 3986 percent-encoding utilities (pure-std replacement for the urlencoding crate)
@@ -298,12 +306,22 @@ pub mod interning;
 pub mod io;
 pub mod jsonld; // Re-enabled after fixing StringInterner method calls
 pub mod model;
+/// Experimental, unvalidated research prototype: molecular/genetic-algorithm-inspired
+/// optimization primitives (cellular division, DNA-structure encodings). Not backed by any
+/// trained model or production data path. Gated behind the `experimental-ai` feature (off by
+/// default, no other crate depends on it).
+#[cfg(feature = "experimental-ai")]
 pub mod molecular;
 pub mod optimization;
 pub mod oxigraph_compat;
 pub mod parser;
 pub mod perf_sla; // Performance SLA harness: SloTarget, BenchmarkResult, assert_meets_slo
 pub mod production;
+/// Experimental, unvalidated research prototype: quantum-computing-inspired data structures
+/// (e.g. `QuantumConsciousnessState`) used for speculative query-planning research. Simulated
+/// on classical hardware; not a production optimization path. Gated behind the
+/// `experimental-ai` feature (off by default, no other crate depends on it).
+#[cfg(feature = "experimental-ai")]
 pub mod quantum;
 pub mod query;
 pub mod rdf_store;

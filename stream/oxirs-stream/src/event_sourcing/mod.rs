@@ -55,7 +55,10 @@ impl Default for EventStoreConfig {
             max_memory_events: 1_000_000,
             enable_persistence: true,
             persistence_backend: PersistenceBackend::FileSystem {
-                base_path: "/tmp/oxirs-event-store".to_string(),
+                base_path: std::env::temp_dir()
+                    .join("oxirs-event-store")
+                    .to_string_lossy()
+                    .into_owned(),
             },
             snapshot_config: SnapshotConfig::default(),
             retention_policy: RetentionPolicy::default(),

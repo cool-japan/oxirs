@@ -36,6 +36,13 @@ impl QueryParser {
                 let full_iri = self.resolve_prefixed_name(&prefix, &local)?;
                 Ok(Term::Iri(NamedNode::new_unchecked(full_iri)))
             }
+            Some(Token::A) => {
+                // `a` in a term position is the rdf:type predicate shorthand.
+                self.advance();
+                Ok(Term::Iri(NamedNode::new_unchecked(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                )))
+            }
             Some(Token::StringLiteral(value)) => {
                 let value = value.clone();
                 self.advance();
@@ -43,6 +50,25 @@ impl QueryParser {
                     value,
                     language: None,
                     datatype: None,
+                }))
+            }
+            Some(Token::RdfLiteral {
+                value,
+                language,
+                datatype,
+            }) => {
+                let value = value.clone();
+                let language = language.clone();
+                let datatype = datatype.clone();
+                self.advance();
+                let datatype = match datatype {
+                    Some(raw) => Some(self.resolve_datatype(&raw)?),
+                    None => None,
+                };
+                Ok(Term::Literal(Literal {
+                    value,
+                    language,
+                    datatype,
                 }))
             }
             Some(Token::NumericLiteral(value)) => {
@@ -223,7 +249,33 @@ impl QueryParser {
         Ok(expr)
     }
     pub(super) fn parse_relational_expression(&mut self) -> Result<Expression> {
-        let mut expr = self.parse_additive_expression()?;
+        let expr = self.parse_additive_expression()?;
+        // `Expression IN ( … )` / `Expression NOT IN ( … )`. The right operand is
+        // an expression list, carried as a `list(…)` function call so the
+        // evaluator's `collect_in_list` recognises it; membership reuses the
+        // existing `terms_equal` semantics.
+        if matches!(self.peek(), Some(Token::In)) {
+            self.advance();
+            let list = self.parse_expression_list()?;
+            return Ok(Expression::Binary {
+                op: BinaryOperator::In,
+                left: Box::new(expr),
+                right: Box::new(list),
+            });
+        }
+        if matches!(self.peek(), Some(Token::Not))
+            && matches!(self.tokens.get(self.position + 1), Some(Token::In))
+        {
+            self.advance(); // NOT
+            self.advance(); // IN
+            let list = self.parse_expression_list()?;
+            return Ok(Expression::Binary {
+                op: BinaryOperator::NotIn,
+                left: Box::new(expr),
+                right: Box::new(list),
+            });
+        }
+        let mut expr = expr;
         while let Some(op) = self.match_relational_operator() {
             let right = self.parse_additive_expression()?;
             expr = Expression::Binary {
@@ -233,5 +285,26 @@ impl QueryParser {
             };
         }
         Ok(expr)
+    }
+    /// Parse a parenthesised `ExpressionList` — `'(' ( Expression ( ',' … )* )? ')'`
+    /// — as a `list(…)` function call. An empty list `()` yields a zero-argument
+    /// `list()`, so `?x IN ()` is always false and `?x NOT IN ()` always true.
+    pub(super) fn parse_expression_list(&mut self) -> Result<Expression> {
+        self.expect_token(Token::LeftParen)?;
+        let mut args = Vec::new();
+        if !self.match_token(&Token::RightParen) {
+            loop {
+                args.push(self.parse_expression()?);
+                if self.match_token(&Token::Comma) {
+                    continue;
+                }
+                self.expect_token(Token::RightParen)?;
+                break;
+            }
+        }
+        Ok(Expression::Function {
+            name: "list".to_string(),
+            args,
+        })
     }
 }

@@ -22,11 +22,13 @@
 //!
 //! ## Example
 //!
-//! ```rust
+//! ```no_run
 //! use oxirs::commands::merge_command::{
 //!     MergeCommand, MergeArgs, OutputFormat, MergeMode,
 //! };
 //!
+//! // `graph_a.ttl` and `graph_b.nt` are read from disk and parsed with the
+//! // real oxirs-core RDF parsers; unparseable input fails loudly.
 //! let cmd = MergeCommand::new();
 //! let args = MergeArgs {
 //!     sources: vec!["graph_a.ttl".to_string(), "graph_b.nt".to_string()],
@@ -40,7 +42,10 @@
 //! assert!(result.stats.total_triples > 0);
 //! ```
 
+use oxirs_core::format::{FormatHandler, RdfFormat};
+use oxirs_core::model::{Literal, Object, Predicate, Subject, Triple};
 use std::collections::{HashMap, HashSet};
+use std::io::BufReader;
 
 // ─── Domain types ────────────────────────────────────────────────────────────
 
@@ -202,6 +207,8 @@ pub enum MergeError {
     SourceNotFound(String),
     /// Unsupported input format.
     UnsupportedFormat(String),
+    /// A source file could not be parsed as RDF.
+    Parse(String),
     /// Internal error.
     Internal(String),
 }
@@ -212,6 +219,7 @@ impl std::fmt::Display for MergeError {
             Self::NoSources => write!(f, "No source files provided"),
             Self::SourceNotFound(p) => write!(f, "Source not found: {p}"),
             Self::UnsupportedFormat(fmt) => write!(f, "Unsupported format: {fmt}"),
+            Self::Parse(msg) => write!(f, "Parse error: {msg}"),
             Self::Internal(msg) => write!(f, "Internal error: {msg}"),
         }
     }
@@ -243,9 +251,12 @@ fn rename_blank_nodes(triples: &mut [RdfTriple], source_index: usize) -> usize {
     renamed
 }
 
-// ─── Simulated parser ────────────────────────────────────────────────────────
+// ─── Real RDF parser ─────────────────────────────────────────────────────────
 
 /// Detect the input format from a file name/extension.
+///
+/// Returns the canonical format token (`"turtle"`, `"ntriples"`, `"nquads"`,
+/// `"rdfxml"`) or `None` when the extension is unrecognised.
 fn detect_format(file_name: &str) -> Option<&'static str> {
     if let Some(dot) = file_name.rfind('.') {
         let ext = &file_name[dot + 1..];
@@ -261,34 +272,120 @@ fn detect_format(file_name: &str) -> Option<&'static str> {
     }
 }
 
-/// Deterministic triple generator for testing without a real file system.
-///
-/// Generates triples based on the file name so that different "files" produce
-/// overlapping-but-distinct sets of triples.
-fn simulate_parse(file_name: &str) -> Vec<RdfTriple> {
-    let seed = file_name
-        .bytes()
-        .fold(0u64, |acc, b| acc.wrapping_add(b as u64));
-    let count = ((seed % 7) + 3) as usize;
-    let mut triples = Vec::with_capacity(count);
-
-    for i in 0..count {
-        let idx = (seed as usize + i) % 100;
-        let s = if i % 4 == 0 {
-            format!("_:b{idx}")
-        } else {
-            format!("http://example.org/s{idx}")
-        };
-        let p = format!("http://example.org/p{}", idx % 5);
-        let o = if i % 3 == 0 {
-            format!("\"value_{idx}\"")
-        } else {
-            format!("http://example.org/o{}", (idx + 1) % 50)
-        };
-        triples.push(RdfTriple::new(s, p, o));
+/// Map a canonical format token to an `oxirs_core` [`RdfFormat`].
+fn rdf_format_for(token: &str) -> Option<RdfFormat> {
+    match token {
+        "turtle" => Some(RdfFormat::Turtle),
+        "ntriples" => Some(RdfFormat::NTriples),
+        "nquads" => Some(RdfFormat::NQuads),
+        "rdfxml" => Some(RdfFormat::RdfXml),
+        _ => None,
     }
+}
 
-    triples
+/// Read and parse a real RDF source file into [`RdfTriple`]s using the
+/// oxirs-core RDF parsers.  Fails loudly on missing files or parse errors —
+/// no data is ever fabricated.
+fn parse_source_file(path: &str) -> Result<Vec<RdfTriple>, MergeError> {
+    let token =
+        detect_format(path).ok_or_else(|| MergeError::UnsupportedFormat(path.to_string()))?;
+    let format =
+        rdf_format_for(token).ok_or_else(|| MergeError::UnsupportedFormat(path.to_string()))?;
+
+    let file = std::fs::File::open(path)
+        .map_err(|e| MergeError::SourceNotFound(format!("{path}: {e}")))?;
+
+    let handler = FormatHandler::new(format);
+    let triples = handler
+        .parse_triples(BufReader::new(file))
+        .map_err(|e| MergeError::Parse(format!("{path}: {e}")))?;
+
+    Ok(triples.iter().map(triple_to_rdf_triple).collect())
+}
+
+/// Convert an oxirs-core [`Triple`] into the merge command's flat string form.
+///
+/// IRIs are rendered bare (no angle brackets), blank nodes keep their `_:`
+/// prefix, and literals use N-Triples lexical form so the merge serializer's
+/// [`format_term`] can round-trip them faithfully.
+fn triple_to_rdf_triple(t: &Triple) -> RdfTriple {
+    RdfTriple {
+        s: subject_to_string(t.subject()),
+        p: predicate_to_string(t.predicate()),
+        o: object_to_string(t.object()),
+    }
+}
+
+fn subject_to_string(s: &Subject) -> String {
+    match s {
+        Subject::NamedNode(n) => n.as_str().to_string(),
+        Subject::BlankNode(b) => format!("_:{}", b.id()),
+        Subject::Variable(v) => format!("?{}", v.name()),
+        Subject::QuotedTriple(q) => quoted_triple_to_string(
+            subject_to_string(q.subject()),
+            predicate_to_string(q.predicate()),
+            object_to_string(q.object()),
+        ),
+    }
+}
+
+fn predicate_to_string(p: &Predicate) -> String {
+    match p {
+        Predicate::NamedNode(n) => n.as_str().to_string(),
+        Predicate::Variable(v) => format!("?{}", v.name()),
+    }
+}
+
+fn object_to_string(o: &Object) -> String {
+    match o {
+        Object::NamedNode(n) => n.as_str().to_string(),
+        Object::BlankNode(b) => format!("_:{}", b.id()),
+        Object::Literal(lit) => literal_to_string(lit),
+        Object::Variable(v) => format!("?{}", v.name()),
+        Object::QuotedTriple(q) => quoted_triple_to_string(
+            subject_to_string(q.subject()),
+            predicate_to_string(q.predicate()),
+            object_to_string(q.object()),
+        ),
+    }
+}
+
+/// Render an RDF-star quoted triple as `<< s p o >>` in canonical bare form so
+/// that distinct quoted triples remain distinct (no false deduplication).
+fn quoted_triple_to_string(s: String, p: String, o: String) -> String {
+    format!("<< {s} {p} {o} >>")
+}
+
+/// Render a literal in N-Triples lexical form (`"value"`, `"value"@lang`, or
+/// `"value"^^<datatype>`), omitting the implicit `xsd:string` datatype.
+fn literal_to_string(lit: &Literal) -> String {
+    let escaped = escape_literal_value(lit.value());
+    if let Some(lang) = lit.language() {
+        format!("\"{escaped}\"@{lang}")
+    } else {
+        let datatype = lit.datatype().as_str();
+        if datatype == "http://www.w3.org/2001/XMLSchema#string" {
+            format!("\"{escaped}\"")
+        } else {
+            format!("\"{escaped}\"^^<{datatype}>")
+        }
+    }
+}
+
+/// Escape a literal lexical value for N-Triples-style quoting.
+fn escape_literal_value(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(ch),
+        }
+    }
+    out
 }
 
 // ─── Conflict detection ──────────────────────────────────────────────────────
@@ -394,7 +491,8 @@ impl MergeCommand {
             return Err(MergeError::NoSources);
         }
 
-        // Validate formats
+        // Validate formats up-front so an unknown extension fails before any
+        // file is read or parsed.
         for src in &args.sources {
             if detect_format(src).is_none() {
                 return Err(MergeError::UnsupportedFormat(src.clone()));
@@ -408,7 +506,7 @@ impl MergeCommand {
         let mut total_blank_renamed = 0_usize;
 
         for (idx, src) in args.sources.iter().enumerate() {
-            let mut triples = simulate_parse(src);
+            let mut triples = parse_source_file(src)?;
             let count = triples.len();
             total_raw += count;
 
@@ -522,16 +620,47 @@ impl MergeCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    fn default_args(sources: Vec<&str>) -> MergeArgs {
+    static SOURCE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    /// A small Turtle document with a mix of IRIs, a literal, and a blank node.
+    const SAMPLE_TTL: &str = "@prefix ex: <http://example.org/> .\n\
+        ex:s1 ex:p ex:o1 .\n\
+        ex:s2 ex:p \"value\" .\n\
+        _:b0 ex:p ex:o2 .\n";
+
+    /// A small N-Triples document (no blank nodes) so identical copies fully
+    /// deduplicate.
+    const SAMPLE_NT: &str =
+        "<http://example.org/s> <http://example.org/p> <http://example.org/o> .\n\
+        <http://example.org/s> <http://example.org/p2> \"lit\" .\n";
+
+    /// Write `body` to a uniquely-named file (with the given extension) in the
+    /// system temp directory and return its path as a `String`.
+    fn temp_source(ext: &str, body: &str) -> String {
+        let n = SOURCE_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir =
+            std::env::temp_dir().join(format!("oxirs_merge_test_{}_{}", std::process::id(), n));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join(format!("source.{ext}"));
+        std::fs::write(&path, body).expect("write temp source");
+        path.to_string_lossy().into_owned()
+    }
+
+    fn args_from(sources: Vec<String>) -> MergeArgs {
         MergeArgs {
-            sources: sources.into_iter().map(String::from).collect(),
+            sources,
             output: None,
             output_format: OutputFormat::NTriples,
             mode: MergeMode::SetUnion,
             dry_run: false,
             track_provenance: false,
         }
+    }
+
+    fn default_args(sources: Vec<&str>) -> MergeArgs {
+        args_from(sources.into_iter().map(String::from).collect())
     }
 
     // ── RdfTriple tests ─────────────────────────────────────────────────
@@ -792,7 +921,7 @@ mod tests {
     #[test]
     fn test_merge_single_source() {
         let cmd = MergeCommand::new();
-        let args = default_args(vec!["data.ttl"]);
+        let args = default_args(vec![&temp_source("ttl", SAMPLE_TTL)]);
         let result = cmd.execute(&args);
         assert!(result.is_ok());
         let r = result.expect("should succeed");
@@ -802,7 +931,10 @@ mod tests {
     #[test]
     fn test_merge_two_sources() {
         let cmd = MergeCommand::new();
-        let args = default_args(vec!["alpha.ttl", "beta.nt"]);
+        let args = default_args(vec![
+            &temp_source("ttl", SAMPLE_TTL),
+            &temp_source("nt", SAMPLE_NT),
+        ]);
         let result = cmd.execute(&args);
         assert!(result.is_ok());
         let r = result.expect("should succeed");
@@ -813,7 +945,11 @@ mod tests {
     #[test]
     fn test_merge_three_sources() {
         let cmd = MergeCommand::new();
-        let args = default_args(vec!["a.ttl", "b.nt", "c.rdf"]);
+        let args = default_args(vec![
+            &temp_source("ttl", SAMPLE_TTL),
+            &temp_source("nt", SAMPLE_NT),
+            &temp_source("ttl", SAMPLE_TTL),
+        ]);
         let result = cmd.execute(&args);
         assert!(result.is_ok());
     }
@@ -827,9 +963,33 @@ mod tests {
     }
 
     #[test]
+    fn test_merge_missing_source_fails_loud() {
+        // A path with a supported extension but no file on disk must fail
+        // loudly rather than fabricate any triples.
+        let cmd = MergeCommand::new();
+        let missing = std::env::temp_dir()
+            .join("oxirs_merge_nonexistent_source.ttl")
+            .to_string_lossy()
+            .into_owned();
+        let args = default_args(vec![&missing]);
+        let result = cmd.execute(&args);
+        assert!(matches!(result, Err(MergeError::SourceNotFound(_))));
+    }
+
+    #[test]
+    fn test_merge_unparseable_source_fails_loud() {
+        // Garbage content with a valid extension must surface a parse error.
+        let path = temp_source("nt", "this is not valid n-triples at all @@@\n");
+        let cmd = MergeCommand::new();
+        let args = default_args(vec![&path]);
+        let result = cmd.execute(&args);
+        assert!(matches!(result, Err(MergeError::Parse(_))));
+    }
+
+    #[test]
     fn test_merge_dry_run_no_triples() {
         let cmd = MergeCommand::new();
-        let mut args = default_args(vec!["data.ttl"]);
+        let mut args = default_args(vec![&temp_source("ttl", SAMPLE_TTL)]);
         args.dry_run = true;
         let result = cmd.execute(&args).expect("should succeed");
         assert!(result.dry_run);
@@ -841,19 +1001,23 @@ mod tests {
     #[test]
     fn test_merge_with_provenance() {
         let cmd = MergeCommand::new();
-        let mut args = default_args(vec!["data.ttl"]);
+        let path = temp_source("ttl", SAMPLE_TTL);
+        let mut args = default_args(vec![&path]);
         args.track_provenance = true;
         let result = cmd.execute(&args).expect("should succeed");
         assert!(!result.provenance.is_empty());
         for prov in &result.provenance {
-            assert_eq!(prov.source, "data.ttl");
+            assert_eq!(prov.source, path);
         }
     }
 
     #[test]
     fn test_merge_provenance_mode() {
         let cmd = MergeCommand::new();
-        let mut args = default_args(vec!["a.ttl", "b.nt"]);
+        let mut args = default_args(vec![
+            &temp_source("ttl", SAMPLE_TTL),
+            &temp_source("nt", SAMPLE_NT),
+        ]);
         args.mode = MergeMode::WithProvenance;
         let result = cmd.execute(&args).expect("should succeed");
         assert!(!result.provenance.is_empty());
@@ -862,7 +1026,7 @@ mod tests {
     #[test]
     fn test_merge_output_ntriples() {
         let cmd = MergeCommand::new();
-        let args = default_args(vec!["data.ttl"]);
+        let args = default_args(vec![&temp_source("ttl", SAMPLE_TTL)]);
         let result = cmd.execute(&args).expect("should succeed");
         let text = result.output_text.as_ref().expect("should have output");
         assert!(text.contains('.'));
@@ -871,7 +1035,7 @@ mod tests {
     #[test]
     fn test_merge_output_turtle() {
         let cmd = MergeCommand::new();
-        let mut args = default_args(vec!["data.ttl"]);
+        let mut args = default_args(vec![&temp_source("ttl", SAMPLE_TTL)]);
         args.output_format = OutputFormat::Turtle;
         let result = cmd.execute(&args).expect("should succeed");
         let text = result.output_text.as_ref().expect("should have output");
@@ -881,21 +1045,24 @@ mod tests {
     #[test]
     fn test_merge_dedup_identical_sources() {
         let cmd = MergeCommand::new();
-        let args = default_args(vec!["same.ttl", "same.ttl"]);
+        // Same file (no blank nodes) merged with itself: all triples dedup.
+        let path = temp_source("nt", SAMPLE_NT);
+        let args = default_args(vec![&path, &path]);
         let result = cmd.execute(&args).expect("should succeed");
-        // Two identical sources: should have duplicates removed
-        // (some might remain because blank node renaming makes them unique)
         assert!(result.stats.total_triples > 0);
+        assert!(result.stats.duplicates_removed > 0);
     }
 
     #[test]
     fn test_merge_stats_fields() {
         let cmd = MergeCommand::new();
-        let args = default_args(vec!["x.ttl", "y.nt"]);
+        let path_x = temp_source("ttl", SAMPLE_TTL);
+        let path_y = temp_source("nt", SAMPLE_NT);
+        let args = default_args(vec![&path_x, &path_y]);
         let result = cmd.execute(&args).expect("should succeed");
         assert_eq!(result.stats.source_stats.len(), 2);
-        assert_eq!(result.stats.source_stats[0].source, "x.ttl");
-        assert_eq!(result.stats.source_stats[1].source, "y.nt");
+        assert_eq!(result.stats.source_stats[0].source, path_x);
+        assert_eq!(result.stats.source_stats[1].source, path_y);
     }
 
     // ── merge_triple_sets tests ─────────────────────────────────────────
@@ -979,7 +1146,7 @@ mod tests {
     #[test]
     fn test_merge_command_default() {
         let cmd = MergeCommand;
-        let args = default_args(vec!["test.ttl"]);
+        let args = default_args(vec![&temp_source("ttl", SAMPLE_TTL)]);
         let result = cmd.execute(&args);
         assert!(result.is_ok());
     }

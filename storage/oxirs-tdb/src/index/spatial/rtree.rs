@@ -40,7 +40,18 @@ pub struct SpatialIndex {
     geometries: HashMap<NodeId, Geometry>,
     /// Statistics
     stats: IndexStats,
+    /// Advisory maximum entries per R*-tree node (fan-out tuning knob threaded
+    /// from [`StoreParams::spatial_index_max_entries`](crate::store::StoreParams)).
+    ///
+    /// The backing `rstar` R*-tree fixes its node capacity at compile time via
+    /// its `RTreeParams` const generics, so this value cannot resize existing
+    /// nodes at runtime; it is recorded here for tuning/reporting and surfaced
+    /// through [`SpatialIndex::max_entries`] and the spatial stats.
+    max_entries: usize,
 }
+
+/// Default advisory maximum entries per spatial index node.
+const DEFAULT_SPATIAL_MAX_ENTRIES: usize = 1000;
 
 #[derive(Debug, Clone, Default)]
 struct IndexStats {
@@ -51,13 +62,26 @@ struct IndexStats {
 }
 
 impl SpatialIndex {
-    /// Create a new spatial index
+    /// Create a new spatial index with the default advisory node capacity.
     pub fn new() -> Self {
+        Self::with_max_entries(DEFAULT_SPATIAL_MAX_ENTRIES)
+    }
+
+    /// Create a new spatial index with an advisory maximum entries per node.
+    ///
+    /// See [`SpatialIndex::max_entries`] for how the value is used.
+    pub fn with_max_entries(max_entries: usize) -> Self {
         Self {
             rtree: RTree::new(),
             geometries: HashMap::new(),
             stats: IndexStats::default(),
+            max_entries: max_entries.max(1),
         }
+    }
+
+    /// Advisory maximum entries per R*-tree node configured for this index.
+    pub fn max_entries(&self) -> usize {
+        self.max_entries
     }
 
     /// Insert a geometry into the index

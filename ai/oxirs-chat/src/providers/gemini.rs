@@ -1,7 +1,11 @@
-//! Google Gemini LLM provider
+//! Google Gemini LLM provider (model catalog / config types)
 //!
-//! Mock implementation for testing and development. In production, this
-//! would make actual HTTP requests to the Gemini API.
+//! Provides the [`GeminiModel`] catalog and [`GeminiConfig`] builder.
+//! [`GeminiClient::generate`] and [`GeminiClient::generate_with_context`] do
+//! **not** call the real Gemini API — no HTTP client is wired up here, and
+//! this crate does not currently have a working Gemini backend under
+//! `crate::llm` — so they return [`ChatError::LlmGenerationError`] rather
+//! than a fabricated response.
 
 use crate::error::{ChatError, Result};
 use crate::llm::types::ChatMessage;
@@ -151,7 +155,13 @@ impl GeminiClient {
         (char_count + 3) / 4
     }
 
-    /// Generate a response for a single prompt (mock)
+    /// Generate a response for a single prompt.
+    ///
+    /// # Errors
+    /// Always returns [`ChatError::LlmGenerationError`] once input
+    /// validation passes: this client has no HTTP transport wired to the
+    /// Gemini API, so it cannot produce a real response and must not
+    /// fabricate one.
     pub async fn generate(&self, prompt: &str) -> Result<GeminiResponse> {
         if prompt.is_empty() {
             return Err(ChatError::ValidationError(
@@ -164,21 +174,18 @@ impl GeminiClient {
             ));
         }
 
-        // Mock response — in production this would call the Gemini REST API
-        let response_text = format!(
-            "[Gemini/{model}] Simulated response to: {prompt}",
+        Err(ChatError::LlmGenerationError(format!(
+            "GeminiClient (providers::gemini) has no real Gemini API transport wired up for \
+             model {model}; this crate does not yet have a working Gemini backend",
             model = self.config.model.as_str()
-        );
-        let token_count = Self::count_tokens(&response_text);
-
-        Ok(GeminiResponse {
-            text: response_text,
-            finish_reason: "STOP".to_string(),
-            token_count,
-        })
+        )))
     }
 
-    /// Generate a response given a conversation history (mock)
+    /// Generate a response given a conversation history.
+    ///
+    /// # Errors
+    /// Always returns [`ChatError::LlmGenerationError`], for the same
+    /// reason as [`generate`](Self::generate).
     pub async fn generate_with_context(&self, messages: &[ChatMessage]) -> Result<GeminiResponse> {
         if messages.is_empty() {
             return Err(ChatError::ValidationError(
@@ -191,25 +198,11 @@ impl GeminiClient {
             ));
         }
 
-        let last_user = messages
-            .iter()
-            .rev()
-            .find(|m| matches!(m.role, crate::llm::types::ChatRole::User))
-            .map(|m| m.content.as_str())
-            .unwrap_or("(no user message)");
-
-        let response_text = format!(
-            "[Gemini/{model}] Context-aware response to: {last}",
-            model = self.config.model.as_str(),
-            last = last_user
-        );
-        let token_count = Self::count_tokens(&response_text);
-
-        Ok(GeminiResponse {
-            text: response_text,
-            finish_reason: "STOP".to_string(),
-            token_count,
-        })
+        Err(ChatError::LlmGenerationError(format!(
+            "GeminiClient (providers::gemini) has no real Gemini API transport wired up for \
+             model {model}; this crate does not yet have a working Gemini backend",
+            model = self.config.model.as_str()
+        )))
     }
 }
 
@@ -300,15 +293,22 @@ mod tests {
         assert_eq!(client.model_name(), "gemini-pro");
     }
 
+    /// Regression: even with a valid prompt and a configured API key,
+    /// `generate()` must not fabricate a response — it has no real Gemini
+    /// API transport wired up, so it must fail loudly instead of silently
+    /// returning simulated content.
     #[tokio::test]
-    async fn test_generate_success() {
+    async fn test_generate_never_fabricates_response() {
         let client = make_client("test-key");
         let response = client.generate("What is RDF?").await;
-        assert!(response.is_ok());
-        let r = response.expect("should succeed");
-        assert!(!r.text.is_empty());
-        assert_eq!(r.finish_reason, "STOP");
-        assert!(r.is_complete());
+        assert!(response.is_err());
+        let err = response.expect_err("must fail loudly instead of fabricating a response");
+        assert!(matches!(err, ChatError::LlmGenerationError(_)));
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("Simulated"),
+            "error must not resemble a fabricated response: {msg}"
+        );
     }
 
     #[tokio::test]
@@ -325,8 +325,10 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// Regression: same guarantee as
+    /// [`test_generate_never_fabricates_response`] for the context-aware path.
     #[tokio::test]
-    async fn test_generate_with_context() {
+    async fn test_generate_with_context_never_fabricates_response() {
         let client = make_client("test-key");
         let messages = vec![
             ChatMessage {
@@ -346,9 +348,9 @@ mod tests {
             },
         ];
         let result = client.generate_with_context(&messages).await;
-        assert!(result.is_ok());
-        let r = result.expect("should succeed");
-        assert!(r.text.contains("gemini-pro"));
+        assert!(result.is_err());
+        let err = result.expect_err("must fail loudly instead of fabricating a response");
+        assert!(matches!(err, ChatError::LlmGenerationError(_)));
     }
 
     #[tokio::test]

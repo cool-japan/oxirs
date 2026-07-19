@@ -1045,43 +1045,42 @@ impl GCNAdapter {
 }
 
 impl KGEmbeddingModel for GCNAdapter {
-    fn train(&mut self, _triples: &[Triple]) -> Result<()> {
-        // GCN training would be implemented here
-        Ok(())
+    // `GCN` (gnn_embeddings.rs) already has a real `KGEmbeddingModel`
+    // implementation (adjacency-matrix construction, symmetric
+    // normalization, and a genuine multi-layer forward pass over graph
+    // structure). This adapter previously ignored `self.gcn` entirely and
+    // returned fabricated constants (0.5 scores, zero vectors, empty
+    // predictions); it now delegates to the real model.
+    fn train(&mut self, triples: &[Triple]) -> Result<()> {
+        self.gcn.train(triples)
     }
 
-    fn get_entity_embedding(&self, _entity: &str) -> Option<Vector> {
-        // GCN embeddings would be computed from graph structure
-        // For now, return a default embedding
-        Some(Vector::new(vec![0.0; 128]))
+    fn get_entity_embedding(&self, entity: &str) -> Option<Vector> {
+        self.gcn.get_entity_embedding(entity)
     }
 
-    fn get_relation_embedding(&self, _relation: &str) -> Option<Vector> {
-        // Relations in GCN are typically handled differently
-        Some(Vector::new(vec![0.0; 128]))
+    fn get_relation_embedding(&self, relation: &str) -> Option<Vector> {
+        self.gcn.get_relation_embedding(relation)
     }
 
-    fn score_triple(&self, _triple: &Triple) -> f32 {
-        // GCN scoring would use graph structure
-        0.5
+    fn score_triple(&self, triple: &Triple) -> f32 {
+        self.gcn.score_triple(triple)
     }
 
-    fn predict_tail(&self, _head: &str, _relation: &str, _k: usize) -> Vec<(String, f32)> {
-        // Return mock predictions
-        vec![]
+    fn predict_tail(&self, head: &str, relation: &str, k: usize) -> Vec<(String, f32)> {
+        self.gcn.predict_tail(head, relation, k)
     }
 
-    fn predict_head(&self, _relation: &str, _tail: &str, _k: usize) -> Vec<(String, f32)> {
-        // Return mock predictions
-        vec![]
+    fn predict_head(&self, relation: &str, tail: &str, k: usize) -> Vec<(String, f32)> {
+        self.gcn.predict_head(relation, tail, k)
     }
 
     fn get_entity_embeddings(&self) -> HashMap<String, Vector> {
-        HashMap::new()
+        self.gcn.get_entity_embeddings()
     }
 
     fn get_relation_embeddings(&self) -> HashMap<String, Vector> {
-        HashMap::new()
+        self.gcn.get_relation_embeddings()
     }
 }
 
@@ -1097,42 +1096,40 @@ impl GraphSAGEAdapter {
 }
 
 impl KGEmbeddingModel for GraphSAGEAdapter {
-    fn train(&mut self, _triples: &[Triple]) -> Result<()> {
-        // GraphSAGE training would be implemented here
-        Ok(())
+    // `GraphSAGE` (gnn_embeddings.rs) already has a real `KGEmbeddingModel`
+    // implementation (neighbor sampling + aggregation forward pass). This
+    // adapter previously ignored `self.graphsage` entirely and returned
+    // fabricated constants; it now delegates to the real model.
+    fn train(&mut self, triples: &[Triple]) -> Result<()> {
+        self.graphsage.train(triples)
     }
 
-    fn get_entity_embedding(&self, _entity: &str) -> Option<Vector> {
-        // GraphSAGE embeddings would be computed from neighbors
-        Some(Vector::new(vec![0.0; self.graphsage.dimensions()]))
+    fn get_entity_embedding(&self, entity: &str) -> Option<Vector> {
+        self.graphsage.get_entity_embedding(entity)
     }
 
-    fn get_relation_embedding(&self, _relation: &str) -> Option<Vector> {
-        // Relations in GraphSAGE are typically handled differently
-        Some(Vector::new(vec![0.0; self.graphsage.dimensions()]))
+    fn get_relation_embedding(&self, relation: &str) -> Option<Vector> {
+        self.graphsage.get_relation_embedding(relation)
     }
 
-    fn score_triple(&self, _triple: &Triple) -> f32 {
-        // GraphSAGE scoring would use neighbor aggregation
-        0.5
+    fn score_triple(&self, triple: &Triple) -> f32 {
+        self.graphsage.score_triple(triple)
     }
 
-    fn predict_tail(&self, _head: &str, _relation: &str, _k: usize) -> Vec<(String, f32)> {
-        // Return mock predictions
-        vec![]
+    fn predict_tail(&self, head: &str, relation: &str, k: usize) -> Vec<(String, f32)> {
+        self.graphsage.predict_tail(head, relation, k)
     }
 
-    fn predict_head(&self, _relation: &str, _tail: &str, _k: usize) -> Vec<(String, f32)> {
-        // Return mock predictions
-        vec![]
+    fn predict_head(&self, relation: &str, tail: &str, k: usize) -> Vec<(String, f32)> {
+        self.graphsage.predict_head(relation, tail, k)
     }
 
     fn get_entity_embeddings(&self) -> HashMap<String, Vector> {
-        HashMap::new()
+        self.graphsage.get_entity_embeddings()
     }
 
     fn get_relation_embeddings(&self) -> HashMap<String, Vector> {
-        HashMap::new()
+        self.graphsage.get_relation_embeddings()
     }
 }
 
@@ -1237,6 +1234,96 @@ mod tests {
             .get_relation_embedding("likes")
             .expect("likes relation embedding should exist");
         assert_eq!(rel_emb.dimensions, 50);
+        Ok(())
+    }
+
+    /// Regression test for the P1 finding: `GCNAdapter` used to ignore its
+    /// wrapped `GCN` model entirely and fabricate constant
+    /// scores/embeddings (`0.5`, all-zero vectors, empty predictions). It
+    /// must now delegate to the real GCN forward pass.
+    #[test]
+    fn test_gcn_adapter_uses_real_model() -> Result<()> {
+        let config = KGEmbeddingConfig {
+            model: KGEmbeddingModelType::GCN,
+            dimensions: 8,
+            epochs: 5,
+            ..Default::default()
+        };
+
+        let mut model = KGEmbedding::new(config);
+        let triples = create_test_triples();
+        model.train(&triples)?;
+
+        let alice = model
+            .get_entity_embedding("Alice")
+            .expect("Alice embedding should exist after training");
+        let bob = model
+            .get_entity_embedding("Bob")
+            .expect("Bob embedding should exist after training");
+
+        // The old adapter always returned `Vector::new(vec![0.0; 128])`
+        // regardless of entity; real GCN embeddings must be dimension-8 and
+        // (with overwhelming probability for random init + a forward pass)
+        // not all-zero, and distinct entities must not be identical.
+        assert_eq!(alice.dimensions, 8);
+        assert!(alice.as_f32().iter().any(|&v| v != 0.0));
+        assert_ne!(alice.as_f32(), bob.as_f32());
+
+        // The old adapter's score_triple always returned exactly 0.5.
+        let real_triple = Triple::new("Alice".to_string(), "knows".to_string(), "Bob".to_string());
+        let fake_triple = Triple::new(
+            "Alice".to_string(),
+            "knows".to_string(),
+            "NonexistentEntity".to_string(),
+        );
+        let real_score = model.score_triple(&real_triple);
+        let fake_score = model.score_triple(&fake_triple);
+        // A triple referencing an unknown entity has no embedding, so
+        // score_triple's `else` branch returns 0.0 (not the old constant 0.5).
+        assert_eq!(fake_score, 0.0);
+        // A real triple's score must not equal the removed hardcoded constant
+        // (statistically indistinguishable only in pathological seeds).
+        assert_ne!(real_score, 0.5);
+
+        // The old adapter's predict_tail/predict_head always returned `vec![]`.
+        let predictions = model.predict_tail("Alice", "knows", 3);
+        assert!(
+            !predictions.is_empty(),
+            "predict_tail must use the real GCN model, not return fabricated empty predictions"
+        );
+
+        Ok(())
+    }
+
+    /// Regression test for the P1 finding: `GraphSAGEAdapter` used to
+    /// ignore its wrapped `GraphSAGE` model and fabricate constant
+    /// scores/embeddings. It must now delegate to the real neighbor
+    /// aggregation forward pass.
+    #[test]
+    fn test_graphsage_adapter_uses_real_model() -> Result<()> {
+        let config = KGEmbeddingConfig {
+            model: KGEmbeddingModelType::GraphSAGE,
+            dimensions: 8,
+            epochs: 5,
+            ..Default::default()
+        };
+
+        let mut model = KGEmbedding::new(config);
+        let triples = create_test_triples();
+        model.train(&triples)?;
+
+        let alice = model
+            .get_entity_embedding("Alice")
+            .expect("Alice embedding should exist after training");
+        assert_eq!(alice.dimensions, 8);
+        assert!(alice.as_f32().iter().any(|&v| v != 0.0));
+
+        let predictions = model.predict_tail("Alice", "knows", 3);
+        assert!(
+            !predictions.is_empty(),
+            "predict_tail must use the real GraphSAGE model, not return fabricated empty predictions"
+        );
+
         Ok(())
     }
 }

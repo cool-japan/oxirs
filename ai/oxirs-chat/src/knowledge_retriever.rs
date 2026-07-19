@@ -109,6 +109,12 @@ pub struct KnowledgeRetriever {
     doc_frequencies: HashMap<String, usize>,
     /// Average document length in tokens
     avg_doc_length: f32,
+    /// Running total of tokens across all indexed documents, maintained
+    /// incrementally by [`add_document`](Self::add_document) and
+    /// [`remove_document`](Self::remove_document) so
+    /// [`avg_doc_length`](Self::avg_doc_length) can be kept up to date in
+    /// `O(1)` per mutation instead of rescanning the whole corpus.
+    total_tokens: usize,
 }
 
 impl KnowledgeRetriever {
@@ -120,13 +126,14 @@ impl KnowledgeRetriever {
             term_frequencies: HashMap::new(),
             doc_frequencies: HashMap::new(),
             avg_doc_length: 0.0,
+            total_tokens: 0,
         }
     }
 
     /// Add a document and update BM25 indices.
     pub fn add_document(&mut self, doc: Document) {
         let tokens = Self::tokenize(&doc.content);
-        let _doc_len = tokens.len();
+        let doc_len = tokens.len();
 
         // Term frequency for this document
         let mut tf: HashMap<String, usize> = HashMap::new();
@@ -139,7 +146,14 @@ impl KnowledgeRetriever {
             *self.doc_frequencies.entry(term.clone()).or_insert(0) += 1;
         }
 
-        self.term_frequencies.insert(doc.id.clone(), tf);
+        // If this doc_id was already indexed, remove its old token count from
+        // the running total before adding the new one so re-indexing a
+        // document (e.g. an updated version) keeps the average correct.
+        if let Some(old_tf) = self.term_frequencies.insert(doc.id.clone(), tf) {
+            let old_len: usize = old_tf.values().sum();
+            self.total_tokens = self.total_tokens.saturating_sub(old_len);
+        }
+        self.total_tokens += doc_len;
         self.documents.insert(doc.id.clone(), doc);
 
         self.recompute_avg_doc_length();
@@ -148,6 +162,8 @@ impl KnowledgeRetriever {
     /// Remove a document.  Returns `true` if the document was present.
     pub fn remove_document(&mut self, doc_id: &str) -> bool {
         if let Some(tf) = self.term_frequencies.remove(doc_id) {
+            let removed_len: usize = tf.values().sum();
+            self.total_tokens = self.total_tokens.saturating_sub(removed_len);
             for term in tf.keys() {
                 if let Some(count) = self.doc_frequencies.get_mut(term.as_str()) {
                     if *count <= 1 {
@@ -344,17 +360,16 @@ impl KnowledgeRetriever {
         }
     }
 
+    /// Recompute [`avg_doc_length`](Self::avg_doc_length) from the
+    /// incrementally-maintained [`total_tokens`](Self::total_tokens) running
+    /// total. `O(1)` — does not rescan the corpus — so it is safe to call
+    /// after every single-document mutation even for large corpora.
     fn recompute_avg_doc_length(&mut self) {
         if self.term_frequencies.is_empty() {
             self.avg_doc_length = 0.0;
             return;
         }
-        let total: usize = self
-            .term_frequencies
-            .values()
-            .map(|tf| tf.values().sum::<usize>())
-            .sum();
-        self.avg_doc_length = total as f32 / self.term_frequencies.len() as f32;
+        self.avg_doc_length = self.total_tokens as f32 / self.term_frequencies.len() as f32;
     }
 
     fn finalise_results(&self, mut results: Vec<SearchResult>) -> Vec<SearchResult> {
@@ -935,5 +950,33 @@ mod tests {
             let _ = &res.snippet;
         }
         assert_eq!(results.len(), 5);
+    }
+
+    // 48. Regression: re-adding a document under the same id updates the
+    // incrementally-tracked token total (and thus avg_doc_length) rather than
+    // double-counting the old content, and removal correctly decrements it.
+    #[test]
+    fn test_avg_doc_length_tracks_reindex_and_removal() {
+        let mut r = retriever();
+        r.add_document(doc("d1", "a b c d e")); // 5 tokens
+        r.add_document(doc("d2", "a b")); // 2 tokens
+        assert_eq!(r.total_tokens, 7);
+        assert!((r.avg_doc_length - 3.5).abs() < 1e-6);
+
+        // Re-index d1 with shorter content: total must reflect the new
+        // length, not old_len + new_len.
+        r.add_document(doc("d1", "a b")); // 2 tokens, was 5
+        assert_eq!(r.total_tokens, 4);
+        assert!((r.avg_doc_length - 2.0).abs() < 1e-6);
+
+        // Removing a document decrements the running total.
+        assert!(r.remove_document("d2"));
+        assert_eq!(r.total_tokens, 2);
+        assert!((r.avg_doc_length - 2.0).abs() < 1e-6);
+
+        // Removing the last document resets to zero.
+        assert!(r.remove_document("d1"));
+        assert_eq!(r.total_tokens, 0);
+        assert_eq!(r.avg_doc_length, 0.0);
     }
 }

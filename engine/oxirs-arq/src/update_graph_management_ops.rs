@@ -37,7 +37,7 @@ impl GraphManagementExecutor {
                 iri,
                 into_graph,
                 silent,
-            } => Self::execute_load(iri, into_graph.as_deref(), *silent),
+            } => Self::execute_load(iri, into_graph.as_deref(), *silent, dataset),
             GraphManagementOp::Clear { target, silent } => {
                 Self::execute_clear(target, *silent, dataset)
             }
@@ -71,18 +71,57 @@ impl GraphManagementExecutor {
 
     fn execute_load(
         iri: &str,
-        _into_graph: Option<&str>,
+        into_graph: Option<&str>,
         silent: bool,
+        dataset: &mut GraphManagementDataset,
     ) -> Result<GraphManagementResult> {
-        // HTTP loading is not implemented in this in-memory executor.
-        if silent {
-            Ok(GraphManagementResult::default())
-        } else {
-            Err(anyhow!(
-                "LOAD <{iri}> is not supported by the in-memory graph management executor. \
-                 Use a network-capable executor or specify SILENT to suppress this error."
-            ))
+        // A real HTTP fetch + RDF parse. On failure, `SILENT` suppresses the
+        // error (returning a no-op result) while a non-`SILENT` LOAD surfaces
+        // it — the two outcomes are therefore distinguishable in the error path
+        // (an empty document loads zero triples with Ok, a failed fetch errors).
+        match Self::load_document(iri, into_graph, dataset) {
+            Ok(result) => Ok(result),
+            Err(e) if silent => {
+                tracing::warn!("SILENT LOAD <{iri}> failed, treating as no-op: {e}");
+                Ok(GraphManagementResult::default())
+            }
+            Err(e) => Err(e),
         }
+    }
+
+    /// Fetch the document at `iri` over HTTP, parse it as RDF, and insert the
+    /// resulting triples into `into_graph` (default graph when `None`).
+    fn load_document(
+        iri: &str,
+        into_graph: Option<&str>,
+        dataset: &mut GraphManagementDataset,
+    ) -> Result<GraphManagementResult> {
+        use oxirs_core::parser::Parser;
+
+        let (body, content_type) =
+            crate::service_federation::http_get_document(iri, std::time::Duration::from_secs(60))?;
+
+        let format = detect_rdf_format(iri, content_type.as_deref());
+        let triples = Parser::new(format)
+            .parse_str_to_triples(&body)
+            .map_err(|e| anyhow!("failed to parse LOAD <{iri}> as {format:?}: {e}"))?;
+
+        let mut result = GraphManagementResult::default();
+        for triple in &triples {
+            dataset.add_triple(
+                into_graph,
+                Triple::new(
+                    subject_to_string(triple.subject()),
+                    predicate_to_string(triple.predicate()),
+                    object_to_string(triple.object()),
+                ),
+            );
+        }
+        result.triples_affected = triples.len();
+        result
+            .graphs_affected
+            .push(into_graph.map_or_else(|| "DEFAULT".to_owned(), str::to_owned));
+        Ok(result)
     }
 
     // -----------------------------------------------------------------------
@@ -408,5 +447,88 @@ impl GraphManagementExecutor {
             triples_affected: count,
             graphs_affected: vec![Self::target_label(source), Self::target_label(dest)],
         })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// LOAD helpers
+// ---------------------------------------------------------------------------
+
+/// Choose an [`oxirs_core::parser::RdfFormat`] from the reported `Content-Type`
+/// header (preferred) or, failing that, the document IRI's file extension.
+/// Defaults to Turtle, the most common RDF interchange format.
+fn detect_rdf_format(iri: &str, content_type: Option<&str>) -> oxirs_core::parser::RdfFormat {
+    use oxirs_core::parser::RdfFormat;
+
+    if let Some(ct) = content_type {
+        let ct = ct
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        match ct.as_str() {
+            "text/turtle" | "application/x-turtle" => return RdfFormat::Turtle,
+            "application/n-triples" | "text/plain" => return RdfFormat::NTriples,
+            "application/n-quads" => return RdfFormat::NQuads,
+            "application/trig" => return RdfFormat::TriG,
+            "application/rdf+xml" | "text/xml" | "application/xml" => return RdfFormat::RdfXml,
+            "application/ld+json" | "application/json" => return RdfFormat::JsonLd,
+            _ => {}
+        }
+    }
+
+    // Fall back to the IRI's file extension.
+    if let Some(ext) = iri.rsplit('.').next() {
+        if let Some(fmt) = RdfFormat::from_extension(ext) {
+            return fmt;
+        }
+    }
+
+    RdfFormat::Turtle
+}
+
+/// Render a triple subject as the plain string used by this in-memory model
+/// (bare IRIs, `_:` blank nodes).
+fn subject_to_string(subject: &oxirs_core::model::Subject) -> String {
+    use oxirs_core::model::Subject;
+    match subject {
+        Subject::NamedNode(n) => n.as_str().to_owned(),
+        Subject::BlankNode(b) => format!("_:{}", b.as_str()),
+        Subject::Variable(v) => format!("?{}", v.as_str()),
+        Subject::QuotedTriple(qt) => format!("{qt}"),
+    }
+}
+
+/// Render a triple predicate as a plain IRI string.
+fn predicate_to_string(predicate: &oxirs_core::model::Predicate) -> String {
+    use oxirs_core::model::Predicate;
+    match predicate {
+        Predicate::NamedNode(n) => n.as_str().to_owned(),
+        Predicate::Variable(v) => format!("?{}", v.as_str()),
+    }
+}
+
+/// Render a triple object as a plain string, keeping literals unambiguous by
+/// preserving quotes, language tags and datatype IRIs.
+fn object_to_string(object: &oxirs_core::model::Object) -> String {
+    use oxirs_core::model::Object;
+    match object {
+        Object::NamedNode(n) => n.as_str().to_owned(),
+        Object::BlankNode(b) => format!("_:{}", b.as_str()),
+        Object::Variable(v) => format!("?{}", v.as_str()),
+        Object::QuotedTriple(qt) => format!("{qt}"),
+        Object::Literal(l) => {
+            if let Some(lang) = l.language() {
+                format!("\"{}\"@{}", l.value(), lang)
+            } else {
+                let dt = l.datatype().into_owned();
+                if dt.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
+                    format!("\"{}\"", l.value())
+                } else {
+                    format!("\"{}\"^^<{}>", l.value(), dt.as_str())
+                }
+            }
+        }
     }
 }

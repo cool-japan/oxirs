@@ -32,10 +32,16 @@
 //!
 //! ```rust,no_run
 //! use oxirs_tdb::consensus::paxos::{PaxosProposer, PaxosAcceptor, ProposalValue};
+//! use oxirs_tdb::consensus::transport::LoopbackSimulationTransport;
 //!
 //! # async fn example() -> anyhow::Result<()> {
-//! // Create proposer
-//! let mut proposer = PaxosProposer::new("proposer-1".to_string());
+//! // Create proposer. A real multi-node deployment must supply a transport
+//! // backed by real network I/O; LoopbackSimulationTransport is only for
+//! // single-process tests/local development.
+//! let mut proposer = PaxosProposer::with_transport(
+//!     "proposer-1".to_string(),
+//!     LoopbackSimulationTransport::arc(),
+//! );
 //! proposer.add_acceptor("acceptor-1".to_string());
 //! proposer.add_acceptor("acceptor-2".to_string());
 //! proposer.add_acceptor("acceptor-3".to_string());
@@ -47,6 +53,7 @@
 //! # }
 //! ```
 
+use crate::consensus::transport::NetworkTransport;
 use crate::error::{Result, TdbError};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -54,7 +61,6 @@ use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
 
 /// Proposal number for Paxos protocol
 ///
@@ -148,6 +154,12 @@ pub struct PaxosProposer {
     promises: Arc<Mutex<HashMap<String, Promise>>>,
     /// Statistics
     stats: Arc<Mutex<PaxosProposerStats>>,
+    /// Real (or explicitly-simulated) network transport used to reach
+    /// acceptors. `None` means no transport has been configured, in which
+    /// case `propose()` fails loudly with
+    /// `TdbError::DistributedTransportNotConfigured` instead of fabricating
+    /// consensus.
+    transport: Option<Arc<dyn NetworkTransport>>,
 }
 
 /// Paxos Proposer Statistics
@@ -166,7 +178,14 @@ pub struct PaxosProposerStats {
 }
 
 impl PaxosProposer {
-    /// Create a new Paxos proposer
+    /// Create a new Paxos proposer with no transport configured.
+    ///
+    /// **Note:** `propose()` on a proposer built this way always fails with
+    /// [`TdbError::DistributedTransportNotConfigured`] — there is no way to
+    /// honestly reach acceptors without a transport. Use
+    /// [`PaxosProposer::with_transport`] (with a real network-backed
+    /// transport, or [`crate::consensus::transport::LoopbackSimulationTransport`]
+    /// for single-node tests) to actually run consensus.
     pub fn new(id: String) -> Self {
         // Generate numeric ID from string hash
         let numeric_id = Self::hash_id(&id);
@@ -178,7 +197,17 @@ impl PaxosProposer {
             acceptors: Arc::new(Mutex::new(HashSet::new())),
             promises: Arc::new(Mutex::new(HashMap::new())),
             stats: Arc::new(Mutex::new(PaxosProposerStats::default())),
+            transport: None,
         }
+    }
+
+    /// Create a new Paxos proposer backed by a real (or explicitly-simulated)
+    /// [`NetworkTransport`]. This is the constructor production code should
+    /// use.
+    pub fn with_transport(id: String, transport: Arc<dyn NetworkTransport>) -> Self {
+        let mut proposer = Self::new(id);
+        proposer.transport = Some(transport);
+        proposer
     }
 
     /// Hash string ID to numeric ID
@@ -209,6 +238,13 @@ impl PaxosProposer {
     /// - `Ok(value)` if consensus achieved
     /// - `Err(_)` if consensus failed
     pub async fn propose(&mut self, initial_value: ProposalValue) -> Result<ProposalValue> {
+        if self.transport.is_none() {
+            return Err(TdbError::DistributedTransportNotConfigured {
+                node_id: self.id.clone(),
+                protocol: "Paxos".to_string(),
+            });
+        }
+
         {
             let mut stats = self.stats.lock();
             stats.total_proposals += 1;
@@ -308,21 +344,27 @@ impl PaxosProposer {
         Ok((true, previous_value))
     }
 
-    /// Send PREPARE message to acceptor (simulated)
+    /// Send PREPARE message to acceptor over the configured `NetworkTransport`.
     async fn send_prepare(
         &self,
         acceptor_id: &str,
         proposal_number: ProposalNumber,
     ) -> Result<Promise> {
-        // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For v0.1.0: Simulated for local testing. Paxos protocol logic is production-ready.
-        tokio::time::sleep(Duration::from_millis(5)).await;
+        let transport =
+            self.transport
+                .as_ref()
+                .ok_or_else(|| TdbError::DistributedTransportNotConfigured {
+                    node_id: self.id.clone(),
+                    protocol: "Paxos".to_string(),
+                })?;
 
-        Ok(Promise {
-            acceptor_id: acceptor_id.to_string(),
-            promised_number: proposal_number,
-            accepted_proposal: None,
-        })
+        let payload = oxicode::serde::encode_to_vec(&proposal_number, oxicode::config::standard())
+            .map_err(|e| TdbError::Serialization(e.to_string()))?;
+        let response = transport.send_prepare(acceptor_id, &payload).await?;
+
+        oxicode::serde::decode_from_slice(&response, oxicode::config::standard())
+            .map(|(promise, _)| promise)
+            .map_err(|e| TdbError::Deserialization(e.to_string()))
     }
 
     /// Phase 2: Accept phase
@@ -355,22 +397,29 @@ impl PaxosProposer {
         Ok(accept_count >= majority)
     }
 
-    /// Send ACCEPT message to acceptor (simulated)
+    /// Send ACCEPT message to acceptor over the configured `NetworkTransport`.
     async fn send_accept(
         &self,
         acceptor_id: &str,
         proposal_number: ProposalNumber,
-        _value: ProposalValue,
+        value: ProposalValue,
     ) -> Result<AcceptResponse> {
-        // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For v0.1.0: Simulated for local testing. Paxos protocol logic is production-ready.
-        tokio::time::sleep(Duration::from_millis(5)).await;
+        let transport =
+            self.transport
+                .as_ref()
+                .ok_or_else(|| TdbError::DistributedTransportNotConfigured {
+                    node_id: self.id.clone(),
+                    protocol: "Paxos".to_string(),
+                })?;
 
-        Ok(AcceptResponse {
-            acceptor_id: acceptor_id.to_string(),
-            accepted_number: proposal_number,
-            accepted: true,
-        })
+        let payload =
+            oxicode::serde::encode_to_vec(&(proposal_number, value), oxicode::config::standard())
+                .map_err(|e| TdbError::Serialization(e.to_string()))?;
+        let response = transport.send_accept(acceptor_id, &payload).await?;
+
+        oxicode::serde::decode_from_slice(&response, oxicode::config::standard())
+            .map(|(accept_response, _)| accept_response)
+            .map_err(|e| TdbError::Deserialization(e.to_string()))
     }
 
     /// Get proposer ID
@@ -635,7 +684,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_paxos_proposer_successful_consensus() {
-        let mut proposer = PaxosProposer::new("proposer-1".to_string());
+        let mut proposer = PaxosProposer::with_transport(
+            "proposer-1".to_string(),
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         proposer.add_acceptor("acceptor-1".to_string());
         proposer.add_acceptor("acceptor-2".to_string());
@@ -649,6 +701,23 @@ mod tests {
         let stats = proposer.stats();
         assert_eq!(stats.successful_consensus, 1);
         assert_eq!(stats.total_proposals, 1);
+    }
+
+    #[tokio::test]
+    async fn test_paxos_proposer_without_transport_fails_loudly() {
+        // Regression test for the fabricated-consensus bug: a proposer with
+        // no NetworkTransport configured must never report a fake success.
+        let mut proposer = PaxosProposer::new("proposer-1".to_string());
+        proposer.add_acceptor("acceptor-1".to_string());
+
+        let err = proposer
+            .propose(ProposalValue::Data(vec![1]))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            TdbError::DistributedTransportNotConfigured { .. }
+        ));
     }
 
     #[tokio::test]
@@ -795,7 +864,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_paxos_proposer_stats() {
-        let mut proposer = PaxosProposer::new("proposer-1".to_string());
+        let mut proposer = PaxosProposer::with_transport(
+            "proposer-1".to_string(),
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         proposer.add_acceptor("acceptor-1".to_string());
         proposer.add_acceptor("acceptor-2".to_string());

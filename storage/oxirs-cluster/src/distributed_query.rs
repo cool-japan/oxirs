@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::raft::OxirsNodeId;
 
@@ -479,21 +479,35 @@ impl DistributedQueryExecutor {
                 Self::parse_sparql_json_results(json)
             }
             Ok(resp) => {
-                // Network request succeeded but returned error status
-                warn!(
-                    "Node {} returned error status {}: falling back to simulation",
-                    subquery.target_node,
-                    resp.status()
+                // The remote node answered with an error status. Propagate a real
+                // error instead of substituting fabricated results, so a failed
+                // subquery can never masquerade as a genuine (successful) result.
+                let status = resp.status();
+                error!(
+                    "Node {} returned error status {} for subquery {}",
+                    subquery.target_node, status, subquery.subquery_id
                 );
-                Self::simulate_subquery_execution(subquery).await
+                Err(anyhow::anyhow!(
+                    "subquery {} on node {} failed with HTTP status {}",
+                    subquery.subquery_id,
+                    subquery.target_node,
+                    status
+                ))
             }
             Err(e) => {
-                // Network request failed - fall back to simulation for development
-                warn!(
-                    "Failed to reach node {}: {} - falling back to simulation",
-                    subquery.target_node, e
+                // The remote node was unreachable. Fail loudly rather than
+                // synthesizing placeholder triples that the caller could not
+                // distinguish from real query results.
+                error!(
+                    "Failed to reach node {} for subquery {}: {}",
+                    subquery.target_node, subquery.subquery_id, e
                 );
-                Self::simulate_subquery_execution(subquery).await
+                Err(anyhow::anyhow!(
+                    "subquery {} could not reach node {}: {}",
+                    subquery.subquery_id,
+                    subquery.target_node,
+                    e
+                ))
             }
         }
     }
@@ -523,38 +537,6 @@ impl DistributedQueryExecutor {
                 }
                 results.push(result_binding);
             }
-        }
-
-        Ok(results)
-    }
-
-    /// Simulate subquery execution for development/fallback
-    async fn simulate_subquery_execution(subquery: SubqueryPlan) -> Result<Vec<ResultBinding>> {
-        // Simulate network latency
-        tokio::time::sleep(tokio::time::Duration::from_millis(
-            subquery.estimated_latency_ms,
-        ))
-        .await;
-
-        // Generate mock results based on query pattern
-        let mut results = Vec::new();
-        let result_count = std::cmp::min(subquery.estimated_rows, 100);
-
-        for i in 0..result_count {
-            let mut binding = ResultBinding::new();
-            for var in &subquery.variables {
-                // Generate more realistic values based on variable names
-                let value = match var.as_str() {
-                    "?s" | "?subject" => format!("http://example.org/resource_{i}"),
-                    "?p" | "?predicate" => format!("http://example.org/property_{}", i % 10),
-                    "?o" | "?object" => format!("\"Object value {i}\""),
-                    "?name" => format!("\"Name {i}\""),
-                    "?type" => "http://example.org/Type".to_string(),
-                    _ => format!("value_{}_{}", subquery.target_node, i),
-                };
-                binding.add_binding(var.clone(), value);
-            }
-            results.push(binding);
         }
 
         Ok(results)
@@ -867,31 +849,65 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_query_execution() {
+    async fn test_query_execution_errors_on_unreachable_node() {
+        // Nodes 2 and 3 are not real endpoints. The executor must surface a real
+        // error instead of fabricating placeholder triples.
         let executor = DistributedQueryExecutor::new(1);
         executor.add_node(2).await;
         executor.add_node(3).await;
 
         let sparql = "SELECT ?x WHERE { ?x <type> <Person> }";
-        let results = executor.execute_query(sparql).await.unwrap();
+        let result = executor.execute_query(sparql).await;
 
-        // Should have some results from the mock execution
-        assert!(!results.is_empty());
+        assert!(
+            result.is_err(),
+            "unreachable nodes must produce an error, not fabricated results"
+        );
     }
 
     #[tokio::test]
-    async fn test_query_caching() {
+    async fn test_execute_single_subquery_no_fabricated_triples_on_failure() {
+        // Directly exercise the subquery path against an unroutable node and
+        // confirm it fails loudly rather than returning synthetic example.org
+        // triples.
+        let subquery = SubqueryPlan {
+            subquery_id: "sq-fail".to_string(),
+            target_node: 424242,
+            sparql_fragment: "SELECT ?s WHERE { ?s ?p ?o }".to_string(),
+            variables: vec!["?s".to_string()],
+            estimated_rows: 100,
+            estimated_latency_ms: 20,
+        };
+
+        let err = DistributedQueryExecutor::execute_single_subquery(subquery)
+            .await
+            .expect_err("unreachable subquery must return Err");
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("example.org"),
+            "error must not contain fabricated data: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_query_caching_returns_cached_results() {
+        // Pre-populate the cache so execute_query short-circuits before any
+        // network access and returns the cached bindings verbatim.
         let executor = DistributedQueryExecutor::new(1);
         executor.add_node(2).await;
 
         let sparql = "SELECT ?x WHERE { ?x <type> <Person> }";
 
-        // First execution - cache miss
-        let results1 = executor.execute_query(sparql).await.unwrap();
+        let mut cached = ResultBinding::new();
+        cached.add_binding("?x".to_string(), "urn:example:alice".to_string());
+        let expected = vec![cached];
+        executor.cache_results(sparql, &expected).await;
 
-        // Second execution - should hit cache
-        let results2 = executor.execute_query(sparql).await.unwrap();
+        let results = executor
+            .execute_query(sparql)
+            .await
+            .expect("cache hit must succeed without network access");
 
-        assert_eq!(results1.len(), results2.len());
+        assert_eq!(results, expected);
     }
 }

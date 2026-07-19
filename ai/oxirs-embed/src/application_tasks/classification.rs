@@ -271,83 +271,202 @@ impl ClassificationEvaluator {
                     .count();
                 Ok(correct as f64 / predictions.len() as f64)
             }
-            ClassificationMetric::Precision => {
-                // Simplified macro-averaged precision
-                Ok(0.75) // Placeholder
+            ClassificationMetric::Precision
+            | ClassificationMetric::Recall
+            | ClassificationMetric::F1Score => {
+                // Macro-averaged over the real per-class precision/recall/F1
+                // computed from the confusion matrix (true/false positives and
+                // false negatives per class).
+                let per_class = self.calculate_per_class_results(predictions)?;
+                if per_class.is_empty() {
+                    return Ok(0.0);
+                }
+                let sum: f64 = match metric {
+                    ClassificationMetric::Precision => {
+                        per_class.values().map(|c| c.precision).sum()
+                    }
+                    ClassificationMetric::Recall => per_class.values().map(|c| c.recall).sum(),
+                    ClassificationMetric::F1Score => per_class.values().map(|c| c.f1_score).sum(),
+                    _ => unreachable!("matched above"),
+                };
+                Ok(sum / per_class.len() as f64)
             }
-            ClassificationMetric::Recall => {
-                // Simplified macro-averaged recall
-                Ok(0.73) // Placeholder
-            }
-            ClassificationMetric::F1Score => {
-                // Simplified macro-averaged F1
-                Ok(0.74) // Placeholder
-            }
-            _ => Ok(0.5), // Placeholder for other metrics
+            ClassificationMetric::ROCAUC
+            | ClassificationMetric::PRAUC
+            | ClassificationMetric::MCC => Err(anyhow!(
+                "Classification metric {metric:?} is not yet implemented; requires per-class \
+                     prediction scores, which SimpleClassifier does not currently expose"
+            )),
         }
     }
 
-    /// Calculate per-class results
+    /// Calculate per-class results from real true-positive/false-positive/
+    /// false-negative counts derived from the predictions.
     fn calculate_per_class_results(
         &self,
         predictions: &[(String, String, Option<String>)],
     ) -> Result<HashMap<String, ClassResults>> {
         let mut results = HashMap::new();
 
-        // Get unique classes
+        // Consider every class that appears either as ground truth or as a
+        // prediction, so classes the classifier over/under-predicts are not
+        // silently dropped from the report.
         let classes: std::collections::HashSet<String> = predictions
             .iter()
             .map(|(true_label, _, _)| true_label.clone())
+            .chain(predictions.iter().filter_map(|(_, _, pred)| pred.clone()))
             .collect();
 
         for class in classes {
-            let class_results = ClassResults {
-                class_label: class.clone(),
-                precision: 0.75, // Simplified
-                recall: 0.73,    // Simplified
-                f1_score: 0.74,  // Simplified
-                support: 10,     // Simplified
+            let true_positives = predictions
+                .iter()
+                .filter(|(true_label, _, pred)| {
+                    true_label == &class && pred.as_deref() == Some(class.as_str())
+                })
+                .count();
+            let false_positives = predictions
+                .iter()
+                .filter(|(true_label, _, pred)| {
+                    true_label != &class && pred.as_deref() == Some(class.as_str())
+                })
+                .count();
+            let false_negatives = predictions
+                .iter()
+                .filter(|(true_label, _, pred)| {
+                    true_label == &class && pred.as_deref() != Some(class.as_str())
+                })
+                .count();
+            let support = predictions
+                .iter()
+                .filter(|(true_label, _, _)| true_label == &class)
+                .count();
+
+            let precision = if true_positives + false_positives > 0 {
+                true_positives as f64 / (true_positives + false_positives) as f64
+            } else {
+                0.0
             };
-            results.insert(class, class_results);
+            let recall = if true_positives + false_negatives > 0 {
+                true_positives as f64 / (true_positives + false_negatives) as f64
+            } else {
+                0.0
+            };
+            let f1_score = if precision + recall > 0.0 {
+                2.0 * precision * recall / (precision + recall)
+            } else {
+                0.0
+            };
+
+            results.insert(
+                class.clone(),
+                ClassResults {
+                    class_label: class,
+                    precision,
+                    recall,
+                    f1_score,
+                    support,
+                },
+            );
         }
 
         Ok(results)
     }
 
-    /// Generate confusion matrix
+    /// Generate a real multi-class confusion matrix, indexed by a
+    /// deterministic (sorted) ordering over every class seen as ground truth
+    /// or prediction. `matrix[i][j]` is the count of true-class-`i` samples
+    /// predicted as class `j`.
     fn generate_confusion_matrix(
         &self,
-        _predictions: &[(String, String, Option<String>)],
+        predictions: &[(String, String, Option<String>)],
     ) -> Result<Vec<Vec<usize>>> {
-        // Simplified 2x2 confusion matrix
-        Ok(vec![vec![80, 10], vec![5, 85]])
+        let mut classes: Vec<String> = predictions
+            .iter()
+            .map(|(true_label, _, _)| true_label.clone())
+            .chain(predictions.iter().filter_map(|(_, _, pred)| pred.clone()))
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        classes.sort();
+
+        let class_index: HashMap<&str, usize> = classes
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.as_str(), i))
+            .collect();
+
+        let mut matrix = vec![vec![0usize; classes.len()]; classes.len()];
+        for (true_label, _, pred) in predictions {
+            let Some(&true_idx) = class_index.get(true_label.as_str()) else {
+                continue;
+            };
+            if let Some(predicted_label) = pred {
+                if let Some(&pred_idx) = class_index.get(predicted_label.as_str()) {
+                    matrix[true_idx][pred_idx] += 1;
+                }
+            }
+        }
+
+        Ok(matrix)
     }
 
-    /// Generate classification report
+    /// Generate classification report with macro- and support-weighted
+    /// averages computed from the real per-class results.
     fn generate_classification_report(
         &self,
-        _per_class_results: &HashMap<String, ClassResults>,
+        per_class_results: &HashMap<String, ClassResults>,
         predictions: &[(String, String, Option<String>)],
     ) -> Result<ClassificationReport> {
         let accuracy = predictions
             .iter()
             .filter(|(true_label, _, pred)| pred.as_ref().map(|p| p == true_label).unwrap_or(false))
             .count() as f64
-            / predictions.len() as f64;
+            / predictions.len().max(1) as f64;
+
+        let num_classes = per_class_results.len().max(1);
+        let total_support: usize = per_class_results.values().map(|c| c.support).sum();
+
+        let macro_precision =
+            per_class_results.values().map(|c| c.precision).sum::<f64>() / num_classes as f64;
+        let macro_recall =
+            per_class_results.values().map(|c| c.recall).sum::<f64>() / num_classes as f64;
+        let macro_f1 =
+            per_class_results.values().map(|c| c.f1_score).sum::<f64>() / num_classes as f64;
+
+        let (weighted_precision, weighted_recall, weighted_f1) = if total_support > 0 {
+            let weighted_precision = per_class_results
+                .values()
+                .map(|c| c.precision * c.support as f64)
+                .sum::<f64>()
+                / total_support as f64;
+            let weighted_recall = per_class_results
+                .values()
+                .map(|c| c.recall * c.support as f64)
+                .sum::<f64>()
+                / total_support as f64;
+            let weighted_f1 = per_class_results
+                .values()
+                .map(|c| c.f1_score * c.support as f64)
+                .sum::<f64>()
+                / total_support as f64;
+            (weighted_precision, weighted_recall, weighted_f1)
+        } else {
+            (0.0, 0.0, 0.0)
+        };
 
         let macro_avg = ClassResults {
             class_label: "macro avg".to_string(),
-            precision: 0.75,
-            recall: 0.73,
-            f1_score: 0.74,
+            precision: macro_precision,
+            recall: macro_recall,
+            f1_score: macro_f1,
             support: predictions.len(),
         };
 
         let weighted_avg = ClassResults {
             class_label: "weighted avg".to_string(),
-            precision: 0.76,
-            recall: 0.74,
-            f1_score: 0.75,
+            precision: weighted_precision,
+            recall: weighted_recall,
+            f1_score: weighted_f1,
             support: predictions.len(),
         };
 
@@ -363,5 +482,90 @@ impl ClassificationEvaluator {
 impl Default for ClassificationEvaluator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for the P1 finding: Precision/Recall/F1Score must be
+    /// computed from the real confusion matrix, not hardcoded 0.75/0.73/0.74.
+    #[test]
+    fn test_calculate_classification_metric_precision_recall_f1_are_real() -> Result<()> {
+        let evaluator = ClassificationEvaluator::new();
+        // 2 correct "cat" predictions, 1 correct "dog", 1 "cat" mispredicted
+        // as "dog".
+        let predictions = vec![
+            ("cat".to_string(), "e1".to_string(), Some("cat".to_string())),
+            ("cat".to_string(), "e2".to_string(), Some("cat".to_string())),
+            ("cat".to_string(), "e3".to_string(), Some("dog".to_string())),
+            ("dog".to_string(), "e4".to_string(), Some("dog".to_string())),
+        ];
+
+        let precision = evaluator
+            .calculate_classification_metric(&ClassificationMetric::Precision, &predictions)?;
+        let recall = evaluator
+            .calculate_classification_metric(&ClassificationMetric::Recall, &predictions)?;
+        let f1 = evaluator
+            .calculate_classification_metric(&ClassificationMetric::F1Score, &predictions)?;
+
+        // cat: TP=2, FP=0, FN=1 -> precision=1.0, recall=2/3
+        // dog: TP=1, FP=1, FN=0 -> precision=0.5, recall=1.0
+        // macro precision = (1.0 + 0.5) / 2 = 0.75; macro recall = (2/3 + 1.0) / 2 ≈ 0.8333
+        assert!((precision - 0.75).abs() < 1e-9, "precision = {precision}");
+        assert!((recall - 0.8333333333).abs() < 1e-6, "recall = {recall}");
+        assert!(f1 > 0.0 && f1 < 1.0, "f1 = {f1}");
+
+        // These must NOT be the old hardcoded constants for a *different*
+        // confusion matrix (sanity: values change with the data).
+        let all_correct = vec![
+            ("cat".to_string(), "e1".to_string(), Some("cat".to_string())),
+            ("dog".to_string(), "e2".to_string(), Some("dog".to_string())),
+        ];
+        let perfect_precision = evaluator
+            .calculate_classification_metric(&ClassificationMetric::Precision, &all_correct)?;
+        assert!(
+            (perfect_precision - 1.0).abs() < 1e-9,
+            "perfect_precision = {perfect_precision}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calculate_classification_metric_unsupported_metrics_error() {
+        let evaluator = ClassificationEvaluator::new();
+        let predictions = vec![("cat".to_string(), "e1".to_string(), Some("cat".to_string()))];
+
+        for metric in [
+            ClassificationMetric::ROCAUC,
+            ClassificationMetric::PRAUC,
+            ClassificationMetric::MCC,
+        ] {
+            assert!(
+                evaluator
+                    .calculate_classification_metric(&metric, &predictions)
+                    .is_err(),
+                "metric = {metric:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_calculate_per_class_results_computes_real_confusion_counts() {
+        let evaluator = ClassificationEvaluator::new();
+        let predictions = vec![
+            ("cat".to_string(), "e1".to_string(), Some("cat".to_string())),
+            ("cat".to_string(), "e2".to_string(), Some("dog".to_string())),
+        ];
+
+        let results = evaluator
+            .calculate_per_class_results(&predictions)
+            .expect("should succeed");
+        let cat_results = &results["cat"];
+        assert_eq!(cat_results.support, 2);
+        assert!((cat_results.precision - 1.0).abs() < 1e-9);
+        assert!((cat_results.recall - 0.5).abs() < 1e-9);
     }
 }

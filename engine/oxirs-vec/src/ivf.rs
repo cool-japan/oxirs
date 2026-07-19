@@ -352,6 +352,95 @@ impl InvertedList {
         }
     }
 
+    /// Reconstruct the residual encoded by multi-level residual quantization.
+    fn reconstruct_multi_level_residual(
+        &self,
+        level_codes: &[Vec<u8>],
+        final_residual: &Option<Vector>,
+        dims: usize,
+    ) -> Result<Vector> {
+        let mut reconstructed_residual = Vector::new(vec![0.0; dims]);
+
+        for (level, codes) in level_codes.iter().enumerate() {
+            if level < self.multi_level_pq.len() {
+                let level_reconstruction = self.multi_level_pq[level].decode_vector(codes)?;
+                reconstructed_residual = reconstructed_residual.add(&level_reconstruction)?;
+            }
+        }
+
+        if let Some(final_res) = final_residual {
+            reconstructed_residual = reconstructed_residual.add(final_res)?;
+        }
+
+        Ok(reconstructed_residual)
+    }
+
+    /// Reconstruct the residual encoded by multi-codebook quantization.
+    fn reconstruct_multi_codebook_residual(
+        &self,
+        codebook_codes: &[Vec<u8>],
+        weights: &[f32],
+        dims: usize,
+    ) -> Result<Vector> {
+        let mut acc = Vector::new(vec![0.0; dims]);
+        let mut total_weight = 0.0;
+
+        for (i, codes) in codebook_codes.iter().enumerate() {
+            if i < self.multi_codebook_pq.len() && i < weights.len() {
+                let recon = self.multi_codebook_pq[i].decode_vector(codes)?;
+                acc = acc.add(&recon.scale(weights[i]))?;
+                total_weight += weights[i];
+            }
+        }
+
+        if total_weight > 0.0 {
+            acc = acc.scale(1.0 / total_weight);
+        }
+
+        Ok(acc)
+    }
+
+    /// Reconstruct all (uri, full vector) pairs held by this inverted list.
+    ///
+    /// `residual_mode` indicates whether [`VectorStorage::Full`] entries hold
+    /// an absolute vector (`false`) or an unquantized residual relative to
+    /// `centroid` (`true`) — see `IvfIndex::insert`'s `QuantizationStrategy::None`
+    /// branch, which stores either depending on `enable_residual_quantization`.
+    fn reconstruct_all(&self, centroid: &Vector, residual_mode: bool) -> Vec<(String, Vector)> {
+        let dims = centroid.dimensions;
+        self.vectors
+            .iter()
+            .filter_map(|(uri, storage)| {
+                let reconstructed = match storage {
+                    VectorStorage::Full(v) => {
+                        if residual_mode {
+                            centroid.add(v).ok()
+                        } else {
+                            Some(v.clone())
+                        }
+                    }
+                    VectorStorage::Quantized(codes) => self
+                        .pq_index
+                        .as_ref()
+                        .and_then(|pq| pq.decode_vector(codes).ok())
+                        .and_then(|residual| centroid.add(&residual).ok()),
+                    VectorStorage::MultiLevelQuantized {
+                        levels,
+                        final_residual,
+                    } => self
+                        .reconstruct_multi_level_residual(levels, final_residual, dims)
+                        .ok()
+                        .and_then(|residual| centroid.add(&residual).ok()),
+                    VectorStorage::MultiCodebook { codebooks, weights } => self
+                        .reconstruct_multi_codebook_residual(codebooks, weights, dims)
+                        .ok()
+                        .and_then(|residual| centroid.add(&residual).ok()),
+                };
+                reconstructed.map(|v| (uri.clone(), v))
+            })
+            .collect()
+    }
+
     /// Train product quantizer on collected residuals
     fn train_pq(&mut self, residuals: &[Vector]) -> Result<()> {
         match &self.quantization {
@@ -1009,6 +1098,26 @@ impl VectorIndex for IvfIndex {
         // Would need to search through all inverted lists
         // For efficiency, we return None
         None
+    }
+
+    fn iter_vectors(&self) -> Vec<(String, Vector)> {
+        let residual_mode = self.config.enable_residual_quantization
+            && matches!(self.config.quantization, QuantizationStrategy::None);
+        let mut all = Vec::with_capacity(self.n_vectors);
+        for (idx, list_lock) in self.inverted_lists.iter().enumerate() {
+            let Some(centroid) = self.centroids.get(idx) else {
+                continue;
+            };
+            let Ok(list) = list_lock.read() else {
+                continue;
+            };
+            all.extend(list.reconstruct_all(centroid, residual_mode));
+        }
+        all
+    }
+
+    fn supports_enumeration(&self) -> bool {
+        true
     }
 }
 

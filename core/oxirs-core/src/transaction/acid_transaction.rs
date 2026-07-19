@@ -53,6 +53,11 @@ pub struct AcidTransaction {
     write_set: HashMap<Quad, QuadVersion>,
     /// Write-Ahead Log
     wal: Arc<RwLock<WriteAheadLog>>,
+    /// Optional backing store to which committed inserts/deletes are applied
+    /// during [`AcidTransaction::commit`]. When `None`, the transaction only
+    /// records durability entries in the WAL (e.g. for tests or callers that
+    /// apply the pending sets themselves via [`AcidTransaction::pending_inserts`]).
+    store: Option<Arc<dyn crate::Store>>,
     /// Commit counter
     commit_counter: Arc<Counter>,
     /// Abort counter
@@ -97,10 +102,20 @@ impl AcidTransaction {
             read_set: HashMap::new(),
             write_set: HashMap::new(),
             wal,
+            store: None,
             commit_counter,
             abort_counter,
             commit_timer,
         }
+    }
+
+    /// Attach a backing store so that [`AcidTransaction::commit`] applies the
+    /// transaction's pending inserts and deletes to it atomically with the WAL
+    /// commit record. Without a store the committed changes would only be
+    /// recorded in the WAL and never become visible in the data set.
+    pub fn with_store(mut self, store: Arc<dyn crate::Store>) -> Self {
+        self.store = Some(store);
+        self
     }
 
     /// Get the transaction ID
@@ -355,6 +370,19 @@ impl AcidTransaction {
         // Force WAL to disk for durability guarantee
         self.flush_wal()?;
 
+        // Apply the committed changes to the backing store (redo phase). The
+        // commit record is already durable, so a crash between here and full
+        // application is recoverable by replaying the WAL. Deletions are
+        // applied before insertions to mirror the pending-operation ordering.
+        if let Some(store) = &self.store {
+            for quad in &self.pending_deletes {
+                store.remove_quad(quad)?;
+            }
+            for quad in &self.pending_inserts {
+                store.insert_quad(quad.clone())?;
+            }
+        }
+
         // Transition to committed state
         self.state = TransactionState::Committed;
 
@@ -577,6 +605,49 @@ mod tests {
 
         tx.abort()?;
         // Note: Can't check state after abort since it consumes self
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_commit_applies_inserts_and_deletes_to_store() -> Result<(), OxirsError> {
+        use crate::rdf_store::RdfStore;
+        use crate::Store as StoreTrait;
+
+        let dir = tempdir().map_err(|e| OxirsError::Io(e.to_string()))?;
+        let wal = Arc::new(RwLock::new(WriteAheadLog::new(dir.path())?));
+        let store: Arc<dyn crate::Store> = Arc::new(RdfStore::new()?);
+
+        // Pre-seed a quad that the transaction will delete on commit.
+        let existing = create_test_quad(99);
+        StoreTrait::insert_quad(&*store, existing.clone())?;
+        assert_eq!(StoreTrait::len(&*store)?, 1);
+
+        let mut tx = AcidTransaction::new(
+            TransactionId(1),
+            IsolationLevel::Snapshot,
+            None,
+            wal,
+            Arc::new(Counter::new("test.commits".to_string())),
+            Arc::new(Counter::new("test.aborts".to_string())),
+            Arc::new(Timer::new("test.commit_time".to_string())),
+        )
+        .with_store(store.clone());
+
+        let new_quad = create_test_quad(1);
+        tx.insert(new_quad.clone())?;
+        tx.delete(existing.clone())?;
+
+        // Before commit, the store is unchanged.
+        assert_eq!(StoreTrait::len(&*store)?, 1);
+
+        tx.commit()?;
+
+        // After commit, the insert is visible and the delete has been applied.
+        assert_eq!(StoreTrait::len(&*store)?, 1);
+        let all = StoreTrait::quads(&*store)?;
+        assert!(all.contains(&new_quad), "committed insert must be visible");
+        assert!(!all.contains(&existing), "committed delete must be applied");
 
         Ok(())
     }

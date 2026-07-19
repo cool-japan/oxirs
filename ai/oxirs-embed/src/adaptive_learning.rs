@@ -160,6 +160,10 @@ pub struct AdaptiveLearningSystem {
     model_parameters: Arc<RwLock<HashMap<String, DMatrix<f64>>>>,
     /// Learning state
     learning_state: Arc<RwLock<LearningState>>,
+    /// Last embedding actually produced for a given query, used as the
+    /// "current model output" reference point when new feedback arrives for
+    /// that same query. Absent until a query has been seen at least once.
+    last_known_embedding: Arc<RwLock<HashMap<String, Vec<f64>>>>,
 }
 
 /// Internal learning state
@@ -211,6 +215,7 @@ impl AdaptiveLearningSystem {
                 current_learning_rate: learning_rate,
                 performance_baseline: 0.5,
             })),
+            last_known_embedding: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -242,11 +247,18 @@ impl AdaptiveLearningSystem {
         let experience_buffer = Arc::clone(&self.experience_buffer);
         let metrics = Arc::clone(&self.metrics);
         let config = self.config.clone();
+        let last_known_embedding = Arc::clone(&self.last_known_embedding);
 
         tokio::spawn(async move {
             while let Some(feedback) = receiver.recv().await {
-                if let Err(e) =
-                    Self::process_feedback(feedback, &experience_buffer, &metrics, &config).await
+                if let Err(e) = Self::process_feedback(
+                    feedback,
+                    &experience_buffer,
+                    &metrics,
+                    &config,
+                    &last_known_embedding,
+                )
+                .await
                 {
                     warn!("Error processing feedback: {}", e);
                 }
@@ -308,19 +320,41 @@ impl AdaptiveLearningSystem {
         buffer: &Arc<RwLock<VecDeque<ExperienceSample>>>,
         metrics: &Arc<RwLock<AdaptationMetrics>>,
         config: &AdaptiveLearningConfig,
+        last_known_embedding: &Arc<RwLock<HashMap<String, Vec<f64>>>>,
     ) -> Result<()> {
         // Convert feedback to experience sample
         if feedback.quality_score > config.quality_threshold {
+            // `current` is the model's actual last-known output for this exact
+            // query: the embedding recorded the previous time feedback for this
+            // query was processed. For a query seen for the first time there is
+            // no prior model output to compare against, so we fall back to the
+            // freshly submitted embedding (a genuine cold-start, not a bug: a
+            // fresh query trivially "conforms" to itself until proven otherwise).
+            let current = {
+                let known_guard = last_known_embedding.read().expect("lock poisoned");
+                known_guard
+                    .get(&feedback.query)
+                    .cloned()
+                    .unwrap_or_else(|| feedback.embedding.clone())
+            };
+
             let sample = ExperienceSample {
                 input: feedback.query.clone(),
                 target: feedback.embedding.clone(),
-                current: feedback.embedding.clone(), // This would be the current model output
+                current,
                 improvement_target: 1.0 - feedback.quality_score,
                 context: feedback
                     .task_context
                     .map(|ctx| [("task".to_string(), ctx)].into())
                     .unwrap_or_default(),
             };
+
+            // Record this feedback's embedding as the new "current" reference
+            // for this query so the next round of feedback measures real drift.
+            {
+                let mut known_guard = last_known_embedding.write().expect("lock poisoned");
+                known_guard.insert(feedback.query.clone(), feedback.embedding.clone());
+            }
 
             // Add to buffer
             {
@@ -812,6 +846,72 @@ mod tests {
 
             // Give some time for initialization
             sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    /// Regression test for the P1 finding: `current` must reflect the
+    /// model's actual last-known output for a query, not simply be copied
+    /// from the freshly submitted `target` embedding (which made the quality
+    /// signal driving adaptation always ~1.0 and meaningless).
+    #[tokio::test]
+    async fn test_process_feedback_current_reflects_prior_embedding_not_target() {
+        let buffer = Arc::new(RwLock::new(VecDeque::new()));
+        let metrics = Arc::new(RwLock::new(AdaptationMetrics::default()));
+        let config = AdaptiveLearningConfig::default();
+        let last_known_embedding = Arc::new(RwLock::new(HashMap::new()));
+
+        let first_feedback = QualityFeedback {
+            query: "q1".to_string(),
+            embedding: vec![1.0, 0.0, 0.0],
+            quality_score: 0.9,
+            timestamp: Utc::now(),
+            relevance: None,
+            task_context: None,
+        };
+        AdaptiveLearningSystem::process_feedback(
+            first_feedback,
+            &buffer,
+            &metrics,
+            &config,
+            &last_known_embedding,
+        )
+        .await
+        .expect("should succeed");
+
+        // First time seeing "q1": there is no prior output, so `current`
+        // legitimately equals `target` (a genuine cold start, not the bug).
+        {
+            let buf = buffer.read().expect("lock poisoned");
+            let sample = buf.back().expect("sample should exist");
+            assert_eq!(sample.current, sample.target);
+        }
+
+        let second_feedback = QualityFeedback {
+            query: "q1".to_string(),
+            embedding: vec![0.0, 1.0, 0.0],
+            quality_score: 0.9,
+            timestamp: Utc::now(),
+            relevance: None,
+            task_context: None,
+        };
+        AdaptiveLearningSystem::process_feedback(
+            second_feedback,
+            &buffer,
+            &metrics,
+            &config,
+            &last_known_embedding,
+        )
+        .await
+        .expect("should succeed");
+
+        // Second time seeing "q1": `current` must be the *previous* round's
+        // embedding, genuinely different from this round's `target`.
+        {
+            let buf = buffer.read().expect("lock poisoned");
+            let sample = buf.back().expect("sample should exist");
+            assert_eq!(sample.current, vec![1.0, 0.0, 0.0]);
+            assert_eq!(sample.target, vec![0.0, 1.0, 0.0]);
+            assert_ne!(sample.current, sample.target);
         }
     }
 

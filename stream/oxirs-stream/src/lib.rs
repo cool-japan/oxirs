@@ -1,9 +1,9 @@
 //! # OxiRS Stream - Ultra-High Performance RDF Streaming Platform
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-stream/badge.svg)](https://docs.rs/oxirs-stream)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Real-time streaming support with Kafka/NATS/Redis I/O, RDF Patch, SPARQL Update delta,
@@ -439,6 +439,11 @@ pub mod time_travel;
 pub mod tls_security;
 pub mod types;
 pub mod wasm_edge_computing;
+// Standalone WASM plugin processor (distinct data model from `wasm_edge_computing`).
+// Its `execute_wasm_function` does not embed a real execution engine, so it always
+// returns `StreamError::UnsupportedOperation` rather than fabricating output; use
+// `wasm_edge_computing::WasmEdgeProcessor` (built on wasmtime) for genuine execution.
+pub mod wasm_edge_processor;
 pub mod webhook;
 
 // New v0.3.0 modules for advanced features

@@ -19,18 +19,17 @@ pub mod formatters;
 pub mod fuzzy_history;
 pub mod graphviz_export;
 pub mod help;
-pub mod interactive;
 pub mod logging;
 pub mod output;
 pub mod pagination;
 pub mod progress;
 pub mod query_bookmarks;
+pub mod repl_commands;
 pub mod result_export;
 pub mod schema_autocomplete;
 pub mod sparql_autocomplete;
 pub mod syntax_highlighting;
 pub mod template_formatter;
-pub mod transaction;
 pub mod tutorial;
 pub mod utils;
 pub mod validation;
@@ -58,8 +57,6 @@ pub use graphviz_export::{
     QueryPlanExporter,
 };
 pub use help::{HelpCategory, HelpProvider};
-#[allow(deprecated)]
-pub use interactive::InteractiveMode;
 pub use logging::{
     init_logging, CommandLogger, DataLogger, LogConfig, LogFormat, PerfLogger, QueryLogger,
 };
@@ -67,6 +64,7 @@ pub use output::{ColorScheme, OutputFormatter};
 pub use pagination::{NavigationCommand, PaginationConfig, ResultPaginator};
 pub use progress::{ProgressTracker, ProgressType};
 pub use query_bookmarks::{BookmarkConfig, BookmarkManager, QueryBookmark};
+pub use repl_commands::{dispatch_colon_command, ColonOutcome, ReplState};
 pub use result_export::{ExportConfig, ExportFormat, ResultExporter};
 pub use schema_autocomplete::{
     CacheStats, SchemaAutocompleteProvider, SchemaDiscoveryConfig, SchemaInfo,
@@ -77,10 +75,6 @@ pub use syntax_highlighting::{
     HighlightConfig,
 };
 pub use template_formatter::{TemplateFormatter, TemplatePresets};
-pub use transaction::{
-    IsolationLevel, TransactionConfig, TransactionManager, TransactionMetadata,
-    TransactionOperation, TransactionState, TransactionStats,
-};
 pub use tutorial::{Difficulty, TutorialLesson, TutorialManager, TutorialStep};
 pub use utils::*;
 pub use validation::ArgumentValidator;

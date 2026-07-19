@@ -184,18 +184,23 @@ pub struct ExternalServicesManager {
 }
 
 impl ExternalServicesManager {
-    /// Create a new external services manager
-    pub fn new(config: ExternalServicesConfig) -> Self {
+    /// Create a new external services manager.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying `reqwest::Client` cannot be built
+    /// (e.g. the platform's TLS backend fails to initialize), rather than
+    /// panicking.
+    pub fn new(config: ExternalServicesConfig) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(config.timeout_duration)
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| anyhow!("Failed to create HTTP client: {e}"))?;
 
-        Self {
+        Ok(Self {
             rate_limiter: RateLimiter::new(config.rate_limit_per_minute),
             config,
             client,
-        }
+        })
     }
 
     /// Search knowledge base APIs
@@ -1248,7 +1253,7 @@ mod tests {
     #[tokio::test]
     async fn test_streaming_speech_to_text_returns_receiver() {
         let config = make_streaming_config("en-US");
-        let manager = ExternalServicesManager::new(config);
+        let manager = ExternalServicesManager::new(config).expect("should build HTTP client");
 
         let options = SpeechProcessingOptions {
             enable_punctuation: false,
@@ -1288,7 +1293,7 @@ mod tests {
     #[tokio::test]
     async fn test_streaming_speech_to_text_no_matching_service() {
         let config = ExternalServicesConfig::default(); // no speech services
-        let manager = ExternalServicesManager::new(config);
+        let manager = ExternalServicesManager::new(config).expect("should build HTTP client");
 
         let options = SpeechProcessingOptions {
             enable_punctuation: false,
@@ -1327,7 +1332,7 @@ mod tests {
         let mut config = make_streaming_config("en-US");
         // Disable streaming on the only config
         config.speech_services[0].real_time_streaming = false;
-        let manager = ExternalServicesManager::new(config);
+        let manager = ExternalServicesManager::new(config).expect("should build HTTP client");
 
         let options = SpeechProcessingOptions {
             enable_punctuation: false,

@@ -338,6 +338,13 @@ impl QueryCache {
         &self.stats
     }
 
+    /// Maximum number of cached query results this cache retains before
+    /// evicting (the configured capacity, e.g. from
+    /// [`StoreParams::query_cache_size`](crate::store::StoreParams)).
+    pub fn max_entries(&self) -> usize {
+        self.config.max_entries
+    }
+
     /// Clear all cache entries and reset statistics
     pub fn clear(&self) {
         self.cache.clear();

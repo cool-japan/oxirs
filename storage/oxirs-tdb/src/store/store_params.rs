@@ -24,21 +24,31 @@ pub struct StoreParams {
     pub buffer_pool_size: usize,
 
     // Index configuration
-    /// Enable Subject-Predicate-Object index
+    /// Enable Subject-Predicate-Object index.
+    /// Reserved — not yet honored: the engine always maintains all three triple
+    /// indexes (SPO/POS/OSP) for optimal pattern selection.
     pub enable_spo_index: bool,
-    /// Enable Predicate-Object-Subject index
+    /// Enable Predicate-Object-Subject index.
+    /// Reserved — not yet honored (see [`enable_spo_index`](Self::enable_spo_index)).
     pub enable_pos_index: bool,
-    /// Enable Object-Subject-Predicate index
+    /// Enable Object-Subject-Predicate index.
+    /// Reserved — not yet honored (see [`enable_spo_index`](Self::enable_spo_index)).
     pub enable_osp_index: bool,
-    /// Enable quad (named graph) indexes
+    /// Enable quad (named graph) indexes. Honored: threaded to
+    /// [`TdbConfig::enable_quad_indexes`](crate::store::TdbConfig).
     pub enable_quad_indexes: bool,
 
     // Dictionary configuration
-    /// Enable inline storage of small values
+    /// Enable inline storage of small values.
+    /// Reserved — not yet honored by the dictionary encoder.
     pub enable_inline_values: bool,
-    /// Enable prefix compression for URIs
+    /// Enable prefix compression for URIs.
+    /// Reserved — not yet honored: URI compression is gated by
+    /// [`enable_compression`](Self::enable_compression) /
+    /// [`compression_algorithm`](Self::compression_algorithm), not this flag.
     pub enable_prefix_compression: bool,
-    /// Dictionary cache size (number of entries)
+    /// Dictionary cache size (number of entries).
+    /// Reserved — not yet honored by the dictionary cache.
     pub dictionary_cache_size: usize,
 
     // Transaction configuration
@@ -46,9 +56,11 @@ pub struct StoreParams {
     pub enable_wal: bool,
     /// Write-ahead log buffer size in bytes
     pub wal_buffer_size: usize,
-    /// Maximum transaction size (number of triples)
+    /// Maximum transaction size (number of triples).
+    /// Reserved — not yet honored by the transaction manager.
     pub max_transaction_size: usize,
-    /// Transaction timeout in seconds
+    /// Transaction timeout in seconds.
+    /// Reserved — not yet honored by the transaction manager.
     pub transaction_timeout_secs: u64,
 
     // Compression configuration
@@ -92,43 +104,60 @@ pub struct StoreParams {
     pub spatial_index_max_entries: usize,
 
     // Production features
-    /// Enable diagnostic logging and error reporting
+    /// Enable diagnostic logging and error reporting.
+    /// Reserved — not yet honored: the diagnostic engine is always constructed.
     pub enable_diagnostics: bool,
-    /// Enable metrics collection and export
+    /// Enable metrics collection and export.
+    /// Reserved — not yet honored by the storage engine.
     pub enable_metrics: bool,
-    /// Enable performance profiling
+    /// Enable performance profiling.
+    /// Reserved — not yet honored by the storage engine.
     pub enable_profiling: bool,
 
     // Connection pooling
-    /// Minimum number of connections to maintain
+    /// Minimum number of connections to maintain.
+    /// Reserved — not yet honored: the store has no connection pool.
     pub min_connections: usize,
-    /// Maximum number of concurrent connections
+    /// Maximum number of concurrent connections.
+    /// Reserved — not yet honored: the store has no connection pool.
     pub max_connections: usize,
-    /// Connection timeout in seconds
+    /// Connection timeout in seconds.
+    /// Reserved — not yet honored: the store has no connection pool.
     pub connection_timeout_secs: u64,
 
     // Backup configuration
-    /// Enable online (hot) backups
+    /// Enable online (hot) backups.
+    /// Reserved — not yet honored: backups are driven by a separate API.
     pub enable_online_backup: bool,
-    /// Number of days to retain backups
+    /// Number of days to retain backups.
+    /// Reserved — not yet honored: backups are driven by a separate API.
     pub backup_retention_days: u32,
-    /// Enable backup encryption
+    /// Enable backup encryption.
+    /// Reserved — not yet honored: backups are driven by a separate API.
     pub enable_backup_encryption: bool,
 
     // Performance tuning
-    /// Enable direct I/O bypassing OS cache
+    /// Enable direct I/O bypassing the OS cache. Honored: threaded to
+    /// [`TdbConfig::enable_direct_io`](crate::store::TdbConfig), which gates the
+    /// opt-in [`DirectIOFile`](crate::storage::direct_io::DirectIOFile) path for
+    /// large sequential scans (default `false`, unix-only).
     pub enable_direct_io: bool,
-    /// Enable asynchronous I/O operations
+    /// Enable asynchronous I/O operations.
+    /// Reserved — not yet honored by the storage engine.
     pub enable_async_io: bool,
-    /// Enable NUMA (Non-Uniform Memory Access) awareness
+    /// Enable NUMA (Non-Uniform Memory Access) awareness.
+    /// Reserved — not yet honored by the storage engine.
     pub enable_numa_awareness: bool,
-    /// Enable GPU acceleration for computations
+    /// Enable GPU acceleration for computations.
+    /// Reserved — not yet honored by the storage engine.
     pub enable_gpu_acceleration: bool,
 
     // Distributed systems
-    /// Enable data replication
+    /// Enable data replication.
+    /// Reserved — not yet honored by the storage engine.
     pub enable_replication: bool,
-    /// Replication mode (master-slave, master-master, etc.)
+    /// Replication mode (master-slave, master-master, etc.).
+    /// Reserved — not yet honored by the storage engine.
     pub replication_mode: ReplicationMode,
 }
 

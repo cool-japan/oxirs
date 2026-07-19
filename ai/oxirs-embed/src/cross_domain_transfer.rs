@@ -600,13 +600,40 @@ impl CrossDomainTransferManager {
         let source_relations = source.model.get_relations();
         let target_relations = self.extract_relations_from_triples(&target.training_data);
 
+        // The source model does not expose its raw triples, only aggregate
+        // stats, so we use its *average* per-relation usage frequency as the
+        // structural baseline; the target domain's raw training data lets us
+        // compute each candidate relation's *actual* usage frequency for a
+        // real (if approximate) structural comparison, instead of a constant.
+        let source_stats = source.model.get_stats();
+        let source_avg_relation_frequency = if source_stats.num_relations > 0 {
+            source_stats.num_triples as f64 / source_stats.num_relations as f64
+        } else {
+            0.0
+        };
+
+        let mut target_relation_frequency: HashMap<&str, usize> = HashMap::new();
+        for (_, predicate, _) in &target.training_data {
+            *target_relation_frequency
+                .entry(predicate.as_str())
+                .or_insert(0) += 1;
+        }
+
         for source_relation in &source_relations {
             for target_relation in &target_relations {
                 let semantic_similarity =
                     self.calculate_string_similarity(source_relation, target_relation);
 
-                // Structural similarity (simplified - could analyze usage patterns)
-                let structural_similarity = 0.5; // Placeholder
+                // Structural similarity: how close this target relation's
+                // observed usage frequency is to the source domain's average
+                // per-relation usage frequency.
+                let target_frequency = target_relation_frequency
+                    .get(target_relation.as_str())
+                    .copied()
+                    .unwrap_or(0) as f64;
+                let max_frequency = source_avg_relation_frequency.max(target_frequency).max(1.0);
+                let structural_similarity =
+                    1.0 - (source_avg_relation_frequency - target_frequency).abs() / max_frequency;
 
                 if semantic_similarity > 0.6 {
                     alignments.push(RelationAlignment {
@@ -662,20 +689,48 @@ impl CrossDomainTransferManager {
         Ok(shifts)
     }
 
-    /// Analyze structural changes between domains
+    /// Analyze structural changes between domains.
+    ///
+    /// `DomainCharacteristics` only retains aggregate per-domain statistics,
+    /// not the raw graph adjacency, so true clustering-coefficient /
+    /// average-path-length / community-detection algorithms cannot be run
+    /// here. Instead, each change is derived from the closest already-computed
+    /// real statistic available on both domains (the same relative-difference
+    /// approach used for `degree_distribution_shift`), rather than a
+    /// hardcoded constant:
+    /// - clustering: relative change in graph density (density and local
+    ///   clustering tendency are directly correlated for a fixed degree);
+    /// - path length: relative change in hierarchical depth (deeper
+    ///   hierarchies imply longer typical shortest paths);
+    /// - community structure: relative change in overall structural
+    ///   complexity.
     fn analyze_structural_changes(
         &self,
         source: &DomainCharacteristics,
         target: &DomainCharacteristics,
     ) -> Result<StructuralChanges> {
+        let relative_change = |source_value: f64, target_value: f64| -> f64 {
+            let denom = source_value.abs().max(f64::EPSILON);
+            ((source_value - target_value).abs() / denom).min(1.0)
+        };
+
         // Calculate relative changes in structural properties
         let degree_distribution_shift =
             (source.size_metrics.avg_entity_degree - target.size_metrics.avg_entity_degree).abs()
                 / source.size_metrics.avg_entity_degree;
 
-        let clustering_changes = 0.1; // Placeholder - would calculate actual clustering coefficients
-        let path_length_changes = 0.15; // Placeholder
-        let community_structure_changes = 0.2; // Placeholder
+        let clustering_changes = relative_change(
+            source.size_metrics.graph_density,
+            target.size_metrics.graph_density,
+        );
+        let path_length_changes = relative_change(
+            source.complexity_metrics.hierarchical_depth as f64,
+            target.complexity_metrics.hierarchical_depth as f64,
+        );
+        let community_structure_changes = relative_change(
+            source.complexity_metrics.structural_complexity,
+            target.complexity_metrics.structural_complexity,
+        );
 
         Ok(StructuralChanges {
             degree_distribution_shift,
@@ -1486,5 +1541,70 @@ mod tests {
 
         // Should have reasonable similarity due to shared entity and relation types
         assert!(similarity > 0.2);
+    }
+
+    /// Regression test for the P3 finding: structural change metrics must be
+    /// derived from real per-domain statistics and must genuinely vary with
+    /// the input, instead of hardcoded constants (0.1 / 0.15 / 0.2).
+    #[test]
+    fn test_analyze_structural_changes_varies_with_real_data() {
+        let manager = CrossDomainTransferManager::new(TransferConfig::default());
+
+        let base_characteristics =
+            |graph_density: f64, hierarchical_depth: usize, structural_complexity: f64| {
+                DomainCharacteristics {
+                    domain_type: "test".to_string(),
+                    language: "en".to_string(),
+                    entity_types: vec![],
+                    relation_types: vec![],
+                    size_metrics: DomainSizeMetrics {
+                        num_entities: 100,
+                        num_relations: 10,
+                        num_triples: 500,
+                        avg_entity_degree: 5.0,
+                        graph_density,
+                    },
+                    complexity_metrics: DomainComplexityMetrics {
+                        entity_type_diversity: 2,
+                        relation_type_diversity: 2,
+                        hierarchical_depth,
+                        semantic_diversity: 0.5,
+                        structural_complexity,
+                    },
+                }
+            };
+
+        let source = base_characteristics(0.1, 4, 0.5);
+
+        // Identical to source: every change metric must be exactly zero.
+        let identical_target = base_characteristics(0.1, 4, 0.5);
+        let no_change = manager
+            .analyze_structural_changes(&source, &identical_target)
+            .expect("should succeed");
+        assert_eq!(no_change.clustering_changes, 0.0);
+        assert_eq!(no_change.path_length_changes, 0.0);
+        assert_eq!(no_change.community_structure_changes, 0.0);
+
+        // A very different target must show non-zero, differing change
+        // metrics that genuinely reflect the differing inputs.
+        let different_target = base_characteristics(0.5, 8, 0.9);
+        let changed = manager
+            .analyze_structural_changes(&source, &different_target)
+            .expect("should succeed");
+        assert!(
+            changed.clustering_changes > 0.0,
+            "clustering_changes = {}",
+            changed.clustering_changes
+        );
+        assert!(
+            changed.path_length_changes > 0.0,
+            "path_length_changes = {}",
+            changed.path_length_changes
+        );
+        assert!(
+            changed.community_structure_changes > 0.0,
+            "community_structure_changes = {}",
+            changed.community_structure_changes
+        );
     }
 }

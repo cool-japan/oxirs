@@ -44,11 +44,18 @@
 //!
 //! ```rust,no_run
 //! use oxirs_tdb::distributed::coordinator::{TransactionCoordinator, CoordinatorConfig, CommitProtocol};
+//! use oxirs_tdb::consensus::transport::LoopbackSimulationTransport;
 //!
 //! # async fn example() -> anyhow::Result<()> {
-//! // Create coordinator
+//! // Create coordinator. A real multi-node deployment must supply a
+//! // transport backed by real network I/O; LoopbackSimulationTransport is
+//! // only for single-process tests/local development.
 //! let config = CoordinatorConfig::default();
-//! let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+//! let mut coordinator = TransactionCoordinator::with_transport(
+//!     "coordinator-1".to_string(),
+//!     config,
+//!     LoopbackSimulationTransport::arc(),
+//! );
 //!
 //! // Register participants
 //! coordinator.register_participant("node1".to_string(), "http://node1:8080".to_string()).await?;
@@ -66,6 +73,7 @@
 //! ```
 
 use crate::consensus::paxos::{PaxosProposer, ProposalValue};
+use crate::consensus::transport::NetworkTransport;
 use crate::error::{Result, TdbError};
 use crate::transaction::three_phase_commit::{ThreePhaseCoordinator, TpcPhase};
 use crate::transaction::two_phase_commit::{Participant, TpcState, TwoPhaseCoordinator};
@@ -186,6 +194,12 @@ pub struct TransactionCoordinator {
     txn_counter: Arc<Mutex<u64>>,
     /// Statistics
     stats: Arc<Mutex<CoordinatorStats>>,
+    /// Real (or explicitly-simulated) network transport used to reach
+    /// participants for Paxos/2PC/3PC. `None` means no transport has been
+    /// configured, in which case `commit_transaction()` fails loudly with
+    /// `TdbError::DistributedTransportNotConfigured` instead of fabricating
+    /// participant acknowledgements (see `consensus::transport`).
+    transport: Option<Arc<dyn NetworkTransport>>,
 }
 
 /// Transaction Coordinator Statistics
@@ -214,7 +228,16 @@ pub struct CoordinatorStats {
 }
 
 impl TransactionCoordinator {
-    /// Create a new Transaction Coordinator
+    /// Create a new Transaction Coordinator with no transport configured.
+    ///
+    /// **Note:** `commit_transaction()` on a coordinator built this way
+    /// always fails with [`TdbError::DistributedTransportNotConfigured`] for
+    /// every [`CommitProtocol`] — there is no way to honestly reach
+    /// participants without a transport. Use
+    /// [`TransactionCoordinator::with_transport`] (with a real network-backed
+    /// transport, or
+    /// [`crate::consensus::transport::LoopbackSimulationTransport`] for
+    /// single-node tests) to actually drive distributed commits.
     pub fn new(id: String, config: CoordinatorConfig) -> Self {
         Self {
             id,
@@ -223,7 +246,21 @@ impl TransactionCoordinator {
             participants: Arc::new(RwLock::new(HashMap::new())),
             txn_counter: Arc::new(Mutex::new(0)),
             stats: Arc::new(Mutex::new(CoordinatorStats::default())),
+            transport: None,
         }
+    }
+
+    /// Create a new Transaction Coordinator backed by a real (or
+    /// explicitly-simulated) [`NetworkTransport`]. This is the constructor
+    /// production code should use.
+    pub fn with_transport(
+        id: String,
+        config: CoordinatorConfig,
+        transport: Arc<dyn NetworkTransport>,
+    ) -> Self {
+        let mut coordinator = Self::new(id, config);
+        coordinator.transport = Some(transport);
+        coordinator
     }
 
     /// Register a participant node
@@ -349,6 +386,17 @@ impl TransactionCoordinator {
             )));
         }
 
+        // Every commit protocol requires a real (or explicitly-simulated)
+        // NetworkTransport to honestly reach participants. Without one, fail
+        // loudly instead of letting the underlying protocol fabricate
+        // acknowledgements (see consensus::transport).
+        if self.transport.is_none() {
+            return Err(TdbError::DistributedTransportNotConfigured {
+                node_id: self.id.clone(),
+                protocol: format!("{:?}", metadata.protocol),
+            });
+        }
+
         // Execute commit protocol
         let result = match metadata.protocol {
             CommitProtocol::TwoPhase => self.execute_two_phase_commit(&metadata).await?,
@@ -421,7 +469,15 @@ impl TransactionCoordinator {
 
     /// Execute Two-Phase Commit protocol
     async fn execute_two_phase_commit(&self, metadata: &TransactionMetadata) -> Result<bool> {
-        let mut coordinator = TwoPhaseCoordinator::new(metadata.txn_id.clone());
+        let transport =
+            self.transport
+                .clone()
+                .ok_or_else(|| TdbError::DistributedTransportNotConfigured {
+                    node_id: self.id.clone(),
+                    protocol: "TwoPhaseCommit".to_string(),
+                })?;
+        let mut coordinator =
+            TwoPhaseCoordinator::with_transport(metadata.txn_id.clone(), transport);
 
         // Add participants
         for node_id in &metadata.participants {
@@ -437,6 +493,15 @@ impl TransactionCoordinator {
     }
 
     /// Execute Three-Phase Commit protocol
+    ///
+    /// NOTE: `commit_transaction()` already refuses to reach this method
+    /// without `self.transport` configured (see the check at the top of
+    /// `commit_transaction`), so a caller can no longer get a silent fake
+    /// success out of `CommitProtocol::ThreePhase` when no transport exists.
+    /// `transaction::three_phase_commit::ThreePhaseCoordinator` itself is
+    /// owned by a different module than this coordinator and does not yet
+    /// accept an injected `NetworkTransport` — wiring it through is tracked
+    /// as follow-up work, not fixed in this pass.
     async fn execute_three_phase_commit(&self, metadata: &TransactionMetadata) -> Result<bool> {
         let mut coordinator = ThreePhaseCoordinator::new(metadata.txn_id.clone());
 
@@ -455,7 +520,14 @@ impl TransactionCoordinator {
 
     /// Execute Paxos-based commit
     async fn execute_paxos_commit(&self, metadata: &TransactionMetadata) -> Result<bool> {
-        let mut proposer = PaxosProposer::new(self.id.clone());
+        let transport =
+            self.transport
+                .clone()
+                .ok_or_else(|| TdbError::DistributedTransportNotConfigured {
+                    node_id: self.id.clone(),
+                    protocol: "Paxos".to_string(),
+                })?;
+        let mut proposer = PaxosProposer::with_transport(self.id.clone(), transport);
 
         // Add acceptors (participants)
         for node_id in &metadata.participants {
@@ -591,7 +663,11 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_creation() {
         let config = CoordinatorConfig::default();
-        let coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         assert_eq!(coordinator.id(), "coordinator-1");
         assert_eq!(coordinator.participant_count(), 0);
@@ -599,9 +675,42 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_register_participants() {
+    async fn test_commit_transaction_without_transport_fails_loudly() {
+        // Regression test for the fabricated-consensus bug: none of
+        // TwoPhase/ThreePhase/Paxos may report a fake commit success when no
+        // NetworkTransport has been configured.
         let config = CoordinatorConfig::default();
         let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+
+        coordinator
+            .register_participant("node1".to_string(), "http://node1:8080".to_string())
+            .await
+            .unwrap();
+
+        for protocol in [
+            CommitProtocol::TwoPhase,
+            CommitProtocol::ThreePhase,
+            CommitProtocol::Paxos,
+        ] {
+            let txn_id = coordinator.begin_transaction(protocol).await.unwrap();
+            let err = coordinator.commit_transaction(&txn_id).await.unwrap_err();
+            assert!(
+                matches!(err, TdbError::DistributedTransportNotConfigured { .. }),
+                "protocol {:?} must fail loudly without a transport, got {:?}",
+                protocol,
+                err
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_register_participants() {
+        let config = CoordinatorConfig::default();
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -620,7 +729,11 @@ mod tests {
     #[tokio::test]
     async fn test_begin_transaction() {
         let config = CoordinatorConfig::default();
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -643,7 +756,11 @@ mod tests {
     #[tokio::test]
     async fn test_commit_transaction_2pc() {
         let config = CoordinatorConfig::default();
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -674,7 +791,11 @@ mod tests {
     #[tokio::test]
     async fn test_commit_transaction_3pc() {
         let config = CoordinatorConfig::default();
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -696,7 +817,11 @@ mod tests {
     #[tokio::test]
     async fn test_commit_transaction_paxos() {
         let config = CoordinatorConfig::default();
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -728,7 +853,11 @@ mod tests {
     #[tokio::test]
     async fn test_abort_transaction() {
         let config = CoordinatorConfig::default();
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -752,7 +881,11 @@ mod tests {
     #[tokio::test]
     async fn test_heartbeat_tracking() {
         let config = CoordinatorConfig::default();
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -773,7 +906,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -805,7 +942,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -829,7 +970,11 @@ mod tests {
     #[tokio::test]
     async fn test_get_active_transactions() {
         let config = CoordinatorConfig::default();
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -860,7 +1005,11 @@ mod tests {
     #[tokio::test]
     async fn test_coordinator_stats() {
         let config = CoordinatorConfig::default();
-        let mut coordinator = TransactionCoordinator::new("coordinator-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coordinator-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
 
         coordinator
             .register_participant("node1".to_string(), "http://node1:8080".to_string())
@@ -900,7 +1049,11 @@ mod tests {
     #[tokio::test]
     async fn test_abort_fanout_to_participants() {
         let config = CoordinatorConfig::default();
-        let mut coordinator = TransactionCoordinator::new("coord-1".to_string(), config);
+        let mut coordinator = TransactionCoordinator::with_transport(
+            "coord-1".to_string(),
+            config,
+            crate::consensus::transport::LoopbackSimulationTransport::arc(),
+        );
         coordinator
             .register_participant("n1".to_string(), "http://n1:8080".to_string())
             .await

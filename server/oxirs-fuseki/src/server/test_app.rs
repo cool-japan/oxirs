@@ -142,6 +142,7 @@ pub fn build_minimal_app_state(
         batch_executor: None,
         stream_manager: None,
         dataset_manager: None,
+        api_key_service: None,
         security_auditor: None,
         ddos_protector: None,
         load_balancer: None,

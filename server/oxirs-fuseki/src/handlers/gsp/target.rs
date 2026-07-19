@@ -129,7 +129,15 @@ impl GraphAccess {
         }
     }
 
-    /// Replace all triples in this graph
+    /// Replace all triples in this graph.
+    ///
+    /// This is documented (and used by GSP PUT) as an atomic replace. Because
+    /// the `Store` trait exposes no multi-statement transaction, atomicity is
+    /// achieved with explicit rollback: the existing graph contents are
+    /// snapshotted first, then removed, then the new triples are inserted; if
+    /// ANY step fails midway, every partial change is undone so the graph is
+    /// restored to its exact pre-call state before the error is returned. A
+    /// failed PUT therefore never leaves a half-cleared / half-populated graph.
     pub fn replace_triples(
         &self,
         store: &dyn Store,
@@ -142,69 +150,83 @@ impl GraphAccess {
             )));
         }
 
-        match &self.target {
-            GraphTarget::Default => {
-                // Clear default graph
-                let existing = store
-                    .find_quads(None, None, None, Some(&GraphName::DefaultGraph))
-                    .map_err(|e| GspError::StoreError(e.to_string()))?;
-
-                for quad in existing {
-                    store
-                        .remove_quad(&quad)
-                        .map_err(|e| GspError::StoreError(e.to_string()))?;
-                }
-
-                // Insert new triples
-                for triple in &triples {
-                    let quad = Quad::new(
-                        triple.subject().clone(),
-                        triple.predicate().clone(),
-                        triple.object().clone(),
-                        GraphName::DefaultGraph,
-                    );
-                    store
-                        .insert_quad(quad)
-                        .map_err(|e| GspError::StoreError(e.to_string()))?;
-                }
-
-                Ok(triples.len())
-            }
+        let graph_name = match &self.target {
+            GraphTarget::Default => GraphName::DefaultGraph,
             GraphTarget::Named(uri) => {
                 let node = NamedNode::new(uri)
                     .map_err(|e| GspError::BadRequest(format!("Invalid graph URI: {}", e)))?;
-                let graph_name = GraphName::NamedNode(node);
+                GraphName::NamedNode(node)
+            }
+            GraphTarget::Union => {
+                return Err(GspError::MethodNotAllowed(
+                    "Cannot write to union graph".to_string(),
+                ))
+            }
+        };
 
-                // Clear named graph
-                let existing = store
-                    .find_quads(None, None, None, Some(&graph_name))
-                    .map_err(|e| GspError::StoreError(e.to_string()))?;
+        Self::replace_graph_atomic(store, &graph_name, triples)
+    }
 
-                for quad in existing {
-                    store
-                        .remove_quad(&quad)
-                        .map_err(|e| GspError::StoreError(e.to_string()))?;
+    /// Atomically replace the contents of `graph_name` with `triples`, rolling
+    /// back all partial changes on any store error.
+    fn replace_graph_atomic(
+        store: &dyn Store,
+        graph_name: &GraphName,
+        triples: Vec<Triple>,
+    ) -> Result<usize, GspError> {
+        // 1. Snapshot the current graph contents (needed for rollback).
+        let existing = store
+            .find_quads(None, None, None, Some(graph_name))
+            .map_err(|e| GspError::StoreError(e.to_string()))?;
+
+        // 2. Remove existing quads. On failure, re-insert the ones already
+        //    removed and abort — the graph is back to its original state.
+        for (i, quad) in existing.iter().enumerate() {
+            if let Err(e) = store.remove_quad(quad) {
+                for restored in &existing[..i] {
+                    if let Err(re) = store.insert_quad(restored.clone()) {
+                        tracing::warn!("GSP replace rollback (re-insert) failed: {re}");
+                    }
                 }
+                return Err(GspError::StoreError(format!(
+                    "replace failed while clearing graph (changes rolled back): {e}"
+                )));
+            }
+        }
 
-                // Insert new triples
-                for triple in &triples {
-                    let quad = Quad::new(
-                        triple.subject().clone(),
-                        triple.predicate().clone(),
-                        triple.object().clone(),
+        // 3. Insert the new triples. On failure, remove the ones already
+        //    inserted and re-insert the full original contents.
+        for (idx, triple) in triples.iter().enumerate() {
+            let quad = Quad::new(
+                triple.subject().clone(),
+                triple.predicate().clone(),
+                triple.object().clone(),
+                graph_name.clone(),
+            );
+            if let Err(e) = store.insert_quad(quad) {
+                for undo in &triples[..idx] {
+                    let undo_quad = Quad::new(
+                        undo.subject().clone(),
+                        undo.predicate().clone(),
+                        undo.object().clone(),
                         graph_name.clone(),
                     );
-                    store
-                        .insert_quad(quad)
-                        .map_err(|e| GspError::StoreError(e.to_string()))?;
+                    if let Err(re) = store.remove_quad(&undo_quad) {
+                        tracing::warn!("GSP replace rollback (remove) failed: {re}");
+                    }
                 }
-
-                Ok(triples.len())
+                for restored in &existing {
+                    if let Err(re) = store.insert_quad(restored.clone()) {
+                        tracing::warn!("GSP replace rollback (restore) failed: {re}");
+                    }
+                }
+                return Err(GspError::StoreError(format!(
+                    "replace failed while inserting (changes rolled back): {e}"
+                )));
             }
-            GraphTarget::Union => Err(GspError::MethodNotAllowed(
-                "Cannot write to union graph".to_string(),
-            )),
         }
+
+        Ok(triples.len())
     }
 
     /// Add triples to this graph
@@ -230,20 +252,24 @@ impl GraphAccess {
             }
         };
 
-        // Insert new triples
-        for triple in &triples {
-            let quad = Quad::new(
-                triple.subject().clone(),
-                triple.predicate().clone(),
-                triple.object().clone(),
-                graph_name.clone(),
-            );
-            store
-                .insert_quad(quad)
-                .map_err(|e| GspError::StoreError(e.to_string()))?;
-        }
+        // Accumulate the target-graph quads and insert the whole batch through
+        // the single batched ingest path instead of a per-triple loop.
+        let count = triples.len();
+        let batch: Vec<Quad> = triples
+            .into_iter()
+            .map(|triple| {
+                Quad::new(
+                    triple.subject().clone(),
+                    triple.predicate().clone(),
+                    triple.object().clone(),
+                    graph_name.clone(),
+                )
+            })
+            .collect();
+        crate::store::bulk_insert_quads(store, batch)
+            .map_err(|e| GspError::StoreError(e.to_string()))?;
 
-        Ok(triples.len())
+        Ok(count)
     }
 
     /// Delete all triples from this graph
@@ -352,5 +378,101 @@ mod tests {
 
         let triples = access.get_triples(&store).unwrap();
         assert_eq!(triples.len(), 1);
+    }
+
+    /// Regression: a store error partway through a GSP PUT replace must roll
+    /// back so the graph is restored to its exact pre-call contents, never left
+    /// half-cleared / half-populated.
+    #[test]
+    fn test_replace_triples_atomic_rollback_on_insert_error() {
+        use oxirs_core::model::{Object, Predicate, Subject};
+        use oxirs_core::rdf_store::{ConcreteStore, OxirsQueryResults, PreparedQuery};
+        use oxirs_core::OxirsError;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct FailingStore {
+            inner: ConcreteStore,
+            insert_calls: AtomicUsize,
+            fail_at: usize,
+        }
+
+        impl Store for FailingStore {
+            fn insert_quad(&self, quad: Quad) -> oxirs_core::Result<bool> {
+                let n = self.insert_calls.fetch_add(1, Ordering::SeqCst);
+                if n == self.fail_at {
+                    return Err(OxirsError::Store("injected insert failure".to_string()));
+                }
+                self.inner.insert_quad(quad)
+            }
+            fn remove_quad(&self, quad: &Quad) -> oxirs_core::Result<bool> {
+                self.inner.remove_quad(quad)
+            }
+            fn find_quads(
+                &self,
+                s: Option<&Subject>,
+                p: Option<&Predicate>,
+                o: Option<&Object>,
+                g: Option<&GraphName>,
+            ) -> oxirs_core::Result<Vec<Quad>> {
+                self.inner.find_quads(s, p, o, g)
+            }
+            fn is_ready(&self) -> bool {
+                self.inner.is_ready()
+            }
+            fn len(&self) -> oxirs_core::Result<usize> {
+                self.inner.len()
+            }
+            fn is_empty(&self) -> oxirs_core::Result<bool> {
+                self.inner.is_empty()
+            }
+            fn query(&self, sparql: &str) -> oxirs_core::Result<OxirsQueryResults> {
+                self.inner.query(sparql)
+            }
+            fn prepare_query(&self, sparql: &str) -> oxirs_core::Result<PreparedQuery> {
+                self.inner.prepare_query(sparql)
+            }
+        }
+
+        // Seed the default graph with two original triples.
+        let inner = ConcreteStore::new().unwrap();
+        for i in 0..2 {
+            let s = NamedNode::new(format!("http://example.org/orig{i}")).unwrap();
+            let p = NamedNode::new("http://example.org/p").unwrap();
+            let o = Literal::new_simple_literal(format!("v{i}"));
+            inner.insert_triple(Triple::new(s, p, o)).unwrap();
+        }
+        // Fail on the second NEW insert (index 1).
+        let failing = FailingStore {
+            inner,
+            insert_calls: AtomicUsize::new(0),
+            fail_at: 1,
+        };
+
+        let new_triples: Vec<Triple> = (0..3)
+            .map(|i| {
+                let s = NamedNode::new(format!("http://example.org/new{i}")).unwrap();
+                let p = NamedNode::new("http://example.org/p").unwrap();
+                let o = Literal::new_simple_literal(format!("n{i}"));
+                Triple::new(s, p, o)
+            })
+            .collect();
+
+        let access = GraphAccess::new(GraphTarget::Default, &failing);
+        let result = access.replace_triples(&failing, new_triples);
+        assert!(result.is_err(), "replace must fail when an insert errors");
+
+        // Rollback must have restored exactly the original two triples.
+        let remaining = access.get_triples(&failing).unwrap();
+        assert_eq!(
+            remaining.len(),
+            2,
+            "graph must be restored to original contents after rollback"
+        );
+        assert!(
+            remaining
+                .iter()
+                .all(|t| t.subject().to_string().contains("orig")),
+            "only the original triples should remain after rollback"
+        );
     }
 }

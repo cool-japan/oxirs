@@ -8,31 +8,38 @@ use oxirs_core::RdfTerm;
 use std::error::Error;
 use std::fs;
 use std::io::BufReader;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// Map a schema file's extension to its RDF serialization format.
+///
+/// Shared by schema-type detection and every schema parser so the set of
+/// supported extensions stays consistent. An unknown or absent extension is an
+/// explicit error rather than a silent default.
+pub(super) fn detect_rdf_format(path: &Path) -> Result<RdfFormat, Box<dyn Error>> {
+    let extension = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .ok_or("File has no extension")?;
+    match extension.to_lowercase().as_str() {
+        "ttl" => Ok(RdfFormat::Turtle),
+        "rdf" | "xml" | "owl" => Ok(RdfFormat::RdfXml),
+        "nt" => Ok(RdfFormat::NTriples),
+        "nq" => Ok(RdfFormat::NQuads),
+        "trig" => Ok(RdfFormat::TriG),
+        "jsonld" | "json" => Ok(RdfFormat::JsonLd {
+            profile: oxirs_core::format::JsonLdProfileSet::empty(),
+        }),
+        "n3" => Ok(RdfFormat::N3),
+        ext => Err(format!("Unsupported file extension: {}", ext).into()),
+    }
+}
 
 /// Detect the type of schema file (SHACL, RDFS, or OWL)
 pub(super) fn detect_schema_type(
     schema_file: &PathBuf,
     ctx: &crate::cli::CliContext,
 ) -> Result<String, Box<dyn Error>> {
-    let format = match schema_file
-        .extension()
-        .and_then(|e| e.to_str())
-        .ok_or("File has no extension")?
-        .to_lowercase()
-        .as_str()
-    {
-        "ttl" => RdfFormat::Turtle,
-        "rdf" | "xml" => RdfFormat::RdfXml,
-        "nt" => RdfFormat::NTriples,
-        "nq" => RdfFormat::NQuads,
-        "trig" => RdfFormat::TriG,
-        "jsonld" | "json" => RdfFormat::JsonLd {
-            profile: oxirs_core::format::JsonLdProfileSet::empty(),
-        },
-        "n3" => RdfFormat::N3,
-        ext => return Err(format!("Unsupported file extension: {}", ext).into()),
-    };
+    let format = detect_rdf_format(schema_file)?;
     let file = fs::File::open(schema_file)?;
     let reader = BufReader::new(file);
     let parser = RdfParser::new(format);

@@ -11,6 +11,7 @@ use crate::{ClusterError, Result};
 use oxirs_core::model::Triple;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{error, info, warn};
@@ -153,6 +154,37 @@ impl ShardManager {
         }
 
         Ok(())
+    }
+
+    /// Register (or update) the network address of a peer node with the
+    /// underlying [`NetworkService`], so that shard-management RPCs issued by
+    /// this manager (shard creation via [`ShardManager::create_shard`], triple
+    /// storage forwarding/replication via [`ShardManager::store_triple`],
+    /// remote shard queries via [`ShardManager::query_triples`], and shard
+    /// split/merge/migrate/rebalance data transfer via
+    /// [`ShardManager::transfer_shard_data`]) can actually reach it.
+    ///
+    /// This is the lifecycle hook cluster bootstrap / membership code must
+    /// call for every peer node **before** any topology-changing call that
+    /// addresses it -- most importantly before
+    /// [`ShardManager::initialize_shards`]. Without a prior registration,
+    /// [`NetworkService::send_message`] fails loudly with "no known network
+    /// address for node N; register the peer before sending" instead of
+    /// silently dropping the RPC, so a peer whose address is genuinely
+    /// unknown surfaces as an explicit error rather than a fabricated
+    /// success.
+    pub async fn register_peer(&self, node_id: OxirsNodeId, address: SocketAddr) {
+        self.network.register_peer(node_id, address).await;
+    }
+
+    /// Bulk-register peer addresses; see [`ShardManager::register_peer`].
+    pub async fn register_peers<I>(&self, peers: I)
+    where
+        I: IntoIterator<Item = (OxirsNodeId, SocketAddr)>,
+    {
+        for (node_id, address) in peers {
+            self.register_peer(node_id, address).await;
+        }
     }
 
     /// Initialize shards based on strategy
@@ -987,6 +1019,62 @@ mod tests {
     use super::*;
     use crate::network::NetworkConfig;
     use crate::storage::mock::MockStorageBackend;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    /// Stand up a loopback TCP listener that accepts connections forever and,
+    /// for each one, reads a single length-prefixed oxicode-encoded
+    /// [`RpcMessage`] frame (matching the wire format
+    /// `crate::network::write_frame`/`read_frame` use) and replies with a
+    /// validly-framed (but otherwise arbitrary) `RpcMessage` response.
+    /// `NetworkService::send_message` only requires a well-formed response
+    /// frame -- it does not validate the response variant -- so this proves
+    /// real end-to-end delivery over a real socket once a peer address has
+    /// been registered, mirroring the pattern used by `network.rs`'s own
+    /// `test_send_message_delivers_to_registered_peer`.
+    async fn spawn_loopback_echo() -> std::net::SocketAddr {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind loopback listener");
+        let addr = listener.local_addr().expect("listener has no local addr");
+
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                tokio::spawn(async move {
+                    let mut len_buf = [0u8; 4];
+                    if socket.read_exact(&mut len_buf).await.is_err() {
+                        return;
+                    }
+                    let len = u32::from_be_bytes(len_buf) as usize;
+                    let mut body = vec![0u8; len];
+                    if socket.read_exact(&mut body).await.is_err() {
+                        return;
+                    }
+                    // The request body content is irrelevant to the echo server;
+                    // any well-formed RpcMessage response satisfies send_message.
+                    let response = RpcMessage::HeartbeatResponse { term: 0 };
+                    let Ok(resp_body) =
+                        oxicode::serde::encode_to_vec(&response, oxicode::config::standard())
+                    else {
+                        return;
+                    };
+                    let resp_len = (resp_body.len() as u32).to_be_bytes();
+                    if socket.write_all(&resp_len).await.is_err() {
+                        return;
+                    }
+                    if socket.write_all(&resp_body).await.is_err() {
+                        return;
+                    }
+                    let _ = socket.flush().await;
+                });
+            }
+        });
+
+        addr
+    }
 
     #[tokio::test]
     async fn test_shard_manager_creation() {
@@ -1011,7 +1099,19 @@ mod tests {
         let storage = Arc::new(MockStorageBackend::new());
         let network = Arc::new(NetworkService::new(1, NetworkConfig::default()));
 
-        let manager = ShardManager::new(1, router, config, storage, network);
+        let manager = ShardManager::new(1, router, config, storage, network.clone());
+
+        // Real inter-node RPC now fails loudly unless the target peer's address
+        // has been registered (NetworkService::send_message). Nodes 2-4 are
+        // remote from this manager's perspective (node 1), so register a real
+        // loopback echo listener for each of them before touching the
+        // shard-assignment path -- mirroring how a real cluster bootstrap would
+        // call `ShardManager::register_peer` for every peer learned from
+        // membership/config before issuing shard-management RPCs.
+        let echo_addr = spawn_loopback_echo().await;
+        for peer in [2, 3, 4] {
+            manager.register_peer(peer, echo_addr).await;
+        }
 
         let nodes = vec![1, 2, 3, 4];
         manager.initialize_shards(&strategy, nodes).await.unwrap();
@@ -1019,5 +1119,31 @@ mod tests {
         // Check that shards were created
         let ownership = manager.shard_ownership.read().await;
         assert_eq!(ownership.len(), 2);
+    }
+
+    /// Regression test for the honest fail-loud behavior: a peer that was
+    /// never registered must surface as an explicit error from
+    /// `initialize_shards`, never a silently-dropped RPC.
+    #[tokio::test]
+    async fn test_shard_initialization_fails_loud_for_unregistered_peer() {
+        let strategy = ShardingStrategy::Hash { num_shards: 1 };
+        let router = Arc::new(ShardRouter::new(strategy.clone()));
+        let config = ShardManagerConfig {
+            replication_factor: 1,
+            ..Default::default()
+        };
+        let storage = Arc::new(MockStorageBackend::new());
+        let network = Arc::new(NetworkService::new(1, NetworkConfig::default()));
+        let manager = ShardManager::new(1, router, config, storage, network);
+
+        // Node 99 is a remote peer that was never registered.
+        let err = manager
+            .initialize_shards(&strategy, vec![99])
+            .await
+            .expect_err("initializing a shard on an unregistered peer must fail loud");
+        assert!(
+            err.to_string().contains("no known network address"),
+            "unexpected error: {err}"
+        );
     }
 }

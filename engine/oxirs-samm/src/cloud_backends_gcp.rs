@@ -49,6 +49,23 @@ impl GcsConfig {
                 "GcsConfig requires either an access_token or service_account_key".to_string(),
             );
         }
+        // `service_account_key` alone cannot yet authenticate: the JWT/OAuth2
+        // service-account token-exchange flow (RS256-signing a claim set with
+        // the private key from the JSON key file, then POSTing to Google's
+        // token endpoint) is not implemented in this crate — there is no
+        // RSA-signing dependency wired in. Rather than constructing a backend
+        // that will only discover this at first-request time (a much later,
+        // harder-to-diagnose failure), reject the configuration up front.
+        if self.access_token.is_none() && self.service_account_key.is_some() {
+            return Err(
+                "GcsConfig::with_service_account() cannot authenticate on its own: automatic \
+                 service-account JWT/OAuth2 token exchange is not yet implemented in oxirs-samm. \
+                 Exchange the service-account key for a Bearer token yourself (e.g. via \
+                 `gcloud auth print-access-token` or the Google Cloud SDK) and construct the \
+                 config with `GcsConfig::with_access_token` instead."
+                    .to_string(),
+            );
+        }
         Ok(())
     }
 
@@ -56,6 +73,10 @@ impl GcsConfig {
         if let Some(ref tok) = self.access_token {
             return Some(tok.clone());
         }
+        // Unreachable in practice: `validate()` (always called by
+        // `GcsBackend::new`) rejects service-account-only configs before a
+        // backend can be constructed. Kept as a defensive fallback in case a
+        // `GcsConfig` is ever used without going through `GcsBackend::new`.
         warn!("GcsConfig: service_account_key supplied but automatic token exchange is not yet implemented; supply access_token instead");
         None
     }
@@ -75,6 +96,7 @@ const GCS_UPLOAD_URL: &str = "https://storage.googleapis.com/upload/storage/v1";
 /// Google Cloud Storage backend.
 ///
 /// Authenticates via a Bearer token (OAuth2 access token).
+#[derive(Debug)]
 pub struct GcsBackend {
     config: GcsConfig,
     client: Client,
@@ -281,5 +303,35 @@ impl CloudStorageBackend for GcsBackend {
     async fn list(&self, prefix: &str) -> std::result::Result<Vec<String>, String> {
         let full_prefix = self.config.full_key(prefix);
         self.gcs_list(&full_prefix).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_service_account_only_config_fails_construction() {
+        // A `service_account_key`-only config can never authenticate (no JWT
+        // exchange is implemented), so `GcsBackend::new` must fail loudly at
+        // construction time rather than allow a backend to be built that
+        // will only fail later, at first-request time.
+        let config = GcsConfig::with_service_account("my-bucket", "{\"type\":\"service_account\"}");
+        let result = GcsBackend::new(config);
+        assert!(result.is_err());
+        let message = result.unwrap_err();
+        assert!(message.contains("token exchange"), "message was: {message}");
+    }
+
+    #[test]
+    fn test_access_token_config_constructs_successfully() {
+        let config = GcsConfig::with_access_token("my-bucket", "test-token");
+        assert!(GcsBackend::new(config).is_ok());
+    }
+
+    #[test]
+    fn test_empty_bucket_fails_validation() {
+        let config = GcsConfig::with_access_token("", "test-token");
+        assert!(GcsBackend::new(config).is_err());
     }
 }

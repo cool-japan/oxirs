@@ -27,7 +27,22 @@ pub struct FileManager {
     file_size: Arc<RwLock<u64>>,
     /// Whether to use mmap (true) or direct I/O (false)
     use_mmap: bool,
+    /// Head of the on-disk free-page list (`None` when there are no free pages).
+    ///
+    /// Freed pages form a singly-linked list on disk: each free page stores the
+    /// [`PageId`] of the next free page in its first 8 bytes (`0` = end of list,
+    /// since page 0 is permanently reserved for the superblock). The head is
+    /// persisted in the superblock and restored via [`FileManager::set_free_list_head`]
+    /// when the store is reopened, so [`FileManager::allocate_page`] can reuse
+    /// freed pages across restarts.
+    free_list_head: Arc<RwLock<Option<PageId>>>,
 }
+
+/// Sentinel stored in a free page's "next" slot meaning "end of list".
+///
+/// Page 0 is permanently reserved for the superblock, so it can never be a
+/// legitimate free page and is therefore a safe "no next" marker.
+const FREE_LIST_NULL: u64 = 0;
 
 impl FileManager {
     /// Open or create a file
@@ -65,7 +80,20 @@ impl FileManager {
             mmap,
             file_size: Arc::new(RwLock::new(file_size)),
             use_mmap,
+            free_list_head: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Restore the head of the persisted free-page list (called on open after
+    /// the superblock has been read).
+    pub fn set_free_list_head(&self, head: Option<PageId>) {
+        *self.free_list_head.write() = head;
+    }
+
+    /// Current head of the persisted free-page list, to be recorded in the
+    /// superblock on `sync()`.
+    pub fn free_list_head(&self) -> Option<PageId> {
+        *self.free_list_head.read()
     }
 
     /// Get total number of pages
@@ -97,11 +125,68 @@ impl FileManager {
         Ok(())
     }
 
-    /// Allocate a new page (extend file and return page ID)
+    /// Allocate a page, reusing a previously freed page if one is available.
+    ///
+    /// Reused pages come from the persisted free-page list (see
+    /// [`FileManager::free_page`]); only when that list is empty is the file
+    /// physically extended.
     pub fn allocate_page(&self) -> Result<PageId> {
+        // Reuse a freed page first so the file does not grow unbounded.
+        {
+            let mut head_guard = self.free_list_head.write();
+            if let Some(free_id) = *head_guard {
+                let next = self.read_free_next(free_id)?;
+                *head_guard = next;
+                return Ok(free_id);
+            }
+        }
+
+        // No free pages: physically extend the file.
         let page_id = self.num_pages();
         self.extend_to(page_id + 1)?;
         Ok(page_id)
+    }
+
+    /// Return a page to the persisted free-page list so it can be reused by a
+    /// later [`FileManager::allocate_page`].
+    ///
+    /// The caller must ensure the page is no longer referenced by any live
+    /// structure and is not currently pinned in the buffer pool: this writes a
+    /// free-list node directly to the page on disk.
+    pub fn free_page(&self, page_id: PageId) -> Result<()> {
+        if page_id >= self.num_pages() {
+            return Err(TdbError::PageNotFound(page_id));
+        }
+        let mut head_guard = self.free_list_head.write();
+        let old_head = *head_guard;
+        // Chain the current head off the newly freed page, then make it the head.
+        self.write_free_next(page_id, old_head)?;
+        *head_guard = Some(page_id);
+        Ok(())
+    }
+
+    /// Read the "next free page" pointer stored in a free page's first 8 bytes.
+    fn read_free_next(&self, page_id: PageId) -> Result<Option<PageId>> {
+        let page = self.read_page(page_id)?;
+        let bytes = page.read_at(0, 8)?;
+        let mut arr = [0u8; 8];
+        arr.copy_from_slice(bytes);
+        let next = u64::from_le_bytes(arr);
+        if next == FREE_LIST_NULL {
+            Ok(None)
+        } else {
+            Ok(Some(next))
+        }
+    }
+
+    /// Write the "next free page" pointer into a free page's first 8 bytes.
+    fn write_free_next(&self, page_id: PageId, next: Option<PageId>) -> Result<()> {
+        let mut page = Page::new(page_id, PageType::Free);
+        let next_raw = next.unwrap_or(FREE_LIST_NULL);
+        page.write_at(0, &next_raw.to_le_bytes())?;
+        page.update_header();
+        self.write_page(&mut page)?;
+        Ok(())
     }
 
     /// Read a page from disk
@@ -160,18 +245,23 @@ impl FileManager {
                 return Err(TdbError::Other("Mmap not initialized".to_string()));
             }
         } else {
-            // Direct I/O
+            // Direct I/O. Persist the page's bytes to the physical device:
+            // std::fs::File::flush() is a documented no-op, so an explicit
+            // sync_data() is required for the write to be crash-durable.
             let mut file_guard = self.file.write();
             file_guard.seek(SeekFrom::Start(offset))?;
             file_guard.write_all(page_data)?;
-            file_guard.flush()?;
+            file_guard.sync_data()?;
         }
 
         page.set_dirty(false);
         Ok(())
     }
 
-    /// Flush all changes to disk
+    /// Flush all changes to disk, issuing a full fsync so that everything
+    /// written so far (including any file-length changes from `extend_to`) is
+    /// crash-durable. This is the durability barrier relied on by the buffer
+    /// pool's `flush_all()` checkpoint path and by `TdbStore::sync()`.
     pub fn flush(&self) -> Result<()> {
         if self.use_mmap {
             let mmap_guard = self.mmap.read();
@@ -179,8 +269,8 @@ impl FileManager {
                 mmap.flush()?;
             }
         } else {
-            let mut file_guard = self.file.write();
-            file_guard.flush()?;
+            let file_guard = self.file.write();
+            file_guard.sync_all()?;
         }
         Ok(())
     }
@@ -307,5 +397,69 @@ mod tests {
 
         let result = fm.read_page(999);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_file_manager_free_page_reuse() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let fm = FileManager::open(temp_file.path(), false).unwrap();
+
+        let p0 = fm.allocate_page().expect("alloc 0");
+        let p1 = fm.allocate_page().expect("alloc 1");
+        let p2 = fm.allocate_page().expect("alloc 2");
+        assert_eq!((p0, p1, p2), (0, 1, 2));
+        assert_eq!(fm.num_pages(), 3);
+
+        // Free p1 then p2: the free list is now [p2 -> p1].
+        fm.free_page(p1).expect("free p1");
+        fm.free_page(p2).expect("free p2");
+        assert_eq!(fm.free_list_head(), Some(p2));
+
+        // Allocation reuses freed pages LIFO without growing the file.
+        let a = fm.allocate_page().expect("realloc a");
+        let b = fm.allocate_page().expect("realloc b");
+        assert_eq!(a, p2);
+        assert_eq!(b, p1);
+        assert_eq!(fm.num_pages(), 3, "no file growth while free pages exist");
+        assert_eq!(fm.free_list_head(), None);
+
+        // The list is exhausted: the next allocation extends the file.
+        let c = fm.allocate_page().expect("realloc c");
+        assert_eq!(c, 3);
+        assert_eq!(fm.num_pages(), 4);
+    }
+
+    #[test]
+    fn test_file_manager_free_list_head_restore() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let fm = FileManager::open(temp_file.path(), false).unwrap();
+        for _ in 0..4 {
+            fm.allocate_page().expect("alloc");
+        }
+        fm.free_page(2).expect("free 2");
+
+        // Simulate reopen: a fresh handle with the persisted head restored.
+        let head = fm.free_list_head();
+        let fm2 = FileManager::open(temp_file.path(), false).unwrap();
+        fm2.set_free_list_head(head);
+        assert_eq!(fm2.allocate_page().expect("reuse across reopen"), 2);
+    }
+
+    #[test]
+    fn test_file_manager_write_page_is_durable() {
+        // A page written via write_page() must survive a reopen (fsynced).
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        {
+            let fm = FileManager::open(&path, false).unwrap();
+            let page_id = fm.allocate_page().unwrap();
+            let mut page = Page::new(page_id, PageType::BTreeLeaf);
+            page.write_at(0, b"durable").unwrap();
+            fm.write_page(&mut page).unwrap();
+            fm.flush().unwrap();
+        }
+        let fm = FileManager::open(&path, false).unwrap();
+        let page = fm.read_page(0).unwrap();
+        assert_eq!(page.read_at(0, 7).unwrap(), b"durable");
     }
 }

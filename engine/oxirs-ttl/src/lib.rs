@@ -1,9 +1,9 @@
 //! # OxiRS Turtle - RDF Format Parser
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-ttl/badge.svg)](https://docs.rs/oxirs-ttl)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Production-ready with 461 passing tests and 97% W3C compliance.
 //!
 //! High-performance parsing and serialization for RDF formats in the Turtle family.
@@ -141,6 +141,7 @@ pub mod lexer;
 pub mod parser;
 pub mod patch;
 pub mod profiling;
+mod statement_boundary;
 pub mod streaming;
 pub mod toolkit;
 pub mod writer;

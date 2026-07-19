@@ -26,7 +26,7 @@ geo-types = "0.7"
 wkt.workspace = true
 quick-xml = { workspace = true, optional = true }
 geojson = { workspace = true, optional = true }
-shapefile = { version = "0.8", optional = true }
+shapefile = { version = "0.9", optional = true }
 # NOTE: the GEOS (geos / geos-sys C FFI) computational-geometry backend has been
 # quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false) per
 # the COOLJAPAN Pure Rust Policy v2, so this published crate's --all-features
@@ -46,7 +46,7 @@ flatgeobuf = { version = "6.0", optional = true, default-features = false }
 geo-traits = { version = "0.3", optional = true }
 geozero = { version = "0.15", optional = true }
 fallible-streaming-iterator = { version = "0.1", optional = true }
-mvt = { version = "0.13", optional = true }
+mvt = { version = "0.14", optional = true }
 
 # R-tree spatial indexing
 rstar.workspace = true

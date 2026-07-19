@@ -73,8 +73,10 @@ impl NTriplesParser {
                 Ok(Some(triple)) => triples.push(triple),
                 Ok(None) => {} // Valid but empty line
                 Err(e) if self.lenient => {
-                    // Skip invalid lines in lenient mode
-                    eprintln!("Warning: Skipping invalid line {line_number}: {e}");
+                    // Skip invalid lines in lenient mode, routing the
+                    // diagnostic through the crate's tracing logger so
+                    // deployments can filter/route it like any other log.
+                    tracing::warn!("Skipping invalid N-Triples line {line_number}: {e}");
                 }
                 Err(e) => return Err(e),
             }
@@ -741,6 +743,25 @@ mod tests {
     fn test_ntriples_parser_lenient() {
         let parser = NTriplesParser::new().lenient();
         assert!(parser.is_lenient());
+    }
+
+    #[test]
+    fn test_ntriples_parser_lenient_skips_invalid_line_via_tracing() {
+        // Regression test: lenient mode must skip invalid lines and keep
+        // parsing valid ones, routing the diagnostic through `tracing`
+        // rather than `eprintln!` (verified structurally here; the actual
+        // log routing is exercised by the tracing macro at the call site).
+        let input = "<http://example.org/s> <http://example.org/p> \"valid\" .\n\
+                      this is not a valid ntriples line\n\
+                      <http://example.org/s2> <http://example.org/p2> \"valid2\" .\n";
+        let parser = NTriplesParser::new().lenient();
+        let triples = parser.parse_str(input).expect("lenient parse succeeds");
+        assert_eq!(triples.len(), 2);
+
+        // Strict mode must still surface the same error instead of
+        // silently skipping it.
+        let strict_parser = NTriplesParser::new();
+        assert!(strict_parser.parse_str(input).is_err());
     }
 
     #[test]

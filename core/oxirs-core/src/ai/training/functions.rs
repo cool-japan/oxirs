@@ -28,10 +28,19 @@ pub trait Trainer: Send + Sync {
         training_data: &[Triple],
         validation_data: &[Triple],
     ) -> Result<TrainingMetrics>;
-    /// Resume training from checkpoint
+    /// Resume training from checkpoint.
+    ///
+    /// `model` must be the same (exclusively-owned) model instance that
+    /// will continue training; if the checkpoint contains serialized
+    /// model parameters (`CheckpointData::model_state`), they are loaded
+    /// into `model` via [`KnowledgeGraphEmbedding::load`]. If the
+    /// checkpoint has no `model_state`, or `model` is not exclusively
+    /// owned (so parameters cannot be written into it), this returns an
+    /// error rather than silently resuming with un-restored parameters.
     async fn resume_training(
         &mut self,
         checkpoint_path: &str,
+        model: Arc<dyn KnowledgeGraphEmbedding>,
         training_data: &[Triple],
         validation_data: &[Triple],
     ) -> Result<TrainingMetrics>;

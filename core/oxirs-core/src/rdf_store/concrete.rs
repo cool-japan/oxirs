@@ -48,7 +48,11 @@ impl ConcreteStore {
 
 impl Default for ConcreteStore {
     fn default() -> Self {
-        ConcreteStore::new().expect("ConcreteStore::new() should not fail")
+        // RdfStore::default() constructs the in-memory backend infallibly, so
+        // no fallible unwrap is needed here (no-unwrap policy).
+        ConcreteStore {
+            inner: RwLock::new(RdfStore::default()),
+        }
     }
 }
 
@@ -114,6 +118,44 @@ impl Store for ConcreteStore {
             .read()
             .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         inner.prepare_query(sparql)
+    }
+
+    /// Delegate to `RdfStore`'s inherent `named_graphs` (via the same
+    /// inherent-method-priority resolution used by `len`/`is_empty`/`query`
+    /// above), which reads the interned graph-name index in O(graphs) instead
+    /// of the trait default's empty `Vec`.
+    fn named_graphs(&self) -> Result<Vec<NamedNode>> {
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+        inner.named_graphs()
+    }
+
+    fn bulk_insert_quads(&self, quads: Vec<Quad>) -> Result<usize> {
+        // RdfStore's Store impl inserts through interior mutability, so a shared
+        // borrow of the inner store is enough to reach its single-lock,
+        // single-fsync batch path.
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+        Store::bulk_insert_quads(&*inner, quads)
+    }
+
+    fn for_each_quad(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+        graph_name: Option<&GraphName>,
+        f: &mut dyn FnMut(Quad),
+    ) -> Result<()> {
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+        Store::for_each_quad(&*inner, subject, predicate, object, graph_name, f)
     }
 }
 

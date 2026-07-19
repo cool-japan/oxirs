@@ -4,6 +4,7 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
+use crate::algebra::Algebra;
 use anyhow::{bail, Result};
 use oxirs_core::model::NamedNode;
 
@@ -14,7 +15,13 @@ use super::queryparser_type::QueryParser;
 impl QueryParser {
     pub(super) fn parse_construct_query(&mut self, query: &mut Query) -> Result<()> {
         self.expect_token(Token::Construct)?;
-        if self.match_token(&Token::LeftBrace) {
+        // Two forms (SPARQL 1.1 §16.2):
+        //   * explicit template — `CONSTRUCT { tmpl } WHERE { … }`
+        //   * shorthand         — `CONSTRUCT WHERE { BGP }`, where the WHERE
+        //     block IS the template. The shorthand only permits a basic graph
+        //     pattern in WHERE.
+        let explicit_template = self.match_token(&Token::LeftBrace);
+        if explicit_template {
             query.construct_template = self.parse_construct_template()?;
             self.expect_token(Token::RightBrace)?;
         }
@@ -24,6 +31,24 @@ impl QueryParser {
         query.where_clause = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
         self.parse_solution_modifiers(query)?;
+        if !explicit_template {
+            // Shorthand: the template is the WHERE block's BGP. Anything other
+            // than a plain BGP (FILTER, OPTIONAL, GRAPH, UNION, BIND, …) is a
+            // syntax error for this form — fail loud rather than silently drop.
+            match &query.where_clause {
+                Algebra::Bgp(triples) => {
+                    query.construct_template = triples.clone();
+                }
+                // An empty WHERE group parses to `Table`; the template is then
+                // simply empty (an empty BGP), which is well-formed.
+                Algebra::Table => {}
+                other => bail!(
+                    "CONSTRUCT WHERE shorthand permits only a basic graph pattern in the \
+                     WHERE clause (no FILTER, OPTIONAL, GRAPH, UNION, BIND, MINUS, …); \
+                     found: {other:?}"
+                ),
+            }
+        }
         Ok(())
     }
     pub(super) fn parse_dataset_clause(&mut self, dataset: &mut DatasetClause) -> Result<()> {

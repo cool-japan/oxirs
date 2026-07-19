@@ -179,6 +179,12 @@ pub struct EntityLinker {
     kb: HashMap<String, KbEntry>,
     /// TF-IDF index over entity descriptions (for context disambiguation).
     tfidf: TfIdfIndex,
+    /// First character of every indexed label/alias (lowercased) → list of
+    /// IRIs sharing it. Used as a candidate-generation blocking step in
+    /// [`candidate_generation`](Self::candidate_generation) so mention
+    /// resolution need not run Jaro-Winkler against the entire knowledge
+    /// base for every mention.
+    first_char_index: HashMap<char, Vec<String>>,
     /// Minimum confidence threshold below which an entity is treated as NIL.
     pub nil_threshold: f64,
 }
@@ -194,6 +200,7 @@ impl EntityLinker {
         Self {
             kb: HashMap::new(),
             tfidf: TfIdfIndex::new(),
+            first_char_index: HashMap::new(),
             nil_threshold: 0.1,
         }
     }
@@ -213,6 +220,23 @@ impl EntityLinker {
         let aliases: Vec<String> = aliases.iter().map(|s| s.to_string()).collect();
         let context = format!("{} {}", label, aliases.join(" "));
         self.tfidf.add_document(iri.clone(), &context);
+
+        let mut first_chars: std::collections::HashSet<char> = std::collections::HashSet::new();
+        if let Some(c) = label.to_lowercase().chars().next() {
+            first_chars.insert(c);
+        }
+        for alias in &aliases {
+            if let Some(c) = alias.to_lowercase().chars().next() {
+                first_chars.insert(c);
+            }
+        }
+        for c in first_chars {
+            self.first_char_index
+                .entry(c)
+                .or_default()
+                .push(iri.clone());
+        }
+
         self.kb.insert(iri, KbEntry { label, aliases });
     }
 
@@ -247,12 +271,28 @@ impl EntityLinker {
     }
 
     /// Generate entity candidates matching the mention by string similarity.
+    ///
+    /// Uses [`first_char_index`](Self::first_char_index) as a blocking step:
+    /// only knowledge-base entries sharing the mention's first character are
+    /// scored with Jaro-Winkler, instead of the entire knowledge base. This
+    /// is a standard record-linkage optimization (Jaro-Winkler's own prefix
+    /// bonus already rewards shared leading characters, so genuine matches
+    /// overwhelmingly share the first character with the mention).
     pub fn candidate_generation(&self, mention: &str) -> Vec<EntityCandidate> {
         let mention_lower = mention.to_lowercase();
-        let mut candidates: Vec<EntityCandidate> = self
-            .kb
+        let Some(first_char) = mention_lower.chars().next() else {
+            return Vec::new();
+        };
+        let Some(blocked_iris) = self.first_char_index.get(&first_char) else {
+            return Vec::new();
+        };
+
+        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        let mut candidates: Vec<EntityCandidate> = blocked_iris
             .iter()
-            .filter_map(|(iri, entry)| {
+            .filter(|iri| seen.insert(iri.as_str()))
+            .filter_map(|iri| {
+                let entry = self.kb.get(iri)?;
                 let label_score = jaro_winkler(&mention_lower, &entry.label.to_lowercase());
                 let alias_score = entry
                     .aliases
@@ -598,6 +638,40 @@ mod tests {
         // "Curie" is an alias for Marie Curie
         let cands = linker.candidate_generation("Curie");
         assert!(cands.iter().any(|c| c.iri.contains("Curie")));
+    }
+
+    /// Regression test for the first-character blocking rewrite of
+    /// `candidate_generation`: correct candidates must still be found via
+    /// their blocking bucket even with many unrelated entities present.
+    #[test]
+    fn test_candidate_generation_blocking_scales_with_many_entities() {
+        let mut linker = EntityLinker::new();
+        for i in 0..300 {
+            linker.add_entity(
+                format!("http://example.org/Other{i}"),
+                format!("Other{i}"),
+                &[],
+            );
+        }
+        linker.add_entity(
+            "http://example.org/Albert_Einstein",
+            "Albert Einstein",
+            &["Einstein", "A. Einstein"],
+        );
+        linker.build_index();
+
+        let cands = linker.candidate_generation("Einstein");
+        assert!(!cands.is_empty());
+        assert!(cands[0].iri.contains("Einstein"));
+    }
+
+    /// A mention whose first character matches no indexed label/alias should
+    /// short-circuit to an empty candidate list without scoring anything.
+    #[test]
+    fn test_candidate_generation_blocking_no_match_for_unindexed_first_char() {
+        let linker = linker_with_persons();
+        let cands = linker.candidate_generation("Zzzzzzz");
+        assert!(cands.is_empty());
     }
 
     // ── disambiguate ─────────────────────────────────────────────────────────

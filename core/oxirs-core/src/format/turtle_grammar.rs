@@ -1,7 +1,19 @@
 //! Turtle Grammar Recognizer
 //!
-//! Implements the W3C Turtle grammar specification as a rule recognizer
-//! that builds RDF triples from N3/Turtle token streams.
+//! **Status: unfinished / not wired up.** This module was meant to implement
+//! the W3C Turtle grammar specification as a [`RuleRecognizer`] that builds
+//! RDF triples from N3/Turtle token streams, but [`TurtleGrammarRecognizer`]
+//! never actually recognizes anything and [`TurtleParser::parse_str`] /
+//! [`TurtleParser::parse_reader`] never parsed the input they were given.
+//! Rather than silently returning `Ok(vec![])` (i.e. silently discarding
+//! every triple in the document, indistinguishable from "empty document"),
+//! every entry point now returns an explicit
+//! [`RdfParseError::UnsupportedFeature`] error. The module is `pub(crate)`
+//! (see `format/mod.rs`) so it cannot be reached from outside this crate.
+//!
+//! For real Turtle parsing use [`crate::format::turtle::TurtleParser`] (the
+//! oxttl-backed implementation) or [`crate::parser::Parser`] with
+//! `RdfFormat::Turtle`.
 
 #![allow(dead_code)]
 
@@ -316,14 +328,17 @@ impl RuleRecognizer<TurtleNode> for TurtleGrammarRecognizer {
         &mut self,
         _parser: &mut Parser<Token>,
     ) -> ParseResult<Option<TurtleNode>> {
-        // This is a simplified implementation - the full implementation would be much larger
-        // and handle all Turtle grammar rules according to the W3C specification
-
-        // For now, return None to indicate no node recognized
-        // In the complete implementation, this would process tokens according to the current state
-        // and return TurtleNode::Triple, TurtleNode::PrefixDeclaration, etc.
-
-        Ok(None)
+        // This recognizer was never finished: it does not process tokens
+        // according to `self.state` and cannot legitimately return
+        // `TurtleNode::Triple`/`PrefixDeclaration`/etc. Returning `Ok(None)`
+        // here would be indistinguishable from "end of input reached
+        // successfully with nothing left to recognize", which silently
+        // drops every statement in the document. Fail loudly instead.
+        Err(RdfParseError::unsupported(
+            "turtle_grammar::TurtleGrammarRecognizer is not implemented; use \
+             crate::format::turtle::TurtleParser or crate::parser::Parser \
+             (RdfFormat::Turtle) instead",
+        ))
     }
 }
 
@@ -340,22 +355,33 @@ impl TurtleParser {
     }
 
     /// Parse Turtle from a string into triples
+    ///
+    /// # Errors
+    ///
+    /// Always returns [`RdfParseError::UnsupportedFeature`]: this recognizer
+    /// is unfinished (see module docs) and must not silently report success
+    /// with zero triples for non-empty input. Use
+    /// [`crate::format::turtle::TurtleParser`] instead.
     pub fn parse_str(&mut self, _input: &str) -> ParseResult<Vec<Triple>> {
-        let results = Vec::new();
-
-        // For now, return empty results - the full implementation would:
-        // 1. Create a lexer with N3Lexer
-        // 2. Create a parser with TurtleGrammarRecognizer
-        // 3. Process all tokens through the grammar recognizer
-        // 4. Convert TurtleNode::Triple results to Triple objects
-
-        Ok(results)
+        Err(RdfParseError::unsupported(
+            "turtle_grammar::TurtleParser::parse_str is not implemented; use \
+             crate::format::turtle::TurtleParser or crate::parser::Parser \
+             (RdfFormat::Turtle) instead",
+        ))
     }
 
     /// Parse Turtle from a reader into triples
+    ///
+    /// # Errors
+    ///
+    /// Always returns [`RdfParseError::UnsupportedFeature`]; see
+    /// [`Self::parse_str`].
     pub fn parse_reader<R: std::io::Read>(&mut self, _reader: R) -> ParseResult<Vec<Triple>> {
-        // Full implementation would use ReaderBuffer from toolkit
-        Ok(Vec::new())
+        Err(RdfParseError::unsupported(
+            "turtle_grammar::TurtleParser::parse_reader is not implemented; use \
+             crate::format::turtle::TurtleParser or crate::parser::Parser \
+             (RdfFormat::Turtle) instead",
+        ))
     }
 
     /// Set base IRI for relative IRI resolution
@@ -439,5 +465,55 @@ mod tests {
         let parser = TurtleParser::new();
         assert!(parser.context.prefixes.contains_key("rdf"));
         assert!(parser.context.prefixes.contains_key("xsd"));
+    }
+
+    /// Regression test for the P1 finding: `parse_str` must never silently
+    /// report success with zero triples for non-empty input (that would be
+    /// indistinguishable from "parsed an empty document" and cause silent
+    /// data loss for any real caller). It must fail loudly instead.
+    #[test]
+    fn test_parse_str_fails_loudly_instead_of_silently_dropping_input() {
+        let mut parser = TurtleParser::new();
+        let result = parser.parse_str("<http://example.org/s> <http://example.org/p> \"o\" .");
+        assert!(
+            result.is_err(),
+            "unfinished recognizer must error, not silently return Ok(empty)"
+        );
+        assert!(matches!(
+            result.unwrap_err(),
+            RdfParseError::UnsupportedFeature(_)
+        ));
+    }
+
+    #[test]
+    fn test_parse_reader_fails_loudly_instead_of_silently_dropping_input() {
+        let mut parser = TurtleParser::new();
+        let data = b"<http://example.org/s> <http://example.org/p> \"o\" .";
+        let result = parser.parse_reader(&data[..]);
+        assert!(
+            result.is_err(),
+            "unfinished recognizer must error, not silently return Ok(empty)"
+        );
+        assert!(matches!(
+            result.unwrap_err(),
+            RdfParseError::UnsupportedFeature(_)
+        ));
+    }
+
+    #[test]
+    fn test_recognize_next_node_fails_loudly() {
+        use super::super::n3_lexer::N3Token;
+        use super::super::toolkit::Parser as ToolkitParser;
+
+        let mut recognizer = TurtleGrammarRecognizer::new();
+        // The recognizer never reads from the parser before erroring, so an
+        // empty token buffer is sufficient to exercise the fail-loudly path.
+        let mut toolkit_parser: ToolkitParser<N3Token> = ToolkitParser::new(Vec::new());
+        let result = recognizer.recognize_next_node(&mut toolkit_parser);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            RdfParseError::UnsupportedFeature(_)
+        ));
     }
 }

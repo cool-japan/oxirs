@@ -43,8 +43,15 @@ use std::iter::FromIterator;
 /// # Performance Characteristics
 ///
 /// - **Insertion**: O(1) average case
-/// - **Removal**: O(1) average case  
-/// - **Lookup**: O(1) average case
+/// - **Removal**: O(1) average case
+/// - **Exact-triple lookup** (`contains`): O(1) average case
+/// - **Pattern lookup** (`triples_for_pattern`, `triples_for_subject`,
+///   `triples_for_predicate`, `triples_for_object`, ...): O(n) — this type
+///   stores triples in a single `HashSet` with no secondary SPO/POS/OSP
+///   indices, so any query with at least one wildcard component performs a
+///   full scan. For workloads dominated by pattern queries over large
+///   graphs, prefer an indexed store (e.g. `oxirs_core::store::IndexedGraph`)
+///   instead of this type.
 /// - **Memory**: Each triple stored once (set semantics)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Graph {

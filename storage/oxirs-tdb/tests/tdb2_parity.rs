@@ -26,6 +26,7 @@ use oxirs_tdb::tdb2::{RdfTerm, Tdb2Database, Tdb2Format};
 use oxirs_tdb::TdbStore;
 use std::env;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -33,11 +34,31 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static TEST_SEQ: AtomicU64 = AtomicU64::new(1);
 
+/// Build a genuinely-unique temp directory path for the given prefix.
+///
+/// Nextest runs each test in its own process, so a process-local
+/// `AtomicU64` alone resets to the same values in every process and makes
+/// different tests collide on the *same* on-disk store directory — which
+/// then corrupts under concurrent access and leaks stale data across runs.
+/// Mixing in the process id and a high-resolution timestamp guarantees a
+/// distinct, freshly-empty directory per invocation and per run.
+fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
+    let seq = TEST_SEQ.fetch_add(1, Ordering::SeqCst);
+    let pid = std::process::id();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let dir = env::temp_dir().join(format!("{}_{}_{}_{}", prefix, pid, seq, nanos));
+    // Defend against an astronomically unlikely path repeat: start empty.
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    dir
+}
+
 /// Create a unique temp directory and return a `TdbStore` plus the path.
 fn open_store() -> (TdbStore, std::path::PathBuf) {
-    let id = TEST_SEQ.fetch_add(1, Ordering::SeqCst);
-    let dir = env::temp_dir().join(format!("oxirs_parity_{}", id));
-    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let dir = unique_temp_dir("oxirs_parity");
     let store = TdbStore::open(&dir).expect("open TdbStore");
     (store, dir)
 }
@@ -722,11 +743,7 @@ fn tdb2_parity_bnode_id_uniqueness() {
 
 #[test]
 fn tdb2_parity_bnode_survives_save_and_open() {
-    let tmp = env::temp_dir().join(format!(
-        "oxirs_bnode_parity_{}",
-        TEST_SEQ.fetch_add(1, Ordering::SeqCst)
-    ));
-    std::fs::create_dir_all(&tmp).expect("create dir for bnode test");
+    let tmp = unique_temp_dir("oxirs_bnode_parity");
 
     let mut db = Tdb2Database::new();
     let b = blank("persistent_bnode");
@@ -911,11 +928,7 @@ fn tdb2_parity_prefix_try_expand_unknown_id() {
 
 #[test]
 fn tdb2_parity_format_insert_flush_reopen() {
-    let tmp = env::temp_dir().join(format!(
-        "oxirs_fmt_parity_{}",
-        TEST_SEQ.fetch_add(1, Ordering::SeqCst)
-    ));
-    std::fs::create_dir_all(&tmp).expect("create dir");
+    let tmp = unique_temp_dir("oxirs_fmt_parity");
 
     let mut fmt = Tdb2Format::open(&tmp).expect("open empty Tdb2Format");
     fmt.insert_triple(
@@ -946,11 +959,7 @@ fn tdb2_parity_format_insert_flush_reopen() {
 
 #[test]
 fn tdb2_parity_format_query_after_reopen() {
-    let tmp = env::temp_dir().join(format!(
-        "oxirs_fmt_query_parity_{}",
-        TEST_SEQ.fetch_add(1, Ordering::SeqCst)
-    ));
-    std::fs::create_dir_all(&tmp).expect("create dir");
+    let tmp = unique_temp_dir("oxirs_fmt_query_parity");
 
     let subject = iri("http://ex.org/persist_s");
     let pred = iri("http://ex.org/persist_p");

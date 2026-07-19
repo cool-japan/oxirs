@@ -130,8 +130,12 @@ pub struct ManagedKey {
     pub controller: String,
     /// Algorithm used.
     pub algorithm: KeyAlgorithm,
-    /// Simulated public key bytes.
+    /// Public key bytes (real: Ed25519/X25519 = 32 bytes, P-256 = 33 compressed).
     pub public_key: Vec<u8>,
+    /// Secret key material, kept private and never serialized/exposed directly.
+    /// Access is only via [`ManagedKey::sign`]. This is real key material: the
+    /// public key above is the genuine public counterpart of this secret.
+    secret_key: Vec<u8>,
     /// Current lifecycle status.
     pub status: KeyStatus,
     /// Assigned purposes.
@@ -144,6 +148,39 @@ pub struct ManagedKey {
     pub events: Vec<KeyEvent>,
     /// SHA-256-based fingerprint (hex string).
     pub fingerprint: String,
+}
+
+impl ManagedKey {
+    /// Sign `message` with this key's real private key.
+    ///
+    /// Supported for signing algorithms (`Ed25519`, `P256`). `X25519` is a
+    /// key-agreement key and cannot sign, returning
+    /// [`KeyManagerError::SigningUnsupported`].
+    pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>, KeyManagerError> {
+        match self.algorithm {
+            KeyAlgorithm::Ed25519 => {
+                let signer = crate::proof::ed25519::Ed25519Signer::from_bytes(&self.secret_key)
+                    .map_err(|e| KeyManagerError::SigningUnsupported(e.to_string()))?;
+                Ok(signer.sign(message))
+            }
+            KeyAlgorithm::P256 => {
+                use p256::ecdsa::signature::Signer;
+                let signing_key = p256::ecdsa::SigningKey::from_slice(&self.secret_key)
+                    .map_err(|e| KeyManagerError::SigningUnsupported(e.to_string()))?;
+                let sig: p256::ecdsa::Signature = signing_key.sign(message);
+                Ok(sig.to_bytes().to_vec())
+            }
+            KeyAlgorithm::X25519 => Err(KeyManagerError::SigningUnsupported(
+                "X25519 is a key-agreement key and cannot produce signatures".to_string(),
+            )),
+        }
+    }
+
+    /// Whether this key holds real private key material (always true for keys
+    /// produced by [`KeyManager::generate_key`]).
+    pub fn has_private_key(&self) -> bool {
+        !self.secret_key.is_empty()
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,6 +200,10 @@ pub enum KeyManagerError {
     InvalidDid(String),
     /// Purpose already assigned to the key.
     DuplicatePurpose(String),
+    /// Cryptographic key-pair generation failed.
+    KeyGenerationFailed(String),
+    /// The key cannot sign (e.g. an X25519 key-agreement key, or no material).
+    SigningUnsupported(String),
 }
 
 impl std::fmt::Display for KeyManagerError {
@@ -173,6 +214,10 @@ impl std::fmt::Display for KeyManagerError {
             KeyManagerError::InvalidStatus(msg) => write!(f, "Invalid key status: {msg}"),
             KeyManagerError::InvalidDid(d) => write!(f, "Invalid DID: {d}"),
             KeyManagerError::DuplicatePurpose(msg) => write!(f, "Duplicate purpose: {msg}"),
+            KeyManagerError::KeyGenerationFailed(msg) => {
+                write!(f, "Key generation failed: {msg}")
+            }
+            KeyManagerError::SigningUnsupported(msg) => write!(f, "Signing unsupported: {msg}"),
         }
     }
 }
@@ -180,26 +225,48 @@ impl std::fmt::Display for KeyManagerError {
 impl std::error::Error for KeyManagerError {}
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper: deterministic simulated public key
+// Helper: real key-pair generation
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Produce a deterministic simulated public key from the DID, algorithm, and
-/// a counter.  This avoids pulling in `rand` directly.
-fn simulated_public_key(did: &str, algo: KeyAlgorithm, counter: u64) -> Vec<u8> {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(did.as_bytes());
-    hasher.update((algo as u8).to_be_bytes());
-    hasher.update(counter.to_be_bytes());
-    let hash = hasher.finalize();
-    let len = algo.public_key_len();
-    // SHA-256 is 32 bytes; for P-256 (33 bytes) prepend a compression prefix.
-    if len <= hash.len() {
-        hash[..len].to_vec()
-    } else {
-        let mut key = vec![0x02u8]; // compressed point prefix
-        key.extend_from_slice(&hash[..len - 1]);
-        key
+/// Generate a real cryptographic key pair for `algo`, returning
+/// `(public_key_bytes, secret_key_bytes)`.
+///
+/// - `Ed25519`: 32-byte Ed25519 verifying key + 32-byte signing seed.
+/// - `X25519`: 32-byte Curve25519 public (u-coordinate) + 32-byte private seed.
+/// - `P256`: 33-byte SEC1-compressed public key + 32-byte scalar.
+///
+/// All secrets are drawn from the OS CSPRNG.
+fn generate_keypair(algo: KeyAlgorithm) -> Result<(Vec<u8>, Vec<u8>), KeyManagerError> {
+    // All secrets are drawn from the OS CSPRNG (oxicrypto-rand → getrandom);
+    // generation fails closed if the entropy source is unavailable.
+    match algo {
+        KeyAlgorithm::Ed25519 => {
+            let seed = oxicrypto_rand::random_nonce::<32>().map_err(|e| {
+                KeyManagerError::KeyGenerationFailed(format!("OS entropy source failed: {e}"))
+            })?;
+            let signer = crate::proof::ed25519::Ed25519Signer::from_bytes(&seed)
+                .map_err(|e| KeyManagerError::KeyGenerationFailed(e.to_string()))?;
+            Ok((signer.public_key_bytes().to_vec(), seed.to_vec()))
+        }
+        KeyAlgorithm::X25519 => {
+            use curve25519_dalek::constants::X25519_BASEPOINT;
+            let private_bytes = oxicrypto_rand::random_nonce::<32>().map_err(|e| {
+                KeyManagerError::KeyGenerationFailed(format!("OS entropy source failed: {e}"))
+            })?;
+            let public = X25519_BASEPOINT.mul_clamped(private_bytes).to_bytes();
+            Ok((public.to_vec(), private_bytes.to_vec()))
+        }
+        KeyAlgorithm::P256 => {
+            let signing_key = crate::signatures::es256::generate_p256_signing_key()
+                .map_err(|e| KeyManagerError::KeyGenerationFailed(e.to_string()))?;
+            let public = signing_key
+                .verifying_key()
+                .to_sec1_point(true)
+                .as_bytes()
+                .to_vec();
+            let secret = signing_key.to_bytes().to_vec();
+            Ok((public, secret))
+        }
     }
 }
 
@@ -224,7 +291,7 @@ pub struct KeyManager {
     keys: HashMap<String, ManagedKey>,
     /// Index: controller DID → list of key ids.
     keys_by_controller: HashMap<String, Vec<String>>,
-    /// Monotonic counter used for deterministic key generation.
+    /// Monotonic counter used to disambiguate key indices per DID.
     counter: u64,
 }
 
@@ -262,7 +329,7 @@ impl KeyManager {
             return Err(KeyManagerError::DuplicateKey(key_id));
         }
 
-        let public_key = simulated_public_key(did, algorithm, self.counter);
+        let (public_key, secret_key) = generate_keypair(algorithm)?;
         let fingerprint = compute_fingerprint(&public_key);
 
         let key = ManagedKey {
@@ -270,6 +337,7 @@ impl KeyManager {
             controller: did.to_string(),
             algorithm,
             public_key,
+            secret_key,
             status: KeyStatus::Active,
             purposes: Vec::new(),
             created_at: timestamp,
@@ -1165,6 +1233,81 @@ mod tests {
         assert_eq!(KeyAlgorithm::Ed25519.public_key_len(), 32);
         assert_eq!(KeyAlgorithm::X25519.public_key_len(), 32);
         assert_eq!(KeyAlgorithm::P256.public_key_len(), 33);
+    }
+
+    // ── Real key material ────────────────────────────────────────────────
+
+    #[test]
+    fn test_generated_keys_have_real_private_material() {
+        let mut mgr = KeyManager::new();
+        let id = mgr
+            .generate_key(alice_did(), KeyAlgorithm::Ed25519, 1000)
+            .expect("gen");
+        let key = mgr.get_key(&id).expect("key");
+        assert!(key.has_private_key());
+    }
+
+    #[test]
+    fn test_generated_keys_are_random_not_deterministic() {
+        // Two keys for the same DID/algorithm must have distinct public keys,
+        // proving they are freshly generated (not a hash of public inputs).
+        let mut mgr = KeyManager::new();
+        let id1 = mgr
+            .generate_key(alice_did(), KeyAlgorithm::Ed25519, 1000)
+            .expect("gen1");
+        let id2 = mgr
+            .generate_key(alice_did(), KeyAlgorithm::Ed25519, 2000)
+            .expect("gen2");
+        let k1 = mgr.get_key(&id1).expect("k1");
+        let k2 = mgr.get_key(&id2).expect("k2");
+        assert_ne!(k1.public_key, k2.public_key);
+    }
+
+    #[test]
+    fn test_ed25519_public_key_verifies_own_signature() {
+        // The stored public key is the genuine counterpart of the private key:
+        // a signature made with the key verifies under its public_key.
+        let mut mgr = KeyManager::new();
+        let id = mgr
+            .generate_key(alice_did(), KeyAlgorithm::Ed25519, 1000)
+            .expect("gen");
+        let key = mgr.get_key(&id).expect("key");
+        let msg = b"authenticate me";
+        let sig = key.sign(msg).expect("sign");
+        let ok = crate::proof::ed25519::verify_ed25519(&key.public_key, msg, &sig).expect("verify");
+        assert!(ok);
+        // A tampered message must not verify.
+        let bad =
+            crate::proof::ed25519::verify_ed25519(&key.public_key, b"other", &sig).expect("verify");
+        assert!(!bad);
+    }
+
+    #[test]
+    fn test_p256_public_key_verifies_own_signature() {
+        use p256::ecdsa::signature::Verifier;
+        let mut mgr = KeyManager::new();
+        let id = mgr
+            .generate_key(alice_did(), KeyAlgorithm::P256, 1000)
+            .expect("gen");
+        let key = mgr.get_key(&id).expect("key");
+        let msg = b"p256 message";
+        let sig_bytes = key.sign(msg).expect("sign");
+        let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&key.public_key).expect("vk");
+        let sig = p256::ecdsa::Signature::from_slice(&sig_bytes).expect("sig");
+        assert!(vk.verify(msg, &sig).is_ok());
+    }
+
+    #[test]
+    fn test_x25519_cannot_sign() {
+        let mut mgr = KeyManager::new();
+        let id = mgr
+            .generate_key(alice_did(), KeyAlgorithm::X25519, 1000)
+            .expect("gen");
+        let key = mgr.get_key(&id).expect("key");
+        assert!(matches!(
+            key.sign(b"x"),
+            Err(KeyManagerError::SigningUnsupported(_))
+        ));
     }
 
     // ── Key count ────────────────────────────────────────────────────────

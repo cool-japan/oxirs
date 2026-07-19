@@ -1,6 +1,7 @@
 //! SPARQL query command
 
 use super::cache::global_cache;
+use super::tdb_convert;
 use super::CommandResult;
 use crate::cli::error::helpers as error_helpers;
 use crate::cli::logging::QueryLogger;
@@ -114,12 +115,38 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
         dataset_dir
     };
 
-    // Open store
-    let store = if dataset_path.is_dir() {
-        RdfStore::open(&dataset_path).map_err(|e| format!("Failed to open dataset: {e}"))?
-    } else {
+    if !dataset_path.is_dir() {
         return Err(error_helpers::dataset_not_found_error(&dataset));
-    };
+    }
+
+    // `oxirs query` executes through `RdfStore`'s query engine, which only
+    // understands the in-RAM N-Quads-log format. A tdb2 dataset (see
+    // `tdb_convert::is_tdb2_dataset`) is a different on-disk representation
+    // that `RdfStore::open` cannot read; rather than silently returning
+    // wrong/empty results, fail loud with a pointer to the tool that *does*
+    // execute SPARQL directly against tdb2 stores today.
+    //
+    // Deferred: binding the full SPARQL engine directly onto `TdbStore`
+    // (streaming `scan_quads`/`quad_iter` execution, matching `import` and
+    // `export`) so `oxirs query` itself works against tdb2 datasets. That is
+    // a materially larger change (query planning + execution over a
+    // different term/index representation) than fits this pass; `oxirs
+    // tdbquery` already implements it via `oxirs-arq`'s executor for the
+    // interim.
+    if tdb_convert::is_tdb2_dataset(&dataset_path) {
+        return Err(format!(
+            "Dataset '{dataset}' is a tdb2 (on-disk) dataset. 'oxirs query' does not yet \
+             execute SPARQL directly against tdb2 datasets in this release -- use \
+             'oxirs tdbquery {} \"<query>\"' instead, which runs SPARQL directly against \
+             tdb2 stores.",
+            dataset_path.display()
+        )
+        .into());
+    }
+
+    // Open store
+    let store =
+        RdfStore::open(&dataset_path).map_err(|e| format!("Failed to open dataset: {e}"))?;
 
     // Execute query with progress tracking and logging
     let start_time = Instant::now();
@@ -486,5 +513,46 @@ fn object_to_rdf_term(object: &oxirs_core::model::Object) -> crate::cli::formatt
                 datatype: Some("http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement".to_string()),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tdb2_dispatch_tests {
+    use super::*;
+
+    /// `oxirs query` must fail loud (a clear, actionable error) rather than
+    /// silently returning wrong/empty results when pointed at a tdb2
+    /// dataset — the `RdfStore` query engine used here cannot read
+    /// `oxirs-tdb`'s on-disk format at all.
+    #[tokio::test]
+    async fn test_query_against_tdb2_dataset_fails_loud() {
+        let unique = std::process::id() as u64 * 1_000_003 + line!() as u64;
+        let dataset_dir = std::env::temp_dir().join(format!("oxirs-query-tdb2-test-{unique}"));
+        {
+            // A minimal tdb2 dataset: just the marker file `is_tdb2_dataset`
+            // looks for, so this test does not need to depend on the full
+            // TdbStore lifecycle to exercise the dispatch branch.
+            std::fs::create_dir_all(&dataset_dir).expect("create temp dataset dir");
+            std::fs::write(dataset_dir.join("data.tdb"), b"").expect("write tdb2 marker file");
+        }
+
+        let result = run(
+            dataset_dir.display().to_string(),
+            "SELECT ?s ?p ?o WHERE { ?s ?p ?o }".to_string(),
+            false,
+            "table".to_string(),
+        )
+        .await;
+
+        std::fs::remove_dir_all(&dataset_dir).ok();
+
+        let err = result.expect_err(
+            "query against a tdb2 dataset must fail loud, not silently return wrong/empty results",
+        );
+        let message = err.to_string();
+        assert!(
+            message.contains("tdb2") && message.contains("tdbquery"),
+            "error should explain the tdb2 limitation and point at 'oxirs tdbquery': {message}"
+        );
     }
 }

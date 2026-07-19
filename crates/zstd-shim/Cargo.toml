@@ -7,7 +7,7 @@ license = "Apache-2.0"
 description = "Pure-Rust zstd-API shim backed by oxiarc-zstd (COOLJAPAN Pure Rust Policy v2). Local [patch.crates-io] override for oxirs — NOT the upstream zstd crate; implements the bulk/stream/zstd_safe surface tantivy, parquet, pulsar, and wasmtime use."
 
 [dependencies]
-oxiarc-zstd = "0.3.5"
+oxiarc-zstd = "0.3.6"
 
 [features]
 # No-op feature shims: the real upstream `zstd 0.13` exposes these and downstream

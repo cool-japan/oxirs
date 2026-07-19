@@ -1,9 +1,9 @@
 //! # OxiRS GraphQL - GraphQL Interface for RDF
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-gql/badge.svg)](https://docs.rs/oxirs-gql)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! GraphQL interface for RDF data with automatic schema generation from ontologies.
@@ -28,11 +28,32 @@ use oxirs_core::model::{
 };
 use oxirs_core::ConcreteStore;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 // Re-export QueryResults for other modules
 pub use oxirs_core::query::QueryResults;
 
 // Module declarations are below after the main code
+
+/// Render a bound SPARQL [`Term`] as its plain (bracket-free) lexical
+/// value: the bare IRI for a named node, the bare label for a blank node,
+/// and the lexical form for a literal.
+///
+/// `Term`'s `Display`/`to_string()` instead produces N-Triples-style
+/// serialization (`<http://example.org/x>` for a named node), which is the
+/// right form to re-embed in another SPARQL query but the *wrong* form for
+/// GraphQL scalar output or for round-tripping back through this crate's
+/// own `escape_iri`-style helpers (which expect a bare IRI to wrap in
+/// `<...>` themselves).
+fn term_to_plain_string(term: &Term) -> String {
+    match term {
+        Term::NamedNode(node) => node.as_str().to_string(),
+        Term::BlankNode(node) => format!("_:{}", node.as_str()),
+        Term::Literal(literal) => literal.value().to_string(),
+        Term::Variable(var) => var.as_str().to_string(),
+        Term::QuotedTriple(_) => term.to_string(),
+    }
+}
 
 /// RDF store wrapper for GraphQL integration
 pub struct RdfStore {
@@ -117,67 +138,81 @@ impl RdfStore {
     }
 
     /// Get subjects with optional limit
+    ///
+    /// Note: the `LIMIT`/pagination is applied in Rust, *not* appended to
+    /// the SPARQL text -- the query engine's parser only accepts a bare
+    /// `WHERE { ... }` graph pattern with nothing trailing after the
+    /// closing brace, so `... WHERE { ... } LIMIT n` fails to parse.
+    /// Deduplication (`DISTINCT`) is likewise applied in Rust: the query
+    /// engine parses the `SELECT`/`WHERE` boundary only and does not act on
+    /// `DISTINCT` itself.
     pub fn get_subjects(&self, limit: Option<usize>) -> Result<Vec<String>> {
-        let limit_clause = match limit {
-            Some(l) => format!(" LIMIT {l}"),
-            None => String::new(),
-        };
-
-        let query = format!("SELECT DISTINCT ?s WHERE {{ ?s ?p ?o }}{limit_clause}");
+        let query = "SELECT DISTINCT ?s WHERE { ?s ?p ?o }";
         let mut subjects = Vec::new();
+        let mut seen = std::collections::HashSet::new();
 
         let subject_var = Variable::new("s")
             .map_err(|e| anyhow::anyhow!("Failed to create subject variable: {}", e))?;
 
-        if let QueryResults::Solutions(solutions) = self.query(&query)? {
+        if let QueryResults::Solutions(solutions) = self.query(query)? {
             for solution in &solutions {
                 if let Some(subject) = solution.get(&subject_var) {
-                    subjects.push(subject.to_string());
+                    let value = term_to_plain_string(subject);
+                    if seen.insert(value.clone()) {
+                        subjects.push(value);
+                    }
                 }
             }
+        }
+
+        if let Some(limit) = limit {
+            subjects.truncate(limit);
         }
 
         Ok(subjects)
     }
 
-    /// Get predicates with optional limit
+    /// Get predicates with optional limit (see the notes on
+    /// [`Self::get_subjects`] about why `LIMIT`/deduplication are applied
+    /// in Rust).
     pub fn get_predicates(&self, limit: Option<usize>) -> Result<Vec<String>> {
-        let limit_clause = match limit {
-            Some(l) => format!(" LIMIT {l}"),
-            None => String::new(),
-        };
-
-        let query = format!("SELECT DISTINCT ?p WHERE {{ ?s ?p ?o }}{limit_clause}");
+        let query = "SELECT DISTINCT ?p WHERE { ?s ?p ?o }";
         let mut predicates = Vec::new();
+        let mut seen = std::collections::HashSet::new();
 
         let predicate_var = Variable::new("p")
             .map_err(|e| anyhow::anyhow!("Failed to create predicate variable: {}", e))?;
 
-        if let QueryResults::Solutions(solutions) = self.query(&query)? {
+        if let QueryResults::Solutions(solutions) = self.query(query)? {
             for solution in &solutions {
                 if let Some(predicate) = solution.get(&predicate_var) {
-                    predicates.push(predicate.to_string());
+                    let value = term_to_plain_string(predicate);
+                    if seen.insert(value.clone()) {
+                        predicates.push(value);
+                    }
                 }
             }
+        }
+
+        if let Some(limit) = limit {
+            predicates.truncate(limit);
         }
 
         Ok(predicates)
     }
 
-    /// Get objects with optional limit
+    /// Get objects with optional limit (see the notes on
+    /// [`Self::get_subjects`] about why `LIMIT`/deduplication are applied
+    /// in Rust).
     pub fn get_objects(&self, limit: Option<usize>) -> Result<Vec<(String, String)>> {
-        let limit_clause = match limit {
-            Some(l) => format!(" LIMIT {l}"),
-            None => String::new(),
-        };
-
-        let query = format!("SELECT DISTINCT ?o WHERE {{ ?s ?p ?o }}{limit_clause}");
+        let query = "SELECT DISTINCT ?o WHERE { ?s ?p ?o }";
         let mut objects = Vec::new();
+        let mut seen = std::collections::HashSet::new();
 
         let object_var = Variable::new("o")
             .map_err(|e| anyhow::anyhow!("Failed to create object variable: {}", e))?;
 
-        if let QueryResults::Solutions(solutions) = self.query(&query)? {
+        if let QueryResults::Solutions(solutions) = self.query(query)? {
             for solution in &solutions {
                 if let Some(object) = solution.get(&object_var) {
                     let object_type = match object {
@@ -187,9 +222,16 @@ impl RdfStore {
                         Term::Variable(_) => "Variable".to_string(),
                         Term::QuotedTriple(_) => "QuotedTriple".to_string(),
                     };
-                    objects.push((object.to_string(), object_type));
+                    let entry = (term_to_plain_string(object), object_type);
+                    if seen.insert(entry.clone()) {
+                        objects.push(entry);
+                    }
                 }
             }
+        }
+
+        if let Some(limit) = limit {
+            objects.truncate(limit);
         }
 
         Ok(objects)
@@ -270,6 +312,93 @@ impl RdfStore {
     }
 }
 
+#[cfg(test)]
+mod rdf_store_query_tests {
+    use super::*;
+
+    fn build_store() -> RdfStore {
+        let mut store = RdfStore::new().expect("failed to create test store");
+        store
+            .insert_triple(
+                "http://example.org/alice",
+                "http://xmlns.com/foaf/0.1/name",
+                "\"Alice\"",
+            )
+            .expect("insert triple should succeed");
+        store
+            .insert_triple(
+                "http://example.org/bob",
+                "http://xmlns.com/foaf/0.1/name",
+                "\"Bob\"",
+            )
+            .expect("insert triple should succeed");
+        store
+    }
+
+    /// Regression test: `get_subjects`/`get_predicates`/`get_objects` used
+    /// to return `Term::to_string()` (N-Triples-style, e.g.
+    /// `"<http://example.org/alice>"`) instead of the bare IRI/literal
+    /// value, so every caller comparing against a plain IRI string (as the
+    /// `subjects`/`predicates`/`objects` GraphQL fields' consumers do)
+    /// would never match.
+    #[test]
+    fn test_get_subjects_returns_bare_iris_not_bracketed() {
+        let store = build_store();
+        let subjects = store
+            .get_subjects(None)
+            .expect("get_subjects should succeed");
+        let subjects: std::collections::HashSet<String> = subjects.into_iter().collect();
+
+        assert!(subjects.contains("http://example.org/alice"));
+        assert!(subjects.contains("http://example.org/bob"));
+        assert!(
+            !subjects.iter().any(|s| s.starts_with('<')),
+            "subjects must not be bracket-wrapped: {subjects:?}"
+        );
+    }
+
+    #[test]
+    fn test_get_predicates_returns_bare_iris_not_bracketed() {
+        let store = build_store();
+        let predicates = store
+            .get_predicates(None)
+            .expect("get_predicates should succeed");
+
+        assert_eq!(
+            predicates,
+            vec!["http://xmlns.com/foaf/0.1/name".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_get_objects_returns_plain_literal_values() {
+        let store = build_store();
+        let objects = store.get_objects(None).expect("get_objects should succeed");
+        let values: std::collections::HashSet<String> =
+            objects.into_iter().map(|(value, _)| value).collect();
+
+        assert!(values.contains("Alice"));
+        assert!(values.contains("Bob"));
+        assert!(
+            !values.iter().any(|v| v.starts_with('"')),
+            "literal values must not retain quote delimiters: {values:?}"
+        );
+    }
+
+    /// Regression test: the query engine's SPARQL parser rejects
+    /// `WHERE { ... } LIMIT n` (it requires the graph pattern's closing
+    /// brace to be the last thing in the query), so `limit` must be
+    /// enforced in Rust rather than appended to the SPARQL text.
+    #[test]
+    fn test_get_subjects_respects_limit_without_breaking_the_query() {
+        let store = build_store();
+        let subjects = store
+            .get_subjects(Some(1))
+            .expect("get_subjects with a limit should still succeed");
+        assert_eq!(subjects.len(), 1);
+    }
+}
+
 /// Mock store for testing GraphQL functionality
 #[derive(Debug)]
 pub struct MockStore;
@@ -290,6 +419,7 @@ pub mod ai;
 pub mod api_explorer;
 pub mod ast;
 pub mod auto_caching_strategies;
+pub mod auto_schema_resolver;
 pub mod custom_directives;
 pub mod custom_type_mappings;
 pub mod directive_registry;
@@ -490,6 +620,37 @@ pub struct GraphQLConfig {
     pub validation_config: validation::ValidationConfig,
     pub enable_query_validation: bool,
     pub distributed_cache_config: Option<distributed_cache::CacheConfig>,
+    /// Whether the raw, unauthenticated SPARQL passthrough field
+    /// (`sparql(query: String!): String`) is exposed in the schema at all.
+    /// **Disabled by default**: it bypasses every GraphQL-level
+    /// depth/complexity limit and lets any client run arbitrary SPARQL
+    /// against the store, with no authentication or authorization of its
+    /// own. Only enable this on a deployment where the GraphQL endpoint
+    /// itself is already access-controlled.
+    pub enable_sparql_field: bool,
+    /// Wall-clock timeout applied to each raw SPARQL passthrough query,
+    /// only relevant when `enable_sparql_field` is `true`.
+    pub sparql_query_timeout: Duration,
+    /// Whether to attempt automatic GraphQL schema generation from the
+    /// RDF store's vocabulary (`rdfs:Class`/`owl:Class` definitions) in
+    /// addition to the built-in `hello`/`version`/`triples`/`subjects`/
+    /// `predicates`/`objects` fields. Falls back to the built-in fields
+    /// alone when the store has no discoverable vocabulary, or when
+    /// generation fails.
+    pub auto_generate_schema: bool,
+    /// Maximum accepted HTTP request body size, in bytes.
+    pub max_request_body_size: usize,
+    /// Idle/read timeout applied to each socket read while parsing an
+    /// HTTP request (Slowloris protection).
+    pub request_read_timeout: Duration,
+    /// Maximum number of concurrent HTTP connections served.
+    pub max_connections: usize,
+    /// Per-client-IP rate limiting configuration for incoming HTTP
+    /// requests. **Disabled by default** (`None`): set this to enforce a
+    /// request budget (token bucket / sliding window / fixed window /
+    /// adaptive-under-load) before any GraphQL parsing/execution happens.
+    /// See [`rate_limiting::RateLimiter`].
+    pub rate_limit_config: Option<rate_limiting::RateLimitConfig>,
 }
 
 impl Default for GraphQLConfig {
@@ -502,7 +663,100 @@ impl Default for GraphQLConfig {
             validation_config: validation::ValidationConfig::default(),
             enable_query_validation: true,
             distributed_cache_config: None, // Disabled by default
+            enable_sparql_field: false,
+            sparql_query_timeout: Duration::from_secs(30),
+            auto_generate_schema: true,
+            max_request_body_size: 10 * 1024 * 1024,
+            request_read_timeout: Duration::from_secs(30),
+            max_connections: 1024,
+            rate_limit_config: None,
         }
+    }
+}
+
+impl GraphQLConfig {
+    /// Merge the ergonomic top-level `max_query_depth`/`max_query_complexity`
+    /// shorthands into a full [`validation::ValidationConfig`], overriding
+    /// whatever `validation_config.max_depth`/`max_complexity` already
+    /// contain. This is the single place those two fields take effect --
+    /// previously they were accepted by `with_config` but never read
+    /// anywhere, so setting them had no effect on query validation.
+    fn effective_validation_config(&self) -> validation::ValidationConfig {
+        let mut validation_config = self.validation_config.clone();
+        if let Some(max_depth) = self.max_query_depth {
+            validation_config.max_depth = max_depth;
+        }
+        if let Some(max_complexity) = self.max_query_complexity {
+            validation_config.max_complexity = max_complexity;
+        }
+        validation_config
+    }
+}
+
+#[cfg(test)]
+mod graphql_config_tests {
+    use super::*;
+
+    /// Regression test: `max_query_depth`/`max_query_complexity` must
+    /// actually override the validation config used to build the
+    /// `QueryValidator`, not just sit on `GraphQLConfig` unread.
+    #[test]
+    fn test_max_query_depth_and_complexity_override_validation_config() {
+        let config = GraphQLConfig {
+            max_query_depth: Some(3),
+            max_query_complexity: Some(42),
+            ..Default::default()
+        };
+
+        let effective = config.effective_validation_config();
+        assert_eq!(effective.max_depth, 3);
+        assert_eq!(effective.max_complexity, 42);
+    }
+
+    /// When left `None`, the base `validation_config`'s own limits must be
+    /// preserved rather than being reset to some other default.
+    #[test]
+    fn test_none_depth_and_complexity_preserve_validation_config_defaults() {
+        let base_validation_config = validation::ValidationConfig {
+            max_depth: 7,
+            max_complexity: 77,
+            ..Default::default()
+        };
+
+        let config = GraphQLConfig {
+            max_query_depth: None,
+            max_query_complexity: None,
+            validation_config: base_validation_config,
+            ..Default::default()
+        };
+
+        let effective = config.effective_validation_config();
+        assert_eq!(effective.max_depth, 7);
+        assert_eq!(effective.max_complexity, 77);
+    }
+
+    /// Regression test: the fully-implemented `rate_limiting` module used
+    /// to be unreachable from `GraphQLServer` entirely; `rate_limit_config`
+    /// must default to disabled (no surprise behavior change for existing
+    /// deployments) while remaining settable.
+    #[test]
+    fn test_rate_limit_config_defaults_to_disabled_but_is_settable() {
+        assert!(GraphQLConfig::default().rate_limit_config.is_none());
+
+        let config = GraphQLConfig {
+            rate_limit_config: Some(rate_limiting::RateLimitConfig {
+                max_requests: 5,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(
+            config
+                .rate_limit_config
+                .expect("should be set")
+                .max_requests,
+            5
+        );
     }
 }
 
@@ -561,6 +815,12 @@ impl GraphQLServer {
 
     pub async fn start(&self, addr: &str) -> Result<()> {
         tracing::info!("Starting GraphQL server on {}", addr);
+
+        // `GraphQLConfig::max_query_depth`/`max_query_complexity` are the
+        // ergonomic top-level knobs; thread them into the full
+        // `ValidationConfig` before constructing the validator (previously
+        // these fields were parsed by `with_config` but never read).
+        let validation_config = self.config.effective_validation_config();
 
         // Create a basic schema with Query type
         let mut schema = types::Schema::new();
@@ -648,8 +908,15 @@ impl GraphQLServer {
                     .with_default_value(ast::Value::IntValue(10))
                     .with_description("Maximum number of objects to return".to_string()),
                 ),
-            )
-            .with_field(
+            );
+
+        // The raw SPARQL passthrough field bypasses all GraphQL-level
+        // depth/complexity limits and lets any client run arbitrary SPARQL
+        // against the store, with no authentication or authorization of
+        // its own, so it is opt-in only (see
+        // `GraphQLConfig::enable_sparql_field`, default `false`).
+        if self.config.enable_sparql_field {
+            query_type = query_type.with_field(
                 "sparql".to_string(),
                 types::FieldType::new(
                     "sparql".to_string(),
@@ -667,25 +934,25 @@ impl GraphQLServer {
                     .with_description("The SPARQL query to execute".to_string()),
                 ),
             );
+        }
 
-        // Add introspection fields if enabled
+        // Add introspection fields if enabled. `__schema`/`__type` are
+        // modeled as real `Object` types (registered via
+        // `introspection::introspection_meta_types`) rather than opaque
+        // `Scalar`s, so that `QueryExecutor::complete_value` honors client
+        // selection sets on them (see `QueryExecutor::project_introspection_value`).
         if self.config.enable_introspection {
+            for meta_type in introspection::introspection_meta_types() {
+                schema.add_type(meta_type);
+            }
+
             query_type = query_type
                 .with_field(
                     "__schema".to_string(),
                     types::FieldType::new(
                         "__schema".to_string(),
-                        types::GraphQLType::NonNull(Box::new(types::GraphQLType::Scalar(
-                            types::ScalarType {
-                                name: "__Schema".to_string(),
-                                description: Some(
-                                    "A GraphQL Schema defines the capabilities of a GraphQL server"
-                                        .to_string(),
-                                ),
-                                serialize: |_| Ok(ast::Value::NullValue),
-                                parse_value: |_| Err(anyhow::anyhow!("Cannot parse __Schema")),
-                                parse_literal: |_| Err(anyhow::anyhow!("Cannot parse __Schema")),
-                            },
+                        types::GraphQLType::NonNull(Box::new(types::GraphQLType::Object(
+                            types::ObjectType::new("__Schema".to_string()),
                         ))),
                     )
                     .with_description("Access the current type schema of this server".to_string()),
@@ -694,16 +961,7 @@ impl GraphQLServer {
                     "__type".to_string(),
                     types::FieldType::new(
                         "__type".to_string(),
-                        types::GraphQLType::Scalar(types::ScalarType {
-                            name: "__Type".to_string(),
-                            description: Some(
-                                "A GraphQL Schema defines the capabilities of a GraphQL server"
-                                    .to_string(),
-                            ),
-                            serialize: |_| Ok(ast::Value::NullValue),
-                            parse_value: |_| Err(anyhow::anyhow!("Cannot parse __Type")),
-                            parse_literal: |_| Err(anyhow::anyhow!("Cannot parse __Type")),
-                        }),
+                        types::GraphQLType::Object(types::ObjectType::new("__Type".to_string())),
                     )
                     .with_description("Request the type information of a single type".to_string())
                     .with_argument(
@@ -719,6 +977,82 @@ impl GraphQLServer {
                 );
         }
 
+        // Attempt to auto-generate additional object types and root query
+        // fields from the store's RDF vocabulary (`rdfs:Class`/`owl:Class`
+        // declarations), per `GraphQLConfig::auto_generate_schema` (default
+        // `true`). This is a genuine best-effort enhancement: any failure
+        // to extract a vocabulary or generate a schema from it is logged
+        // and simply falls back to the hardcoded fields added above, which
+        // remain present unconditionally.
+        let mut auto_schema_resolver: Option<Arc<auto_schema_resolver::AutoSchemaResolver>> = None;
+        let mut generated_type_names: Vec<String> = Vec::new();
+
+        if self.config.auto_generate_schema {
+            match schema_generator::SchemaGenerator::new()
+                .extract_vocabulary_from_store(&self.store)
+            {
+                Ok(vocabulary) if !vocabulary.classes.is_empty() => {
+                    let gen_config = schema_types::SchemaGenerationConfig {
+                        // The top-level `sparql` field above already covers
+                        // raw SPARQL passthrough when opted into; don't add
+                        // a second copy from the generator.
+                        enable_sparql_field: false,
+                        ..Default::default()
+                    };
+                    let generator = schema_generator::SchemaGenerator::new()
+                        .with_config(gen_config)
+                        .with_vocabulary(vocabulary.clone());
+
+                    match generator.generate_schema() {
+                        Ok(generated) => {
+                            let generated_query_fields = match generated.get_type("Query") {
+                                Some(types::GraphQLType::Object(obj)) => obj.fields.clone(),
+                                _ => std::collections::HashMap::new(),
+                            };
+
+                            for (type_name, generated_type) in generated.types {
+                                if matches!(
+                                    type_name.as_str(),
+                                    "Query" | "Mutation" | "Subscription"
+                                ) {
+                                    continue;
+                                }
+                                schema.add_type(generated_type);
+                            }
+
+                            for (field_name, field_def) in generated_query_fields {
+                                query_type.fields.entry(field_name).or_insert(field_def);
+                            }
+
+                            let resolver = auto_schema_resolver::AutoSchemaResolver::new(
+                                Arc::clone(&self.store),
+                                vocabulary,
+                            );
+                            generated_type_names = resolver.generated_type_names();
+                            auto_schema_resolver = Some(Arc::new(resolver));
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Auto schema generation failed, falling back to built-in fields only: {}",
+                                e
+                            );
+                        }
+                    }
+                }
+                Ok(_) => {
+                    tracing::debug!(
+                        "Store has no discoverable rdfs:Class/owl:Class vocabulary; using built-in GraphQL fields only"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to extract RDF vocabulary from store, falling back to built-in fields only: {}",
+                        e
+                    );
+                }
+            }
+        }
+
         schema.add_type(types::GraphQLType::Object(query_type));
         schema.set_query_type("Query".to_string());
 
@@ -726,28 +1060,46 @@ impl GraphQLServer {
         let schema_clone = schema.clone();
         let mut server = server::Server::new(schema.clone())
             .with_playground(self.config.enable_playground)
-            .with_introspection(self.config.enable_introspection);
+            .with_introspection(self.config.enable_introspection)
+            .with_max_body_size(self.config.max_request_body_size)
+            .with_read_timeout(self.config.request_read_timeout)
+            .with_max_connections(self.config.max_connections);
+
+        if let Some(ref rate_limit_config) = self.config.rate_limit_config {
+            server = server.with_rate_limiting(rate_limit_config.clone());
+        }
 
         // Configure validation if enabled
         if self.config.enable_query_validation {
-            server =
-                server.with_validation(self.config.validation_config.clone(), schema_clone.clone());
+            server = server.with_validation(validation_config, schema_clone.clone());
         }
 
-        // Set up resolvers
-        let query_resolvers = resolvers::QueryResolvers::new(Arc::clone(&self.store));
-        server.add_resolver("Query".to_string(), query_resolvers.rdf_resolver());
+        // Any RDF-class object type produced by auto schema generation must
+        // be resolved "eagerly" (see `execution::QueryExecutor::add_eager_type`)
+        // since `AutoSchemaResolver` returns one fully materialized value
+        // tree per field rather than participating in per-type resolver
+        // dispatch, which has no way to distinguish between items of a list.
+        for type_name in &generated_type_names {
+            server.add_eager_object_type(type_name.clone());
+        }
 
-        // Add introspection resolver
+        // Set up the root Query resolver: hardcoded RDF fields (and the
+        // opt-in raw SPARQL passthrough), GraphQL introspection, and -- when
+        // present -- fields generated from the store's RDF vocabulary.
+        let query_resolvers = resolvers::QueryResolvers::new_with_sparql_config(
+            Arc::clone(&self.store),
+            self.config.enable_sparql_field,
+            self.config.sparql_query_timeout,
+        );
         let introspection_resolver = Arc::new(introspection::IntrospectionResolver::new(Arc::new(
             schema_clone,
         )));
-        server.add_resolver("__Schema".to_string(), introspection_resolver.clone());
-        server.add_resolver("__Type".to_string(), introspection_resolver.clone());
-        server.add_resolver("__Field".to_string(), introspection_resolver.clone());
-        server.add_resolver("__InputValue".to_string(), introspection_resolver.clone());
-        server.add_resolver("__EnumValue".to_string(), introspection_resolver.clone());
-        server.add_resolver("__Directive".to_string(), introspection_resolver);
+        let root_resolver = QueryRootResolver {
+            rdf_resolver: query_resolvers.rdf_resolver(),
+            introspection_resolver,
+            auto_schema_resolver,
+        };
+        server.add_resolver("Query".to_string(), Arc::new(root_resolver));
 
         // Parse the address
         let socket_addr: std::net::SocketAddr = addr
@@ -755,6 +1107,47 @@ impl GraphQLServer {
             .map_err(|e| anyhow::anyhow!("Invalid address '{}': {}", addr, e))?;
 
         server.start(socket_addr).await
+    }
+}
+
+/// Root `Query`-type field resolver that dispatches each requested field to
+/// the appropriate underlying resolver: the hardcoded RDF/SPARQL fields
+/// (see [`resolvers::RdfResolver`]), GraphQL introspection (`__schema`/
+/// `__type`, see [`introspection::IntrospectionResolver`]), and -- when the
+/// store's vocabulary yielded at least one RDF class -- the fields
+/// generated by [`schema_generator::SchemaGenerator`] (see
+/// [`auto_schema_resolver::AutoSchemaResolver`]).
+struct QueryRootResolver {
+    rdf_resolver: Arc<resolvers::RdfResolver>,
+    introspection_resolver: Arc<introspection::IntrospectionResolver>,
+    auto_schema_resolver: Option<Arc<auto_schema_resolver::AutoSchemaResolver>>,
+}
+
+#[async_trait::async_trait]
+impl execution::FieldResolver for QueryRootResolver {
+    async fn resolve_field(
+        &self,
+        field_name: &str,
+        args: &std::collections::HashMap<String, ast::Value>,
+        context: &execution::ExecutionContext,
+    ) -> Result<ast::Value> {
+        match field_name {
+            "__schema" | "__type" => {
+                self.introspection_resolver
+                    .resolve_field(field_name, args, context)
+                    .await
+            }
+            _ => {
+                if let Some(ref auto_resolver) = self.auto_schema_resolver {
+                    if auto_resolver.handles(field_name) {
+                        return auto_resolver.resolve_field(field_name, args, context).await;
+                    }
+                }
+                self.rdf_resolver
+                    .resolve_field(field_name, args, context)
+                    .await
+            }
+        }
     }
 }
 

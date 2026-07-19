@@ -766,6 +766,63 @@ impl QuerySimilarityAnalyzer {
     }
 }
 
+/// Find and report the queries in the *wired* history store
+/// ([`crate::commands::history`]) most similar to `target`.
+///
+/// Operates over the authoritative on-disk history (`query_history.json`) — the
+/// same store the `history` command reads — rather than any separate log. A
+/// valid-but-empty history surfaces an explicit "no history" message; it never
+/// fabricates queries to compare against.
+pub fn run_similarity_over_history(target: &str, top_k: usize) -> CliResult<()> {
+    use crate::cli::CliError;
+    use crate::commands::history::QueryHistory;
+
+    let mut history = QueryHistory::new(QueryHistory::default_history_file(), 1000);
+    history
+        .load()
+        .map_err(|e| CliError::from(format!("Failed to load query history: {e}")))?;
+
+    let query_log: Vec<String> = history.entries().iter().map(|e| e.query.clone()).collect();
+
+    if query_log.is_empty() {
+        println!("No query history found — nothing to compare against.");
+        return Ok(());
+    }
+
+    let analyzer = QuerySimilarityAnalyzer::new();
+    let similar = analyzer.find_similar_queries(target, &query_log, top_k);
+
+    println!(
+        "Queries most similar to the target ({} in history):",
+        query_log.len()
+    );
+    println!("{}", "=".repeat(60));
+
+    if similar.is_empty() {
+        println!("No comparable queries found in history.");
+        return Ok(());
+    }
+
+    for (i, (query, score)) in similar.iter().enumerate() {
+        let preview = if query.len() > 70 {
+            format!("{}...", &query[..67])
+        } else {
+            query.clone()
+        };
+        println!(
+            "{}. overall {:.2} (structural {:.2}, textual {:.2}, feature {:.2})",
+            i + 1,
+            score.overall,
+            score.structural,
+            score.textual,
+            score.feature_based
+        );
+        println!("   {preview}");
+    }
+
+    Ok(())
+}
+
 /// Analyze a query log and generate similarity report
 pub fn analyze_query_log(query_log: &[String]) -> CliResult<()> {
     let analyzer = QuerySimilarityAnalyzer::new();

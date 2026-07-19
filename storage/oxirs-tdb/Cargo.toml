@@ -20,6 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 # Core
 anyhow = { workspace = true }
 thiserror = { workspace = true }
+async-trait = { workspace = true }
 
 # SciRS2 Integration
 scirs2-core = { workspace = true, features = ["profiling", "parallel"] }

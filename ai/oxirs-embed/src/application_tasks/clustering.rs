@@ -257,7 +257,22 @@ impl ClusteringEvaluator {
                     Ok(0.0)
                 }
             }
-            _ => Ok(0.5), // Placeholder for other metrics
+            ClusteringMetric::NormalizedMutualInformation => {
+                if let Some(ref ground_truth) = self.ground_truth_clusters {
+                    self.calculate_nmi(assignments, ground_truth, entities)
+                } else {
+                    // Consistent with AdjustedRandIndex above: without ground
+                    // truth there is nothing to compare against.
+                    Ok(0.0)
+                }
+            }
+            ClusteringMetric::Purity => {
+                if let Some(ref ground_truth) = self.ground_truth_clusters {
+                    self.calculate_purity(assignments, ground_truth, entities)
+                } else {
+                    Ok(0.0)
+                }
+            }
         }
     }
 
@@ -396,14 +411,174 @@ impl ClusteringEvaluator {
     }
 
     /// Calculate Adjusted Rand Index (simplified)
+    /// Adjusted Rand Index between predicted cluster assignments and
+    /// ground-truth labels, computed from the standard contingency-table
+    /// formula: `(sum_ij C(n_ij,2) - expected) / (max - expected)`.
     fn calculate_adjusted_rand_index(
         &self,
-        _assignments: &[usize],
-        _ground_truth: &HashMap<String, String>,
-        _entities: &[String],
+        assignments: &[usize],
+        ground_truth: &HashMap<String, String>,
+        entities: &[String],
     ) -> Result<f64> {
-        // Simplified implementation
-        Ok(0.6)
+        let pairs = Self::labeled_pairs(assignments, ground_truth, entities);
+        if pairs.len() < 2 {
+            return Ok(0.0);
+        }
+
+        let (cluster_counts, label_counts, joint_counts) = Self::contingency_table(&pairs);
+
+        let comb2 = |x: usize| -> f64 {
+            if x < 2 {
+                0.0
+            } else {
+                (x * (x - 1)) as f64 / 2.0
+            }
+        };
+
+        let sum_joint: f64 = joint_counts.values().map(|&v| comb2(v)).sum();
+        let sum_cluster: f64 = cluster_counts.values().map(|&v| comb2(v)).sum();
+        let sum_label: f64 = label_counts.values().map(|&v| comb2(v)).sum();
+        let total_pairs = comb2(pairs.len());
+
+        if total_pairs == 0.0 {
+            return Ok(0.0);
+        }
+
+        let expected_index = sum_cluster * sum_label / total_pairs;
+        let max_index = 0.5 * (sum_cluster + sum_label);
+
+        if (max_index - expected_index).abs() < 1e-12 {
+            // Degenerate case (e.g. a single cluster/label): agreement is
+            // trivially perfect since there is nothing else to compare to.
+            return Ok(1.0);
+        }
+
+        Ok(((sum_joint - expected_index) / (max_index - expected_index)).clamp(-1.0, 1.0))
+    }
+
+    /// Normalized Mutual Information between predicted cluster assignments
+    /// and ground-truth labels: `I(U,V) / sqrt(H(U) * H(V))`.
+    fn calculate_nmi(
+        &self,
+        assignments: &[usize],
+        ground_truth: &HashMap<String, String>,
+        entities: &[String],
+    ) -> Result<f64> {
+        let pairs = Self::labeled_pairs(assignments, ground_truth, entities);
+        if pairs.is_empty() {
+            return Ok(0.0);
+        }
+
+        let (cluster_counts, label_counts, joint_counts) = Self::contingency_table(&pairs);
+        let n = pairs.len() as f64;
+
+        let entropy = |count: usize| -> f64 {
+            let p = count as f64 / n;
+            if p > 0.0 {
+                -p * p.ln()
+            } else {
+                0.0
+            }
+        };
+
+        let mut mutual_information = 0.0;
+        for (&(cluster, label), &n_uv) in &joint_counts {
+            let n_u = cluster_counts[&cluster] as f64;
+            let n_v = label_counts[&label] as f64;
+            let p_uv = n_uv as f64 / n;
+            mutual_information += p_uv * ((n * n_uv as f64) / (n_u * n_v)).ln();
+        }
+
+        let h_u: f64 = cluster_counts.values().map(|&c| entropy(c)).sum();
+        let h_v: f64 = label_counts.values().map(|&c| entropy(c)).sum();
+
+        if h_u <= 0.0 || h_v <= 0.0 {
+            // No uncertainty in one of the partitions (e.g. a single
+            // cluster/label): normalized mutual information is undefined, so
+            // report perfect agreement only when the other side also has no
+            // uncertainty, else no measurable information.
+            return Ok(if h_u <= 0.0 && h_v <= 0.0 { 1.0 } else { 0.0 });
+        }
+
+        Ok((mutual_information / (h_u * h_v).sqrt()).clamp(0.0, 1.0))
+    }
+
+    /// Clustering purity: the fraction of (labeled) entities whose
+    /// predicted cluster's majority ground-truth label matches their own.
+    fn calculate_purity(
+        &self,
+        assignments: &[usize],
+        ground_truth: &HashMap<String, String>,
+        entities: &[String],
+    ) -> Result<f64> {
+        if assignments.len() != entities.len() || assignments.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut clusters: HashMap<usize, Vec<&str>> = HashMap::new();
+        let mut total_labeled = 0usize;
+        for (idx, &cluster) in assignments.iter().enumerate() {
+            if let Some(label) = ground_truth.get(&entities[idx]) {
+                clusters.entry(cluster).or_default().push(label.as_str());
+                total_labeled += 1;
+            }
+        }
+
+        if total_labeled == 0 {
+            return Ok(0.0);
+        }
+
+        let total_correct: usize = clusters
+            .values()
+            .map(|labels| {
+                let mut counts: HashMap<&str, usize> = HashMap::new();
+                for &label in labels {
+                    *counts.entry(label).or_insert(0) += 1;
+                }
+                counts.values().copied().max().unwrap_or(0)
+            })
+            .sum();
+
+        Ok(total_correct as f64 / total_labeled as f64)
+    }
+
+    /// Pair up predicted cluster assignments with ground-truth labels for
+    /// entities that have a recorded label, dropping unlabeled entities.
+    fn labeled_pairs<'a>(
+        assignments: &[usize],
+        ground_truth: &'a HashMap<String, String>,
+        entities: &[String],
+    ) -> Vec<(usize, &'a str)> {
+        entities
+            .iter()
+            .zip(assignments.iter())
+            .filter_map(|(entity, &cluster)| {
+                ground_truth
+                    .get(entity)
+                    .map(|label| (cluster, label.as_str()))
+            })
+            .collect()
+    }
+
+    /// Build cluster-size, label-size, and joint contingency counts from
+    /// (cluster, label) pairs.
+    #[allow(clippy::type_complexity)]
+    fn contingency_table<'a>(
+        pairs: &[(usize, &'a str)],
+    ) -> (
+        HashMap<usize, usize>,
+        HashMap<&'a str, usize>,
+        HashMap<(usize, &'a str), usize>,
+    ) {
+        let mut cluster_counts: HashMap<usize, usize> = HashMap::new();
+        let mut label_counts: HashMap<&str, usize> = HashMap::new();
+        let mut joint_counts: HashMap<(usize, &str), usize> = HashMap::new();
+        for &(cluster, label) in pairs {
+            *cluster_counts.entry(cluster).or_insert(0) += 1;
+            *label_counts.entry(label).or_insert(0) += 1;
+            *joint_counts.entry((cluster, label)).or_insert(0) += 1;
+        }
+        (cluster_counts, label_counts, joint_counts)
     }
 
     /// Analyze clusters
@@ -463,5 +638,104 @@ impl ClusteringEvaluator {
 impl Default for ClusteringEvaluator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Perfect agreement between predicted clusters and ground truth: ARI,
+    /// NMI, and purity must all report (near) 1.0 rather than a fabricated
+    /// 0.5/0.6.
+    #[test]
+    fn test_ground_truth_metrics_perfect_agreement() -> Result<()> {
+        let mut evaluator = ClusteringEvaluator::new();
+        let entities = vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ];
+        let assignments = vec![0usize, 0, 1, 1];
+        let ground_truth: HashMap<String, String> = [
+            ("a".to_string(), "X".to_string()),
+            ("b".to_string(), "X".to_string()),
+            ("c".to_string(), "Y".to_string()),
+            ("d".to_string(), "Y".to_string()),
+        ]
+        .into_iter()
+        .collect();
+        evaluator.set_ground_truth(ground_truth.clone());
+
+        let ari =
+            evaluator.calculate_adjusted_rand_index(&assignments, &ground_truth, &entities)?;
+        assert!((ari - 1.0).abs() < 1e-9, "ari = {ari}");
+
+        let nmi = evaluator.calculate_nmi(&assignments, &ground_truth, &entities)?;
+        assert!((nmi - 1.0).abs() < 1e-9, "nmi = {nmi}");
+
+        let purity = evaluator.calculate_purity(&assignments, &ground_truth, &entities)?;
+        assert!((purity - 1.0).abs() < 1e-9, "purity = {purity}");
+
+        Ok(())
+    }
+
+    /// Predicted clusters uncorrelated with (in fact, inverted relative to)
+    /// ground truth should score well below the "perfect" case.
+    #[test]
+    fn test_ground_truth_metrics_poor_agreement() -> Result<()> {
+        let evaluator = ClusteringEvaluator::new();
+        let entities = vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ];
+        // Every predicted cluster mixes both ground-truth labels evenly.
+        let assignments = vec![0usize, 1, 0, 1];
+        let ground_truth: HashMap<String, String> = [
+            ("a".to_string(), "X".to_string()),
+            ("b".to_string(), "X".to_string()),
+            ("c".to_string(), "Y".to_string()),
+            ("d".to_string(), "Y".to_string()),
+        ]
+        .into_iter()
+        .collect();
+
+        let ari =
+            evaluator.calculate_adjusted_rand_index(&assignments, &ground_truth, &entities)?;
+        assert!(ari < 0.5, "ari = {ari}");
+
+        let purity = evaluator.calculate_purity(&assignments, &ground_truth, &entities)?;
+        assert!((purity - 0.5).abs() < 1e-9, "purity = {purity}");
+
+        Ok(())
+    }
+
+    /// The `_ => Ok(0.5)` fallback must be gone: every `ClusteringMetric`
+    /// variant is handled explicitly by `calculate_clustering_metric`.
+    #[test]
+    fn test_calculate_clustering_metric_handles_ground_truth_variants_without_ground_truth(
+    ) -> Result<()> {
+        let evaluator = ClusteringEvaluator::new();
+        let embeddings = vec![vec![0.0f32, 0.0], vec![1.0, 1.0]];
+        let assignments = vec![0usize, 1];
+        let entities = vec!["a".to_string(), "b".to_string()];
+
+        for metric in [
+            ClusteringMetric::NormalizedMutualInformation,
+            ClusteringMetric::Purity,
+        ] {
+            let score = evaluator.calculate_clustering_metric(
+                &metric,
+                &embeddings,
+                &assignments,
+                &entities,
+            )?;
+            assert_eq!(score, 0.0, "metric = {metric:?}");
+        }
+
+        Ok(())
     }
 }

@@ -8,7 +8,7 @@ Time-series optimizations for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.3.2, 2026-07-12) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.4.0, 2026-07-19) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 
@@ -227,7 +227,7 @@ See `/tmp/oxirs_cli_phase_d_guide.md` for complete CLI documentation.
 
 ## Production Status
 
-- ✅ **1,285 tests passing** - 100% success rate
+- ✅ **1,305 tests passing** - 100% success rate
 - ✅ **Zero warnings** - Strict code quality enforcement
 - ✅ **10 examples** - Complete usage documentation
 - ✅ **3 benchmarks** - Performance validation

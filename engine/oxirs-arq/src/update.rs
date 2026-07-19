@@ -954,37 +954,41 @@ impl<'a> UpdateExecutor<'a> {
         }
     }
 
-    /// Evaluate a pattern to get variable bindings
+    /// Evaluate a WHERE pattern against the real store to get variable bindings.
+    ///
+    /// This executes the algebra with [`crate::executor::QueryExecutor`] over a
+    /// [`crate::executor::StoreRefDataset`] wrapping `self.store`, so that
+    /// DELETE WHERE / INSERT WHERE / DELETE-INSERT WHERE match actual data in
+    /// the triple store instead of a disconnected in-memory executor.
     fn evaluate_pattern(
         &mut self,
         pattern: &Algebra,
     ) -> Result<Vec<HashMap<String, oxirs_core::model::Term>>, OxirsError> {
-        use crate::executor::QueryExecutor;
+        use crate::executor::{QueryExecutor, StoreRefDataset};
 
-        // Create evaluation context
-        let mut context = EvaluationContext::default();
+        // Run the pattern against the real store. Scope the immutable reborrow
+        // of `self.store` so the store is free for mutation afterwards.
+        let solution = {
+            let store_ref: &dyn Store = &*self.store;
+            let dataset = StoreRefDataset::new(store_ref);
+            let mut executor = QueryExecutor::new();
+            let (solution, _stats) = executor
+                .execute(pattern, &dataset)
+                .map_err(|e| OxirsError::Query(e.to_string()))?;
+            solution
+        };
 
-        // Create query executor
-        let mut executor = QueryExecutor::new();
-
-        // Execute the pattern and collect bindings
-        let results = executor
-            .execute_algebra(pattern, &mut context)
-            .map_err(|e| OxirsError::Query(e.to_string()))?;
-
-        // Convert results to the expected format
+        // Convert results to the expected format.
         let mut bindings = Vec::new();
-        for solution in results {
-            for binding in solution {
-                let mut converted_binding = HashMap::new();
-                for (var, term) in binding {
-                    // Convert from algebra::Term to term::Term and then to oxirs_core::model::Term
-                    let arq_term = crate::term::Term::from_algebra_term(&term);
-                    let core_term = self.convert_term_to_core(&arq_term)?;
-                    converted_binding.insert(var.as_str().to_string(), core_term);
-                }
-                bindings.push(converted_binding);
+        for binding in solution {
+            let mut converted_binding = HashMap::new();
+            for (var, term) in binding {
+                // Convert from algebra::Term to term::Term and then to oxirs_core::model::Term
+                let arq_term = crate::term::Term::from_algebra_term(&term);
+                let core_term = self.convert_term_to_core(&arq_term)?;
+                converted_binding.insert(var.as_str().to_string(), core_term);
             }
+            bindings.push(converted_binding);
         }
 
         Ok(bindings)
@@ -1319,6 +1323,121 @@ mod tests {
         assert_eq!(stats.total_operations, 0);
         assert_eq!(stats.batch_count, 0);
         assert_eq!(stats.operations_per_second, 0.0);
+    }
+
+    #[test]
+    fn delete_where_roundtrip_on_real_store() {
+        use oxirs_core::model::{Literal as CoreLiteral, NamedNode, Predicate, Quad};
+        use oxirs_core::rdf_store::{ConcreteStore, Store};
+
+        let mut store = ConcreteStore::new().expect("create store");
+
+        let s1 = NamedNode::new("http://example.org/s1").expect("iri");
+        let s2 = NamedNode::new("http://example.org/s2").expect("iri");
+        let p = NamedNode::new("http://example.org/p").expect("iri");
+        let q = NamedNode::new("http://example.org/q").expect("iri");
+
+        store
+            .insert(&Quad::new(
+                s1.clone(),
+                p.clone(),
+                CoreLiteral::new("v1"),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert s1");
+        store
+            .insert(&Quad::new(
+                s2.clone(),
+                q.clone(),
+                CoreLiteral::new("v2"),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert s2");
+
+        // DELETE WHERE { ?s <p> ?o } must delete only the (s1 p "v1") triple,
+        // proving WHERE evaluation runs against the real store (not fabricated
+        // http://example.org/subject|object constants).
+        let pattern = Algebra::Bgp(vec![TriplePattern {
+            subject: Term::Variable(Variable::new("s").expect("var")),
+            predicate: Term::Iri(p.clone()),
+            object: Term::Variable(Variable::new("o").expect("var")),
+        }]);
+        let op = UpdateOperation::DeleteWhere {
+            pattern: Box::new(pattern),
+        };
+
+        let deleted = {
+            let mut executor = UpdateExecutor::new(&mut store);
+            executor.execute(&op).expect("delete where").deleted
+        };
+        assert_eq!(deleted, 1, "exactly one matching triple must be deleted");
+
+        let remaining_p = store
+            .find_quads(None, Some(&Predicate::NamedNode(p)), None, None)
+            .expect("find p");
+        assert!(remaining_p.is_empty(), "the (s1 p v1) triple must be gone");
+        let remaining_q = store
+            .find_quads(None, Some(&Predicate::NamedNode(q)), None, None)
+            .expect("find q");
+        assert_eq!(remaining_q.len(), 1, "the (s2 q v2) triple must survive");
+    }
+
+    #[test]
+    fn delete_where_matches_typed_literal_on_real_store() {
+        use oxirs_core::model::{Literal as CoreLiteral, NamedNode, Predicate, Quad};
+        use oxirs_core::rdf_store::{ConcreteStore, Store};
+
+        let mut store = ConcreteStore::new().expect("create store");
+
+        let s = NamedNode::new("http://example.org/s").expect("iri");
+        let age = NamedNode::new("http://example.org/age").expect("iri");
+        let xsd_int = NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("iri");
+
+        // Two ages: only the typed 25 should match the typed-literal pattern.
+        store
+            .insert(&Quad::new(
+                s.clone(),
+                age.clone(),
+                CoreLiteral::new_typed("25", xsd_int.clone()),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert 25");
+        store
+            .insert(&Quad::new(
+                s.clone(),
+                age.clone(),
+                CoreLiteral::new_typed("30", xsd_int.clone()),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert 30");
+
+        // DELETE WHERE { ?s <age> "25"^^xsd:integer } — typed-literal match.
+        let pattern = Algebra::Bgp(vec![TriplePattern {
+            subject: Term::Variable(Variable::new("s").expect("var")),
+            predicate: Term::Iri(age.clone()),
+            object: Term::Literal(crate::algebra::Literal {
+                value: "25".to_string(),
+                language: None,
+                datatype: Some(xsd_int.clone()),
+            }),
+        }]);
+        let op = UpdateOperation::DeleteWhere {
+            pattern: Box::new(pattern),
+        };
+
+        let deleted = {
+            let mut executor = UpdateExecutor::new(&mut store);
+            executor.execute(&op).expect("delete where").deleted
+        };
+        assert_eq!(
+            deleted, 1,
+            "typed-literal pattern must match exactly one triple"
+        );
+
+        let remaining = store
+            .find_quads(None, Some(&Predicate::NamedNode(age)), None, None)
+            .expect("find age");
+        assert_eq!(remaining.len(), 1, "only the age=30 triple must survive");
     }
 
     #[test]

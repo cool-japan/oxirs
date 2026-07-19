@@ -4,8 +4,6 @@
 //! Pages are the fundamental unit of storage in TDB.
 
 use crate::error::{Result, TdbError};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
 

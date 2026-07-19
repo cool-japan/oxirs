@@ -120,12 +120,17 @@ impl CompressionFormat {
     }
 }
 
-/// Compressed reader wrapper
+/// Compressed reader wrapper.
+///
+/// The boxed variants are `Send` so a `CompressedReader` can be fed directly
+/// into oxirs-core's streaming parsers (`RdfParser::for_reader` /
+/// `FormatHandler::parse_triples`), both of which require
+/// `Read + Send + 'static`.
 pub enum CompressedReader {
     None(BufReader<File>),
-    Gzip(Box<dyn Read>),
-    Bzip2(Box<dyn Read>),
-    Xz(Box<dyn Read>),
+    Gzip(Box<dyn Read + Send>),
+    Bzip2(Box<dyn Read + Send>),
+    Xz(Box<dyn Read + Send>),
 }
 
 impl Read for CompressedReader {
@@ -197,6 +202,28 @@ pub fn open_reader(path: &Path) -> ToolResult<CompressedReader> {
             let reader = BufReader::new(file);
             Ok(CompressedReader::Xz(Box::new(reader)))
         }
+    }
+}
+
+/// Open a file for reading, decompressing gzip transparently based on the
+/// file's *content* (the gzip magic bytes `0x1f 0x8b`) rather than its name.
+///
+/// This exists for callers whose compressed artifact may not carry a `.gz`
+/// file name (for example an archive whose name was chosen by the user): it
+/// guarantees a gzip stream is inflated and a non-gzip stream is passed
+/// through verbatim, while still routing every gzip inflate through the one
+/// `oxiarc_deflate` implementation in this crate. Corrupt gzip input yields an
+/// explicit error.
+pub fn open_reader_sniffed(path: &Path) -> ToolResult<Box<dyn Read + Send>> {
+    let mut all = Vec::new();
+    BufReader::new(File::open(path)?).read_to_end(&mut all)?;
+
+    if all.len() >= 2 && all[0] == 0x1f && all[1] == 0x8b {
+        let decompressed = oxiarc_deflate::gzip_decompress(&all)
+            .map_err(|e| format!("gzip decompression failed: {e}"))?;
+        Ok(Box::new(Cursor::new(decompressed)))
+    } else {
+        Ok(Box::new(Cursor::new(all)))
     }
 }
 
@@ -385,6 +412,22 @@ pub struct DecompressionStats {
     pub duration: std::time::Duration,
 }
 
+/// Strip a single trailing compression extension so callers can run their own
+/// (name-based) RDF format detection on the *inner* file name.
+///
+/// Examples: `data.ttl.gz` -> `data.ttl`, `data.nt.bz2` -> `data.nt`,
+/// `data.ttl` -> `data.ttl` (unchanged). This is what makes `.gz` handling
+/// transparent: the RDF format is decided by the inner extension, not by the
+/// compression wrapper.
+pub fn strip_compression_suffix(path: &Path) -> std::path::PathBuf {
+    if CompressionFormat::from_path(path) == CompressionFormat::None {
+        return path.to_path_buf();
+    }
+    // The compression extension is the final dotted component; dropping it
+    // reveals the inner name (e.g. `data.ttl.gz` -> `data.ttl`).
+    path.with_extension("")
+}
+
 /// Detect RDF format from compressed file path
 /// Examples: "data.ttl.gz" -> "turtle", "data.nt.bz2" -> "ntriples"
 pub fn detect_rdf_format_compressed(path: &Path) -> Option<String> {
@@ -524,6 +567,78 @@ mod tests {
             .read_to_string(&mut decompressed)
             .expect("failed to read decompressed payload");
         assert_eq!(decompressed, payload, "round-trip payload mismatch");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_strip_compression_suffix() {
+        assert_eq!(
+            strip_compression_suffix(Path::new("data.ttl.gz")),
+            Path::new("data.ttl")
+        );
+        assert_eq!(
+            strip_compression_suffix(Path::new("data.nt.bz2")),
+            Path::new("data.nt")
+        );
+        assert_eq!(
+            strip_compression_suffix(Path::new("data.rdf.xz")),
+            Path::new("data.rdf")
+        );
+        // No compression extension: returned unchanged.
+        assert_eq!(
+            strip_compression_suffix(Path::new("data.ttl")),
+            Path::new("data.ttl")
+        );
+        // Bare compression extension.
+        assert_eq!(
+            strip_compression_suffix(Path::new("data.gz")),
+            Path::new("data")
+        );
+    }
+
+    /// Corrupt gzip input must surface an explicit decompression error rather
+    /// than returning empty/garbage data (fail-loud contract).
+    #[test]
+    fn test_corrupt_gzip_input_errors() {
+        use std::env::temp_dir;
+
+        let unique = format!(
+            "{}_{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let path = temp_dir().join(format!("oxirs_gzip_corrupt_{unique}.ttl.gz"));
+
+        // Gzip magic header followed by garbage: looks like gzip by name and by
+        // the first two bytes, but the stream is not a valid gzip member.
+        std::fs::write(&path, [0x1f, 0x8b, 0x08, 0x00, 0xde, 0xad, 0xbe, 0xef])
+            .expect("failed to write corrupt gzip file");
+
+        let result = open_reader(&path);
+        // Either open_reader itself fails during eager decompression, or the
+        // first read does — in both cases the caller sees an explicit error and
+        // never valid-looking empty content.
+        match result {
+            Err(_) => { /* explicit error at open time: good */ }
+            Ok(mut reader) => {
+                let mut buf = Vec::new();
+                let read_result = reader.read_to_end(&mut buf);
+                assert!(
+                    read_result.is_err() || buf.is_empty(),
+                    "corrupt gzip must not yield fabricated content"
+                );
+                // The intended contract is an explicit error; assert we did not
+                // silently succeed with bytes.
+                assert!(
+                    read_result.is_err(),
+                    "corrupt gzip must produce an explicit read error"
+                );
+            }
+        }
 
         let _ = std::fs::remove_file(&path);
     }

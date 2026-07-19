@@ -1,12 +1,12 @@
 # OxiRS TTL - RDF Turtle Family Parser & Serializer
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
-[![Tests](https://img.shields.io/badge/tests-1%2C779%20passing-green)](https://github.com/cool-japan/oxirs)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Tests](https://img.shields.io/badge/tests-1%2C817%20passing-green)](https://github.com/cool-japan/oxirs)
 [![Compliance](https://img.shields.io/badge/W3C-97%25%20compliant-brightgreen)](https://www.w3.org/TR/turtle/)
 
-**Status**: v0.3.2 - Released 2026-07-12
+**Status**: v0.4.0 - Released 2026-07-19
 
-✨ **Production-Ready**: API-stable with comprehensive testing (1,779 tests), W3C compliance, and performance optimizations.
+✨ **Production-Ready**: API-stable with comprehensive testing (1,817 tests), W3C compliance, and performance optimizations.
 
 High-performance parsers and serializers for RDF formats in the Turtle family including Turtle, N-Triples, TriG, N-Quads, and N3. Ported from Oxigraph's oxttl crate with extensive enhancements for OxiRS.
 
@@ -434,7 +434,7 @@ Measured on Apple M1 with typical RDF datasets:
 
 ### Test Coverage
 
-- **1,779 tests passing**
+- **1,817 tests passing**
 - **Property-based testing** with proptest
 - **Memory leak tests** for production safety
 - **Performance regression tests** for baseline tracking

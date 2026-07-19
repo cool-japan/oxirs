@@ -4,7 +4,15 @@
 //! with optimization, explanation, and multiple data source support.
 
 use super::{utils, ToolResult, ToolStats};
+use oxirs_core::model::Triple;
+use oxirs_core::rdf_store::{QueryResults as CoreQueryResults, RdfStore};
+use oxirs_ttl::formats::nquads::NQuadsParser;
+use oxirs_ttl::formats::ntriples::NTriplesParser;
+use oxirs_ttl::formats::trig::TriGParser;
+use oxirs_ttl::toolkit::Parser;
+use oxirs_ttl::turtle::TurtleParser;
 use std::fs;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -140,10 +148,17 @@ struct QueryInfo {
 
 /// Data source types
 #[derive(Debug)]
-#[allow(dead_code)]
 enum DataSource {
+    /// A persistent oxirs-core dataset directory (opened read-only and merged
+    /// into the in-memory query store).
     Dataset(PathBuf),
+    /// An RDF file (Turtle/N-Triples/N-Quads/TriG/N3) parsed and merged into
+    /// the in-memory query store.
     File(PathBuf),
+    /// A named graph IRI declared as in-scope for the query. `arq`'s
+    /// `--namedgraph` flag takes only an IRI (no data file), so this
+    /// contributes no triples of its own — see `--data`/`--dataset` to load
+    /// actual named-graph content.
     NamedGraph(String),
 }
 
@@ -436,71 +451,215 @@ fn explain_query(_query: &str, query_info: &QueryInfo) -> ToolResult<()> {
     Ok(())
 }
 
-/// Execute SPARQL query against data sources
+/// Load all configured data sources into a fresh in-memory [`RdfStore`].
+///
+/// `File` sources are parsed via the real oxirs-ttl parsers (Turtle,
+/// N-Triples, N-Quads, TriG, N3) and inserted as default-graph triples.
+/// `Dataset` sources are opened read-only via `RdfStore::open` and their
+/// quads are copied in (the on-disk dataset itself is never mutated).
+/// `NamedGraph` sources declare an in-scope graph IRI but carry no data of
+/// their own (see the `DataSource::NamedGraph` doc comment).
+fn build_store(data_sources: &[DataSource]) -> ToolResult<RdfStore> {
+    let mut store = RdfStore::new().map_err(|e| format!("Failed to create query store: {e}"))?;
+
+    for source in data_sources {
+        match source {
+            DataSource::File(path) => {
+                let format = utils::detect_rdf_format(path);
+                let content = utils::read_input(path)?;
+                let triples = parse_to_triples(&content, &format)
+                    .map_err(|e| format!("Failed to parse '{}': {e}", path.display()))?;
+                for triple in triples {
+                    store
+                        .insert_triple(triple)
+                        .map_err(|e| format!("Failed to load '{}': {e}", path.display()))?;
+                }
+            }
+            DataSource::Dataset(path) => {
+                let dataset_store = RdfStore::open(path)
+                    .map_err(|e| format!("Failed to open dataset '{}': {e}", path.display()))?;
+                let quads = dataset_store
+                    .quads()
+                    .map_err(|e| format!("Failed to read dataset '{}': {e}", path.display()))?;
+                for quad in quads {
+                    store
+                        .insert_quad(quad)
+                        .map_err(|e| format!("Failed to load dataset '{}': {e}", path.display()))?;
+                }
+            }
+            DataSource::NamedGraph(graph_uri) => {
+                // No data payload for this source kind; see doc comment above.
+                println!("Note: named graph '{graph_uri}' declared with no data file to load");
+            }
+        }
+    }
+
+    Ok(store)
+}
+
+/// Parse RDF content into a uniform `Vec<Triple>`, regardless of source format.
+fn parse_to_triples(content: &str, format: &str) -> ToolResult<Vec<Triple>> {
+    match format {
+        "turtle" | "ttl" | "n3" => {
+            let parser = TurtleParser::new();
+            parser
+                .parse_document(content)
+                .map_err(|e| format!("Turtle parse error: {e}").into())
+        }
+        "ntriples" | "nt" => {
+            let parser = NTriplesParser::new();
+            let mut triples = Vec::new();
+            for (idx, line) in content.lines().enumerate() {
+                match parser.parse_line(line, idx + 1) {
+                    Ok(Some(t)) => triples.push(t),
+                    Ok(None) => {}
+                    Err(e) => {
+                        return Err(format!("N-Triples line {}: {e}", idx + 1).into());
+                    }
+                }
+            }
+            Ok(triples)
+        }
+        "nquads" | "nq" => {
+            let parser = NQuadsParser::new();
+            let quads = parser
+                .parse(Cursor::new(content))
+                .map_err(|e| format!("N-Quads parse error: {e}"))?;
+            Ok(quads
+                .into_iter()
+                .map(|q| {
+                    Triple::new(
+                        q.subject().clone(),
+                        q.predicate().clone(),
+                        q.object().clone(),
+                    )
+                })
+                .collect())
+        }
+        "trig" => {
+            let parser = TriGParser::new();
+            let quads = parser
+                .parse(Cursor::new(content))
+                .map_err(|e| format!("TriG parse error: {e}"))?;
+            Ok(quads
+                .into_iter()
+                .map(|q| {
+                    Triple::new(
+                        q.subject().clone(),
+                        q.predicate().clone(),
+                        q.object().clone(),
+                    )
+                })
+                .collect())
+        }
+        other => Err(format!("Unsupported data format for arq: '{other}'").into()),
+    }
+}
+
+/// Normalize `ASK { ... }` queries to `ASK WHERE { ... }`.
+///
+/// SPARQL 1.1 (§10.2) permits the `WHERE` keyword to be omitted in an ASK
+/// query's pattern block, but oxirs-core's `QueryExecutor::extract_triple_patterns`
+/// locates the pattern block by searching for the literal `WHERE` keyword.
+/// Without this normalization, a spec-legal `ASK { ?s ?p ?o }` silently
+/// matches zero patterns and always evaluates to `false`, regardless of the
+/// store's actual contents. Inserting the (semantically no-op) `WHERE`
+/// keyword here ensures ASK queries in either legal form reach the real
+/// engine correctly instead of being misread as unconditionally empty.
+fn normalize_ask_query(query: &str) -> std::borrow::Cow<'_, str> {
+    let leading_ws = query.len() - query.trim_start().len();
+    let rest = &query[leading_ws..];
+    if rest.len() < 3 || !rest[..3].eq_ignore_ascii_case("ASK") {
+        return std::borrow::Cow::Borrowed(query);
+    }
+    let after_ask = rest[3..].trim_start();
+    if after_ask.len() >= 5 && after_ask[..5].eq_ignore_ascii_case("WHERE") {
+        return std::borrow::Cow::Borrowed(query);
+    }
+    let ask_end = leading_ws + 3;
+    let mut normalized = String::with_capacity(query.len() + 6);
+    normalized.push_str(&query[..ask_end]);
+    normalized.push_str(" WHERE");
+    normalized.push_str(&query[ask_end..]);
+    std::borrow::Cow::Owned(normalized)
+}
+
+/// Execute SPARQL query against data sources using oxirs-core's real query
+/// executor (the same engine `oxirs query` drives — see
+/// `commands/query.rs::run`). No result is synthesized: an empty store
+/// yields empty results, and ASK reflects the actual evaluated boolean.
 fn execute_sparql_query(
-    _query: &str,
+    query: &str,
     query_info: &QueryInfo,
     data_sources: &[DataSource],
 ) -> ToolResult<QueryResults> {
     println!("Loading {} data source(s)...", data_sources.len());
+    let store = build_store(data_sources)?;
 
-    // For now, simulate query execution
-    // In a real implementation, this would:
-    // 1. Load all data sources into a unified dataset
-    // 2. Parse the SPARQL query into an algebra expression
-    // 3. Optimize the query plan
-    // 4. Execute the query against the dataset
-    // 5. Return results
+    let normalized_query = normalize_ask_query(query);
+    let oxirs_results = store
+        .query(&normalized_query)
+        .map_err(|e| format!("Query execution failed: {e}"))?;
 
-    let variables = query_info.variables.clone();
-    let mut bindings = Vec::new();
-
-    // Simulate some results
-    match query_info.query_type.as_str() {
-        "SELECT" => {
-            for i in 0..5 {
+    let query_results = match oxirs_results.results() {
+        CoreQueryResults::Bindings(rows) => {
+            let variables: Vec<String> = oxirs_results
+                .variables()
+                .iter()
+                .map(|v| format!("?{v}"))
+                .collect();
+            let mut bindings = Vec::with_capacity(rows.len());
+            for row in rows {
                 let mut values = std::collections::HashMap::new();
-                for var in &variables {
-                    values.insert(
-                        var.clone(),
-                        format!("value_{}{}", var.trim_start_matches('?'), i),
-                    );
+                for var in oxirs_results.variables() {
+                    if let Some(term) = row.get(var) {
+                        values.insert(format!("?{var}"), term.to_string());
+                    }
                 }
                 bindings.push(QueryBinding { values });
             }
+            QueryResults {
+                variables,
+                bindings,
+                result_type: QueryResultType::Select,
+            }
         }
-        "ASK" => {
-            // ASK queries return boolean
-            return Ok(QueryResults {
-                variables: Vec::new(),
-                bindings: Vec::new(),
-                result_type: QueryResultType::Ask(true),
-            });
+        CoreQueryResults::Boolean(answer) => QueryResults {
+            variables: Vec::new(),
+            bindings: Vec::new(),
+            result_type: QueryResultType::Ask(*answer),
+        },
+        CoreQueryResults::Graph(quads) => {
+            let variables = vec![
+                "?subject".to_string(),
+                "?predicate".to_string(),
+                "?object".to_string(),
+            ];
+            let mut bindings = Vec::with_capacity(quads.len());
+            for quad in quads {
+                let mut values = std::collections::HashMap::new();
+                values.insert("?subject".to_string(), quad.subject().to_string());
+                values.insert("?predicate".to_string(), quad.predicate().to_string());
+                values.insert("?object".to_string(), quad.object().to_string());
+                bindings.push(QueryBinding { values });
+            }
+            let result_type = if query_info.query_type == "DESCRIBE" {
+                QueryResultType::Describe
+            } else {
+                QueryResultType::Construct
+            };
+            QueryResults {
+                variables,
+                bindings,
+                result_type,
+            }
         }
-        _ => {
-            println!(
-                "Query type '{}' simulation not implemented",
-                query_info.query_type
-            );
-        }
-    }
-
-    println!("Query executed successfully");
-    println!("Result bindings: {}", bindings.len());
-
-    let result_type = match query_info.query_type.as_str() {
-        "SELECT" => QueryResultType::Select,
-        "CONSTRUCT" => QueryResultType::Construct,
-        "ASK" => QueryResultType::Ask(true),
-        "DESCRIBE" => QueryResultType::Describe,
-        _ => QueryResultType::Select,
     };
 
-    Ok(QueryResults {
-        variables,
-        bindings,
-        result_type,
-    })
+    println!("Query executed successfully");
+    println!("Result bindings: {}", query_results.bindings.len());
+
+    Ok(query_results)
 }
 
 /// Format query results in specified format
@@ -802,4 +961,169 @@ fn markdown_escape(input: &str) -> String {
         .replace('|', "\\|")
         .replace('\n', " ")
         .replace('\r', "")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    /// Unique scratch subdirectory under the OS temp dir for a single test.
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let n = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs_arq_test_{label}_{}_{}",
+            std::process::id(),
+            n
+        ));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn write_temp_ttl(dir: &std::path::Path, name: &str, content: &str) -> PathBuf {
+        let path = dir.join(name);
+        fs::write(&path, content).expect("write temp ttl");
+        path
+    }
+
+    #[test]
+    fn test_parse_to_triples_turtle() {
+        let content = "@prefix ex: <http://example.org/> .\nex:s ex:p ex:o .\n";
+        let triples = parse_to_triples(content, "turtle").expect("parse turtle");
+        assert_eq!(triples.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_to_triples_unsupported_format() {
+        let result = parse_to_triples("", "rdfxml");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_build_store_loads_real_file_data() {
+        let dir = unique_temp_dir("build_store_file");
+        let ttl_path = write_temp_ttl(
+            &dir,
+            "data.ttl",
+            "@prefix ex: <http://example.org/> .\nex:alice ex:knows ex:bob .\nex:bob ex:knows ex:carol .\n",
+        );
+
+        let store = build_store(&[DataSource::File(ttl_path)]).expect("build store");
+        let quads = store.quads().expect("quads");
+        assert_eq!(
+            quads.len(),
+            2,
+            "store should contain exactly the parsed triples"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_execute_select_returns_real_bindings_not_synthesized() {
+        let dir = unique_temp_dir("select_real");
+        let ttl_path = write_temp_ttl(
+            &dir,
+            "data.ttl",
+            "@prefix ex: <http://example.org/> .\nex:alice ex:name \"Alice\" .\n",
+        );
+
+        let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
+        let query_info = parse_and_validate_query(query).expect("parse query");
+        let results = execute_sparql_query(query, &query_info, &[DataSource::File(ttl_path)])
+            .expect("execute query");
+
+        assert_eq!(results.bindings.len(), 1, "exactly one real triple loaded");
+        let binding = &results.bindings[0];
+        // The old implementation fabricated "value_{var}{i}" strings; assert
+        // real term values are returned instead.
+        let object_value = binding.values.get("?o").expect("?o bound");
+        assert!(
+            object_value.contains("Alice"),
+            "expected real literal value from the loaded data, got: {object_value}"
+        );
+        assert!(
+            !object_value.starts_with("value_o"),
+            "must not return fabricated placeholder value"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_execute_select_empty_store_returns_empty_bindings() {
+        let query = "SELECT ?s WHERE { ?s ?p ?o }";
+        let query_info = parse_and_validate_query(query).expect("parse query");
+        // No data sources loaded into the store at all (build_store still runs
+        // against a fresh in-memory store), verifying we get honest empty
+        // results rather than 5 fabricated rows.
+        let dir = unique_temp_dir("select_empty");
+        let ttl_path = write_temp_ttl(&dir, "empty.ttl", "");
+        let results = execute_sparql_query(query, &query_info, &[DataSource::File(ttl_path)])
+            .expect("execute query");
+        assert!(results.bindings.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_execute_ask_reflects_real_data() {
+        let dir = unique_temp_dir("ask_real");
+        let ttl_path = write_temp_ttl(
+            &dir,
+            "data.ttl",
+            "@prefix ex: <http://example.org/> .\nex:alice ex:knows ex:bob .\n",
+        );
+
+        let ask_true = "ASK { ?s <http://example.org/knows> ?o }";
+        let query_info = parse_and_validate_query(ask_true).expect("parse query");
+        let results =
+            execute_sparql_query(ask_true, &query_info, &[DataSource::File(ttl_path.clone())])
+                .expect("execute ask");
+        match results.result_type {
+            QueryResultType::Ask(answer) => assert!(answer, "matching pattern must ASK true"),
+            _ => panic!("expected Ask result type"),
+        }
+
+        let ask_false = "ASK { ?s <http://example.org/nonexistent> ?o }";
+        let query_info2 = parse_and_validate_query(ask_false).expect("parse query");
+        let results2 = execute_sparql_query(ask_false, &query_info2, &[DataSource::File(ttl_path)])
+            .expect("execute ask");
+        match results2.result_type {
+            QueryResultType::Ask(answer) => {
+                assert!(
+                    !answer,
+                    "non-matching pattern must ASK false, not hardcoded true"
+                )
+            }
+            _ => panic!("expected Ask result type"),
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_build_store_loads_dataset_directory() {
+        let dataset_dir = unique_temp_dir("dataset_src");
+        {
+            let mut store = RdfStore::open(&dataset_dir).expect("open dataset store");
+            let triple = parse_to_triples(
+                "@prefix ex: <http://example.org/> .\nex:a ex:b ex:c .\n",
+                "turtle",
+            )
+            .expect("parse")
+            .remove(0);
+            store.insert_triple(triple).expect("insert");
+            store.flush().expect("flush dataset store");
+        }
+
+        let store = build_store(&[DataSource::Dataset(dataset_dir.clone())])
+            .expect("build store from dataset");
+        let quads = store.quads().expect("quads");
+        assert_eq!(quads.len(), 1);
+
+        let _ = fs::remove_dir_all(&dataset_dir);
+    }
 }

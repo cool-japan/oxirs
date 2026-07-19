@@ -1,9 +1,9 @@
 //! # OxiRS Fuseki - SPARQL HTTP Server
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-fuseki/badge.svg)](https://docs.rs/oxirs-fuseki)
 //!
-//! **Status**: Production Release (v0.3.2)
+//! **Status**: Production Release (v0.3.3)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SPARQL 1.1/1.2 HTTP protocol server with Apache Fuseki compatibility.
@@ -207,6 +207,25 @@ impl Server {
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
+
+    /// Assemble the `AppState` that `run()` would eventually hand to
+    /// `Runtime::build_app`, without binding a TCP listener or running
+    /// `Runtime::initialize_services()`'s background service startup.
+    ///
+    /// This is the seam Task 4(b) needs: it exists purely so the
+    /// `ServerBuilder::config()` -> `Server::config` -> `AppState::config`
+    /// threading contract has direct, fast test coverage (see
+    /// `server_builder_tests` below) instead of requiring a live network
+    /// bind to observe. Uses the same `build_minimal_app_state` helper the
+    /// production-router regression test uses, so the config field really is
+    /// the one `ServerBuilder::build()` produced -- a revert of `build()`
+    /// back to always using `ServerConfig::default()` makes the config this
+    /// method exposes (and therefore the test asserting on it) go back to
+    /// reporting no write protection.
+    #[doc(hidden)]
+    pub fn to_minimal_app_state(&self) -> server::AppState {
+        server::build_minimal_app_state(self.store.clone(), self.config.clone())
+    }
 }
 
 /// Server builder for configuration
@@ -214,6 +233,7 @@ pub struct ServerBuilder {
     port: u16,
     host: String,
     dataset_path: Option<String>,
+    config: Option<config::ServerConfig>,
 }
 
 impl ServerBuilder {
@@ -222,6 +242,7 @@ impl ServerBuilder {
             port: 3030,
             host: "localhost".to_string(),
             dataset_path: None,
+            config: None,
         }
     }
 
@@ -240,6 +261,16 @@ impl ServerBuilder {
         self
     }
 
+    /// Supply the fully-loaded [`ServerConfig`] (datasets, `read_only` flags,
+    /// security, etc.). Without this, `build()` falls back to
+    /// `ServerConfig::default()` — an empty datasets map — which is what
+    /// silently dropped every `read_only` setting before: the loaded config
+    /// never reached `AppState`, so write-protection could not be enforced.
+    pub fn config(mut self, config: config::ServerConfig) -> Self {
+        self.config = Some(config);
+        self
+    }
+
     pub async fn build(self) -> Result<Server, Box<dyn std::error::Error>> {
         // Install the Pure Rust crypto provider as the process default before any
         // rustls-backed component runs (TLS termination, OAuth via reqwest, the
@@ -253,7 +284,11 @@ impl ServerBuilder {
             Store::new()?
         };
 
-        let config = config::ServerConfig::default();
+        // Use the fully-loaded config when one was supplied (so `datasets[..].read_only`
+        // reaches `AppState` and the update handlers can enforce it); otherwise fall
+        // back to defaults. Keep the socket address the builder resolved (CLI/host/port
+        // overrides win) rather than silently re-deriving it from the config.
+        let config = self.config.unwrap_or_else(config::ServerConfig::default);
 
         Ok(Server {
             addr,
@@ -266,5 +301,76 @@ impl ServerBuilder {
 impl Default for ServerBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod server_builder_tests {
+    use super::*;
+    use crate::config::{DatasetConfig, ServerConfig};
+
+    fn read_only_dataset_config(name: &str) -> DatasetConfig {
+        DatasetConfig {
+            name: name.to_string(),
+            location: String::new(),
+            read_only: true,
+            text_index: None,
+            shacl_shapes: vec![],
+            services: vec![],
+            access_control: None,
+            backup: None,
+        }
+    }
+
+    /// Task 4(b) regression: `ServerBuilder::config()` must thread all the
+    /// way into `AppState`. This test builds a `ServerConfig` with
+    /// `datasets["default"].read_only = true`, drives it through the public
+    /// `ServerBuilder` API (no port bind, no `initialize_services()`), and
+    /// asserts the resulting `AppState` reports the default dataset
+    /// read-only. A revert of `ServerBuilder::build()` back to always using
+    /// `ServerConfig::default()` (dropping the caller-supplied config) makes
+    /// this fail, since a fresh default config has no datasets at all.
+    #[tokio::test]
+    async fn test_server_builder_threads_read_only_config_into_app_state() {
+        let mut config = ServerConfig::default();
+        config
+            .datasets
+            .insert("default".to_string(), read_only_dataset_config("default"));
+
+        // `.host("127.0.0.1")` is required because `ServerBuilder::new()`'s
+        // default host is the *hostname* "localhost", and `build()` parses
+        // `"{host}:{port}"` directly as a `SocketAddr` -- `FromStr` for
+        // `SocketAddr` requires an IP literal and does not resolve hostnames,
+        // so the default would fail to parse here regardless of `.config()`.
+        // Irrelevant to what this test is verifying (config threading), so
+        // pinned to a literal IP rather than exercised.
+        let server = ServerBuilder::new()
+            .host("127.0.0.1")
+            .config(config)
+            .build()
+            .await
+            .expect("build() must succeed without binding a port");
+
+        let state = server.to_minimal_app_state();
+        assert!(
+            state.is_dataset_read_only("default"),
+            "AppState must report the default dataset read-only when ServerBuilder \
+             was given a config with datasets[\"default\"].read_only = true"
+        );
+    }
+
+    /// Companion case: without an explicit `.config(..)` call, `build()`
+    /// falls back to `ServerConfig::default()`, which has no datasets --
+    /// nothing should be reported read-only.
+    #[tokio::test]
+    async fn test_server_builder_without_config_has_no_read_only_datasets() {
+        let server = ServerBuilder::new()
+            .host("127.0.0.1")
+            .build()
+            .await
+            .expect("build() must succeed without binding a port");
+
+        let state = server.to_minimal_app_state();
+        assert!(!state.is_dataset_read_only("default"));
     }
 }

@@ -341,30 +341,87 @@ impl RuleEngine {
         Ok(result)
     }
 
-    /// Evaluate a condition query (stub)
-    #[allow(unused_variables)]
+    /// Evaluate a rule condition against the store.
+    ///
+    /// The condition may be an ASK query (boolean answer) or a SELECT/CONSTRUCT
+    /// query (satisfied when it yields any solution / triple). Any query that
+    /// fails to execute is surfaced as an error rather than silently treated as
+    /// satisfied.
     fn evaluate_condition(&self, condition: &str, store: &dyn Store) -> Result<bool> {
-        // TODO: Execute SPARQL ASK query
-        Ok(true)
+        use oxirs_core::rdf_store::QueryResults;
+
+        let query_results = store.query(condition).map_err(|e| {
+            ShaclError::SparqlExecution(format!("Rule condition query failed: {e}"))
+        })?;
+
+        Ok(match query_results.results() {
+            QueryResults::Boolean(value) => *value,
+            QueryResults::Bindings(bindings) => !bindings.is_empty(),
+            QueryResults::Graph(quads) => !quads.is_empty(),
+        })
     }
 
-    /// Execute a triple rule (stub)
-    #[allow(unused_variables)]
-    fn execute_triple_rule(
+    /// Execute a CONSTRUCT-style query and insert the produced triples into the
+    /// store, updating the execution result counters.
+    fn run_construct_and_insert(
         &self,
-        rule: &ShaclRule,
+        query: &str,
         store: &dyn Store,
         result: &mut RuleExecutionResult,
     ) -> Result<()> {
-        // TODO: Implement triple rule execution
-        result
-            .errors
-            .push("Triple rule execution not yet fully implemented".to_string());
-        Ok(())
+        use oxirs_core::rdf_store::QueryResults;
+
+        let query_results = store.query(query).map_err(|e| {
+            ShaclError::SparqlExecution(format!("Rule query execution failed: {e}"))
+        })?;
+
+        match query_results.results() {
+            QueryResults::Graph(quads) => {
+                let mut affected = std::collections::HashSet::new();
+                for quad in quads {
+                    affected.insert(quad.subject().clone());
+                    match store.insert_quad(quad.clone()) {
+                        Ok(true) => result.triples_added += 1,
+                        Ok(false) => { /* already present, no-op */ }
+                        Err(e) => result
+                            .errors
+                            .push(format!("Failed to insert inferred triple: {e}")),
+                    }
+                }
+                result.nodes_affected += affected.len();
+                Ok(())
+            }
+            QueryResults::Boolean(_) | QueryResults::Bindings(_) => {
+                result.errors.push(
+                    "Rule query did not produce a CONSTRUCT/graph result; no triples to insert"
+                        .to_string(),
+                );
+                Ok(())
+            }
+        }
     }
 
-    /// Execute a CONSTRUCT rule (stub)
-    #[allow(unused_variables)]
+    /// Execute a triple rule (sh:TripleRule).
+    ///
+    /// A SHACL `sh:TripleRule` builds triples from `sh:subject`/`sh:predicate`/
+    /// `sh:object` node expressions evaluated per focus node. Full node-expression
+    /// evaluation is not yet available in this crate, so this fails loudly rather
+    /// than silently producing nothing — express the rule as an `sh:construct`
+    /// (ConstructRule) for now.
+    fn execute_triple_rule(
+        &self,
+        rule: &ShaclRule,
+        _store: &dyn Store,
+        _result: &mut RuleExecutionResult,
+    ) -> Result<()> {
+        Err(ShaclError::UnsupportedOperation(format!(
+            "TripleRule execution (rule '{}') is not implemented; express the rule as a \
+             SHACL sh:construct (ConstructRule) instead",
+            rule.id
+        )))
+    }
+
+    /// Execute a CONSTRUCT rule (sh:construct).
     fn execute_construct_rule(
         &self,
         rule: &ShaclRule,
@@ -372,16 +429,19 @@ impl RuleEngine {
         result: &mut RuleExecutionResult,
     ) -> Result<()> {
         if let Some(ref construct_query) = rule.construct {
-            tracing::debug!("Executing CONSTRUCT query: {}", construct_query);
-            result
-                .errors
-                .push("CONSTRUCT rule execution not yet fully implemented".to_string());
+            tracing::debug!("Executing CONSTRUCT rule '{}'", rule.id);
+            self.run_construct_and_insert(construct_query, store, result)?;
+        } else {
+            result.errors.push(format!(
+                "ConstructRule '{}' has no CONSTRUCT query",
+                rule.id
+            ));
         }
         Ok(())
     }
 
-    /// Execute a generic SPARQL rule (stub)
-    #[allow(unused_variables)]
+    /// Execute a generic SPARQL rule. In SHACL-AF these carry a CONSTRUCT query
+    /// whose graph is materialized into the store.
     fn execute_sparql_rule(
         &self,
         rule: &ShaclRule,
@@ -389,10 +449,12 @@ impl RuleEngine {
         result: &mut RuleExecutionResult,
     ) -> Result<()> {
         if let Some(ref sparql_query) = rule.sparql {
-            tracing::debug!("Executing SPARQL query: {}", sparql_query);
+            tracing::debug!("Executing SPARQL rule '{}'", rule.id);
+            self.run_construct_and_insert(sparql_query, store, result)?;
+        } else {
             result
                 .errors
-                .push("SPARQL rule execution not yet fully implemented".to_string());
+                .push(format!("SparqlRule '{}' has no SPARQL query", rule.id));
         }
         Ok(())
     }

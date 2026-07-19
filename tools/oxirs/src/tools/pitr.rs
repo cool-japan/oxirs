@@ -4,9 +4,13 @@
 //! Enables restoration to specific timestamps or transaction IDs.
 
 use chrono::{DateTime, Utc};
+use oxirs_core::model::Quad;
+use oxirs_core::rdf_store::RdfStore;
+use oxirs_ttl::formats::nquads::{NQuadsParser, NQuadsSerializer};
+use oxirs_ttl::toolkit::{Parser as TtlParser, Serializer as TtlSerializer};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Cursor, Write};
 use std::path::{Path, PathBuf};
 
 /// Transaction log entry
@@ -62,6 +66,23 @@ impl TransactionLog {
         })
     }
 
+    /// Append a transaction entry whose payload is a set of RDF quads,
+    /// serialized as N-Quads text so `recover_to_timestamp`/
+    /// `recover_to_transaction` can replay them into a real target store.
+    /// This is the canonical encoding `data` must use for
+    /// `OperationType::Insert`/`Update`/`Delete` entries to be replayable.
+    pub fn append_quads(
+        &mut self,
+        operation_type: OperationType,
+        quads: &[Quad],
+    ) -> Result<u64, Box<dyn std::error::Error>> {
+        let mut buf = Vec::new();
+        NQuadsSerializer::new()
+            .serialize(quads, &mut buf)
+            .map_err(|e| format!("Failed to serialize transaction quads: {e}"))?;
+        self.append(operation_type, buf)
+    }
+
     /// Append a transaction entry to the log
     pub fn append(
         &mut self,
@@ -99,11 +120,20 @@ impl TransactionLog {
         Ok(transaction_id)
     }
 
-    /// Recover to a specific point in time
+    /// Recover to a specific point in time.
+    ///
+    /// Opens (creating if necessary) a real [`RdfStore`] at `output_dir` and
+    /// replays every logged transaction up to `target_timestamp` into it:
+    /// `Insert`/`Update` entries insert their quads, `Delete` entries remove
+    /// theirs, and `BeginTransaction`/`CommitTransaction`/`RollbackTransaction`
+    /// markers are no-ops. A transaction whose payload cannot be decoded as
+    /// N-Quads text (i.e. was not written via [`Self::append_quads`]) fails
+    /// the whole recovery loudly rather than being silently counted as
+    /// "applied" — see [`Self::parse_entry_quads`].
     pub fn recover_to_timestamp(
         &self,
         target_timestamp: DateTime<Utc>,
-        _output_dir: &Path,
+        output_dir: &Path,
     ) -> Result<usize, Box<dyn std::error::Error>> {
         println!("Starting Point-in-Time Recovery");
         println!("Target timestamp: {}", target_timestamp.to_rfc3339());
@@ -112,25 +142,41 @@ impl TransactionLog {
         let mut log_files = self.collect_log_files()?;
         log_files.sort();
 
+        let mut store = RdfStore::open(output_dir).map_err(|e| {
+            format!(
+                "Failed to open recovery target '{}': {e}",
+                output_dir.display()
+            )
+        })?;
+
         let mut applied_transactions = 0;
 
         // Replay transactions up to the target timestamp
         for log_file in log_files {
-            applied_transactions += self.replay_log_file(&log_file, Some(target_timestamp))?;
+            applied_transactions +=
+                self.replay_log_file(&log_file, Some(target_timestamp), &mut store)?;
         }
 
+        store
+            .flush()
+            .map_err(|e| format!("Failed to flush recovered dataset: {e}"))?;
+
         println!(
-            "Recovery complete: {} transactions applied",
-            applied_transactions
+            "Recovery complete: {} transactions applied to {}",
+            applied_transactions,
+            output_dir.display()
         );
         Ok(applied_transactions)
     }
 
-    /// Recover to a specific transaction ID
+    /// Recover to a specific transaction ID.
+    ///
+    /// Same real-replay semantics as [`Self::recover_to_timestamp`], but
+    /// stops once a transaction ID beyond `target_transaction_id` is seen.
     pub fn recover_to_transaction(
         &self,
         target_transaction_id: u64,
-        _output_dir: &Path,
+        output_dir: &Path,
     ) -> Result<usize, Box<dyn std::error::Error>> {
         println!("Starting Point-in-Time Recovery");
         println!("Target transaction ID: {}", target_transaction_id);
@@ -138,9 +184,16 @@ impl TransactionLog {
         let mut log_files = self.collect_log_files()?;
         log_files.sort();
 
+        let mut store = RdfStore::open(output_dir).map_err(|e| {
+            format!(
+                "Failed to open recovery target '{}': {e}",
+                output_dir.display()
+            )
+        })?;
+
         let mut applied_transactions = 0;
 
-        for log_file in log_files {
+        'outer: for log_file in log_files {
             let file = File::open(&log_file)?;
             let reader = BufReader::new(file);
 
@@ -155,24 +208,98 @@ impl TransactionLog {
                 if entry.transaction_id > target_transaction_id {
                     // Stop when we exceed target transaction ID
                     println!("Reached target transaction ID");
-                    return Ok(applied_transactions);
+                    break 'outer;
                 }
 
                 // Verify checksum
                 if !Self::verify_checksum(&entry) {
                     eprintln!(
-                        "Warning: Checksum mismatch for transaction {}",
+                        "Warning: Checksum mismatch for transaction {}, skipping",
                         entry.transaction_id
                     );
                     continue;
                 }
 
-                // Apply transaction (placeholder - actual implementation would replay to store)
+                // Apply the transaction to the real recovery target store.
+                Self::apply_entry_to_store(&mut store, &entry)?;
                 applied_transactions += 1;
             }
         }
 
+        store
+            .flush()
+            .map_err(|e| format!("Failed to flush recovered dataset: {e}"))?;
+
+        println!(
+            "Recovery complete: {} transactions applied to {}",
+            applied_transactions,
+            output_dir.display()
+        );
         Ok(applied_transactions)
+    }
+
+    /// Decode a WAL entry's `data` payload as N-Quads text (the encoding
+    /// written by [`Self::append_quads`]). `Begin`/`Commit`/`Rollback`
+    /// markers legitimately carry an empty payload and decode to no quads.
+    /// Any other payload that is not valid UTF-8 N-Quads means the
+    /// transaction format prevents real replay, so this fails loudly instead
+    /// of the caller fabricating a successful "applied" count.
+    fn parse_entry_quads(
+        entry: &TransactionLogEntry,
+    ) -> Result<Vec<Quad>, Box<dyn std::error::Error>> {
+        if entry.data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let text = std::str::from_utf8(&entry.data).map_err(|e| {
+            format!(
+                "Transaction {} payload is not valid UTF-8 N-Quads text and cannot be replayed: {e}",
+                entry.transaction_id
+            )
+        })?;
+
+        if text.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        NQuadsParser::new().parse(Cursor::new(text)).map_err(|e| {
+            format!(
+                "Transaction {} payload could not be parsed as N-Quads and cannot be replayed: {e}",
+                entry.transaction_id
+            )
+            .into()
+        })
+    }
+
+    /// Apply one transaction log entry to the recovery target store.
+    fn apply_entry_to_store(
+        store: &mut RdfStore,
+        entry: &TransactionLogEntry,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        match entry.operation_type {
+            OperationType::BeginTransaction
+            | OperationType::CommitTransaction
+            | OperationType::RollbackTransaction => {
+                // Control markers carry no store mutation of their own.
+                Ok(())
+            }
+            OperationType::Insert | OperationType::Update => {
+                for quad in Self::parse_entry_quads(entry)? {
+                    store.insert_quad(quad).map_err(|e| {
+                        format!("Failed to apply transaction {}: {e}", entry.transaction_id)
+                    })?;
+                }
+                Ok(())
+            }
+            OperationType::Delete => {
+                for quad in Self::parse_entry_quads(entry)? {
+                    store.remove_quad(&quad).map_err(|e| {
+                        format!("Failed to apply transaction {}: {e}", entry.transaction_id)
+                    })?;
+                }
+                Ok(())
+            }
+        }
     }
 
     /// Create an incremental backup checkpoint
@@ -331,6 +458,7 @@ impl TransactionLog {
         &self,
         log_file: &Path,
         until_timestamp: Option<DateTime<Utc>>,
+        store: &mut RdfStore,
     ) -> Result<usize, Box<dyn std::error::Error>> {
         let file = File::open(log_file)?;
         let reader = BufReader::new(file);
@@ -354,13 +482,14 @@ impl TransactionLog {
             // Verify checksum
             if !Self::verify_checksum(&entry) {
                 eprintln!(
-                    "Warning: Checksum mismatch for transaction {}",
+                    "Warning: Checksum mismatch for transaction {}, skipping",
                     entry.transaction_id
                 );
                 continue;
             }
 
-            // Apply transaction (placeholder)
+            // Apply the transaction to the real recovery target store.
+            Self::apply_entry_to_store(store, &entry)?;
             replayed += 1;
         }
 
@@ -514,5 +643,191 @@ mod tests {
         // Cleanup
         let _ = fs::remove_dir_all(temp_log_dir);
         let _ = fs::remove_dir_all(temp_archive_dir);
+    }
+
+    fn test_quad(subject: &str, predicate: &str, object: &str) -> Quad {
+        use oxirs_core::model::{NamedNode, Object};
+        Quad::new_default_graph(
+            NamedNode::new(subject).expect("subject IRI"),
+            NamedNode::new(predicate).expect("predicate IRI"),
+            Object::NamedNode(NamedNode::new(object).expect("object IRI")),
+        )
+    }
+
+    #[test]
+    fn test_recover_to_timestamp_applies_real_quads_to_output_store() {
+        let temp_log_dir = temp_dir().join("oxirs_pitr_test_recover_ts_logs");
+        let temp_archive_dir = temp_dir().join("oxirs_pitr_test_recover_ts_archive");
+        let output_dir = temp_dir().join("oxirs_pitr_test_recover_ts_output");
+        let _ = fs::remove_dir_all(&temp_log_dir);
+        let _ = fs::remove_dir_all(&temp_archive_dir);
+        let _ = fs::remove_dir_all(&output_dir);
+
+        let config = PitrConfig {
+            log_dir: temp_log_dir.clone(),
+            archive_dir: temp_archive_dir.clone(),
+            max_log_size: 10_000_000,
+            auto_archive: false,
+        };
+        let mut log = TransactionLog::new(config).unwrap();
+
+        let quad = test_quad(
+            "http://example.org/alice",
+            "http://example.org/knows",
+            "http://example.org/bob",
+        );
+        log.append_quads(OperationType::Insert, std::slice::from_ref(&quad))
+            .unwrap();
+
+        // Recover to a timestamp far in the future so every entry replays.
+        let future = Utc::now() + chrono::Duration::hours(1);
+        let applied = log.recover_to_timestamp(future, &output_dir).unwrap();
+        assert_eq!(
+            applied, 1,
+            "the single real Insert transaction must be applied"
+        );
+
+        // The old implementation only incremented a counter; verify the
+        // output directory now holds a real, queryable restored dataset.
+        let restored = RdfStore::open(&output_dir).expect("open restored dataset");
+        let quads = restored.quads().expect("restored quads");
+        assert_eq!(quads.len(), 1);
+        assert_eq!(quads[0].subject().to_string(), "<http://example.org/alice>");
+
+        let _ = fs::remove_dir_all(temp_log_dir);
+        let _ = fs::remove_dir_all(temp_archive_dir);
+        let _ = fs::remove_dir_all(output_dir);
+    }
+
+    #[test]
+    fn test_recover_to_transaction_applies_and_deletes_real_quads() {
+        let temp_log_dir = temp_dir().join("oxirs_pitr_test_recover_tx_logs");
+        let temp_archive_dir = temp_dir().join("oxirs_pitr_test_recover_tx_archive");
+        let output_dir = temp_dir().join("oxirs_pitr_test_recover_tx_output");
+        let _ = fs::remove_dir_all(&temp_log_dir);
+        let _ = fs::remove_dir_all(&temp_archive_dir);
+        let _ = fs::remove_dir_all(&output_dir);
+
+        let config = PitrConfig {
+            log_dir: temp_log_dir.clone(),
+            archive_dir: temp_archive_dir.clone(),
+            max_log_size: 10_000_000,
+            auto_archive: false,
+        };
+        let mut log = TransactionLog::new(config).unwrap();
+
+        let q1 = test_quad(
+            "http://example.org/s1",
+            "http://example.org/p",
+            "http://example.org/o1",
+        );
+        let q2 = test_quad(
+            "http://example.org/s2",
+            "http://example.org/p",
+            "http://example.org/o2",
+        );
+        let tx1 = log
+            .append_quads(OperationType::Insert, std::slice::from_ref(&q1))
+            .unwrap();
+        let tx2 = log
+            .append_quads(OperationType::Insert, std::slice::from_ref(&q2))
+            .unwrap();
+        let tx3 = log
+            .append_quads(OperationType::Delete, std::slice::from_ref(&q1))
+            .unwrap();
+        assert_eq!((tx1, tx2, tx3), (1, 2, 3));
+
+        // Recover through transaction 3 (both inserts and the delete).
+        let applied = log.recover_to_transaction(3, &output_dir).unwrap();
+        assert_eq!(applied, 3);
+
+        let restored = RdfStore::open(&output_dir).expect("open restored dataset");
+        let quads = restored.quads().expect("restored quads");
+        // q1 was inserted then deleted; only q2 must remain — proves real
+        // Delete replay, not just a fabricated "applied" counter.
+        assert_eq!(quads.len(), 1);
+        assert_eq!(quads[0].subject().to_string(), "<http://example.org/s2>");
+
+        let _ = fs::remove_dir_all(temp_log_dir);
+        let _ = fs::remove_dir_all(temp_archive_dir);
+        let _ = fs::remove_dir_all(output_dir);
+    }
+
+    #[test]
+    fn test_recover_to_transaction_stops_at_target_id() {
+        let temp_log_dir = temp_dir().join("oxirs_pitr_test_recover_stop_logs");
+        let temp_archive_dir = temp_dir().join("oxirs_pitr_test_recover_stop_archive");
+        let output_dir = temp_dir().join("oxirs_pitr_test_recover_stop_output");
+        let _ = fs::remove_dir_all(&temp_log_dir);
+        let _ = fs::remove_dir_all(&temp_archive_dir);
+        let _ = fs::remove_dir_all(&output_dir);
+
+        let config = PitrConfig {
+            log_dir: temp_log_dir.clone(),
+            archive_dir: temp_archive_dir.clone(),
+            max_log_size: 10_000_000,
+            auto_archive: false,
+        };
+        let mut log = TransactionLog::new(config).unwrap();
+
+        let q1 = test_quad(
+            "http://example.org/s1",
+            "http://example.org/p",
+            "http://example.org/o1",
+        );
+        let q2 = test_quad(
+            "http://example.org/s2",
+            "http://example.org/p",
+            "http://example.org/o2",
+        );
+        log.append_quads(OperationType::Insert, std::slice::from_ref(&q1))
+            .unwrap();
+        log.append_quads(OperationType::Insert, std::slice::from_ref(&q2))
+            .unwrap();
+
+        let applied = log.recover_to_transaction(1, &output_dir).unwrap();
+        assert_eq!(applied, 1, "must stop after the target transaction id");
+
+        let restored = RdfStore::open(&output_dir).expect("open restored dataset");
+        assert_eq!(restored.quads().unwrap().len(), 1);
+
+        let _ = fs::remove_dir_all(temp_log_dir);
+        let _ = fs::remove_dir_all(temp_archive_dir);
+        let _ = fs::remove_dir_all(output_dir);
+    }
+
+    #[test]
+    fn test_recover_fails_loudly_on_non_replayable_payload() {
+        let temp_log_dir = temp_dir().join("oxirs_pitr_test_recover_fail_logs");
+        let temp_archive_dir = temp_dir().join("oxirs_pitr_test_recover_fail_archive");
+        let output_dir = temp_dir().join("oxirs_pitr_test_recover_fail_output");
+        let _ = fs::remove_dir_all(&temp_log_dir);
+        let _ = fs::remove_dir_all(&temp_archive_dir);
+        let _ = fs::remove_dir_all(&output_dir);
+
+        let config = PitrConfig {
+            log_dir: temp_log_dir.clone(),
+            archive_dir: temp_archive_dir.clone(),
+            max_log_size: 10_000_000,
+            auto_archive: false,
+        };
+        let mut log = TransactionLog::new(config).unwrap();
+
+        // An Insert entry whose payload is NOT N-Quads text (e.g. written by
+        // some other producer via the raw `append` API) must cause recovery
+        // to fail loudly rather than silently reporting fake success.
+        log.append(OperationType::Insert, b"this is not n-quads".to_vec())
+            .unwrap();
+
+        let future = Utc::now() + chrono::Duration::hours(1);
+        let result = log.recover_to_timestamp(future, &output_dir);
+        assert!(
+            result.is_err(),
+            "a transaction format that prevents real replay must fail loudly"
+        );
+
+        let _ = fs::remove_dir_all(temp_log_dir);
+        let _ = fs::remove_dir_all(temp_archive_dir);
+        let _ = fs::remove_dir_all(output_dir);
     }
 }

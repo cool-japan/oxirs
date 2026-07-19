@@ -28,6 +28,9 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 oxiarc-zstd = { workspace = true }
+oxiarc-lz4 = { workspace = true }
+oxiarc-brotli = { workspace = true }
+oxiarc-deflate = { workspace = true }
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 # rand_distr functionality now provided by scirs2-core (use scirs2_core::random::distributions)
 half = "2.7"
@@ -55,7 +58,7 @@ chrono.workspace = true
 pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 numpy = { version = "0.29", optional = true }
 uuid.workspace = true
-humantime = "2.3"
+humantime = "2.4"
 indicatif.workspace = true
 # Tantivy full-text search (upgraded to 0.25 for lru security fix)
 tantivy = { workspace = true, optional = true }
