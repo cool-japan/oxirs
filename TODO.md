@@ -1,10 +1,18 @@
 # OxiRS Development Roadmap
 
-*Version: 0.4.0 | Last Updated: July 17, 2026*
+*Version: 0.4.0 | Last Updated: July 19, 2026*
 
-## Current Status: v0.3.2 - Released (July 12, 2026)
+## Current Status: v0.4.0 - Release preparation (July 19, 2026)
 
 **OxiRS** is an advanced AI-augmented semantic web platform built in Rust, delivering a production-ready alternative to Apache Jena + Fuseki with cutting-edge AI/ML capabilities.
+
+### Release Metrics (v0.4.0, July 19, 2026)
+- **Version**: 0.4.0
+- **Architecture**: 27-crate workspace (25 published library crates + the `oxirs` CLI + the `oxirs-tauri` desktop app; plus 6 opt-in `publish = false` C-FFI quarantine adapter crates and 1 internal `performance_validation` crate, neither counted above)
+- **Build Status**: Clean compilation - zero errors/warnings (`clippy --workspace --all-targets -D warnings`, rustdoc, release build all clean)
+- **Test Status**: 45,199 tests passing with `--all-features` (44,398 with default features), 100% pass rate, 0 failed either way; 937 doctests passing across 27 crates
+- **Headline change**: Consolidates the unreleased 0.3.3 production-hardening pass (272-finding audit → 288 fixes, 455 regression tests) with 0.3.4's deployment fixes; oxirs-tdb is now a real durable on-disk backend (superblock v2, fsync-backed writes, free-page allocator, GSPO/GPOS/GOSP indexes) wired into oxirs-fuseki's `StoreType::TDB2` and `oxirs import --dataset-type tdb2`; the SPARQL query path is unified through the real oxirs-arq engine (`CONSTRUCT`/`DESCRIBE`, `GRAPH`/`FROM`/`FROM NAMED`, `SERVICE` federation, native aggregates/`HAVING`), removing the legacy demo path and silent-empty-200 fallback
+- **Also shipped**: axum 0.8 route migration complete workspace-wide (fuseki, cluster, embed, chat); real X25519/Ristretto DID crypto, OIDC/SAML SSO signature verification, real BFT cluster RPC, and hardened `read_only` dataset enforcement; SPARQL parser fixes (WHERE-less `ASK`/`SELECT *`, positionally-scoped `BIND`, group-scoped `FILTER` after `UNION`, populated `GROUP BY`/`ORDER BY` lists); `oxirs` CLI gains `lint`, `merge`, `jena-parity`, `monitor`, `detect-format`, `inspect` subcommands and more
 
 ### Release Metrics (v0.3.2, July 12, 2026)
 - **Version**: 0.3.2

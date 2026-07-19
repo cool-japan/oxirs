@@ -1,10 +1,10 @@
 # OxiRS SHACL 🔍
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: v0.3.2 - Released 2026-07-12
+**Status**: v0.4.0 - Released 2026-07-19
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 

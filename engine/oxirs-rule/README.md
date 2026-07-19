@@ -1,8 +1,8 @@
 # OxiRS Rule Engine
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.2 - Released 2026-07-12
+**Status**: v0.4.0 - Released 2026-07-19
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -327,7 +327,7 @@ cargo test --release --features benchmarks
 ```
 
 ### Test Coverage
-- 2,240 tests passing (100% success rate)
+- 2,242 tests passing (100% success rate)
 - Unit tests for all reasoning algorithms
 - Integration tests with real-world datasets
 - Performance regression tests
@@ -391,11 +391,11 @@ Licensed under the Apache License, Version 2.0.
 
 ## Status
 
-🚀 **Production Release (v0.3.2)** – 2026-07-12
+🚀 **Production Release (v0.4.0)** – 2026-07-19
 
 Highlights:
 - ✅ Forward/backward chaining over persisted datasets with automatic inference snapshots
 - ✅ RETE network optimized with SciRS2 metrics and tracing hooks
 - ✅ Integrated with federation-aware SPARQL workflows for rule-driven post-processing
-- ✅ 2,240 tests passing plus CLI end-to-end coverage
+- ✅ 2,242 tests passing plus CLI end-to-end coverage
 - 🚧 Advanced distributed reasoning (planned for future release)

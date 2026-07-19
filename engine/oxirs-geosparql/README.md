@@ -1,10 +1,10 @@
 # oxirs-geosparql
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
 GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
 
-**Status**: v0.3.2 - Released 2026-07-12
+**Status**: v0.4.0 - Released 2026-07-19
 
 ✅ **Production Ready**: APIs are stable and ready for production deployments. 1,967 tests passing.
 

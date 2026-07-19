@@ -425,6 +425,6 @@ Same as OxiRS parent project (see repository root).
 
 ## Version
 
-Current version: `0.3.2` (1,292 tests passing)
+Current version: `0.4.0` (1,292 tests passing)
 
 Part of the OxiRS semantic web platform.

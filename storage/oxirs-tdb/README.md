@@ -4,7 +4,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status**: v0.4.0 - Release preparation 2026-07-17 (2125 tests passing)
+**Status**: v0.4.0 - Release preparation 2026-07-19 (2155 tests passing)
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 

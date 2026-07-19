@@ -1,10 +1,10 @@
 # OxiRS Cluster
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status**: v0.3.2 - Released 2026-07-12 (1831 tests passing)
+**Status**: v0.4.0 - Released 2026-07-19 (1868 tests passing)
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 

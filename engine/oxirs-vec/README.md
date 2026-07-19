@@ -1,10 +1,10 @@
 # OxiRS Vec - Vector Search Engine
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.2 - Released 2026-07-12
+**Status**: v0.4.0 - Released 2026-07-19
 
-✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing (1,754 tests passing).
+✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing (1,771 tests passing).
 
 High-performance vector search infrastructure for semantic similarity search in RDF knowledge graphs.
 
@@ -272,7 +272,7 @@ runtime.block_on(async {
 
 ## Status
 
-### Production Release (v0.3.2)
+### Production Release (v0.4.0)
 - ✅ HNSW/IVF/Flat indices with persisted dataset support
 - ✅ SPARQL/GraphQL integration enhanced with federation-aware vector filters
 - ✅ CLI pipelines for batch embedding import/export and monitoring

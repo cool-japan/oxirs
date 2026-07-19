@@ -8,7 +8,7 @@ CANbus/J1939 protocol support for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.3.2) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.4.0) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 

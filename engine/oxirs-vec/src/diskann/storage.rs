@@ -522,7 +522,8 @@ mod tests {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, Ordering::Relaxed);
         env::temp_dir().join(format!(
-            "diskann_storage_test_{}_{}",
+            "diskann_storage_test_{}_{}_{}",
+            std::process::id(),
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
             id
         ))

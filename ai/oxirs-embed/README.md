@@ -1,8 +1,8 @@
 # OxiRS Embed - Knowledge Graph Embeddings
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.3.2 - Released 2026-07-12
+**Status**: v0.4.0 - Released 2026-07-19
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -621,7 +621,7 @@ provided by `oxirs_embed::gpu_acceleration::{GpuAccelerationConfig, GpuAccelerat
 
 ## Status
 
-### Production Release (v0.3.2)
+### Production Release (v0.4.0)
 - ✅ Structural KG embedding models: TransE, DistMult, ComplEx, RotatE, HoLE, ConvE, TuckER, QuatE
 - ✅ Specialized domain text embeddings: SciBERT, CodeBERT, BioBERT, LegalBERT, FinBERT, ClinicalBERT, ChemBERT
 - ✅ Link prediction, entity clustering, community detection, vector search, visualization, interpretability

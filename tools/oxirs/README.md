@@ -4,9 +4,9 @@
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: v0.4.0 — release preparation on branch `0.4.0`, last verified 2026-07-17
+**Status**: v0.4.0 — release preparation on branch `0.4.0`, last verified 2026-07-19
 
-**Tests**: 1268 passed, 0 failed (`cargo nextest run -p oxirs`)
+**Tests**: 1279 passed, 0 failed (`cargo nextest run -p oxirs`)
 
 ⚡ **Production-Ready**: APIs are stable and tested. Ready for production use with comprehensive documentation.
 
@@ -16,7 +16,7 @@
 
 This crate is an end-user CLI application, not a published library: `Cargo.toml` sets `publish = false` so it can depend on `publish = false` quarantine adapter crates (for optional GPU/CUDA, GEOS, DuckDB, and Kafka/Pulsar integrations) without putting C FFI on the published Pure-Rust dependency surface. It ships as a release binary built from source rather than via `cargo install oxirs` from crates.io — see [Installation](#installation).
 
-## What's New in v0.4.0 (2026-07-17)
+## What's New in v0.4.0 (2026-07-19)
 
 - **New subcommands**: `lint` (RDF/Turtle issue scanner), `merge` (set-union with blank-node renaming, conflict detection, optional provenance), `jena-parity` (OxiRS-vs-Apache-Jena feature-parity report), `monitor` (poll a **remote** SPARQL endpoint for latency/uptime/P95 — distinct from `performance monitor`, which samples the local process), `detect-format` (RDF format detection by extension/content/magic bytes with a confidence score), and `inspect` (consolidated data profiler: counts, namespaces, top predicates/classes, connectivity, object-type distribution, data-quality checks)
 - **Command extensions**: `serve --dry-run` (validate config + report the bind address without opening a socket), `schema-gen --advanced` (subclass-hierarchy / domain-range / cardinality inference emitting OWL/RDFS), `history export-csv` and `history similar` (query-similarity ranking), and `profile … --flamegraph <svg>` (SVG flamegraph output)
