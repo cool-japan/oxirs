@@ -169,7 +169,10 @@ rdkafka = "0.39"
 async-nats = "0.49"
 
 # Clustering
-openraft = "0.9"
+# `serde` feature is required so OpenRaft's RPC types (AppendEntriesRequest,
+# VoteRequest, Entry, etc.) derive Serialize/Deserialize — oxirs-cluster's
+# `raft_network` transport wire-serializes them directly (via oxicode).
+openraft = { version = "0.9", features = ["serde"] }
 
 # CLI
 clap = { version = "4.6", features = ["derive"] }

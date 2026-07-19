@@ -52,6 +52,11 @@ async fn make_three_node_cluster() -> (ClusterNode, ClusterNode, ClusterNode) {
             address: format!("127.0.0.1:{port}").parse().expect("addr"),
             data_dir: dir.join(format!("node-{id}")).display().to_string(),
             peers,
+            // This suite never calls `.start()` (see the module doc comment
+            // at the top of this file) so `init_raft` is never invoked and a
+            // real multi-node Raft transport is never needed here; nodes
+            // share state purely through `GLOBAL_SHARED_STORAGE`.
+            peer_addresses: std::collections::HashMap::new(),
             discovery: None,
             replication_strategy: None,
             use_bft: false,

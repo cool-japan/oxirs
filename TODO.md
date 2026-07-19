@@ -812,3 +812,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
   - **Approach:** Once core exposes SPARQL UPDATE, write simulation results back into the graph via INSERT DATA.
   - **Completed 2026-06-22:** `execute_update` now uses `UpdateParser` + `UpdateExecutor` from `oxirs_core::query`.
   - **Risk:** Blocked on a core capability; gate the injection path until available.
+
+## Known Limitations (oxirs-cluster Raft, added 2026-07-19)
+
+> Real multi-node OpenRaft 0.9.24 consensus landed in `storage/oxirs-cluster/` (replacing the previous deliberate stub that refused multi-node clustering). An independent adversarial code review of that work flagged the two gaps below, both explicitly scoped OUT of the implementation — confirmed by the project owner, who chose to defer rather than expand scope.
+
+- [ ] `oxirs-cluster`: `storage/oxirs-cluster/src/raft.rs:432` — `OxirsStorage` (Raft vote/log/snapshot) is in-memory only (`Arc<RwLock<_>>` fields, nothing durable). A genuine OS crash+restart of the bootstrap node loses `RaftNode::bootstrap_attempted` (:741) and could re-initialize on rejoin, potentially forcing an already-healthy leader elsewhere to step down.
+  - Priority: P2 | Scope: large | Hint: needs a real persistent WAL/snapshot layer for the Raft log + state machine (e.g. wired into oxirs-tdb or a dedicated on-disk log) — a separate multi-day distributed-systems effort, not a quick patch.
+
+- [ ] `oxirs-cluster`: `storage/oxirs-cluster/src/raft.rs:923` (`init_raft`) — no cross-node validation that all nodes were configured with the same peer set; each node independently computes "am I the lowest node_id" (:1054) from its own local peer list. A misconfiguration (e.g. node A configured with `{A,B,C}`, node B with only `{B,C}`) could theoretically let two nodes both believe they're lowest and both call `initialize()`.
+  - Priority: P2 | Scope: medium | Hint: not reachable via any currently-shipped code path or test — a defensive-hardening gap for future real-world (non-test) deployment configs.

@@ -64,6 +64,7 @@
 #![allow(clippy::derivable_impls)]
 #![allow(clippy::useless_conversion)]
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -117,6 +118,8 @@ pub mod partition_detection;
 pub mod performance_metrics;
 pub mod performance_monitor;
 pub mod raft;
+#[cfg(feature = "raft")]
+mod raft_network;
 pub mod raft_optimization;
 pub mod raft_profiling;
 pub mod raft_state;
@@ -378,6 +381,15 @@ pub struct NodeConfig {
     pub data_dir: String,
     /// List of peer node IDs
     pub peers: Vec<OxirsNodeId>,
+    /// Known network addresses of entries in `peers`, keyed by node id.
+    ///
+    /// Required (for every id in `peers`) to form a real multi-node Raft
+    /// cluster — `ClusterNode::new` feeds this straight into
+    /// `RaftNode::set_network` via `ConsensusManager::with_raft_network`, so
+    /// the Raft transport (`raft_network.rs`) knows where to dial each peer
+    /// and what address to advertise for itself. Left empty for a genuine
+    /// single-node deployment (`peers` empty), which never needs it.
+    pub peer_addresses: HashMap<OxirsNodeId, SocketAddr>,
     /// Discovery configuration
     pub discovery: Option<DiscoveryConfig>,
     /// Replication strategy
@@ -401,6 +413,7 @@ impl NodeConfig {
             address,
             data_dir: format!("./data/node-{node_id}"),
             peers: Vec::new(),
+            peer_addresses: HashMap::new(),
             discovery: Some(DiscoveryConfig::default()),
             replication_strategy: Some(ReplicationStrategy::default()),
             use_bft: false,
@@ -413,6 +426,14 @@ impl NodeConfig {
         if !self.peers.contains(&peer_id) && peer_id != self.node_id {
             self.peers.push(peer_id);
         }
+        self
+    }
+
+    /// Record (or update) the network address of a peer, so a multi-node
+    /// Raft cluster can be formed. Does not implicitly add `peer_id` to
+    /// `peers` — call `add_peer` too if it isn't already listed.
+    pub fn add_peer_address(&mut self, peer_id: OxirsNodeId, address: SocketAddr) -> &mut Self {
+        self.peer_addresses.insert(peer_id, address);
         self
     }
 
@@ -501,7 +522,16 @@ impl ClusterNode {
             .await
             .map_err(|e| ClusterError::Other(format!("Failed to create data directory: {e}")))?;
 
-        // Initialize consensus manager
+        // Initialize consensus manager. `with_raft_network` feeds this
+        // node's own address and its peers' known addresses down to
+        // `RaftNode::set_network`, so `ConsensusManager::init()` (called
+        // from `ClusterNode::start`) can construct a real multi-node Raft
+        // instance rather than failing with `NetworkNotConfigured` (only a
+        // genuine single-node peer set works without it).
+        #[cfg(feature = "raft")]
+        let consensus = ConsensusManager::new(config.node_id, config.peers.clone())
+            .with_raft_network(config.address, config.peer_addresses.clone());
+        #[cfg(not(feature = "raft"))]
         let consensus = ConsensusManager::new(config.node_id, config.peers.clone());
 
         // Initialize discovery service
@@ -730,7 +760,14 @@ impl ClusterNode {
         Ok(())
     }
 
-    /// Stop the cluster node
+    /// Stop the cluster node.
+    ///
+    /// Models a real node crash/stop (not a graceful departure): this
+    /// node's Raft participation is torn down abruptly via
+    /// `ConsensusManager::stop_raft` (no leadership transfer — contrast
+    /// `graceful_shutdown`), so peers stop hearing from it and a healthy
+    /// remaining majority can elect a new leader if it was one. A later
+    /// `start()` call rebuilds and rejoins Raft from scratch.
     pub async fn stop(&mut self) -> Result<()> {
         let mut running = self.running.write().await;
         if !*running {
@@ -744,6 +781,14 @@ impl ClusterNode {
             .stop()
             .await
             .map_err(|e| ClusterError::Other(format!("Failed to stop discovery service: {e}")))?;
+
+        // Abruptly stop Raft participation so peers actually notice this
+        // node is gone (see doc comment above) and free the Raft RPC
+        // listener's port for a later `start()` to rebind.
+        self.consensus
+            .stop_raft()
+            .await
+            .map_err(|e| ClusterError::Other(format!("Failed to stop consensus: {e}")))?;
 
         *running = false;
 

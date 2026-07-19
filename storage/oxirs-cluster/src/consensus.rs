@@ -46,6 +46,27 @@ impl ConsensusManager {
         self.peer_addresses.insert(node_id, address);
     }
 
+    /// Configure this node's *Raft* network (its own bind address and every
+    /// peer's address) so that `init()` can construct real multi-node
+    /// OpenRaft consensus. Deliberately separate from `with_network`/
+    /// `register_peer_address` above, which are for the unrelated
+    /// `NetworkService`-based health-probe transport — the two are
+    /// independent subsystems (see `RaftNode::set_network` and
+    /// `raft_network.rs` for the dedicated Raft RPC transport this feeds).
+    /// Without this, `init()` only succeeds for a genuine single-node peer
+    /// set (empty, or containing only `self`); a real multi-node peer set
+    /// fails loudly with `RaftClusterError::NetworkNotConfigured` instead of
+    /// silently falling back to fake single-node "leadership".
+    #[cfg(feature = "raft")]
+    pub fn with_raft_network(
+        mut self,
+        address: SocketAddr,
+        peer_addresses: HashMap<OxirsNodeId, SocketAddr>,
+    ) -> Self {
+        self.raft_node.set_network(address, peer_addresses);
+        self
+    }
+
     /// Initialize the consensus system
     #[cfg(feature = "raft")]
     pub async fn init(&mut self) -> Result<()> {
@@ -62,6 +83,19 @@ impl ConsensusManager {
     pub async fn init(&mut self) -> Result<()> {
         tracing::info!("Consensus manager initialized in single-node mode");
         Ok(())
+    }
+
+    /// Abruptly stop this node's Raft participation, without attempting a
+    /// graceful leadership transfer first (contrast `graceful_shutdown`,
+    /// which does try to hand off leadership before shutting down). Models a
+    /// real node crash/stop: once this returns, peers stop hearing from this
+    /// node (no more heartbeats if it was leader, no more responses to
+    /// AppendEntries/Vote RPCs), so a healthy remaining majority can elect a
+    /// new leader. Frees the Raft RPC listener's port so a later `init()`
+    /// call (e.g. after `ClusterNode::stop()` then `start()`) can rebind and
+    /// rejoin. Safe to call even if Raft was never initialized.
+    pub async fn stop_raft(&mut self) -> Result<()> {
+        self.raft_node.shutdown().await
     }
 
     /// Check if this node is the leader
