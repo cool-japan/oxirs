@@ -510,6 +510,19 @@ pub trait Store: Send + Sync {
         Ok(inserted)
     }
 
+    /// Release capacity that a bulk load over-provisioned in the store's internal
+    /// term dictionaries back to the allocator.
+    ///
+    /// The default implementation is a no-op, so backends without over-allocating
+    /// dictionaries (or where trimming is meaningless) keep working unchanged.
+    /// In-memory/durable backends that grow their dictionaries by doubling should
+    /// override this (see the [`RdfStore`] override) and callers should invoke it
+    /// **once** after a large [`bulk_insert_quads`](Store::bulk_insert_quads)
+    /// completes — not after individual small inserts.
+    fn shrink_to_fit(&self) -> Result<()> {
+        Ok(())
+    }
+
     /// Stream every quad matching the pattern to `f`, one at a time, without the
     /// caller ever materializing the whole matching set as a `Vec<Quad>`.
     ///
@@ -648,6 +661,28 @@ impl SolutionMapping {
 
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Term)> {
         self.bindings.iter()
+    }
+}
+
+/// Ask the process allocator to return free pages to the OS after a bulk load
+/// has freed its large transient buffers and trimmed the term dictionaries.
+///
+/// glibc keeps freed small/medium arenas mapped by default, so without this hint
+/// the resident set can linger near the load-time peak even though the live data
+/// is far smaller. Compiled to a no-op unless the `malloc-trim` feature is on and
+/// the target is Linux/glibc (the only place `malloc_trim` exists); it uses the
+/// crate's existing pure-Rust `libc` binding, adding no C dependency.
+#[inline]
+pub(crate) fn trim_process_allocator() {
+    #[cfg(all(feature = "malloc-trim", target_os = "linux", target_env = "gnu"))]
+    {
+        // SAFETY: `malloc_trim` is a standard glibc entry point that only advises
+        // the allocator to release free pages back to the OS. It takes no
+        // ownership, has no preconditions on program state, and returns an int we
+        // intentionally ignore (1 = memory released, 0 = nothing to release).
+        unsafe {
+            libc::malloc_trim(0);
+        }
     }
 }
 
@@ -968,6 +1003,44 @@ impl RdfStore {
             }
             _ => None,
         }
+    }
+
+    /// Best-effort estimate, in bytes, of the resident heap footprint of the
+    /// interned in-memory storage (the four permutation indexes plus the column
+    /// dictionaries plus interned term bytes). Available for the `Memory` and
+    /// `Persistent` backends; `None` for the ultra-performance backend, which
+    /// reports through [`memory_usage`](Self::memory_usage) instead. Intended for
+    /// coarse before/after comparisons, not exact accounting.
+    pub fn interned_size_estimate(&self) -> Option<usize> {
+        match &self.backend {
+            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+                storage.read().ok().map(|s| s.size_estimate())
+            }
+            StorageBackend::UltraMemory(_, _) => None,
+        }
+    }
+
+    /// Release excess reserved capacity in the in-memory storage back to the
+    /// allocator after a bulk load. Shrinks the column dictionaries' backing
+    /// `Vec`/`HashMap` allocations (which a bulk load leaves over-provisioned by
+    /// up to 2x) to fit their live contents. A no-op for the ultra-performance
+    /// backend. Call once a large load has completed; it is not worth calling
+    /// after individual small inserts.
+    pub fn shrink_to_fit(&self) -> Result<()> {
+        if let StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) =
+            &self.backend
+        {
+            {
+                let mut storage = storage
+                    .write()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
+                storage.shrink_to_fit();
+            }
+            // Drop the write guard before asking the process allocator to return
+            // the freed pages to the OS.
+            trim_process_allocator();
+        }
+        Ok(())
     }
 
     /// Clear memory arena to reclaim memory (ultra-performance mode only)
@@ -1562,6 +1635,13 @@ impl Store for RdfStore {
                 Ok(inserted)
             }
         }
+    }
+
+    /// Trim the interned dictionaries after a bulk load, delegating to the
+    /// inherent [`RdfStore::shrink_to_fit`]. Fully qualified so it never recurses
+    /// into this trait method.
+    fn shrink_to_fit(&self) -> Result<()> {
+        RdfStore::shrink_to_fit(self)
     }
 
     /// Streaming scan override: visit each matching quad without building a

@@ -291,9 +291,16 @@ impl QueryExecutor {
                     }
                     Err(anyhow::anyhow!("COALESCE: no argument could be evaluated"))
                 }
-                _ => Err(anyhow::Error::new(super::types::UnknownFunctionError(
-                    name.clone(),
-                ))),
+                // GeoSPARQL / OxiRS geo extension functions are matched by their
+                // full IRI (the parser expands `geof:`/`oxgeo:` CURIEs). A
+                // recognised geo function returns `Some(..)`; anything else is a
+                // genuinely unknown function.
+                _ => match self.try_geosparql_function(name, args, binding) {
+                    Some(result) => result,
+                    None => Err(anyhow::Error::new(super::types::UnknownFunctionError(
+                        name.clone(),
+                    ))),
+                },
             },
             Expression::Exists(algebra) => match self.evaluate_exists_subquery(algebra, binding) {
                 Ok(has_solutions) => Ok(crate::algebra::Term::Literal(crate::algebra::Literal {

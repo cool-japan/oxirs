@@ -108,6 +108,23 @@ impl QueryExecutor {
     pub fn budget(&self) -> Option<&std::sync::Arc<crate::query_governor::ExecutionBudget>> {
         self.execution_budget.as_ref()
     }
+    /// Wall-clock budget check for use inside hot evaluation loops.
+    ///
+    /// A no-op when no budget is attached. When a budget *is* attached it
+    /// forwards to [`crate::query_governor::ExecutionBudget::check_time`] and, on
+    /// breach, returns the **typed** [`crate::query_governor::BudgetExceeded`]
+    /// wrapped via [`anyhow::Error::new`] (not stringified) so a caller up the
+    /// stack can `downcast_ref` it and map a wall-time timeout to the correct
+    /// HTTP status. Call it *throttled* (e.g. once every 1024 loop iterations —
+    /// see [`Self::hash_join`], [`Self::execute_minus`], [`Self::apply_left_join`])
+    /// because the underlying `Instant::now()` is not free at O(N*M) scale.
+    #[inline]
+    pub(super) fn budget_check_time(&self) -> Result<()> {
+        if let Some(ref budget) = self.execution_budget {
+            budget.check_time().map_err(anyhow::Error::new)?;
+        }
+        Ok(())
+    }
     /// Execute a query on behalf of `tenant_id`, gated by the attached
     /// [`crate::sla_integration::ArqSlaGate`].
     ///
@@ -144,6 +161,14 @@ impl QueryExecutor {
         algebra: &Algebra,
         dataset: &dyn Dataset,
     ) -> Result<Solution> {
+        // Wall-time budget check at every operator boundary. `execute_serial` is
+        // the single recursive dispatch point for the Serial strategy (the
+        // strategy fuseki forces for every query), so a check here fires between
+        // Union / LeftJoin / Minus / Filter / … sub-evaluations and guarantees a
+        // deeply-nested-but-cheap-per-node tree still gets stopped. The genuinely
+        // hot O(N*M) inner loops (hash_join / execute_minus / apply_left_join)
+        // carry their own throttled checks on top of this.
+        self.budget_check_time()?;
         match algebra {
             Algebra::Bgp(patterns) => self.execute_bgp_index_aware(patterns, dataset),
             Algebra::Join { left, right } => {
@@ -710,7 +735,16 @@ impl QueryExecutor {
         }
 
         let mut result = Solution::new();
+        // Persistent throttled wall-time check (see [`Self::hash_join`]): an
+        // OPTIONAL against a high-cardinality right side is O(|L|+|R|) in the
+        // common case but degrades toward O(|L|*|R|) when many left rows collide
+        // on the same shared-variable key, so both loops are instrumented.
+        let mut budget_ticks: u64 = 0;
         for left_binding in &left {
+            if budget_ticks & 0x3FF == 0 {
+                self.budget_check_time()?;
+            }
+            budget_ticks += 1;
             let key: Vec<_> = shared_vars
                 .iter()
                 .filter_map(|var| {
@@ -722,6 +756,10 @@ impl QueryExecutor {
             let mut has_join = false;
             if let Some(matching) = hash_table.get(&key) {
                 for &right_binding in matching {
+                    if budget_ticks & 0x3FF == 0 {
+                        self.budget_check_time()?;
+                    }
+                    budget_ticks += 1;
                     let mut is_compatible = true;
                     let mut merged = left_binding.clone();
                     for (var, term) in right_binding {
@@ -772,7 +810,19 @@ impl QueryExecutor {
             hash_table.entry(key).or_default().push(binding);
         }
         let mut result = Solution::new();
+        // Persistent (not per-probe-row) counter so the throttled wall-time check
+        // fires across the whole join, including the pathological cross join where
+        // every build row lands in a single hash bucket and the inner loop runs
+        // |build|*|probe| times. Checking `& 0x3FF` fires at 0 (immediately) then
+        // every 1024 iterations; the check is incremented in BOTH loops so a
+        // "many probes, few matches" shape (large outer, empty inner) is covered
+        // too. See [`Self::budget_check_time`] for why this is throttled.
+        let mut budget_ticks: u64 = 0;
         for probe_binding in &probe_side {
+            if budget_ticks & 0x3FF == 0 {
+                self.budget_check_time()?;
+            }
+            budget_ticks += 1;
             let probe_key: Vec<_> = shared_vars
                 .iter()
                 .filter_map(|var| {
@@ -783,6 +833,10 @@ impl QueryExecutor {
                 .collect();
             if let Some(matching_bindings) = hash_table.get(&probe_key) {
                 for &build_binding in matching_bindings {
+                    if budget_ticks & 0x3FF == 0 {
+                        self.budget_check_time()?;
+                    }
+                    budget_ticks += 1;
                     let mut is_compatible = true;
                     let mut merged = probe_binding.clone();
                     for (var, term) in build_binding {

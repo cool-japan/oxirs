@@ -172,6 +172,24 @@ impl QueryParser {
                 let name = format!("{prefix}:{local}");
                 self.advance();
                 if self.match_token(&Token::LeftParen) {
+                    // Prefixed-name *function call* (e.g. `geof:distance(...)`):
+                    // resolve a declared, non-empty prefix to the full IRI so the
+                    // evaluator can match extension/GeoSPARQL functions by their
+                    // canonical IRI — mirroring the non-call branch below. An empty
+                    // prefix (bare aggregate names such as `COUNT`/`SUM` that reach
+                    // this branch in HAVING/expression context arrive as
+                    // `PrefixedName("", name)`) and an unregistered prefix keep the
+                    // `prefix:local` form, so aggregate and user-function handling
+                    // is unchanged even when a default namespace (`PREFIX : <...>`)
+                    // is declared.
+                    let name = if !prefix.is_empty() {
+                        match self.prefixes.get(&prefix) {
+                            Some(base) => format!("{base}{local}"),
+                            None => name,
+                        }
+                    } else {
+                        name
+                    };
                     let mut args = Vec::new();
                     // `COUNT(*)` in an expression context (e.g. `HAVING (COUNT(*)
                     // > 1)`): the star is the count-all form, carried as an empty

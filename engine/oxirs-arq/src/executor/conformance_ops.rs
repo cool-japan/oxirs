@@ -32,11 +32,23 @@ impl QueryExecutor {
         }
 
         let mut result = Solution::new();
+        // MINUS is an O(|left|*|right|) double scan: for two disjoint
+        // high-cardinality patterns (`?a :prefLabel ?x MINUS { ?b :altLabel ?y }`)
+        // every inner iteration is cheap (shared-var set empty -> `continue`) but
+        // there are |left|*|right| of them, which is the observed multi-minute
+        // runaway. A persistent throttled wall-time check in the inner loop makes
+        // that abort at the budget deadline. `& 0x3FF` fires at 0 then every 1024
+        // inner iterations; see [`QueryExecutor::budget_check_time`].
+        let mut budget_ticks: u64 = 0;
         for left_binding in &left_solutions {
             let left_vars: HashSet<&Variable> = left_binding.keys().collect();
 
             let mut should_remove = false;
             for right_binding in &right_solutions {
+                if budget_ticks & 0x3FF == 0 {
+                    self.budget_check_time()?;
+                }
+                budget_ticks += 1;
                 let right_vars: HashSet<&Variable> = right_binding.keys().collect();
                 let shared_vars: Vec<&&Variable> = left_vars.intersection(&right_vars).collect();
 

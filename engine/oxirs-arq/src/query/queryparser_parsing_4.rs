@@ -26,7 +26,16 @@ impl QueryParser {
             self.expect_token(Token::RightBrace)?;
         }
         self.parse_dataset_clause(&mut query.dataset)?;
-        self.expect_token(Token::Where)?;
+        // The explicit-template form (`CONSTRUCT { tmpl } [WHERE] { … }`) may omit
+        // the `WHERE` keyword in SPARQL 1.1. The shorthand form
+        // (`CONSTRUCT WHERE { BGP }`) must keep it: there the WHERE block *is* the
+        // template, so the keyword is grammatically mandatory and dropping it
+        // would make `CONSTRUCT { … }` ambiguous with the explicit form.
+        if explicit_template {
+            self.match_token(&Token::Where);
+        } else {
+            self.expect_token(Token::Where)?;
+        }
         self.expect_token(Token::LeftBrace)?;
         query.where_clause = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;

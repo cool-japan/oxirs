@@ -13,6 +13,7 @@ pub mod queryexecutor_execute_group;
 pub mod queryexecutor_execute_index_optimized_join_group;
 pub mod queryexecutor_execute_single_pattern_group;
 pub mod queryexecutor_extract_join_variables_group;
+pub mod queryexecutor_geosparql;
 pub mod queryexecutor_lang_function_group;
 pub mod queryexecutor_new_group;
 pub mod queryexecutor_numeric_comparison_group;

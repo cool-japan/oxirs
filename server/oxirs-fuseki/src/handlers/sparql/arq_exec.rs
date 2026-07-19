@@ -28,11 +28,13 @@ use oxirs_arq::executor::{with_dataset_clause, ExecutionStrategy, QueryExecutor,
 use oxirs_arq::query::{
     parse_query, DatasetClause, DescribeTarget, ProjectionItem, Query, QueryType,
 };
+use oxirs_arq::query_governor::{BudgetExceeded, ExecutionBudget};
 use oxirs_arq::{describe, instantiate_construct};
 use oxirs_core::model::{
     BlankNode, Literal as CoreLiteral, Object, Predicate, Subject, Triple as CoreTriple,
 };
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// Parse a SPARQL query string and execute it against the store.
 ///
@@ -52,13 +54,61 @@ pub fn execute_query(query_str: &str, store: &Store) -> FusekiResult<QueryResult
     dispatch(&parsed, store)
 }
 
-/// Dispatch a parsed query to the form-specific executor.
+/// Dispatch a parsed query to the form-specific executor with no resource
+/// budget (unbounded execution). Kept for standalone / test callers; the fuseki
+/// query handler uses [`dispatch_with_budget`] to enforce the query timeout.
 pub fn dispatch(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+    dispatch_with_budget(query, store, None)
+}
+
+/// Dispatch a parsed query, attaching an optional [`ExecutionBudget`] so the
+/// oxirs-arq engine enforces the query's wall-time (and, if configured, row /
+/// scan) limits *during* evaluation. `None` means unbounded — behaviour
+/// identical to the historical [`dispatch`].
+pub fn dispatch_with_budget(
+    query: &Query,
+    store: &Store,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<QueryResult> {
     match query.query_type {
-        QueryType::Select | QueryType::Ask => execute_select_or_ask(query, store),
-        QueryType::Construct => execute_construct(query, store),
-        QueryType::Describe => execute_describe(query, store),
+        QueryType::Select | QueryType::Ask => execute_select_or_ask(query, store, budget),
+        QueryType::Construct => execute_construct(query, store, budget),
+        QueryType::Describe => execute_describe(query, store, budget),
     }
+}
+
+/// Map an oxirs-arq engine error to a fuseki HTTP error, promoting a resource
+/// budget breach to the correct status.
+///
+/// A **wall-time** budget breach is a timeout, mapped to `408 Request Timeout`
+/// (`TimeoutWithMessage`). 408 is chosen deliberately so a client sees the same
+/// status whether the *cooperative* query budget aborts the work or the outer
+/// `TimeoutLayer` safety net trips — both mean "your request exceeded the time
+/// limit". A **row / scan** budget breach is a resource cap the query blew past,
+/// mapped to `503 Service Unavailable`: the server refused to keep spending
+/// resources on it, and blindly retrying the identical query will not help. Any
+/// other engine error keeps its historical `500` (`query_execution`).
+///
+/// Preserving the typed [`BudgetExceeded`] end-to-end depends on the engine
+/// wrapping it with `anyhow::Error::new` (not `anyhow!("{e}")`); see
+/// `QueryExecutor::budget_check_time`.
+fn map_engine_error(context: &str, err: anyhow::Error) -> FusekiError {
+    if let Some(budget_err) = err.downcast_ref::<BudgetExceeded>() {
+        return match budget_err {
+            BudgetExceeded::TimeoutExceeded {
+                elapsed_ms,
+                limit_ms,
+            } => FusekiError::TimeoutWithMessage(format!(
+                "query exceeded its {limit_ms} ms execution-time budget (ran {elapsed_ms} ms) \
+                 and was aborted by the server"
+            )),
+            BudgetExceeded::ResultRowsExceeded { .. }
+            | BudgetExceeded::TriplesScannedExceeded { .. } => {
+                FusekiError::service_unavailable(format!("{context}: {budget_err}"))
+            }
+        };
+    }
+    FusekiError::query_execution(format!("{context}: {err}"))
 }
 
 /// Execute a parsed SELECT or ASK query.
@@ -66,9 +116,13 @@ pub fn dispatch(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
 /// SELECT builds the full solution-modifier stack natively from the parsed
 /// query (grouping/aggregation, HAVING, projected expressions, ORDER BY,
 /// projection, DISTINCT and slicing); ASK reduces to "any match".
-pub fn execute_select_or_ask(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+pub fn execute_select_or_ask(
+    query: &Query,
+    store: &Store,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<QueryResult> {
     let algebra = build_select_algebra(query)?;
-    let solution = run(store, &query.dataset, &algebra)?;
+    let solution = run(store, &query.dataset, &algebra, budget)?;
     match query.query_type {
         QueryType::Ask => Ok(ask_result(!solution.is_empty())),
         _ => select_result(solution),
@@ -81,14 +135,18 @@ pub fn execute_select_or_ask(query: &Query, store: &Store) -> FusekiResult<Query
 /// solution sequence) and instantiates the CONSTRUCT template per row. An empty
 /// template — whether written explicitly (`CONSTRUCT {}`) or produced by an
 /// empty `CONSTRUCT WHERE {}` shorthand — is a 400, never a silent empty graph.
-pub fn execute_construct(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+pub fn execute_construct(
+    query: &Query,
+    store: &Store,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<QueryResult> {
     if query.construct_template.is_empty() {
         return Err(FusekiError::query_parsing(
             "CONSTRUCT template is empty: there is nothing to construct",
         ));
     }
     let algebra = build_graph_where_algebra(query);
-    let solution = run(store, &query.dataset, &algebra)?;
+    let solution = run(store, &query.dataset, &algebra, budget)?;
     // The oxirs-arq engine's `instantiate_construct` accepts path-encoded
     // (length-one `PropertyPath::Iri`/`Variable`) template predicates natively,
     // so the template is passed through unchanged — no caller-side normalization.
@@ -107,7 +165,11 @@ pub fn execute_construct(query: &Query, store: &Store) -> FusekiResult<QueryResu
 /// an empty solution (a plain CBD lookup); `DESCRIBE *` with no WHERE has
 /// nothing in scope and is a 400. The resulting Concise Bounded Description is
 /// serialized like CONSTRUCT.
-pub fn execute_describe(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+pub fn execute_describe(
+    query: &Query,
+    store: &Store,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<QueryResult> {
     // `Algebra::Zero` is the parser's default when no WHERE block is present;
     // any real WHERE parses to a BGP/Table/... instead.
     let has_where = !matches!(query.where_clause, Algebra::Zero);
@@ -141,9 +203,12 @@ pub fn execute_describe(query: &Query, store: &Store) -> FusekiResult<QueryResul
         let algebra = build_graph_where_algebra(query);
         let mut executor = QueryExecutor::new();
         executor.set_strategy(ExecutionStrategy::Serial);
+        if let Some(budget) = budget {
+            executor = executor.with_budget(budget);
+        }
         let (solution, _stats) = executor
             .execute(&algebra, &view)
-            .map_err(|e| FusekiError::query_execution(format!("DESCRIBE WHERE failed: {e}")))?;
+            .map_err(|e| map_engine_error("DESCRIBE WHERE failed", e))?;
         solution
     } else {
         Vec::new()
@@ -175,7 +240,12 @@ pub fn execute_describe(query: &Query, store: &Store) -> FusekiResult<QueryResul
 /// parallel strategies do not reliably evaluate `Group` (aggregation). An empty
 /// `clause` makes the view a transparent passthrough, so wrapping is always
 /// safe.
-fn run(store: &Store, clause: &DatasetClause, algebra: &Algebra) -> FusekiResult<Solution> {
+fn run(
+    store: &Store,
+    clause: &DatasetClause,
+    algebra: &Algebra,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<Solution> {
     let arc = store.get_dataset(None)?;
     let guard = arc
         .read()
@@ -184,9 +254,15 @@ fn run(store: &Store, clause: &DatasetClause, algebra: &Algebra) -> FusekiResult
     let view = with_dataset_clause(&base, clause);
     let mut executor = QueryExecutor::new();
     executor.set_strategy(ExecutionStrategy::Serial);
+    // Attach the wall-time budget so the engine's throttled `check_time` calls in
+    // hash_join / execute_minus / apply_left_join / execute_serial abort a
+    // runaway before it monopolises this (blocking) thread.
+    if let Some(budget) = budget {
+        executor = executor.with_budget(budget);
+    }
     let (solution, _stats) = executor
         .execute(algebra, &view)
-        .map_err(|e| FusekiError::query_execution(format!("query execution failed: {e}")))?;
+        .map_err(|e| map_engine_error("query execution failed", e))?;
     Ok(solution)
 }
 

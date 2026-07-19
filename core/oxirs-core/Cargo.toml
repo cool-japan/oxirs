@@ -125,10 +125,20 @@ quote = { workspace = true }
 criterion.workspace = true
 tokio = { workspace = true, features = ["test-util", "rt", "io-util", "macros"] }
 tempfile.workspace = true
+# Heap profiler for the memory-footprint measurement example (dev-only, Pure
+# Rust). Gated behind the `dhat-heap` feature so it never perturbs a plain
+# release measurement run and never reaches library/default builds.
+dhat = "0.3"
 
 [features]
-default = ["serde", "parallel", "rdf-12", "rdf-star", "sparql-12"]
+default = ["serde", "parallel", "rdf-12", "rdf-star", "sparql-12", "malloc-trim"]
 serde = []
+# Return freed heap pages to the OS via glibc `malloc_trim` once a bulk load has
+# finished trimming its term dictionaries. Linux/glibc only (compiled to a no-op
+# elsewhere) and uses the crate's already-present pure-Rust `libc` binding, so it
+# adds no C dependency. On by default; disable with `--no-default-features` (or by
+# dropping it from the default set) to skip the call.
+malloc-trim = []
 async = []
 async-tokio = ["async"]
 parallel = ["rayon"]
@@ -140,6 +150,9 @@ blas = []
 rdf-12 = []
 rdf-star = []
 sparql-12 = []
+# Enables the dhat heap profiler inside the `mem_profile_load` example only.
+# Off by default; a dev-only measurement toggle with no effect on the library.
+dhat-heap = []
 # Experimental AI research modules (consciousness/molecular/quantum). These generate
 # results from untrained, randomly-initialized weights and are unvalidated research
 # prototypes — not production AI features. Off by default: ~12.8k lines with no

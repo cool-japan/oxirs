@@ -23,6 +23,19 @@ use tracing::{error, instrument};
 
 // SPARQL query parsing
 use oxirs_arq::query::parse_query;
+// Runtime resource budget: enforces the effective query timeout *during*
+// evaluation (cooperative wall-time checks inside the engine's hot loops).
+use oxirs_arq::query_governor::{ExecutionBudget, ResourceBudget};
+
+/// Extra wall-clock slack, beyond the cooperative query budget, before the
+/// outer `tokio::time::timeout` safety net gives up on the blocking task and
+/// frees the HTTP response. The engine's own budget should abort at
+/// ~`effective`; this grace only matters if a budget checkpoint was missed, so
+/// it is deliberately small. It also must stay below
+/// `server.request_timeout_secs` (the axum `TimeoutLayer`) so the query budget,
+/// not the coarse outer layer, is what normally fires — see the startup warning
+/// in `Runtime::build_router`.
+const QUERY_TIMEOUT_GRACE_SECS: u64 = 5;
 
 /// Deserializer that accepts either a single string or a sequence of
 /// strings, returning `Some(Vec<String>)` in either case.
@@ -216,14 +229,16 @@ pub async fn sparql_query(
         }
     };
 
-    // Create query context
+    // Create query context. `context.timeout` carries ONLY the client-requested
+    // `?timeout=` (seconds), or `None` when the client did not ask for one — in
+    // which case the configured `max_query_time_secs` becomes the effective cap
+    // (see `execute_sparql_query`). This intentionally overrides the QueryContext
+    // default so "no ?timeout" means "server default", not a hardcoded 30 s.
     let mut context = QueryContext {
         user,
         ..Default::default()
     };
-    if let Some(timeout) = params.timeout {
-        context.timeout = Some(Duration::from_secs(timeout as u64));
-    }
+    context.timeout = params.timeout.map(|t| Duration::from_secs(t as u64));
 
     // Execute query
     match execute_sparql_query(&query_string, context, &state).await {
@@ -377,11 +392,15 @@ pub async fn sparql_query_post(
         }
     };
 
-    // Create query context
-    let context = QueryContext {
+    // Create query context. POST bodies here carry no `?timeout`, so leave it
+    // unset (`None`) and let the configured `max_query_time_secs` be the
+    // effective cap in `execute_sparql_query` (rather than the QueryContext
+    // default of 30 s).
+    let mut context = QueryContext {
         user,
         ..Default::default()
     };
+    context.timeout = None;
 
     // Execute the query using the same logic as GET
     match execute_sparql_query(&query_string, context, &state).await {
@@ -526,7 +545,7 @@ pub async fn sparql_update(
 /// error. The endpoint never answers `200 OK` with a fabricated empty result.
 pub async fn execute_sparql_query(
     query: &str,
-    _context: QueryContext,
+    context: QueryContext,
     state: &Arc<AppState>,
 ) -> FusekiResult<QueryResult> {
     // Basic validation first.
@@ -534,28 +553,85 @@ pub async fn execute_sparql_query(
         return Err(FusekiError::query_parsing("Empty query"));
     }
 
-    // Parse ONCE via the real arq parser. The parsed query form is the single
-    // routing authority; a parse failure is a 400, never a silent 200 + empty.
-    let parsed = match parse_query(query) {
-        Ok(parsed) => parsed,
-        Err(e) => {
-            // A SPARQL UPDATE sent to the query endpoint will not parse as a
-            // query; point the caller at the dedicated /update endpoint instead
-            // of emitting a generic parse error.
-            if looks_like_update(query) {
-                return Err(FusekiError::query_parsing(
-                    "This is a SPARQL Query endpoint; send SPARQL UPDATE requests to /update",
-                ));
-            }
-            return Err(FusekiError::query_parsing(format!(
-                "SPARQL parse error: {e}"
-            )));
-        }
-    };
+    // ── Effective timeout ────────────────────────────────────────────────
+    // The configured `max_query_time_secs` is the ceiling AND the default. A
+    // client `?timeout=` can only LOWER it (never raise it above the server
+    // cap): effective = min(requested, config_max). A `?timeout=0` (or absent)
+    // falls back to the config cap rather than timing out instantly. `.max(1)`
+    // guards a pathological config of 0. This is the wiring that finally makes
+    // `performance.query_optimization.max_query_time_secs` a live setting.
+    let config_max_secs = state
+        .config
+        .performance
+        .query_optimization
+        .max_query_time_secs
+        .max(1);
+    let requested_secs = context.timeout.map(|d| d.as_secs()).filter(|&s| s > 0);
+    let effective_secs = requested_secs.map_or(config_max_secs, |s| s.min(config_max_secs));
+    let effective = Duration::from_secs(effective_secs);
+    let outer_wait = effective + Duration::from_secs(QUERY_TIMEOUT_GRACE_SECS);
 
-    // Dispatch on the parsed form. All four query forms run through the real
-    // engine; failures surface as typed HTTP errors, never a silent empty body.
-    crate::handlers::sparql::arq_exec::dispatch(&parsed, &state.store)
+    // ── Off-thread execution + hard response deadline ────────────────────
+    // The oxirs-arq engine runs synchronously with no `.await`, so running it
+    // directly on the async worker would (a) pin a tokio runtime thread for the
+    // whole query and (b) make `tokio::time::timeout` and the outer TimeoutLayer
+    // structurally unable to fire. `spawn_blocking` moves it to the blocking
+    // pool (freeing the async worker) and lets the timeout race it.
+    //
+    // `spawn_blocking` is NOT cancellable, so the timeout alone cannot stop the
+    // CPU work — that is the `ExecutionBudget`'s job (cooperative wall-time
+    // checks inside the engine). BOTH are required: the budget halts the
+    // computation, the timeout guarantees the client gets a response even if a
+    // budget checkpoint is somehow missed. `Store` is a cheap `Arc` clone, which
+    // satisfies the `'static` bound on the blocking closure.
+    let budget = ExecutionBudget::new(ResourceBudget {
+        max_wall_time: Some(effective),
+        max_result_rows: None,
+        max_triples_scanned: None,
+    });
+    let store = state.store.clone();
+    let query_owned = query.to_string();
+    let join = tokio::task::spawn_blocking(move || {
+        // Parse ONCE via the real arq parser. The parsed query form is the single
+        // routing authority; a parse failure is a 400, never a silent 200 + empty.
+        let parsed = match parse_query(&query_owned) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                // A SPARQL UPDATE sent to the query endpoint will not parse as a
+                // query; point the caller at the dedicated /update endpoint
+                // instead of emitting a generic parse error.
+                if looks_like_update(&query_owned) {
+                    return Err(FusekiError::query_parsing(
+                        "This is a SPARQL Query endpoint; send SPARQL UPDATE requests to /update",
+                    ));
+                }
+                return Err(FusekiError::query_parsing(format!(
+                    "SPARQL parse error: {e}"
+                )));
+            }
+        };
+        // Dispatch on the parsed form with the wall-time budget attached; a
+        // budget breach surfaces as a typed HTTP error (408/503), never a silent
+        // empty body.
+        crate::handlers::sparql::arq_exec::dispatch_with_budget(&parsed, &store, Some(budget))
+    });
+
+    match tokio::time::timeout(outer_wait, join).await {
+        // Task finished within the deadline: propagate its Ok/Err verbatim (a
+        // BudgetExceeded that fired first is already a typed 408/503 here).
+        Ok(Ok(result)) => result,
+        // The blocking task panicked (or the runtime is shutting down).
+        Ok(Err(join_err)) => Err(FusekiError::internal(format!(
+            "query execution task failed: {join_err}"
+        ))),
+        // Outer safety net fired: the cooperative budget did not stop the query
+        // within `effective + grace`. The blocking thread is still running
+        // (uncancellable) but must hit a budget checkpoint shortly and exit. We
+        // return 408 for consistency with the budget-timeout and TimeoutLayer.
+        Err(_elapsed) => Err(FusekiError::TimeoutWithMessage(format!(
+            "query exceeded the {effective_secs}s execution-time limit (server aborted)"
+        ))),
+    }
 }
 
 /// Heuristic used only to improve the error message when a request that fails to

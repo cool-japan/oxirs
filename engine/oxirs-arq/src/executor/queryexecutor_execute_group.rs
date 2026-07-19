@@ -33,8 +33,11 @@ impl QueryExecutor {
         dataset: &dyn Dataset,
     ) -> Result<(Solution, super::stats::ExecutionStats)> {
         // ── Budget: pre-execution wall-time check ────────────────────────
+        // Preserve the typed `BudgetExceeded` (via `anyhow::Error::new`, not a
+        // stringified `anyhow!("{e}")`) so the fuseki handler can `downcast_ref`
+        // it and map a wall-time breach to HTTP 408 rather than a generic 500.
         if let Some(ref budget) = self.execution_budget {
-            budget.check_time().map_err(|e| anyhow::anyhow!("{e}"))?;
+            budget.check_time().map_err(anyhow::Error::new)?;
         }
 
         let start_time = std::time::Instant::now();
@@ -57,9 +60,7 @@ impl QueryExecutor {
         // ── Budget: post-execution per-row accounting ────────────────────
         if let Some(ref budget) = self.execution_budget {
             for _ in &result {
-                budget
-                    .record_result_row()
-                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+                budget.record_result_row().map_err(anyhow::Error::new)?;
             }
         }
 

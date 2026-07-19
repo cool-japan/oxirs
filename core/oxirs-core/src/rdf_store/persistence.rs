@@ -32,7 +32,7 @@ use crate::parser::RdfFormat;
 use crate::serializer::Serializer;
 use crate::{OxirsError, Result};
 use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -287,48 +287,90 @@ impl PersistentState {
 pub fn load_from_disk(data_file: &Path) -> Result<(MemoryStorage, bool)> {
     let mut storage = MemoryStorage::new();
 
-    let mut file = File::open(data_file)
+    let file = File::open(data_file)
         .map_err(|e| OxirsError::Io(format!("Failed to open {}: {e}", data_file.display())))?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
-        .map_err(|e| OxirsError::Io(format!("Failed to read {}: {e}", data_file.display())))?;
-    drop(file);
+    let file_len = file
+        .metadata()
+        .map(|m| m.len())
+        .map_err(|e| OxirsError::Io(format!("Failed to stat {}: {e}", data_file.display())))?;
 
-    if bytes.is_empty() {
+    if file_len == 0 {
         return Ok((storage, false));
     }
 
-    let ends_with_newline = bytes.last() == Some(&b'\n');
-    let segments: Vec<&[u8]> = bytes.split(|&b| b == b'\n').collect();
-    let seg_count = segments.len();
+    // Pre-size the column dictionaries from a rough quad-count estimate (file
+    // length / a typical N-Quads line length) so the load makes its dominant
+    // allocations once instead of doubling repeatedly. Any over-estimate is
+    // returned by the shrink_to_fit below.
+    const AVG_NQUADS_LINE_BYTES: u64 = 120;
+    let approx_quads = (file_len / AVG_NQUADS_LINE_BYTES).max(1) as usize;
+    storage.reserve_for_bulk_load(approx_quads);
 
+    // Stream the file one line at a time rather than reading all of it into a
+    // single resident `Vec<u8>` (plus a `Vec` of ~one slice per line): for a
+    // 150+ MB dataset that buffer alone dominated load-time peak memory.
+    // `read_until` keeps the trailing '\n' when present, so a clean final line is
+    // distinguishable from a torn (unterminated) trailing line — the same repair
+    // signal the whole-file split previously derived from `ends_with_newline`.
+    let mut reader = BufReader::new(file);
+    let mut line: Vec<u8> = Vec::with_capacity(256);
+    let mut offset: u64 = 0;
     let mut had_errors = false;
-    let mut torn_trailing: Option<usize> = None;
+    // File length to truncate back to when a torn trailing line is dropped.
+    let mut torn_truncate_to: Option<u64> = None;
+    // Set when the final line parsed/skipped cleanly but lacked a trailing
+    // newline, so a subsequent append would otherwise merge into it.
+    let mut needs_trailing_newline = false;
 
-    for (idx, seg) in segments.iter().enumerate() {
-        let is_last_segment = idx + 1 == seg_count;
+    loop {
+        line.clear();
+        let n = reader
+            .read_until(b'\n', &mut line)
+            .map_err(|e| OxirsError::Io(format!("Failed to read {}: {e}", data_file.display())))?;
+        if n == 0 {
+            break; // EOF
+        }
+        let line_start = offset;
+        offset += n as u64;
+
+        // A chunk without a trailing '\n' can only be the final one: `read_until`
+        // stops at either a delimiter or EOF.
+        let ends_with_newline = line.last() == Some(&b'\n');
+        let seg: &[u8] = if ends_with_newline {
+            &line[..line.len() - 1]
+        } else {
+            &line[..]
+        };
+
         if seg.iter().all(|b| b.is_ascii_whitespace()) {
+            if !ends_with_newline {
+                needs_trailing_newline = true;
+            }
             continue;
         }
+
         match parse_nquads_line(seg) {
             Ok(quads) => {
                 for quad in quads {
                     storage.insert_quad(quad);
                 }
+                if !ends_with_newline {
+                    needs_trailing_newline = true;
+                }
             }
             Err(msg) => {
-                if is_last_segment && !ends_with_newline {
+                if !ends_with_newline {
                     tracing::warn!(
                         "Dropping torn trailing line ({} bytes) in {}: {msg}",
                         seg.len(),
                         data_file.display()
                     );
-                    torn_trailing = Some(seg.len());
+                    torn_truncate_to = Some(line_start);
                 } else {
                     had_errors = true;
                     tracing::warn!(
-                        "Skipping unparseable line {} in {}: {msg}",
-                        idx + 1,
+                        "Skipping unparseable line at byte {} in {}: {msg}",
+                        line_start,
                         data_file.display()
                     );
                 }
@@ -336,10 +378,18 @@ pub fn load_from_disk(data_file: &Path) -> Result<(MemoryStorage, bool)> {
         }
     }
 
+    // Return any capacity the reserve/insert path over-provisioned before the
+    // store goes live, so the steady footprint reflects only the live terms, then
+    // hand the freed pages back to the OS.
+    storage.shrink_to_fit();
+    super::trim_process_allocator();
+
+    // Close the read handle before reopening the file for repair.
+    drop(reader);
+
     // Normalize the on-disk file so subsequent appends never merge into the last
     // line: either truncate a torn trailing line, or add a missing final newline.
-    if let Some(torn_len) = torn_trailing {
-        let new_len = bytes.len().saturating_sub(torn_len) as u64;
+    if let Some(new_len) = torn_truncate_to {
         match OpenOptions::new().write(true).open(data_file) {
             Ok(f) => {
                 if let Err(e) = f.set_len(new_len) {
@@ -354,7 +404,7 @@ pub fn load_from_disk(data_file: &Path) -> Result<(MemoryStorage, bool)> {
                 data_file.display()
             ),
         }
-    } else if !ends_with_newline {
+    } else if needs_trailing_newline {
         // The last valid line lacked a trailing newline; add one.
         match OpenOptions::new().append(true).open(data_file) {
             Ok(mut f) => {

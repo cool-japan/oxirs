@@ -105,16 +105,26 @@ impl QueryParser {
                 query.order_by.push(OrderCondition { expr, ascending });
             }
         }
-        if self.match_token(&Token::Limit) {
-            if let Some(Token::NumericLiteral(num)) = self.peek() {
-                query.limit = num.parse().ok();
-                self.advance();
-            }
-        }
-        if self.match_token(&Token::Offset) {
-            if let Some(Token::NumericLiteral(num)) = self.peek() {
-                query.offset = num.parse().ok();
-                self.advance();
+        // `LimitOffsetClauses ::= LimitClause OffsetClause? | OffsetClause
+        // LimitClause?` (SPARQL 1.1 §18.5): BOTH orders are legal. A fixed
+        // LIMIT-then-OFFSET sequence silently drops the LIMIT of an
+        // `OFFSET n LIMIT m` tail — the trailing `LIMIT` is never consumed, so
+        // the query returns every row past the offset instead of `m` rows (an
+        // HTTP-200 wrong answer). Read the two clauses in a loop that accepts
+        // whichever keyword comes next, in either order, until neither appears.
+        loop {
+            if self.match_token(&Token::Limit) {
+                if let Some(Token::NumericLiteral(num)) = self.peek() {
+                    query.limit = num.parse().ok();
+                    self.advance();
+                }
+            } else if self.match_token(&Token::Offset) {
+                if let Some(Token::NumericLiteral(num)) = self.peek() {
+                    query.offset = num.parse().ok();
+                    self.advance();
+                }
+            } else {
+                break;
             }
         }
         Ok(())

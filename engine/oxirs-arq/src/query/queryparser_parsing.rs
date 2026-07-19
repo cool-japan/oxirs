@@ -518,7 +518,13 @@ impl QueryParser {
             }
         }
         self.parse_dataset_clause(&mut query.dataset)?;
-        self.expect_token(Token::Where)?;
+        // The `WHERE` keyword is optional in a SPARQL 1.1 SELECT
+        // (`SELECT ?s { … }` and `SELECT * { … }` are both valid); only the
+        // group-graph-pattern braces are required. Mirror the ASK handling
+        // (`match_token`) rather than demanding the keyword. The projection loop
+        // above already stops on `{` (`Token::LeftBrace` hits its `_ => break`),
+        // so the brace that opens the pattern is still available here.
+        self.match_token(&Token::Where);
         self.expect_token(Token::LeftBrace)?;
         query.where_clause = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;

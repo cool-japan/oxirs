@@ -376,6 +376,31 @@ impl MemoryStorage {
         }
     }
 
+    /// Pre-size the column dictionaries for a bulk load of roughly `approx_quads`
+    /// quads, so the dominant allocations are made once up front instead of
+    /// through repeated doubling (each doubling transiently holds both the old and
+    /// new backing buffer, inflating peak memory). The object column is by far the
+    /// highest-cardinality in typical RDF (close to one distinct literal/IRI per
+    /// quad), so it is sized to the full estimate; subjects are lower cardinality
+    /// and reserved conservatively; predicates and graphs grow cheaply and are
+    /// left to size themselves. Any over-reservation is returned by a later
+    /// [`shrink_to_fit`](Self::shrink_to_fit).
+    pub fn reserve_for_bulk_load(&mut self, approx_quads: usize) {
+        self.objects.reserve(approx_quads);
+        self.subjects.reserve(approx_quads / 4);
+    }
+
+    /// Release excess reserved capacity in every column dictionary back to the
+    /// allocator after a bulk load completes. The permutation indexes are
+    /// `BTreeSet`s, which allocate per node and have no slack to trim, so only the
+    /// dictionaries (backed by `Vec`/`HashMap` that grow by doubling) are shrunk.
+    pub fn shrink_to_fit(&mut self) {
+        self.subjects.shrink_to_fit();
+        self.predicates.shrink_to_fit();
+        self.objects.shrink_to_fit();
+        self.graphs.shrink_to_fit();
+    }
+
     pub fn len(&self) -> usize {
         self.spog.len()
     }

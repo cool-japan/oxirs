@@ -1113,9 +1113,36 @@ impl Runtime {
         app = app.layer(DefaultBodyLimit::max(max_body_bytes));
         app = app.layer(SetRequestIdLayer::x_request_id(RequestIdGenerator));
         app = app.layer(TraceLayer::new_for_http());
+        // Coarse whole-request deadline. For SPARQL queries this is a SAFETY NET
+        // *behind* the per-query `ExecutionBudget` (see
+        // `handlers::sparql::core::execute_sparql_query`): the query budget aborts
+        // the computation cooperatively at ~`max_query_time_secs`, and this layer
+        // only guarantees the connection is not held forever. For the budget to be
+        // the mechanism that normally fires (returning a precise 408 with the
+        // query's own message), `request_timeout_secs` must exceed
+        // `max_query_time_secs` plus the query grace; otherwise this layer
+        // preempts the budget and every long query looks like a generic 408.
+        let request_timeout_secs = self.config.server.request_timeout_secs;
+        let max_query_time_secs = self
+            .config
+            .performance
+            .query_optimization
+            .max_query_time_secs;
+        if request_timeout_secs <= max_query_time_secs {
+            warn!(
+                request_timeout_secs,
+                max_query_time_secs,
+                "server.request_timeout_secs ({request_timeout_secs}s) <= \
+                 performance.query_optimization.max_query_time_secs ({max_query_time_secs}s): the \
+                 outer HTTP TimeoutLayer may preempt the per-query execution budget, cutting long \
+                 queries at the layer instead of letting the budget abort them cleanly. Set \
+                 request_timeout_secs above max_query_time_secs (plus a few seconds of grace) so \
+                 the query budget fires first."
+            );
+        }
         app = app.layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
-            Duration::from_secs(self.config.server.request_timeout_secs),
+            Duration::from_secs(request_timeout_secs),
         ));
         if self.config.server.cors {
             let cors = CorsLayer::new()
