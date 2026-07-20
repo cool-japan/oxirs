@@ -1,7 +1,7 @@
 //! Coordinate Reference System (CRS) transformation functions
 //!
 //! This module provides functions for transforming geometries between different
-//! Coordinate Reference Systems using oxigdal-proj (pure Rust).
+//! Coordinate Reference Systems using oxigeo-proj (pure Rust).
 //!
 //! # Performance
 //!
@@ -14,7 +14,7 @@ use crate::geometry::{Crs, Geometry};
 
 /// Transform a geometry from its current CRS to a target CRS
 ///
-/// This function uses oxigdal-proj (pure Rust) to perform coordinate transformations.
+/// This function uses oxigeo-proj (pure Rust) to perform coordinate transformations.
 /// Both the source and target CRS must have EPSG codes.
 ///
 /// # Arguments
@@ -55,7 +55,7 @@ use crate::geometry::{Crs, Geometry};
 #[cfg(feature = "proj-support")]
 pub fn transform(geom: &Geometry, target_crs: &Crs) -> Result<Geometry> {
     use geo::algorithm::map_coords::MapCoords;
-    use oxigdal_proj::Transformer;
+    use oxigeo_proj::Transformer;
 
     // If already in target CRS, return clone
     if geom.crs == *target_crs {
@@ -77,7 +77,7 @@ pub fn transform(geom: &Geometry, target_crs: &Crs) -> Result<Geometry> {
         ))
     })?;
 
-    // Create oxigdal-proj transformer (pure Rust)
+    // Create oxigeo-proj transformer (pure Rust)
     let transformer = Transformer::from_epsg(source_epsg, target_epsg).map_err(|e| {
         GeoSparqlError::CrsTransformationFailed(format!(
             "Failed to create transformation from EPSG:{} to EPSG:{}: {}",
@@ -87,7 +87,7 @@ pub fn transform(geom: &Geometry, target_crs: &Crs) -> Result<Geometry> {
 
     // Transform coordinates
     let transformed_geom = geom.geom.map_coords(|coord| {
-        let input = oxigdal_proj::Coordinate::new(coord.x, coord.y);
+        let input = oxigeo_proj::Coordinate::new(coord.x, coord.y);
         match transformer.transform(&input) {
             Ok(output) => geo_types::Coord {
                 x: output.x,
@@ -152,7 +152,7 @@ pub fn transform(_geom: &Geometry, _target_crs: &Crs) -> Result<Geometry> {
 #[cfg(feature = "proj-support")]
 pub fn transform_batch(geometries: &[Geometry], target_crs: &Crs) -> Result<Vec<Geometry>> {
     use geo::algorithm::map_coords::MapCoords;
-    use oxigdal_proj::Transformer;
+    use oxigeo_proj::Transformer;
 
     if geometries.is_empty() {
         return Ok(Vec::new());
@@ -199,7 +199,7 @@ pub fn transform_batch(geometries: &[Geometry], target_crs: &Crs) -> Result<Vec<
         .iter()
         .map(|geom| {
             let transformed_geom = geom.geom.map_coords(|coord| {
-                let input = oxigdal_proj::Coordinate::new(coord.x, coord.y);
+                let input = oxigeo_proj::Coordinate::new(coord.x, coord.y);
                 match transformer.transform(&input) {
                     Ok(output) => geo_types::Coord {
                         x: output.x,

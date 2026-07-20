@@ -32,7 +32,7 @@ shapefile = { version = "0.9", optional = true }
 # the COOLJAPAN Pure Rust Policy v2, so this published crate's --all-features
 # dependency surface stays 100% Pure Rust. Use that adapter for GEOS-backed
 # buffering / boundary / Egenhofer & RCC8 boundary predicates.
-oxigdal-proj = { version = "0.1.7", optional = true }  # Pure Rust CRS transformation (COOLJAPAN)
+oxigeo-proj = { version = "0.2.0", optional = true }  # Pure Rust CRS transformation (COOLJAPAN)
 geo-buffer = { version = "0.2", optional = true }
 oxisql-core = { workspace = true, optional = true }
 oxisql-sqlite-compat = { workspace = true, optional = true }
@@ -86,7 +86,7 @@ flatgeobuf-support = ["flatgeobuf", "geo-traits", "geozero", "fallible-streaming
 mvt-support = ["mvt"]
 topojson-support = []
 rust-buffer = ["geo-buffer"]
-proj-support = ["oxigdal-proj"]
+proj-support = ["oxigeo-proj"]
 parallel = ["rayon"]
 gpu = []
 # NOTE (cargo-upgrade sweep, 2026-07-02): scirs2-core removed its `cuda` feature in

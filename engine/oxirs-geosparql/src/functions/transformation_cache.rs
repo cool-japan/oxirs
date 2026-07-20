@@ -101,7 +101,7 @@ impl TransformationCache {
     /// ```
     pub fn transform(&self, geom: &Geometry, target_crs: &Crs) -> Result<Geometry> {
         use geo::algorithm::map_coords::MapCoords;
-        use oxigdal_proj::Transformer;
+        use oxigeo_proj::Transformer;
 
         if &geom.crs == target_crs {
             return Ok(geom.clone());
@@ -137,7 +137,7 @@ impl TransformationCache {
         })?;
 
         let transformed_geom = geom.geom.map_coords(|coord| {
-            let input = oxigdal_proj::Coordinate::new(coord.x, coord.y);
+            let input = oxigeo_proj::Coordinate::new(coord.x, coord.y);
             match transformer.transform(&input) {
                 Ok(output) => geo_types::Coord {
                     x: output.x,
