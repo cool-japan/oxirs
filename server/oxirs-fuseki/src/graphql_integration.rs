@@ -385,6 +385,21 @@ impl GraphQLService {
     pub fn sdl(&self) -> String {
         self.schema.sdl()
     }
+
+    /// Auto-generate a GraphQL SDL from a dataset's RDF vocabulary via
+    /// `oxirs-gql`'s schema generator.
+    ///
+    /// Unlike [`Self::sdl`] — which returns this service's fixed, hand-written
+    /// catalog schema — this introspects the dataset's actual ontology
+    /// (`rdfs:Class` / `owl:Class`, `rdf:Property` / `owl:*Property` with
+    /// `rdfs:domain` / `rdfs:range`) and renders GraphQL object types and fields
+    /// that mirror the data. `dataset` selects the named dataset (`None` = the
+    /// default dataset). See [`crate::graphql_autoschema`] for the integration
+    /// status and the planned follow-up (query execution against the generated
+    /// schema).
+    pub fn auto_generated_sdl(&self, dataset: Option<&str>) -> Result<String> {
+        crate::graphql_autoschema::generate_sdl_for_dataset(&self.store, dataset)
+    }
 }
 
 /// GraphQL query request

@@ -35,7 +35,31 @@ use oxirs_arq::query_governor::{ExecutionBudget, ResourceBudget};
 /// `server.request_timeout_secs` (the axum `TimeoutLayer`) so the query budget,
 /// not the coarse outer layer, is what normally fires — see the startup warning
 /// in `Runtime::build_router`.
-const QUERY_TIMEOUT_GRACE_SECS: u64 = 5;
+pub(crate) const QUERY_TIMEOUT_GRACE_SECS: u64 = 5;
+
+/// Fixed, non-revealing client message for a query-execution task failure.
+///
+/// The internal cause (a panic payload, which may embed an assertion message, a
+/// file path, or a fragment of query/engine state) is logged server-side but
+/// never returned to the client — see [`internal_execution_error`].
+pub(crate) const INTERNAL_EXECUTION_ERROR_MSG: &str = "internal query execution error";
+
+/// Map a `spawn_blocking` join failure (a panicked query task, or the runtime
+/// shutting down) to a client-facing 500 **without leaking the internal cause**.
+///
+/// `FusekiError::internal`'s `Display` is embedded verbatim in the JSON error
+/// body (`to_error_response`), so formatting the raw [`tokio::task::JoinError`]
+/// (which carries any captured panic message) into it would expose engine
+/// internals to every caller. Instead the full join error is logged at `error`
+/// level for operators and the client receives only the fixed
+/// [`INTERNAL_EXECUTION_ERROR_MSG`] sentence.
+fn internal_execution_error(join_err: &tokio::task::JoinError) -> FusekiError {
+    error!(
+        error = %join_err,
+        "SPARQL query execution task failed (panic or runtime shutdown)"
+    );
+    FusekiError::internal(INTERNAL_EXECUTION_ERROR_MSG)
+}
 
 /// Deserializer that accepts either a single string or a sequence of
 /// strings, returning `Some(Vec<String>)` in either case.
@@ -306,8 +330,14 @@ pub async fn sparql_query(
 }
 
 /// SPARQL query POST endpoint handler (for form data and direct body)
+///
+/// `Query(url_params)` exposes the request-line query string so the SPARQL
+/// protocol's `?timeout=` (seconds) is read identically to GET — it is a URL
+/// parameter even on POST, never part of the body — and is capped the same way
+/// (`min(config max)`) in `execute_sparql_query`.
 #[instrument(skip(state))]
 pub async fn sparql_query_post(
+    Query(url_params): Query<SparqlQueryParams>,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     user: Option<AuthUser>,
@@ -392,15 +422,15 @@ pub async fn sparql_query_post(
         }
     };
 
-    // Create query context. POST bodies here carry no `?timeout`, so leave it
-    // unset (`None`) and let the configured `max_query_time_secs` be the
-    // effective cap in `execute_sparql_query` (rather than the QueryContext
-    // default of 30 s).
+    // Create query context. The client `?timeout=` (if any) rides the URL query
+    // string on POST just as on GET; `None` means "no client cap", leaving the
+    // configured `max_query_time_secs` as the effective ceiling in
+    // `execute_sparql_query` (rather than the QueryContext default of 30 s).
     let mut context = QueryContext {
         user,
         ..Default::default()
     };
-    context.timeout = None;
+    context.timeout = url_params.timeout.map(|t| Duration::from_secs(t as u64));
 
     // Execute the query using the same logic as GET
     match execute_sparql_query(&query_string, context, &state).await {
@@ -621,9 +651,7 @@ pub async fn execute_sparql_query(
         // BudgetExceeded that fired first is already a typed 408/503 here).
         Ok(Ok(result)) => result,
         // The blocking task panicked (or the runtime is shutting down).
-        Ok(Err(join_err)) => Err(FusekiError::internal(format!(
-            "query execution task failed: {join_err}"
-        ))),
+        Ok(Err(join_err)) => Err(internal_execution_error(&join_err)),
         // Outer safety net fired: the cooperative budget did not stop the query
         // within `effective + grace`. The blocking thread is still running
         // (uncancellable) but must hit a budget checkpoint shortly and exit. We
@@ -1079,4 +1107,45 @@ fn escape_turtle_string(s: &str) -> String {
         .replace('\n', "\\n")
         .replace('\r', "\\r")
         .replace('\t', "\\t")
+}
+
+#[cfg(test)]
+mod internal_error_tests {
+    use super::{internal_execution_error, INTERNAL_EXECUTION_ERROR_MSG};
+
+    /// A panicked query task must surface to the client as a fixed, generic 500
+    /// message — never the panic payload (which can embed engine internals,
+    /// assertion text, or query state). We build a real [`tokio::task::JoinError`]
+    /// carrying a distinctive secret and assert it does not reach the
+    /// client-facing error body (`FusekiError::Display`, which
+    /// `to_error_response` embeds verbatim).
+    #[test]
+    fn internal_execution_error_hides_panic_payload_from_client_body() {
+        let secret = "SENSITIVE_PANIC_9f3c_do_not_leak";
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("build current-thread runtime for the test");
+        let join_err = rt.block_on(async move {
+            tokio::task::spawn_blocking(move || {
+                panic!("{secret}");
+            })
+            .await
+            .expect_err("the blocking task panicked, so join must return Err")
+        });
+
+        // Sanity: this really is a panic join error (version-robust — some tokio
+        // releases omit the message from `Display`, so we check the kind).
+        assert!(join_err.is_panic(), "expected a panic JoinError");
+
+        let client_body = internal_execution_error(&join_err).to_string();
+
+        assert!(
+            !client_body.contains("SENSITIVE_PANIC"),
+            "client body must not leak the panic payload, got: {client_body}"
+        );
+        assert!(
+            client_body.contains(INTERNAL_EXECUTION_ERROR_MSG),
+            "client body should carry the fixed sentinel, got: {client_body}"
+        );
+    }
 }

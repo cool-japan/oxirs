@@ -84,6 +84,7 @@ pub mod federated_query_types;
 pub mod federation;
 pub mod gpu_kg_embeddings;
 pub mod graph_analytics;
+pub mod graphql_autoschema;
 pub mod graphql_integration;
 pub mod handlers;
 pub mod health;

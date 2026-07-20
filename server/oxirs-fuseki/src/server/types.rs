@@ -1128,16 +1128,28 @@ impl Runtime {
             .performance
             .query_optimization
             .max_query_time_secs;
-        if request_timeout_secs <= max_query_time_secs {
+        // The budget aborts at ~`max_query_time_secs`; the blocking task then has
+        // up to `QUERY_TIMEOUT_GRACE_SECS` of slack (see the outer
+        // `tokio::time::timeout` in `execute_sparql_query`) before the response is
+        // freed. The TimeoutLayer must sit above BOTH, i.e.
+        //   request_timeout_secs > max_query_time_secs + QUERY_TIMEOUT_GRACE_SECS
+        // otherwise it preempts the budget path entirely and every long query
+        // looks like a generic 408. The `<=` boundary is warned (not a hard `<`)
+        // so a config that merely lands exactly on the sum is still flagged.
+        let min_request_timeout_secs = max_query_time_secs
+            .saturating_add(crate::handlers::sparql::core::QUERY_TIMEOUT_GRACE_SECS);
+        if request_timeout_secs <= min_request_timeout_secs {
             warn!(
                 request_timeout_secs,
                 max_query_time_secs,
+                grace_secs = crate::handlers::sparql::core::QUERY_TIMEOUT_GRACE_SECS,
                 "server.request_timeout_secs ({request_timeout_secs}s) <= \
-                 performance.query_optimization.max_query_time_secs ({max_query_time_secs}s): the \
-                 outer HTTP TimeoutLayer may preempt the per-query execution budget, cutting long \
-                 queries at the layer instead of letting the budget abort them cleanly. Set \
-                 request_timeout_secs above max_query_time_secs (plus a few seconds of grace) so \
-                 the query budget fires first."
+                 performance.query_optimization.max_query_time_secs ({max_query_time_secs}s) + \
+                 query grace ({}s): the outer HTTP TimeoutLayer may preempt the per-query \
+                 execution budget, cutting long queries at the layer instead of letting the \
+                 budget abort them cleanly. Set request_timeout_secs above \
+                 max_query_time_secs + grace so the query budget fires first.",
+                crate::handlers::sparql::core::QUERY_TIMEOUT_GRACE_SECS
             );
         }
         app = app.layer(TimeoutLayer::with_status_code(

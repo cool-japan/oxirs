@@ -9,7 +9,9 @@ use anyhow::{anyhow, bail, Result};
 use oxirs_core::model::NamedNode;
 use std::collections::{HashMap, HashSet};
 
-use super::types::{DatasetClause, DescribeTarget, ProjectionItem, Query, QueryType, Token};
+use super::types::{
+    DatasetClause, DatatypeRef, DescribeTarget, ProjectionItem, Query, QueryType, Token,
+};
 
 use super::queryparser_type::QueryParser;
 
@@ -56,6 +58,7 @@ impl QueryParser {
             base_iri: None,
             variables: HashSet::new(),
             blank_node_counter: 0,
+            in_construct_template: false,
         }
     }
     /// Tokenize SPARQL query string
@@ -143,19 +146,43 @@ impl QueryParser {
                     if chars.peek() == Some(&'=') {
                         chars.next();
                         tokens.push(Token::LessEqual);
-                    } else if chars.peek() == Some(&'h') || chars.peek() == Some(&'/') {
+                    } else {
+                        // Disambiguate a full IRIREF (`<urn:p>`, `<http://…>`,
+                        // `<https://…#f>`, relative `<p>`) from the `<` / `<=`
+                        // comparison operators. Per SPARQL 1.1,
+                        //   IRIREF ::= '<' ([^<>"{}|^`\] - [#x00-#x20])* '>'.
+                        // Scan a CLONE of the iterator: only when the closing `>`
+                        // is reached before any character excluded from an IRIREF
+                        // (which includes every control/space char, so `?x < ?y`
+                        // and `?x<5` never misread as IRIs) do we commit a
+                        // `Token::Iri`. Otherwise fall back to the `<` operator
+                        // with the real iterator untouched (only the opening `<`
+                        // already consumed).
+                        let mut lookahead = chars.clone();
                         let mut iri = String::new();
-                        while let Some(&ch) = chars.peek() {
+                        let mut closed = false;
+                        while let Some(ch) = lookahead.next() {
                             if ch == '>' {
-                                chars.next();
+                                closed = true;
+                                break;
+                            }
+                            // Excluded from IRIREF content: <>"{}|^`\ and every
+                            // control or space code point (<= U+0020). Everything
+                            // else — including non-ASCII ucschar — is permitted.
+                            if matches!(ch, '<' | '"' | '{' | '}' | '|' | '^' | '`' | '\\')
+                                || ch <= '\u{20}'
+                            {
                                 break;
                             }
                             iri.push(ch);
-                            chars.next();
                         }
-                        tokens.push(Token::Iri(iri));
-                    } else {
-                        tokens.push(Token::Less);
+                        if closed {
+                            // Commit: `lookahead` already sits just past the `>`.
+                            chars = lookahead;
+                            tokens.push(Token::Iri(iri));
+                        } else {
+                            tokens.push(Token::Less);
+                        }
                     }
                 }
                 '>' => {
@@ -351,13 +378,18 @@ impl QueryParser {
         }
         identifier
     }
-    /// Read the datatype that follows a `^^` marker: either an absolute IRI in
-    /// angle brackets (`<iri>`, returned without the brackets) or a
-    /// `prefix:local` name (returned verbatim for parse-time resolution).
+    /// Read the datatype that follows a `^^` marker, PRESERVING how it was
+    /// written so resolution treats it correctly:
+    ///
+    /// * `<iri>`         → [`DatatypeRef::Iri`] with the brackets stripped — an
+    ///   absolute IRI used verbatim (so `^^<urn:x>` / `^^<tag:y>` are honoured,
+    ///   never prefix-resolved).
+    /// * `prefix:local`  → [`DatatypeRef::Prefixed`] — resolved against the
+    ///   declared prefixes at parse time.
     pub(super) fn parse_datatype_iri(
         &self,
         chars: &mut std::iter::Peekable<std::str::Chars>,
-    ) -> String {
+    ) -> DatatypeRef {
         if chars.peek() == Some(&'<') {
             chars.next();
             let mut iri = String::new();
@@ -368,9 +400,9 @@ impl QueryParser {
                 }
                 iri.push(c);
             }
-            iri
+            DatatypeRef::Iri(iri)
         } else {
-            self.parse_identifier(chars)
+            DatatypeRef::Prefixed(self.parse_identifier(chars))
         }
     }
     pub(super) fn parse_number(&self, chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
@@ -706,9 +738,25 @@ impl QueryParser {
     /// three triples `(?s :p ?o)`, `(?s :q ?r)`, `(?s :q ?t)`.
     pub(super) fn parse_triples_same_subject(&mut self) -> Result<Vec<TriplePattern>> {
         self.skip_whitespace_and_newlines();
-        let subject = self.parse_term()?;
         let mut triples = Vec::new();
-        self.parse_predicate_object_list(&subject, &mut triples)?;
+        // The subject may be a `TriplesNode` — a blank-node property list
+        // `[ … ]` or an RDF collection `( … )` — which expands to its own
+        // triples and yields a fresh anchor node. Its trailing property list is
+        // OPTIONAL (`[ :p :o ] :q :r`, but also the standalone `[ :p :o ] .` and
+        // `( :a :b ) .`), so only parse one when a verb actually follows.
+        if matches!(
+            self.peek(),
+            Some(Token::LeftBracket) | Some(Token::LeftParen)
+        ) {
+            let subject = self.parse_triples_node(&mut triples)?;
+            self.skip_whitespace_and_newlines();
+            if self.is_verb_start() {
+                self.parse_predicate_object_list(&subject, &mut triples)?;
+            }
+        } else {
+            let subject = self.parse_term()?;
+            self.parse_predicate_object_list(&subject, &mut triples)?;
+        }
         Ok(triples)
     }
     /// Parse a `PropertyListPathNotEmpty`:
@@ -749,7 +797,9 @@ impl QueryParser {
     ) -> Result<()> {
         loop {
             self.skip_whitespace_and_newlines();
-            let object = self.parse_term()?;
+            // An object is a `GraphNode`: a plain term OR a nested `TriplesNode`
+            // (`[ … ]` / `( … )`), whose expansion triples are appended to `out`.
+            let object = self.parse_graph_node(out)?;
             out.push(TriplePattern::new(
                 subject.clone(),
                 predicate.clone(),

@@ -161,6 +161,9 @@ async-trait.workspace = true
 
 # GraphQL
 async-graphql.workspace = true
+# oxirs-gql: RDF-vocabulary-driven GraphQL schema auto-generation (juniper-based,
+# independent of the async-graphql catalog schema in graphql_integration.rs).
+oxirs-gql.workspace = true
 
 # OpenAPI
 utoipa = { version = "5.5", features = ["chrono"] }

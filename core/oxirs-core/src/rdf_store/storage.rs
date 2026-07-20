@@ -401,6 +401,132 @@ impl MemoryStorage {
         self.graphs.shrink_to_fit();
     }
 
+    /// Gated shrink for the *repeated bulk-ingest* path: release excess dictionary
+    /// capacity **only when the dictionaries are genuinely over-provisioned**, i.e.
+    /// their combined backing allocation can hold more than twice the slots they
+    /// are actually using. Returns `true` when a shrink was performed, `false` when
+    /// the store was already tight enough to skip it (a no-op).
+    ///
+    /// ## Why a gate
+    ///
+    /// The dictionaries grow by doubling, so a bulk load leaves each column with up
+    /// to ~2x slack. A caller that shrinks *unconditionally after every batch* (as
+    /// the Fuseki ingest seam did) forces a full-dictionary reallocation and rehash
+    /// on each batch, and the very next batch's inserts double the allocation
+    /// straight back — an O(T²/b) shrink→regrow→shrink treadmill across `T` total
+    /// quads in batches of `b`. Firing only when `capacity > 2 * slot_len` breaks
+    /// that treadmill: a steady stream of similarly-sized batches keeps `capacity`
+    /// tracking the live data (never crossing the threshold), so no work is done,
+    /// while a genuine over-reservation (or post-deletion slack) is still reclaimed.
+    ///
+    /// ## Why the comparison is *aggregated* across all four columns
+    ///
+    /// The two low-cardinality columns (predicates, graphs) hold only a handful of
+    /// slots, but a `Vec`'s minimum non-zero allocation is 4 slots — so a
+    /// single-graph, single-predicate load has `capacity (4) > 2 * slot_len (1..2)`
+    /// for those columns *permanently*. A per-column OR gate would therefore trip on
+    /// every batch off the back of a 3-slot graph column and re-shrink (and
+    /// re-`malloc_trim`) the whole store regardless — reinstating the exact treadmill
+    /// this exists to remove. Summing capacity and slots across the four columns
+    /// drowns that fixed handful of slack in the dominant object/subject columns, so
+    /// the gate only fires when a *large* column is really over-provisioned.
+    ///
+    /// ## Why `slot_len`, not the live-term count, is the denominator
+    ///
+    /// [`shrink_to_fit`] shrinks each id vector down to its slot length (live plus
+    /// tombstoned slots — tombstones stay for free-list reuse), not down to the
+    /// live-term count. Gating on `slot_len` means that right after a shrink
+    /// `capacity == slot_len`, so the gate reports "no slack" and does **not** keep
+    /// re-shrinking (and re-`malloc_trim`-ing) a tombstone-heavy dictionary batch
+    /// after batch — which would reintroduce the very per-batch cost the gate exists
+    /// to remove.
+    pub fn shrink_to_fit_if_slack(&mut self) -> bool {
+        let capacity = self.subjects.capacity_estimate()
+            + self.predicates.capacity_estimate()
+            + self.objects.capacity_estimate()
+            + self.graphs.capacity_estimate();
+        let slots = self.subjects.slot_len()
+            + self.predicates.slot_len()
+            + self.objects.slot_len()
+            + self.graphs.slot_len();
+        let over_provisioned = capacity > slots.saturating_mul(2);
+        if over_provisioned {
+            self.shrink_to_fit();
+        }
+        over_provisioned
+    }
+
+    // --- Frozen-snapshot support --------------------------------------------
+    //
+    // These `pub(crate)` seams let the sibling `snapshot` module read the interned
+    // columns and the SPOG permutation to serialize a store, and rebuild a store
+    // from deserialized parts, without exposing the private fields or making the
+    // dictionaries mutable to the outside.
+
+    /// Borrow the subject column dictionary (snapshot builder).
+    pub(crate) fn subjects_dict(&self) -> &ColumnDictionary<Subject> {
+        &self.subjects
+    }
+
+    /// Borrow the predicate column dictionary (snapshot builder).
+    pub(crate) fn predicates_dict(&self) -> &ColumnDictionary<Predicate> {
+        &self.predicates
+    }
+
+    /// Borrow the object column dictionary (snapshot builder).
+    pub(crate) fn objects_dict(&self) -> &ColumnDictionary<Object> {
+        &self.objects
+    }
+
+    /// Borrow the graph-name column dictionary (snapshot builder).
+    pub(crate) fn graphs_dict(&self) -> &ColumnDictionary<GraphName> {
+        &self.graphs
+    }
+
+    /// Borrow the SPOG permutation. The other three permutations are derivable
+    /// from it, so the snapshot builder reads only this one and regenerates the
+    /// rest in the target id ordering.
+    pub(crate) fn spog_index(&self) -> &BTreeSet<[u32; 4]> {
+        &self.spog
+    }
+
+    /// Reassemble a storage from snapshot-deserialized parts: the four column
+    /// dictionaries (already built with sorted-term ids) and the four permutation
+    /// indexes (already sorted in their own permutation order). `named_graphs` is
+    /// re-derived from the graph dictionary — every live graph term is, by
+    /// construction, in use by some quad, so each `GraphName::NamedNode` entry is
+    /// exactly a named graph of the dataset. The caller is responsible for the
+    /// ids in the permutations agreeing with the dictionaries.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_snapshot_parts(
+        subjects: ColumnDictionary<Subject>,
+        predicates: ColumnDictionary<Predicate>,
+        objects: ColumnDictionary<Object>,
+        graphs: ColumnDictionary<GraphName>,
+        spog: BTreeSet<[u32; 4]>,
+        posg: BTreeSet<[u32; 4]>,
+        ospg: BTreeSet<[u32; 4]>,
+        gspo: BTreeSet<[u32; 4]>,
+    ) -> Self {
+        let mut named_graphs = BTreeSet::new();
+        for (_id, graph) in graphs.iter_live_slots() {
+            if let GraphName::NamedNode(node) = graph {
+                named_graphs.insert(node.clone());
+            }
+        }
+        MemoryStorage {
+            subjects,
+            predicates,
+            objects,
+            graphs,
+            spog,
+            posg,
+            ospg,
+            gspo,
+            named_graphs,
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.spog.len()
     }

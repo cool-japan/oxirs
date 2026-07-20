@@ -235,6 +235,18 @@ impl ExecutionBudget {
             }
         }
 
+        // 4. Also surface any triple-scan breach at this checkpoint. Row emission
+        // and triple scanning interleave (a result-heavy query may pass the row
+        // limit while already far over the scan limit, or vice versa); mirroring
+        // `record_triple_scan`'s cross-check keeps every checkpoint able to abort
+        // on whichever limit was breached first.
+        let scanned = self.triples_scanned.load(Ordering::Relaxed);
+        if let Some(limit) = self.budget.max_triples_scanned {
+            if scanned > limit {
+                return Err(BudgetExceeded::TriplesScannedExceeded { scanned, limit });
+            }
+        }
+
         Ok(())
     }
 

@@ -71,6 +71,23 @@ pub struct UpdateRequest {
     pub prefixes: HashMap<String, String>,
     pub base_iri: Option<String>,
 }
+/// Origin of the datatype IRI in a typed RDF literal (`"…"^^dt`).
+///
+/// The lexer must preserve HOW the datatype was written so `^^<urn:x>` (and any
+/// other authority-less scheme such as `tag:`) is honoured as an absolute IRI
+/// rather than mis-resolved as the prefixed name `urn:x`:
+///
+/// * `^^<iri>`         → [`DatatypeRef::Iri`]      — used verbatim as an
+///   absolute IRI, never sent to prefix resolution.
+/// * `^^prefix:local`  → [`DatatypeRef::Prefixed`] — resolved against the
+///   declared prologue prefixes at parse time.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DatatypeRef {
+    /// An absolute IRI written in angle brackets (`^^<…>`), already unwrapped.
+    Iri(String),
+    /// A `prefix:local` (or bare) name (`^^xsd:integer`), resolved via prefixes.
+    Prefixed(String),
+}
 /// Token types for SPARQL parsing
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -166,12 +183,13 @@ pub enum Token {
     Variable(String),
     StringLiteral(String),
     /// A string literal carrying a language tag (`"foo"@ja`) or an explicit
-    /// datatype (`"1"^^xsd:integer`). `datatype` holds the raw form as written
-    /// (an absolute IRI, or a `prefix:local` name resolved at parse time).
+    /// datatype (`"1"^^xsd:integer`, `"5"^^<urn:myint>`). `datatype` carries the
+    /// datatype together with its written origin (see [`DatatypeRef`]) so an
+    /// angle-bracket IRI is never mistaken for a prefixed name.
     RdfLiteral {
         value: String,
         language: Option<String>,
-        datatype: Option<String>,
+        datatype: Option<DatatypeRef>,
     },
     NumericLiteral(String),
     BooleanLiteral(bool),

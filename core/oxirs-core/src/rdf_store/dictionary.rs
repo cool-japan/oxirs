@@ -115,6 +115,52 @@ impl<T: Clone + Eq + Hash> ColumnDictionary<T> {
         self.ids.get(value).copied()
     }
 
+    /// Number of live (currently-mapped) terms — the count the snapshot builder
+    /// pre-reserves for its per-column sorted term list.
+    pub(crate) fn live_len(&self) -> usize {
+        self.ids.len()
+    }
+
+    /// Iterate every live `(id, &value)` slot, skipping tombstones. The snapshot
+    /// builder uses this to enumerate the terms actually in use together with the
+    /// ids the permutation indexes reference, so it can remap those ids to the
+    /// snapshot's sorted-term ordering.
+    pub(crate) fn iter_live_slots(&self) -> impl Iterator<Item = (u32, &T)> + '_ {
+        self.values
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, slot)| slot.as_deref().map(|value| (idx as u32, value)))
+    }
+
+    /// Build a dictionary directly from a list of live terms in id order — the
+    /// term at index `i` is assigned id `i` — together with each id's reference
+    /// count. Used by the snapshot loader to rebuild a column without the
+    /// line-by-line intern churn of a fresh parse: no slot is tombstoned and the
+    /// free list starts empty, so every id `0..terms.len()` resolves to its term
+    /// and `get_id` round-trips. `refcounts[i]` must be the number of stored quads
+    /// referencing term `i` (the loader derives it from the permutation indexes).
+    pub(crate) fn from_live_terms(terms: Vec<T>, refcounts: Vec<u32>) -> Self {
+        debug_assert_eq!(
+            terms.len(),
+            refcounts.len(),
+            "one refcount per term is required"
+        );
+        let n = terms.len();
+        let mut values = Vec::with_capacity(n);
+        let mut ids = HashMap::with_capacity(n);
+        for (idx, term) in terms.into_iter().enumerate() {
+            let shared = Arc::new(term);
+            ids.insert(Arc::clone(&shared), idx as u32);
+            values.push(Some(shared));
+        }
+        Self {
+            values,
+            ids,
+            refcounts,
+            free_ids: Vec::new(),
+        }
+    }
+
     /// Resolve an id back to its interned value, or `None` if the id is
     /// out of range or currently tombstoned.
     pub(crate) fn resolve(&self, id: u32) -> Option<&T> {
@@ -156,6 +202,27 @@ impl<T: Clone + Eq + Hash> ColumnDictionary<T> {
         self.values.reserve(additional);
         self.ids.reserve(additional);
         self.refcounts.reserve(additional);
+    }
+
+    /// Structural capacity of the dictionary, in id slots: how many slots the
+    /// current backing allocation can hold before it must grow. The id vector
+    /// (`values`) is the representative measure — `refcounts` grows in lockstep
+    /// with it and the `ids` map tracks the same population — so its capacity is
+    /// what a [`shrink_to_fit`](Self::shrink_to_fit) would reclaim down to
+    /// [`slot_len`](Self::slot_len). Used by the shrink gate to decide whether the
+    /// over-provisioned slack is worth a reallocation.
+    pub(crate) fn capacity_estimate(&self) -> usize {
+        self.values.capacity()
+    }
+
+    /// Number of id slots currently allocated (live plus tombstoned) — the floor
+    /// that [`shrink_to_fit`](Self::shrink_to_fit) can shrink the id vector down
+    /// to. The shrink gate compares this against [`capacity_estimate`](Self::capacity_estimate):
+    /// gating on the slot count (not the live count) means that once a shrink has
+    /// run `capacity == slot_len`, so the gate reports "no slack" on the next call
+    /// instead of firing forever on a tombstone-heavy dictionary.
+    pub(crate) fn slot_len(&self) -> usize {
+        self.values.len()
     }
 
     /// Drop one reference on `id`. When the last reference goes away the value is

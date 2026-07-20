@@ -47,6 +47,14 @@ const UOM_MILE: &str = "http://www.opengis.net/def/uom/OGC/1.0/mile";
 /// `xsd:double` datatype IRI.
 const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
 
+/// OGC CRS84 — WGS84 longitude/latitude, axis order `(longitude, latitude)`.
+/// This is the GeoSPARQL default coordinate reference system assumed when a
+/// `wktLiteral` carries no leading CRS URI.
+const CRS84: &str = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
+/// EPSG:4326 — WGS84 with the EPSG-registered axis order `(latitude, longitude)`,
+/// i.e. the *opposite* coordinate order from CRS84.
+const EPSG_4326: &str = "http://www.opengis.net/def/crs/EPSG/0/4326";
+
 /// Mean Earth radius in metres (matches `oxirs-geosparql::distance_calculator`).
 const EARTH_RADIUS_M: f64 = 6_371_000.0;
 /// Length of one statute mile in metres.
@@ -149,18 +157,44 @@ fn geometry_point(term: &Term) -> Result<LatLon> {
     }
 }
 
-/// Parse the minimal WKT the distance path needs: `POINT(lon lat)`, tolerating
-/// flexible whitespace/case and an optional leading CRS URI
-/// (`<http://…/CRS84> POINT(…)`). WKT axis order is `(longitude, latitude)`;
-/// the returned tuple is `(latitude, longitude)`.
+/// Parse the minimal WKT the distance path needs — a `POINT` with two
+/// coordinates and an optional leading CRS URI (`<http://…/CRS84> POINT(…)`) —
+/// **honouring the CRS's axis order** and returning the point as `(latitude,
+/// longitude)` regardless of how it was written.
+///
+/// GeoSPARQL embeds the CRS in the `wktLiteral` value. The two CRSs in practical
+/// use for WGS84 disagree on axis order, and getting it wrong silently swaps a
+/// point's latitude and longitude — a large, plausible-looking distance error
+/// (Tokyo's `35.68 139.77` read as `lon lat` lands in the Arabian Sea). So:
+///
+/// * **No CRS URI** → GeoSPARQL default **CRS84**, axis order `(lon, lat)`.
+/// * **CRS84** (`…/OGC/1.3/CRS84`) → `(lon, lat)`.
+/// * **EPSG:4326** (`…/EPSG/0/4326`) → `(lat, lon)` — the coordinates are
+///   swapped relative to CRS84.
+/// * **Any other CRS URI** → an error. Per the module convention this is an
+///   ordinary evaluation error, so inside a `FILTER` the offending row is
+///   excluded rather than silently mis-projected.
 fn parse_wkt_point(raw: &str) -> Result<LatLon> {
     let mut text = raw.trim();
 
-    // Optional leading CRS URI: `<...>` followed by the geometry.
+    // Optional leading CRS URI: `<...>` followed by the geometry. Absence means
+    // the GeoSPARQL default CRS (CRS84).
+    let mut lat_first = false;
     if let Some(rest) = text.strip_prefix('<') {
         let close = rest
             .find('>')
             .ok_or_else(|| anyhow!("invalid WKT CRS prefix (unterminated '<'): {raw}"))?;
+        let crs = rest[..close].trim();
+        lat_first = match crs {
+            CRS84 => false,
+            EPSG_4326 => true,
+            other => {
+                return Err(anyhow!(
+                    "unsupported WKT coordinate reference system '{other}' in {raw} \
+                     (only CRS84 and EPSG:4326 are supported)"
+                ));
+            }
+        };
         text = rest[close + 1..].trim_start();
     }
 
@@ -182,23 +216,31 @@ fn parse_wkt_point(raw: &str) -> Result<LatLon> {
 
     let inner = text[open + 1..close].trim();
     let mut coords = inner.split_whitespace();
-    let lon = coords
+    let first = coords
         .next()
-        .ok_or_else(|| anyhow!("WKT POINT missing longitude: {raw}"))?;
-    let lat = coords
+        .ok_or_else(|| anyhow!("WKT POINT missing first coordinate: {raw}"))?;
+    let second = coords
         .next()
-        .ok_or_else(|| anyhow!("WKT POINT missing latitude: {raw}"))?;
+        .ok_or_else(|| anyhow!("WKT POINT missing second coordinate: {raw}"))?;
     if coords.next().is_some() {
         return Err(anyhow!("WKT POINT expects exactly two coordinates: {raw}"));
     }
 
-    let lon: f64 = lon
+    let first: f64 = first
         .parse()
-        .map_err(|_| anyhow!("invalid WKT longitude '{lon}' in {raw}"))?;
-    let lat: f64 = lat
+        .map_err(|_| anyhow!("invalid WKT coordinate '{first}' in {raw}"))?;
+    let second: f64 = second
         .parse()
-        .map_err(|_| anyhow!("invalid WKT latitude '{lat}' in {raw}"))?;
-    Ok((lat, lon))
+        .map_err(|_| anyhow!("invalid WKT coordinate '{second}' in {raw}"))?;
+
+    // Map the two written coordinates onto (latitude, longitude) using the CRS's
+    // axis order. CRS84 (and the no-CRS default) is (lon, lat); EPSG:4326 is
+    // (lat, lon).
+    if lat_first {
+        Ok((first, second))
+    } else {
+        Ok((second, first))
+    }
 }
 
 /// Extract the unit-of-measure IRI string from a units argument, accepting both

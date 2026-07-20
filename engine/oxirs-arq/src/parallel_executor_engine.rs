@@ -8,8 +8,8 @@
 //! [`crate::parallel_executor_queue`].
 
 use crate::algebra::{
-    Aggregate, Algebra, Binding, Expression, Literal, Solution, Term as AlgebraTerm, TriplePattern,
-    Variable,
+    Aggregate, Algebra, Binding, Expression, Literal, PropertyPath, Solution, Term as AlgebraTerm,
+    TriplePattern, Variable,
 };
 use crate::executor::stats::ExecutionStats;
 use crate::executor::{Dataset, ExecutionContext, ParallelConfig};
@@ -34,6 +34,18 @@ pub struct ParallelQueryExecutor {
 
 /// Type alias for backward compatibility
 pub type ParallelExecutor = ParallelQueryExecutor;
+
+/// Collapse a length-one `PropertyPath::Iri` predicate encoding to a plain
+/// `Term::Iri`, mirroring the store's predicate handling. Other terms pass
+/// through unchanged. Used when re-verifying a bound pattern term against a
+/// stored value so the parser's property-path predicate encoding matches the
+/// store's plain-IRI representation.
+fn normalize_bound_term(term: &AlgebraTerm) -> AlgebraTerm {
+    match term {
+        AlgebraTerm::PropertyPath(PropertyPath::Iri(n)) => AlgebraTerm::Iri(n.clone()),
+        other => other.clone(),
+    }
+}
 
 impl ParallelQueryExecutor {
     /// Create a new parallel query executor
@@ -204,18 +216,17 @@ impl ParallelQueryExecutor {
             return Ok(vec![HashMap::new()]);
         }
 
-        // Partition patterns for parallel processing
-        let chunk_size = std::cmp::max(1, patterns.len() / self.config.max_threads);
-        let pattern_chunks: Vec<_> = patterns.chunks(chunk_size).collect();
-
-        // Process each chunk in parallel
-        let partial_results: Vec<Solution> = pattern_chunks
-            .par_iter()
-            .map(|chunk| self.process_bgp_chunk(chunk, dataset))
-            .collect::<Result<Vec<_>>>()?;
-
-        // Merge results
-        self.merge_bgp_results(partial_results, stats)
+        // BGP patterns are CONJUNCTIVE: they must be joined, not concatenated.
+        // The previous implementation split the pattern list into per-thread
+        // chunks and then `merge_bgp_results`-CONCATENATED the per-chunk
+        // solutions, which returned the union of each pattern's bindings instead
+        // of their join — a silent wrong answer for every multi-pattern BGP
+        // (e.g. `?s :p ?o . ?s :q ?o2` yielded the 5 unjoined rows rather than
+        // the 2 joined ones). Fold the whole pattern list in sequence instead;
+        // per-pattern parallelism is preserved by `join_with_pattern_parallel`,
+        // which fans the current binding set across the thread pool.
+        let solution = self.process_bgp_chunk(patterns, dataset)?;
+        self.merge_bgp_results(vec![solution], stats)
     }
 
     /// Process a chunk of BGP patterns
@@ -245,12 +256,15 @@ impl ParallelQueryExecutor {
     ) -> Result<Solution> {
         // Use parallel iterator for large solutions
         if solution.len() > self.config.parallel_threshold {
+            // Propagate scan errors rather than `.unwrap_or_default()` them: a
+            // dropped `Err` here would silently shrink the BGP result (a wrong
+            // `200 OK`) exactly on the large-input path where it matters most.
             let results: Vec<Binding> = solution
                 .par_iter()
-                .flat_map(|binding| {
-                    self.extend_binding_with_pattern(binding, pattern, dataset)
-                        .unwrap_or_default()
-                })
+                .map(|binding| self.extend_binding_with_pattern(binding, pattern, dataset))
+                .collect::<Result<Vec<Vec<Binding>>>>()?
+                .into_iter()
+                .flatten()
                 .collect();
             Ok(results)
         } else {
@@ -338,7 +352,14 @@ impl ParallelQueryExecutor {
                     true
                 }
             }
-            _ => pattern_term == value,
+            // A bound (non-variable) term must equal the stored value. The parser
+            // encodes a single-IRI predicate as a length-one property path
+            // (`PropertyPath::Iri`), whereas the store returns it as a plain
+            // `Iri`; normalizing that encoding before comparison mirrors the
+            // Serial path (`execute_pattern_with_dataset` trusts `find_triples`
+            // and only binds variables). Without this, every bound-predicate BGP
+            // silently returned zero rows under the Parallel strategy.
+            _ => normalize_bound_term(pattern_term) == normalize_bound_term(value),
         }
     }
 
@@ -553,22 +574,55 @@ impl ParallelQueryExecutor {
         // Create expression evaluator for filtering
         let extension_registry = context.extension_registry.clone();
 
-        // Parallel filtering
+        // Parallel filtering. A whole-query fault (a typed `UnknownFunctionError`
+        // or a runtime `BudgetExceeded`) MUST propagate rather than be swallowed
+        // to `false` — silently dropping the offending rows would return a
+        // wrongly-shrunk `200 OK`, mirroring the Serial `apply_filter` contract.
+        // Every other error class (unbound variable, type error, …) is a per-row
+        // §17.3 evaluation error that excludes just that row. The closure returns
+        // `Result<Option<Binding>>` so the `Err` case can escape the parallel
+        // iterator via `collect::<Result<_>>()`.
+        //
+        // NOTE (remaining divergence): this evaluator is
+        // `crate::expression::ExpressionEvaluator`, a *distinct* implementation
+        // from Serial's dataset-aware `QueryExecutor::evaluate_expression`. It
+        // cannot evaluate `EXISTS` / `NOT EXISTS` (no dataset access on the rayon
+        // worker) and raises an *untyped* "Unknown function" error, so those two
+        // cases still diverge from Serial. Fully unifying the parallel filter
+        // onto the Serial evaluator is tracked separately.
         let filtered: Vec<Binding> = solution
             .into_par_iter()
-            .filter(|binding| {
-                // Create binding context from HashMap
+            .map(|binding| -> Result<Option<Binding>> {
                 let mut ctx = BindingContext::new();
-                for (var, term) in binding {
+                for (var, term) in &binding {
                     ctx.bind(var.as_str(), Term::from_algebra_term(term));
                 }
                 let evaluator_with_ctx =
                     ExpressionEvaluator::with_context(extension_registry.clone(), ctx);
                 match evaluator_with_ctx.evaluate(condition) {
-                    Ok(term) => term.effective_boolean_value().unwrap_or(false),
-                    Err(_) => false,
+                    Ok(term) => {
+                        if term.effective_boolean_value().unwrap_or(false) {
+                            Ok(Some(binding))
+                        } else {
+                            Ok(None)
+                        }
+                    }
+                    Err(e) => {
+                        if e.downcast_ref::<crate::executor::UnknownFunctionError>()
+                            .is_some()
+                            || e.downcast_ref::<crate::query_governor::BudgetExceeded>()
+                                .is_some()
+                        {
+                            Err(e)
+                        } else {
+                            Ok(None)
+                        }
+                    }
                 }
             })
+            .collect::<Result<Vec<Option<Binding>>>>()?
+            .into_iter()
+            .flatten()
             .collect();
 
         stats.intermediate_results += filtered.len();

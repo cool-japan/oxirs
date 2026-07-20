@@ -311,6 +311,14 @@ impl QueryParser {
         }
     }
     pub(super) fn parse_construct_template(&mut self) -> Result<Vec<TriplePattern>> {
+        // Inside a CONSTRUCT template, anonymous `[ ]` / `( )` nodes must lower
+        // to real blank nodes (minted fresh per solution row by
+        // `instantiate_construct`), not to the non-distinguished variables used
+        // in a WHERE pattern. The flag is restored on the way out so a following
+        // WHERE clause reverts to variable lowering. A parse error abandons the
+        // whole parser, so leaving the flag set on the error path is harmless.
+        let prev = self.in_construct_template;
+        self.in_construct_template = true;
         let mut triples = Vec::new();
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
             self.skip_whitespace_and_newlines();
@@ -322,6 +330,7 @@ impl QueryParser {
                 break;
             }
         }
+        self.in_construct_template = prev;
         Ok(triples)
     }
     pub(super) fn expect_variable(&mut self) -> Result<Variable> {

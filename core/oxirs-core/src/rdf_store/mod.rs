@@ -304,6 +304,7 @@
 pub mod concrete;
 pub(crate) mod dictionary;
 pub mod persistence;
+pub mod snapshot;
 pub mod storage;
 pub mod types;
 
@@ -326,7 +327,7 @@ use crate::sparql::extract_and_expand_prefixes; // SPARQL execution engine
 use crate::{OxirsError, Result};
 use async_trait::async_trait;
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 /// Store trait for RDF operations
@@ -723,8 +724,32 @@ impl RdfStore {
     pub fn open_with_sync_policy<P: AsRef<Path>>(path: P, sync_policy: SyncPolicy) -> Result<Self> {
         let path_buf = path.as_ref().to_path_buf();
         let data_file = path_buf.join("data.nq");
+        let snapshot_file = path_buf.join(snapshot::SNAPSHOT_FILE_NAME);
 
-        let (storage, load_had_errors) = if data_file.exists() {
+        // Prefer a frozen mmap snapshot when one is present: it rebuilds the store
+        // without re-parsing `data.nq`, turning a multi-second cold start into a
+        // near-instant one for read-only deployments. Any problem with the snapshot
+        // (missing, wrong version, structurally corrupt, or stale relative to the
+        // current `data.nq`) falls back to the authoritative line-by-line load —
+        // the snapshot is a pure accelerator and never the sole source of truth.
+        let (storage, load_had_errors) = if snapshot_file.exists() {
+            let expected_source_len = std::fs::metadata(&data_file).ok().map(|m| m.len());
+            match snapshot::load_snapshot(&snapshot_file, expected_source_len) {
+                Ok(storage) => (storage, false),
+                Err(e) => {
+                    tracing::warn!(
+                        "Ignoring snapshot {}: {e}; falling back to {}",
+                        snapshot_file.display(),
+                        data_file.display()
+                    );
+                    if data_file.exists() {
+                        persistence::load_from_disk(&data_file)?
+                    } else {
+                        (MemoryStorage::new(), false)
+                    }
+                }
+            }
+        } else if data_file.exists() {
             persistence::load_from_disk(&data_file)?
         } else {
             (MemoryStorage::new(), false)
@@ -735,6 +760,44 @@ impl RdfStore {
         Ok(RdfStore {
             backend: StorageBackend::Persistent(Arc::new(RwLock::new(storage)), Arc::new(state)),
         })
+    }
+
+    /// Write a frozen mmap snapshot of the current store to `path`.
+    ///
+    /// The snapshot serializes the interned term dictionaries and the sorted
+    /// permutation indexes into one file that [`open`](Self::open) mmap-loads on a
+    /// subsequent start, skipping the `data.nq` re-parse. Output is deterministic
+    /// (identical data → identical bytes). Only the in-memory-backed backends are
+    /// supported; the raw `UltraMemory` backend returns an error. RDF-star quoted
+    /// triples are not yet representable and also return an error.
+    pub fn write_snapshot_to(&self, path: &Path) -> Result<()> {
+        match &self.backend {
+            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+                let guard = storage
+                    .read()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
+                snapshot::write_snapshot(&guard, path)
+            }
+            StorageBackend::UltraMemory(..) => Err(OxirsError::Store(
+                "write_snapshot_to is only supported for the in-memory/persistent backends"
+                    .to_string(),
+            )),
+        }
+    }
+
+    /// Offline snapshot builder: load `<dataset_dir>/data.nq` and write the frozen
+    /// snapshot alongside it as `<dataset_dir>/snapshot.oxsnap`, returning the
+    /// snapshot path. This is the read-only "bake" step — run it once after the
+    /// data file changes; a later [`open`](Self::open) of the same directory then
+    /// starts from the snapshot. Deliberately bypasses any existing snapshot so a
+    /// stale one is never used to seed its own replacement.
+    pub fn build_snapshot<P: AsRef<Path>>(dataset_dir: P) -> Result<PathBuf> {
+        let dir = dataset_dir.as_ref();
+        let data_file = dir.join("data.nq");
+        let (storage, _had_errors) = persistence::load_from_disk(&data_file)?;
+        let snapshot_file = dir.join(snapshot::SNAPSHOT_FILE_NAME);
+        snapshot::write_snapshot(&storage, &snapshot_file)?;
+        Ok(snapshot_file)
     }
 
     /// Serialize a single quad to one N-Quads line (no trailing newline).
@@ -817,6 +880,10 @@ impl RdfStore {
                 let mut guard = storage
                     .write()
                     .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
+                // Pre-size the term dictionaries for the batch so the inserts don't
+                // repeatedly double-and-rehash as they stream in (capacity only —
+                // contents unchanged); mirrors the trait `bulk_insert_quads` path.
+                guard.reserve_for_bulk_load(quads.len());
                 let mut ids = Vec::with_capacity(quads.len());
                 for quad in quads {
                     ids.push(u64::from(guard.insert_quad(quad)));
@@ -830,6 +897,8 @@ impl RdfStore {
                     let mut guard = storage.write().map_err(|e| {
                         OxirsError::Store(format!("Failed to acquire write lock: {e}"))
                     })?;
+                    // Pre-size the dictionaries for the batch (see the Memory arm).
+                    guard.reserve_for_bulk_load(quads.len());
                     for quad in quads {
                         let is_new = guard.insert_quad(quad.clone());
                         if is_new {
@@ -1024,21 +1093,33 @@ impl RdfStore {
     /// allocator after a bulk load. Shrinks the column dictionaries' backing
     /// `Vec`/`HashMap` allocations (which a bulk load leaves over-provisioned by
     /// up to 2x) to fit their live contents. A no-op for the ultra-performance
-    /// backend. Call once a large load has completed; it is not worth calling
-    /// after individual small inserts.
+    /// backend.
+    ///
+    /// The shrink is **gated** (see
+    /// [`MemoryStorage::shrink_to_fit_if_slack`](crate::rdf_store::MemoryStorage::shrink_to_fit_if_slack)):
+    /// it only reallocates when a column is over-provisioned past 2x, so calling
+    /// this after every batch of a repeated bulk ingest no longer thrashes the
+    /// dictionaries with a shrink→regrow→shrink treadmill. The process-global
+    /// `malloc_trim` hint is issued **only when a shrink actually happened**, so a
+    /// gated no-op costs nothing (no allocator round-trip). Callers may therefore
+    /// invoke it once per batch; the gate decides when the work is worthwhile.
     pub fn shrink_to_fit(&self) -> Result<()> {
         if let StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) =
             &self.backend
         {
-            {
+            let shrank = {
                 let mut storage = storage
                     .write()
                     .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
-                storage.shrink_to_fit();
+                storage.shrink_to_fit_if_slack()
+            };
+            // Only ask the process allocator to return freed pages to the OS when
+            // we actually reclaimed capacity — a gated no-op must not pay a
+            // process-global `malloc_trim` on every batch.
+            if shrank {
+                // Drop the write guard (already released above) before the trim.
+                trim_process_allocator();
             }
-            // Drop the write guard before asking the process allocator to return
-            // the freed pages to the OS.
-            trim_process_allocator();
         }
         Ok(())
     }
@@ -1609,6 +1690,12 @@ impl Store for RdfStore {
                 let mut guard = storage.write().map_err(|e| {
                     crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
                 })?;
+                // Pre-size the term dictionaries for the whole batch so the inserts
+                // make their dominant allocations once, instead of doubling (and
+                // rehashing the `ids` map) repeatedly as the batch streams in. This
+                // is what turns a repeated large-batch ingest from O(T²/b) into
+                // O(T); the reserve only changes capacity, never contents.
+                guard.reserve_for_bulk_load(quads.len());
                 let mut inserted = 0usize;
                 for quad in quads {
                     if guard.insert_quad(quad) {
@@ -1623,6 +1710,8 @@ impl Store for RdfStore {
                     let mut guard = storage.write().map_err(|e| {
                         crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
                     })?;
+                    // Pre-size the dictionaries for the batch (see the Memory arm).
+                    guard.reserve_for_bulk_load(quads.len());
                     for quad in quads {
                         if guard.insert_quad(quad.clone()) {
                             lines.push(Self::quad_to_nquads_line(&quad)?);

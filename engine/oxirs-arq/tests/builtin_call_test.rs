@@ -914,10 +914,11 @@ fn semicolon_in_optional_and_construct() {
 }
 
 #[test]
-fn blank_node_and_collection_syntax_are_clean_parse_errors() {
+fn blank_node_and_collection_syntax_parse() {
     // Blank-node property lists `[ … ]` / `[]` and RDF collections `( … )` are
-    // not yet implemented. They must surface as a clear parse error (a 4xx over
-    // HTTP), never a silent wrong answer.
+    // now supported (R8): they expand to triples at parse time. (Full coverage
+    // of the expansion lives in tests/blank_node_collection_test.rs; this is the
+    // smoke guard that they no longer 4xx.)
     for query in [
         "PREFIX : <http://ex/> SELECT * WHERE { [ :p ?o ] }",
         "PREFIX : <http://ex/> SELECT * WHERE { [] :p ?o }",
@@ -926,8 +927,8 @@ fn blank_node_and_collection_syntax_are_clean_parse_errors() {
     ] {
         let mut parser = QueryParser::new();
         assert!(
-            parser.parse(query).is_err(),
-            "unsupported blank-node/collection syntax must be a parse error: `{query}`"
+            parser.parse(query).is_ok(),
+            "blank-node/collection syntax must now parse: `{query}`"
         );
     }
 }
@@ -1258,15 +1259,16 @@ fn eval_in_and_not_in() {
 }
 
 #[test]
-fn subquery_is_a_clean_parse_error() {
-    // A `{ SELECT … }` subquery is not yet implemented; it must be a clear parse
-    // error (a 4xx over HTTP), never a silent wrong answer.
+fn subquery_parses() {
+    // A `{ SELECT … }` subquery is now supported (R8, SPARQL 1.1 §8.2.4): it
+    // lowers to a projected sub-tree joined into the outer BGP. (Full coverage
+    // in tests/subquery_test.rs; this is the smoke guard that it no longer 4xx.)
     let mut parser = QueryParser::new();
     assert!(
         parser
             .parse("SELECT ?c WHERE { { SELECT ?c WHERE { ?c a <http://ex/Concept> } } }")
-            .is_err(),
-        "an unsupported subquery must be a parse error, not a silent result"
+            .is_ok(),
+        "a subquery must now parse, not error"
     );
 }
 
