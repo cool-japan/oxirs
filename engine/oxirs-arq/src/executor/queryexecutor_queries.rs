@@ -291,6 +291,16 @@ impl QueryExecutor {
                     }
                     Err(anyhow::anyhow!("COALESCE: no argument could be evaluated"))
                 }
+                // Numeric unary functions (SPARQL 1.1 §17.4.4). Previously these
+                // fell through to the unknown-function arm, so a `BIND(ROUND(?x) AS
+                // ?y)` (or `(ABS(?x) AS ?y)` projection) silently left the target
+                // variable unbound and dropped it from the result — a wrong 200
+                // answer. Each evaluates its single numeric argument and returns a
+                // numeric literal.
+                "abs" | "ABS" => self.numeric_unary_function(args, binding, "abs"),
+                "round" | "ROUND" => self.numeric_unary_function(args, binding, "round"),
+                "ceil" | "CEIL" => self.numeric_unary_function(args, binding, "ceil"),
+                "floor" | "FLOOR" => self.numeric_unary_function(args, binding, "floor"),
                 // GeoSPARQL / OxiRS geo extension functions are matched by their
                 // full IRI (the parser expands `geof:`/`oxgeo:` CURIEs). A
                 // recognised geo function returns `Some(..)`; anything else is a
@@ -311,6 +321,18 @@ impl QueryExecutor {
                     )),
                 })),
                 Err(e) => {
+                    // A runtime budget breach inside the EXISTS subquery is a
+                    // hard stop for the whole query, NOT a "no match" — collapsing
+                    // it to `false` would turn a timed-out FILTER EXISTS into a
+                    // silent 200 with a wrong (over-inclusive) result set. Detect
+                    // the typed error and propagate it so the timeout surfaces as
+                    // the correct HTTP status. Every other error class stays a
+                    // per-row "EXISTS evaluated to false".
+                    if e.downcast_ref::<crate::query_governor::BudgetExceeded>()
+                        .is_some()
+                    {
+                        return Err(e);
+                    }
                     debug!("EXISTS subquery evaluation failed: {}", e);
                     Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
                         value: "false".to_string(),
@@ -333,6 +355,15 @@ impl QueryExecutor {
                         }))
                     }
                     Err(e) => {
+                        // Same as EXISTS above: a budget breach must propagate
+                        // rather than collapse to `true` (which would wrongly keep
+                        // rows a timed-out NOT EXISTS should have been able to
+                        // reject).
+                        if e.downcast_ref::<crate::query_governor::BudgetExceeded>()
+                            .is_some()
+                        {
+                            return Err(e);
+                        }
                         debug!("NOT EXISTS subquery evaluation failed: {}", e);
                         Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
                             value: "true".to_string(),
@@ -442,6 +473,49 @@ impl QueryExecutor {
             }
             _ => Ok(vec![self.evaluate_expression(expr, binding)?]),
         }
+    }
+
+    /// Evaluate a SPARQL numeric unary function (`ABS`/`ROUND`/`CEIL`/`FLOOR`).
+    ///
+    /// The single argument is evaluated to a number; the result is returned as an
+    /// `xsd:integer` literal when it has no fractional part and `xsd:decimal`
+    /// otherwise — the same numeric-literal idiom [`evaluate_binary_operation`]
+    /// uses for `+`/`-`/`*`. `ROUND` rounds halves toward positive infinity
+    /// (SPARQL 1.1 §17.4.4.3), so `ROUND(2.5) = 3` and `ROUND(-2.5) = -2`.
+    pub(super) fn numeric_unary_function(
+        &self,
+        args: &[crate::algebra::Expression],
+        binding: &crate::algebra::Binding,
+        op: &str,
+    ) -> Result<crate::algebra::Term> {
+        if args.len() != 1 {
+            return Err(anyhow::anyhow!("{op}() requires exactly 1 argument"));
+        }
+        let arg = self.evaluate_expression(&args[0], binding)?;
+        let value = self.extract_numeric_value(&arg)?;
+        let result = match op {
+            "abs" => value.abs(),
+            "round" => (value + 0.5).floor(),
+            "ceil" => value.ceil(),
+            "floor" => value.floor(),
+            _ => return Err(anyhow::anyhow!("unsupported numeric function: {op}")),
+        };
+        let (value_str, datatype) = if result.fract() == 0.0 {
+            (
+                format!("{}", result as i64),
+                "http://www.w3.org/2001/XMLSchema#integer",
+            )
+        } else {
+            (
+                format!("{result}"),
+                "http://www.w3.org/2001/XMLSchema#decimal",
+            )
+        };
+        Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+            value: value_str,
+            language: None,
+            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(datatype)),
+        }))
     }
 
     pub(super) fn evaluate_binary_operation(

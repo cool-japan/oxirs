@@ -79,7 +79,19 @@ impl Default for ServerConfig {
                 admin_ui: true,
                 cors: true,
                 max_connections: 1000,
-                request_timeout_secs: 30,
+                // Coarse whole-request deadline for the axum `TimeoutLayer`. It
+                // must sit ABOVE the per-query execution budget so the budget is
+                // what normally fires (a precise 408 carrying the query's own
+                // message) and this layer only guarantees the connection is not
+                // held forever. The invariant enforced at startup
+                // (`Runtime::build_router`) is:
+                //   request_timeout_secs > max_query_time_secs + QUERY_TIMEOUT_GRACE_SECS
+                // With the shipped defaults 300 (max_query_time) + 5 (grace) that
+                // is 305, so 310 leaves the budget a clear margin to fire first.
+                // The previous default of 30 inverted the relationship: the
+                // TimeoutLayer preempted the budget at 30 s with a generic 408
+                // while the detached blocking task kept running up to 300 s.
+                request_timeout_secs: 310,
                 graceful_shutdown_timeout_secs: 30,
                 tls: None,
                 backup_directory: None,
@@ -551,7 +563,9 @@ mod tests {
     #[test]
     fn test_timeouts() {
         let config = ServerConfig::default();
-        assert_eq!(config.request_timeout().as_secs(), 30);
+        // request_timeout_secs must exceed max_query_time_secs (300) + grace (5)
+        // so the per-query budget fires before the coarse HTTP TimeoutLayer.
+        assert_eq!(config.request_timeout().as_secs(), 310);
         assert_eq!(config.graceful_shutdown_timeout().as_secs(), 30);
     }
 

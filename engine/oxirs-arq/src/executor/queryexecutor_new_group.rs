@@ -391,11 +391,22 @@ impl QueryExecutor {
                 self.execute_algebra_streaming(right, dataset, streaming_solution)?;
                 Ok(())
             }
-            Algebra::Filter {
-                pattern,
-                condition: _,
-            } => {
-                self.execute_algebra_streaming(pattern, dataset, streaming_solution)?;
+            Algebra::Filter { .. } => {
+                // The FILTER condition MUST be applied. The previous
+                // implementation discarded it (`condition: _`) and streamed the
+                // unfiltered pattern, so every Streaming-strategy FILTER — and
+                // both branches of a `Filter(Union(A, B))` — returned rows that
+                // Serial would have excluded (a silent wrong-answer). Because
+                // `execute_streaming` already materializes the whole solution
+                // before returning (see `execute_streaming`), there is no real
+                // streaming benefit to forgo: evaluate the entire Filter node via
+                // the Serial path so the dataset-aware condition (including
+                // EXISTS / NOT EXISTS and the typed-error propagation) matches
+                // Serial exactly.
+                let filtered = self.execute_serial(algebra, dataset)?;
+                for binding in filtered {
+                    streaming_solution.add_solution(vec![binding])?;
+                }
                 Ok(())
             }
             _ => {
@@ -877,11 +888,19 @@ impl QueryExecutor {
                 Err(err) => {
                     // An unknown function is a whole-query fault: fail the entire
                     // filter loudly rather than silently shrinking the result set
-                    // (no-silent-empty contract). Every OTHER error class is a
+                    // (no-silent-empty contract). A runtime budget breach (raised
+                    // by a FILTER (NOT) EXISTS subquery that timed out or blew its
+                    // scan budget) is likewise a whole-query fault and MUST NOT be
+                    // swallowed — doing so would drop the row and return a wrong
+                    // 200 instead of a timeout. Every OTHER error class is a
                     // per-row evaluation error (unbound variable, type error, ...)
                     // which SPARQL 1.1 §17.3 treats as excluding that one row, so
                     // it is swallowed and the row is dropped.
-                    if err.downcast_ref::<UnknownFunctionError>().is_some() {
+                    if err.downcast_ref::<UnknownFunctionError>().is_some()
+                        || err
+                            .downcast_ref::<crate::query_governor::BudgetExceeded>()
+                            .is_some()
+                    {
                         return Err(err);
                     }
                 }

@@ -77,6 +77,7 @@ oxirs-core = { version = "0.4.1", path = "core/oxirs-core" }
 # Quarantined NVML telemetry adapter (publish = false; no version — never published)
 oxirs-gpu-monitor = { path = "core/oxirs-gpu-monitor" }
 oxirs-fuseki = { version = "0.4.1", path = "server/oxirs-fuseki" }
+oxirs-gql = { version = "0.4.1", path = "server/oxirs-gql" }
 oxirs-arq = { version = "0.4.1", path = "engine/oxirs-arq" }
 oxirs-geosparql = { version = "0.4.1", path = "engine/oxirs-geosparql" }
 # Quarantined GEOS computational-geometry adapter (publish = false; no version —

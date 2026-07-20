@@ -7,7 +7,7 @@
 use anyhow::{bail, Result};
 use oxirs_core::model::NamedNode;
 
-use super::types::Token;
+use super::types::{DatatypeRef, Token};
 
 use super::queryparser_type::QueryParser;
 
@@ -20,24 +20,29 @@ impl QueryParser {
             bail!("Undefined prefix '{prefix}' in prefixed name '{prefix}:{local}'")
         }
     }
-    /// Resolve the raw datatype of an `"…"^^dt` literal to a `NamedNode`.
+    /// Resolve the datatype of an `"…"^^dt` literal to a `NamedNode`, honouring
+    /// how it was written (see [`DatatypeRef`]):
     ///
-    /// `raw` is the datatype exactly as written after `^^`: either an absolute
-    /// IRI (the `<iri>` form, already unwrapped by the lexer) or a
-    /// `prefix:local` name. An absolute IRI is recognised by an authority
-    /// separator (`scheme://…`); anything else with a colon is treated as a
-    /// prefixed name and resolved against the declared prefixes.
-    pub(super) fn resolve_datatype(&self, raw: &str) -> Result<NamedNode> {
-        if let Some(colon) = raw.find(':') {
-            if raw[colon + 1..].starts_with("//") {
-                return Ok(NamedNode::new_unchecked(raw.to_string()));
+    /// * [`DatatypeRef::Iri`] — the `^^<iri>` form — is an absolute IRI used
+    ///   verbatim. This is what fixes `"5"^^<urn:myint>` / `"x"^^<tag:…>`: an
+    ///   authority-less scheme is no longer mis-resolved as a prefix.
+    /// * [`DatatypeRef::Prefixed`] — the `^^prefix:local` form — is resolved
+    ///   against the declared prefixes. A colon-free name (which cannot arise
+    ///   from a well-formed prefixed datatype) is used verbatim rather than
+    ///   failing, matching the prior lenient behaviour.
+    pub(super) fn resolve_datatype(&self, raw: &DatatypeRef) -> Result<NamedNode> {
+        match raw {
+            DatatypeRef::Iri(iri) => Ok(NamedNode::new_unchecked(iri.clone())),
+            DatatypeRef::Prefixed(name) => {
+                if let Some(colon) = name.find(':') {
+                    let prefix = &name[..colon];
+                    let local = &name[colon + 1..];
+                    let full = self.resolve_prefixed_name(prefix, local)?;
+                    Ok(NamedNode::new_unchecked(full))
+                } else {
+                    Ok(NamedNode::new_unchecked(name.clone()))
+                }
             }
-            let prefix = &raw[..colon];
-            let local = &raw[colon + 1..];
-            let full = self.resolve_prefixed_name(prefix, local)?;
-            Ok(NamedNode::new_unchecked(full))
-        } else {
-            Ok(NamedNode::new_unchecked(raw.to_string()))
         }
     }
     pub(super) fn expect_iri(&mut self) -> Result<String> {

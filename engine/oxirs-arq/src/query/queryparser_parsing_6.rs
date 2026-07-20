@@ -25,7 +25,17 @@ impl QueryParser {
             Some(Token::Values) => self.parse_values_pattern(),
             Some(Token::LeftBrace) => {
                 self.advance();
-                let pattern = self.parse_group_graph_pattern()?;
+                self.skip_whitespace_and_newlines();
+                // A group that opens with `SELECT` (or `ASK`) is a SubSelect
+                // (SPARQL 1.1 §8.2.4), not a nested group graph pattern. Parse
+                // it into an independent, non-correlated algebra sub-tree that
+                // joins into the enclosing pattern on the shared projected
+                // variables.
+                let pattern = if matches!(self.peek(), Some(Token::Select) | Some(Token::Ask)) {
+                    self.parse_sub_select()?
+                } else {
+                    self.parse_group_graph_pattern()?
+                };
                 self.skip_whitespace_and_newlines();
                 self.expect_token(Token::RightBrace)?;
                 Ok(pattern)

@@ -45,12 +45,24 @@ pub async fn query_handler_get(
 }
 
 /// Main SPARQL query endpoint for POST requests
+///
+/// `Query(url_params)` carries the request-line query string so the SPARQL
+/// protocol's `?timeout=` (seconds) is honored on POST exactly as on GET — the
+/// value is a URL parameter even for POST, never part of the body. The parsed
+/// bytes still supply the query itself; only the client timeout is taken from
+/// the URL and it is subject to the same `min(config max)` cap downstream in
+/// `execute_sparql_query`.
 pub async fn query_handler_post(
+    Query(url_params): Query<SparqlQueryParams>,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     user: Option<AuthUser>,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
+    // Client-requested `?timeout=` from the request-line query string (GET and
+    // POST share this interpretation). `None` => the configured cap applies.
+    let requested_timeout = url_params.timeout;
+
     // Check content type and handle body accordingly
     let content_type = headers
         .get("content-type")
@@ -90,7 +102,7 @@ pub async fn query_handler_post(
             query,
             default_graph_uri,
             named_graph_uri,
-            timeout: None,
+            timeout: requested_timeout,
             format: None,
         }
     } else if content_type.contains("application/sparql-query") {
@@ -100,7 +112,7 @@ pub async fn query_handler_post(
             query: Some(query_string),
             default_graph_uri: None,
             named_graph_uri: None,
-            timeout: None,
+            timeout: requested_timeout,
             format: None,
         }
     } else {

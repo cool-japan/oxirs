@@ -23,6 +23,16 @@ struct Args {
     /// Dataset storage path
     #[arg(short, long)]
     dataset: Option<PathBuf>,
+
+    /// Build a frozen mmap snapshot (`snapshot.oxsnap`) for the dataset and exit.
+    ///
+    /// Offline "bake" step for read-only deployments: reads
+    /// `<dataset>/default.db/data.nq` and writes
+    /// `<dataset>/default.db/snapshot.oxsnap` — exactly the file a later serve of
+    /// the same `-d <dataset>` mmap-loads for a near-instant cold start (skipping
+    /// the N-Quads re-parse). Requires `-d/--dataset`; performs no serving.
+    #[arg(long)]
+    build_snapshot: bool,
 }
 
 #[tokio::main]
@@ -33,6 +43,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     let args = Args::parse();
+
+    // Offline snapshot bake: build `<dataset>/default.db/snapshot.oxsnap` and exit
+    // without starting the server. The `default.db` suffix mirrors how the server
+    // opens its default dataset (`Store::open` → `RdfStore::open(path/"default.db")`),
+    // so the snapshot lands precisely where a later serve mmap-loads it.
+    if args.build_snapshot {
+        use oxirs_core::RdfStore;
+        let dataset = args.dataset.ok_or_else(|| {
+            Box::<dyn std::error::Error>::from(
+                "--build-snapshot requires -d/--dataset <dir> (the same dir you serve with -d)",
+            )
+        })?;
+        let db_dir = dataset.join("default.db");
+        let snapshot_path = RdfStore::build_snapshot(&db_dir)?;
+        println!("snapshot written: {}", snapshot_path.display());
+        return Ok(());
+    }
 
     // Use config file if provided, otherwise use CLI args. When a config file is
     // given, the FULL config (datasets, per-dataset `read_only`, security, …) is
