@@ -75,9 +75,96 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-use crate::error::{TurtleParseError, TurtleResult};
+use crate::error::{TextPosition, TurtleParseError, TurtleResult, TurtleSyntaxError};
 use oxirs_core::model::Triple;
 use std::io::{BufRead, BufReader, Read};
+
+/// Determine whether `text` structurally requires the TriG (named-graph)
+/// parser rather than plain Turtle, by scanning for a top-level `{` that is
+/// not inside a comment, an IRIREF (`<...>`), or a string literal (short or
+/// triple-quoted). This avoids the false positives a raw
+/// `text.contains('{') || text.contains("GRAPH")` substring search produces
+/// for ordinary Turtle content such as a literal `"data {json}"` value or a
+/// local name like `ex:GRAPHIC`, neither of which contains a structural `{`.
+fn contains_structural_open_brace(text: &str) -> bool {
+    let mut chars = text.chars().peekable();
+    let mut in_iri = false;
+    let mut short_quote: Option<char> = None;
+    let mut multiline_quote: Option<char> = None;
+    let mut escaped = false;
+
+    while let Some(ch) = chars.next() {
+        if let Some(q) = multiline_quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == q && chars.peek() == Some(&q) {
+                // Consume the remaining two quote characters of the closer.
+                chars.next();
+                if chars.peek() == Some(&q) {
+                    chars.next();
+                    multiline_quote = None;
+                }
+            }
+            continue;
+        }
+
+        if let Some(q) = short_quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == q {
+                short_quote = None;
+            } else if ch == '\n' {
+                // Short string literals cannot legally contain a raw
+                // newline; treat the string context as broken rather than
+                // let a runaway quote swallow the rest of the document.
+                short_quote = None;
+            }
+            continue;
+        }
+
+        if in_iri {
+            if ch == '>' {
+                in_iri = false;
+            }
+            continue;
+        }
+
+        match ch {
+            '#' => {
+                // Comment: skip to end of line.
+                for c in chars.by_ref() {
+                    if c == '\n' {
+                        break;
+                    }
+                }
+            }
+            '<' => in_iri = true,
+            '"' | '\'' => {
+                if chars.peek() == Some(&ch) {
+                    let mut lookahead = chars.clone();
+                    lookahead.next();
+                    if lookahead.peek() == Some(&ch) {
+                        chars.next();
+                        chars.next();
+                        multiline_quote = Some(ch);
+                    } else {
+                        short_quote = Some(ch);
+                    }
+                } else {
+                    short_quote = Some(ch);
+                }
+            }
+            '{' => return true,
+            _ => {}
+        }
+    }
+
+    false
+}
 
 /// Configuration for streaming parser
 ///
@@ -286,14 +373,34 @@ impl<R: BufRead> StreamingParser<R> {
         // Prepend accumulated prefix declarations to this batch
         let document = format!("{}{}", self.prefix_declarations, self.buffer);
 
-        // Detect if this is TriG (contains named graphs) or Turtle
-        let is_trig = document.contains('{') || document.contains("GRAPH");
+        // Detect if this is TriG (contains named graphs) or Turtle, using a
+        // structural scan (respecting comments/IRIs/string literals) rather
+        // than a raw substring search that false-triggers on ordinary
+        // content such as a literal "data {json}" value or a local name
+        // like ex:GRAPHIC.
+        let is_trig = contains_structural_open_brace(&document);
 
         if is_trig {
             // For TriG format with named graphs, read the entire document
-            // (proper streaming would require graph-aware state management)
+            // (proper streaming would require graph-aware state management).
+            // The accumulated size is capped at `max_buffer_size` so a
+            // false-positive (or a genuinely huge TriG document) cannot
+            // defeat the bounded-memory contract of this streaming API by
+            // reading unboundedly to EOF.
             let mut complete_document = document.clone();
             loop {
+                if complete_document.len() >= self.config.max_buffer_size {
+                    return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                        message: format!(
+                            "TriG document exceeds the configured max_buffer_size of {} \
+                             bytes; streaming TriG parsing requires the full named-graph \
+                             document to fit within the buffer limit \u{2014} increase \
+                             StreamingConfig::with_max_buffer_size or split the input",
+                            self.config.max_buffer_size
+                        ),
+                        position: TextPosition::start(),
+                    }));
+                }
                 let mut line = String::new();
                 match self.reader.read_line(&mut line) {
                     Ok(0) => break, // EOF
@@ -578,5 +685,65 @@ mod tests {
 
         assert!(parser.triples_parsed() > 0);
         assert!(parser.bytes_read() > 0);
+    }
+
+    // ─── contains_structural_open_brace regression tests ───────────────────
+
+    #[test]
+    fn regression_structural_brace_ignores_literal_and_local_name() {
+        // A literal containing '{' must not be mistaken for TriG syntax.
+        assert!(!contains_structural_open_brace(
+            r#"ex:alice ex:payload "data {json}" ."#
+        ));
+        // A local name containing the substring "GRAPH" must not trigger
+        // the old raw `contains("GRAPH")` false positive either.
+        assert!(!contains_structural_open_brace(
+            "ex:alice ex:type ex:GRAPHIC ."
+        ));
+        // Genuine named-graph syntax must still be detected.
+        assert!(contains_structural_open_brace("ex:g { ex:a ex:b ex:c . }"));
+        assert!(contains_structural_open_brace(
+            "GRAPH ex:g { ex:a ex:b ex:c . }"
+        ));
+    }
+
+    #[test]
+    fn regression_plain_turtle_with_brace_in_literal_not_routed_to_trig() {
+        // Before the fix, this document's literal "data {json}" made
+        // `document.contains('{')` true, routing it through the TriG
+        // parser unnecessarily. It must still parse correctly as plain
+        // Turtle.
+        let turtle = r#"@prefix ex: <http://example.org/> .
+ex:alice ex:payload "data {json}" .
+"#;
+        let reader = Cursor::new(turtle);
+        let mut parser = StreamingParser::new(reader);
+        let batch = parser
+            .next_batch()
+            .expect("should parse successfully as plain turtle");
+        let triples = batch.expect("should produce a batch");
+        assert_eq!(triples.len(), 1);
+    }
+
+    #[test]
+    fn regression_trig_document_exceeding_max_buffer_size_errors() {
+        // A genuinely-TriG document that exceeds the configured
+        // max_buffer_size must error out of the "read entire document"
+        // loop instead of reading unboundedly to EOF.
+        let mut turtle = String::from("@prefix ex: <http://example.org/> .\nex:g {\n");
+        for i in 0..200 {
+            turtle.push_str(&format!("    ex:s{i} ex:p ex:o{i} .\n"));
+        }
+        turtle.push_str("}\n");
+
+        let reader = Cursor::new(turtle);
+        let config = StreamingConfig::default().with_max_buffer_size(50);
+        let mut parser = StreamingParser::with_config(reader, config);
+
+        let result = parser.next_batch();
+        assert!(
+            result.is_err(),
+            "TriG document exceeding max_buffer_size must error rather than read unboundedly"
+        );
     }
 }

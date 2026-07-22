@@ -6,6 +6,7 @@
 use axum::http::HeaderMap;
 use serde::Serialize;
 
+use crate::error::{FusekiError, FusekiResult};
 use crate::handlers::sparql::core::QueryResult;
 
 /// Content type constants for SPARQL responses
@@ -698,36 +699,45 @@ fn xml_escape(s: &str) -> String {
     out
 }
 
-/// Convert an inline CONSTRUCT/DESCRIBE Turtle/N-Triples body into an
-/// RDF/XML document. This is a minimal best-effort wrapper: real
-/// Turtle parsing is not done here. The body is embedded as a comment
-/// alongside an empty `rdf:RDF` envelope.
-pub fn rdf_graph_to_rdfxml(body: &str) -> String {
-    let mut out = String::new();
-    out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    out.push_str("<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n");
+/// Parse a CONSTRUCT/DESCRIBE Turtle body (as emitted by the query engine) into
+/// an oxirs-core [`Graph`], then serialize it with the requested RDF format.
+///
+/// The Turtle produced by the engine round-trips through the real oxirs-core
+/// parser, so the resulting RDF/XML or JSON-LD contains the actual triples — not
+/// an empty envelope with the data hidden in a comment. A parse or serialize
+/// failure is surfaced as a typed error (the caller returns 5xx) rather than a
+/// 200 response carrying zero triples.
+fn reserialize_graph(body: &str, format: oxirs_core::parser::RdfFormat) -> FusekiResult<String> {
+    use oxirs_core::model::graph::Graph;
+    use oxirs_core::parser::{Parser, RdfFormat};
+    use oxirs_core::serializer::Serializer;
+
+    let mut graph = Graph::new();
     if !body.trim().is_empty() {
-        out.push_str("  <!-- Original Turtle/N-Triples graph follows. -->\n");
-        out.push_str("  <!-- ");
-        out.push_str(&xml_escape(body));
-        out.push_str(" -->\n");
+        let triples = Parser::new(RdfFormat::Turtle)
+            .parse_str_to_triples(body)
+            .map_err(|e| {
+                FusekiError::query_execution(format!(
+                    "failed to parse CONSTRUCT/DESCRIBE graph for reserialization: {e}"
+                ))
+            })?;
+        for triple in triples {
+            graph.insert(triple);
+        }
     }
-    out.push_str("</rdf:RDF>\n");
-    out
+    Serializer::new(format)
+        .serialize_graph(&graph)
+        .map_err(|e| FusekiError::query_execution(format!("failed to serialize RDF graph: {e}")))
 }
 
-/// Convert an inline CONSTRUCT/DESCRIBE Turtle/N-Triples body into a
-/// minimal JSON-LD document with the original graph kept under a
-/// `comment` field.
-pub fn rdf_graph_to_jsonld(body: &str) -> String {
-    let value = serde_json::json!({
-        "@context": {
-            "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-        },
-        "@graph": [],
-        "comment": body,
-    });
-    serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string())
+/// Convert a CONSTRUCT/DESCRIBE Turtle body into a real RDF/XML document.
+pub fn rdf_graph_to_rdfxml(body: &str) -> FusekiResult<String> {
+    reserialize_graph(body, oxirs_core::parser::RdfFormat::RdfXml)
+}
+
+/// Convert a CONSTRUCT/DESCRIBE Turtle body into a real JSON-LD document.
+pub fn rdf_graph_to_jsonld(body: &str) -> FusekiResult<String> {
+    reserialize_graph(body, oxirs_core::parser::RdfFormat::JsonLd)
 }
 
 #[cfg(test)]
@@ -943,9 +953,53 @@ mod tests {
     #[test]
     fn rdf_graph_to_jsonld_emits_context() {
         let body = "<http://ex/s> <http://ex/p> \"v\" .";
-        let jsonld = rdf_graph_to_jsonld(body);
+        let jsonld = rdf_graph_to_jsonld(body).expect("jsonld serializes");
         let value: serde_json::Value = serde_json::from_str(&jsonld).expect("jsonld parses");
-        assert!(value.get("@context").is_some());
-        assert!(value.get("@graph").is_some());
+        // JSON-LD output may be a top-level object or array; either way it must
+        // carry the real triple, not an empty graph.
+        assert!(
+            jsonld.contains("http://ex/p"),
+            "JSON-LD must contain the real predicate, got: {jsonld}"
+        );
+    }
+
+    #[test]
+    fn regression_rdfxml_contains_real_triples() {
+        // A CONSTRUCT/DESCRIBE graph must reserialize into RDF/XML that a
+        // conforming parser can read — the subject/predicate/object IRIs must be
+        // present, not hidden in a comment inside an empty envelope.
+        let body = "<http://ex/s> <http://ex/p> <http://ex/o> .";
+        let xml = rdf_graph_to_rdfxml(body).expect("rdfxml serializes");
+        // The data must NOT be hidden in an XML comment (the old fake behaviour).
+        assert!(
+            !xml.contains("<!--"),
+            "data must not be hidden in an XML comment: {xml}"
+        );
+        // Prove the triple survives by round-tripping the produced RDF/XML back
+        // through a conforming parser: a real serializer yields exactly the one
+        // triple, whereas the old empty-envelope stub would yield zero. Note the
+        // predicate IRI `http://ex/p` is represented as an element name
+        // (namespace `http://ex/` + local name `p`), so it never appears as a
+        // contiguous substring — only a real parse can verify it.
+        use oxirs_core::parser::{Parser, RdfFormat};
+        let triples = Parser::new(RdfFormat::RdfXml)
+            .parse_str_to_triples(&xml)
+            .expect("produced RDF/XML must reparse");
+        assert_eq!(triples.len(), 1, "expected exactly one triple, got: {xml}");
+        let t = &triples[0];
+        assert_eq!(t.subject().to_string(), "<http://ex/s>", "subject: {xml}");
+        assert_eq!(
+            t.predicate().to_string(),
+            "<http://ex/p>",
+            "predicate: {xml}"
+        );
+        assert_eq!(t.object().to_string(), "<http://ex/o>", "object: {xml}");
+    }
+
+    #[test]
+    fn regression_jsonld_empty_body_is_empty_graph() {
+        // An empty body is a well-formed empty graph, never an error.
+        let jsonld = rdf_graph_to_jsonld("").expect("empty jsonld serializes");
+        assert!(!jsonld.contains("http://ex"));
     }
 }

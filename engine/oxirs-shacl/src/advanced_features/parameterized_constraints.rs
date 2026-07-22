@@ -329,63 +329,350 @@ impl ConstraintInstance {
         }
     }
 
-    /// Execute SPARQL ASK constraint
+    /// Build the `$this` + parameter substitution bindings for a SPARQL template.
+    ///
+    /// `$this` is bound to the focus node; every parameter that can be rendered
+    /// as a SPARQL term is bound under its own name. Parameters that have no
+    /// SPARQL term rendering (property paths, lists) are intentionally left
+    /// unbound so that their placeholder survives into the query and triggers a
+    /// fail-loud SPARQL parse error instead of a silently malformed query.
+    fn build_sparql_bindings(&self, focus_node: &Term) -> HashMap<String, String> {
+        let mut bindings = HashMap::new();
+        bindings.insert("this".to_string(), term_to_sparql(focus_node));
+        for (name, value) in &self.parameters {
+            if let Some(rendered) = parameter_value_to_sparql(value) {
+                bindings.insert(name.clone(), rendered);
+            }
+        }
+        bindings
+    }
+
+    /// Execute SPARQL ASK constraint.
+    ///
+    /// SHACL `sh:ask` semantics: the ASK query returns `true` when the focus
+    /// node conforms and `false` on a violation.
     fn execute_sparql_ask(
         &self,
         query_template: &str,
-        _focus_node: &Term,
+        focus_node: &Term,
         _value_nodes: &[Term],
-        _store: &dyn Store,
+        store: &dyn Store,
     ) -> Result<ConstraintExecutionResult> {
-        // TODO: Implement SPARQL ASK execution with parameter substitution
-        tracing::debug!("Executing SPARQL ASK constraint: {}", query_template);
-        Ok(ConstraintExecutionResult::conforms())
+        use oxirs_core::rdf_store::QueryResults;
+
+        let bindings = self.build_sparql_bindings(focus_node);
+        let query = crate::sparql_af::substitute_named_placeholders(query_template, &bindings);
+
+        let results = store.query(&query).map_err(|e| {
+            ShaclError::SparqlExecution(format!(
+                "Parameterized SPARQL ASK constraint '{}' failed: {e}",
+                self.component.id
+            ))
+        })?;
+
+        match results.results() {
+            QueryResults::Boolean(true) => Ok(ConstraintExecutionResult::conforms()),
+            QueryResults::Boolean(false) => Ok(ConstraintExecutionResult::violation(format!(
+                "SPARQL ASK constraint '{}' was not satisfied",
+                self.component.id
+            ))),
+            _ => Err(ShaclError::SparqlExecution(format!(
+                "Parameterized SPARQL ASK constraint '{}' did not return a boolean result; \
+                 the template must be an ASK query",
+                self.component.id
+            ))),
+        }
     }
 
-    /// Execute SPARQL SELECT constraint
+    /// Execute SPARQL SELECT constraint.
+    ///
+    /// SHACL `sh:select` semantics: every solution row is a violation, so an
+    /// empty result set means the constraint is satisfied.
     fn execute_sparql_select(
         &self,
         query_template: &str,
         _result_variable: &str,
-        _focus_node: &Term,
+        focus_node: &Term,
         _value_nodes: &[Term],
-        _store: &dyn Store,
+        store: &dyn Store,
     ) -> Result<ConstraintExecutionResult> {
-        // TODO: Implement SPARQL SELECT execution with parameter substitution
-        tracing::debug!("Executing SPARQL SELECT constraint: {}", query_template);
-        Ok(ConstraintExecutionResult::conforms())
+        use oxirs_core::rdf_store::QueryResults;
+
+        let bindings = self.build_sparql_bindings(focus_node);
+        let query = crate::sparql_af::substitute_named_placeholders(query_template, &bindings);
+
+        let results = store.query(&query).map_err(|e| {
+            ShaclError::SparqlExecution(format!(
+                "Parameterized SPARQL SELECT constraint '{}' failed: {e}",
+                self.component.id
+            ))
+        })?;
+
+        match results.results() {
+            QueryResults::Bindings(rows) => {
+                if rows.is_empty() {
+                    Ok(ConstraintExecutionResult::conforms())
+                } else {
+                    Ok(ConstraintExecutionResult::violation(format!(
+                        "SPARQL SELECT constraint '{}' reported {} violation(s)",
+                        self.component.id,
+                        rows.len()
+                    )))
+                }
+            }
+            _ => Err(ShaclError::SparqlExecution(format!(
+                "Parameterized SPARQL SELECT constraint '{}' did not return bindings; \
+                 the template must be a SELECT query",
+                self.component.id
+            ))),
+        }
     }
 
-    /// Execute script-based constraint
+    /// Execute script-based constraint.
+    ///
+    /// No sandboxed script runtime is wired into this validation path yet, so a
+    /// configured script constraint fails loudly rather than silently reporting
+    /// conformance (fail-loud contract).
     fn execute_script(
         &self,
-        source: &str,
+        _source: &str,
         language: &ScriptLanguage,
         _focus_node: &Term,
         _value_nodes: &[Term],
         _store: &dyn Store,
     ) -> Result<ConstraintExecutionResult> {
-        // TODO: Implement script execution
-        tracing::debug!("Executing {:?} script constraint", language);
-        Ok(ConstraintExecutionResult::conforms())
+        Err(ShaclError::UnsupportedOperation(format!(
+            "Script-based parameterized constraint '{}' ({language:?}) is not executable: \
+             no sandboxed script runtime is available on the validation path",
+            self.component.id
+        )))
     }
 
-    /// Execute built-in constraint
+    /// Execute built-in constraint by dispatching to a real validator.
+    ///
+    /// Supports the standard SHACL value-node constraints that can be evaluated
+    /// without a store. Unknown validator names fail loudly rather than
+    /// reporting a fabricated pass.
     fn execute_builtin(
         &self,
         validator_name: &str,
         _focus_node: &Term,
-        _value_nodes: &[Term],
+        value_nodes: &[Term],
         _store: &dyn Store,
     ) -> Result<ConstraintExecutionResult> {
-        // TODO: Implement built-in validator dispatch
-        tracing::debug!("Executing built-in constraint: {}", validator_name);
-        Ok(ConstraintExecutionResult::conforms())
+        match validator_name {
+            "minLength" => {
+                let min = self.integer_param(&["minLength", "min"])? as usize;
+                for v in value_nodes {
+                    if term_lexical(v).chars().count() < min {
+                        return Ok(ConstraintExecutionResult::violation(format!(
+                            "Value '{}' is shorter than minLength {min}",
+                            term_lexical(v)
+                        )));
+                    }
+                }
+                Ok(ConstraintExecutionResult::conforms())
+            }
+            "maxLength" => {
+                let max = self.integer_param(&["maxLength", "max"])? as usize;
+                for v in value_nodes {
+                    if term_lexical(v).chars().count() > max {
+                        return Ok(ConstraintExecutionResult::violation(format!(
+                            "Value '{}' is longer than maxLength {max}",
+                            term_lexical(v)
+                        )));
+                    }
+                }
+                Ok(ConstraintExecutionResult::conforms())
+            }
+            "pattern" => {
+                let pattern = self.string_param(&["pattern"])?;
+                let re = regex::Regex::new(&pattern).map_err(|e| {
+                    ShaclError::ConstraintValidation(format!("Invalid pattern regex: {e}"))
+                })?;
+                for v in value_nodes {
+                    if !re.is_match(&term_lexical(v)) {
+                        return Ok(ConstraintExecutionResult::violation(format!(
+                            "Value '{}' does not match pattern '{pattern}'",
+                            term_lexical(v)
+                        )));
+                    }
+                }
+                Ok(ConstraintExecutionResult::conforms())
+            }
+            "minInclusive" | "maxInclusive" | "minExclusive" | "maxExclusive" => {
+                let bound = self.numeric_param(&[validator_name])?;
+                for v in value_nodes {
+                    let value = term_numeric(v).ok_or_else(|| {
+                        ShaclError::ConstraintValidation(format!(
+                            "Value '{}' is not numeric for {validator_name}",
+                            term_lexical(v)
+                        ))
+                    })?;
+                    let ok = match validator_name {
+                        "minInclusive" => value >= bound,
+                        "maxInclusive" => value <= bound,
+                        "minExclusive" => value > bound,
+                        "maxExclusive" => value < bound,
+                        _ => unreachable!(),
+                    };
+                    if !ok {
+                        return Ok(ConstraintExecutionResult::violation(format!(
+                            "Value {value} violates {validator_name} {bound}"
+                        )));
+                    }
+                }
+                Ok(ConstraintExecutionResult::conforms())
+            }
+            "minCount" => {
+                let min = self.integer_param(&["minCount", "min"])? as usize;
+                if value_nodes.len() < min {
+                    return Ok(ConstraintExecutionResult::violation(format!(
+                        "Value count {} is below minCount {min}",
+                        value_nodes.len()
+                    )));
+                }
+                Ok(ConstraintExecutionResult::conforms())
+            }
+            "maxCount" => {
+                let max = self.integer_param(&["maxCount", "max"])? as usize;
+                if value_nodes.len() > max {
+                    return Ok(ConstraintExecutionResult::violation(format!(
+                        "Value count {} exceeds maxCount {max}",
+                        value_nodes.len()
+                    )));
+                }
+                Ok(ConstraintExecutionResult::conforms())
+            }
+            other => Err(ShaclError::UnsupportedOperation(format!(
+                "Built-in validator '{other}' is not implemented for parameterized constraint '{}'",
+                self.component.id
+            ))),
+        }
+    }
+
+    /// Look up a parameter value by trying the given candidate names in order,
+    /// falling back to the sole parameter if exactly one is present.
+    fn lookup_param(&self, keys: &[&str]) -> Option<&ParameterValue> {
+        for key in keys {
+            if let Some(v) = self.parameters.get(*key) {
+                return Some(v);
+            }
+        }
+        if self.parameters.len() == 1 {
+            return self.parameters.values().next();
+        }
+        None
+    }
+
+    fn integer_param(&self, keys: &[&str]) -> Result<i64> {
+        match self.lookup_param(keys) {
+            Some(ParameterValue::Integer(i)) => Ok(*i),
+            Some(ParameterValue::Decimal(d)) => Ok(*d as i64),
+            Some(ParameterValue::String(s)) | Some(ParameterValue::Literal(s)) => {
+                s.trim().parse::<i64>().map_err(|_| {
+                    ShaclError::ConstraintValidation(format!(
+                        "Parameter for {keys:?} is not an integer: '{s}'"
+                    ))
+                })
+            }
+            _ => Err(ShaclError::ConstraintValidation(format!(
+                "Missing or non-integer parameter for {keys:?} in constraint '{}'",
+                self.component.id
+            ))),
+        }
+    }
+
+    fn numeric_param(&self, keys: &[&str]) -> Result<f64> {
+        match self.lookup_param(keys) {
+            Some(ParameterValue::Integer(i)) => Ok(*i as f64),
+            Some(ParameterValue::Decimal(d)) => Ok(*d),
+            Some(ParameterValue::String(s)) | Some(ParameterValue::Literal(s)) => {
+                s.trim().parse::<f64>().map_err(|_| {
+                    ShaclError::ConstraintValidation(format!(
+                        "Parameter for {keys:?} is not numeric: '{s}'"
+                    ))
+                })
+            }
+            _ => Err(ShaclError::ConstraintValidation(format!(
+                "Missing or non-numeric parameter for {keys:?} in constraint '{}'",
+                self.component.id
+            ))),
+        }
+    }
+
+    fn string_param(&self, keys: &[&str]) -> Result<String> {
+        match self.lookup_param(keys) {
+            Some(ParameterValue::String(s)) | Some(ParameterValue::Literal(s)) => Ok(s.clone()),
+            Some(ParameterValue::Iri(s)) => Ok(s.clone()),
+            Some(ParameterValue::Integer(i)) => Ok(i.to_string()),
+            _ => Err(ShaclError::ConstraintValidation(format!(
+                "Missing or non-string parameter for {keys:?} in constraint '{}'",
+                self.component.id
+            ))),
+        }
     }
 
     /// Get parameter value
     pub fn get_parameter(&self, name: &str) -> Option<&ParameterValue> {
         self.parameters.get(name)
+    }
+}
+
+/// Render an RDF term as a SPARQL term string for query substitution.
+fn term_to_sparql(term: &Term) -> String {
+    match term {
+        Term::NamedNode(node) => format!("<{}>", node.as_str()),
+        Term::BlankNode(node) => format!("_:{}", node.as_str()),
+        Term::Literal(lit) => {
+            let value = lit.value().replace('\\', "\\\\").replace('"', "\\\"");
+            let datatype = lit.datatype();
+            if let Some(lang) = lit.language() {
+                format!("\"{value}\"@{lang}")
+            } else if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
+                format!("\"{value}\"^^<{}>", datatype.as_str())
+            } else {
+                format!("\"{value}\"")
+            }
+        }
+        Term::Variable(var) => format!("?{}", var.as_str()),
+        Term::QuotedTriple(_) => "<< ?s ?p ?o >>".to_string(),
+    }
+}
+
+/// Render a parameter value as a SPARQL term string, or `None` if it has no
+/// direct SPARQL term rendering (property paths, lists).
+fn parameter_value_to_sparql(value: &ParameterValue) -> Option<String> {
+    match value {
+        ParameterValue::Iri(iri) => Some(format!("<{iri}>")),
+        ParameterValue::Literal(s) | ParameterValue::String(s) => {
+            let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+            Some(format!("\"{escaped}\""))
+        }
+        ParameterValue::Integer(i) => Some(i.to_string()),
+        ParameterValue::Decimal(d) => Some(d.to_string()),
+        ParameterValue::Boolean(b) => Some(b.to_string()),
+        ParameterValue::Term(t) => Some(term_to_sparql(t)),
+        ParameterValue::Path(_) | ParameterValue::List(_) => None,
+    }
+}
+
+/// Extract the lexical form of a term for string-based built-in constraints.
+fn term_lexical(term: &Term) -> String {
+    match term {
+        Term::NamedNode(node) => node.as_str().to_string(),
+        Term::BlankNode(node) => node.as_str().to_string(),
+        Term::Literal(lit) => lit.value().to_string(),
+        Term::Variable(var) => var.as_str().to_string(),
+        Term::QuotedTriple(_) => String::new(),
+    }
+}
+
+/// Extract a numeric value from a term for numeric range built-ins.
+fn term_numeric(term: &Term) -> Option<f64> {
+    match term {
+        Term::Literal(lit) => lit.value().trim().parse::<f64>().ok(),
+        _ => None,
     }
 }
 
@@ -525,6 +812,157 @@ mod tests {
 
         let instance = component.instantiate(params);
         assert!(instance.is_ok());
+    }
+
+    fn make_instance(
+        validator_name: &str,
+        param_name: &str,
+        param_value: ParameterValue,
+    ) -> ConstraintInstance {
+        let mut parameters = HashMap::new();
+        parameters.insert(param_name.to_string(), param_value);
+        ConstraintInstance {
+            component: ParameterizedConstraintComponent::new(
+                "test:c",
+                "c",
+                vec![],
+                ConstraintImplementation::BuiltIn {
+                    validator_name: validator_name.to_string(),
+                },
+            ),
+            parameters,
+        }
+    }
+
+    #[test]
+    fn regression_builtin_minlength_detects_violation() {
+        use oxirs_core::model::Literal;
+        use oxirs_core::ConcreteStore;
+        let store = ConcreteStore::new().expect("store");
+        let instance = make_instance("minLength", "minLength", ParameterValue::Integer(5));
+        let focus = Term::Literal(Literal::new("focus"));
+
+        // "abc" (len 3) violates minLength 5
+        let short = vec![Term::Literal(Literal::new("abc"))];
+        let res = instance.execute(&focus, &short, &store).expect("exec");
+        assert!(!res.conforms, "short value must violate minLength");
+
+        // "abcdef" (len 6) conforms
+        let long = vec![Term::Literal(Literal::new("abcdef"))];
+        let res = instance.execute(&focus, &long, &store).expect("exec");
+        assert!(res.conforms, "long value must conform");
+    }
+
+    #[test]
+    fn regression_builtin_pattern_dispatch() {
+        use oxirs_core::model::Literal;
+        use oxirs_core::ConcreteStore;
+        let store = ConcreteStore::new().expect("store");
+        let instance = make_instance(
+            "pattern",
+            "pattern",
+            ParameterValue::String("^[0-9]+$".to_string()),
+        );
+        let focus = Term::Literal(Literal::new("focus"));
+
+        let bad = vec![Term::Literal(Literal::new("abc"))];
+        assert!(
+            !instance
+                .execute(&focus, &bad, &store)
+                .expect("exec")
+                .conforms
+        );
+
+        let good = vec![Term::Literal(Literal::new("12345"))];
+        assert!(
+            instance
+                .execute(&focus, &good, &store)
+                .expect("exec")
+                .conforms
+        );
+    }
+
+    #[test]
+    fn regression_builtin_unknown_validator_is_fail_loud() {
+        use oxirs_core::model::Literal;
+        use oxirs_core::ConcreteStore;
+        let store = ConcreteStore::new().expect("store");
+        let instance = make_instance("noSuchValidator", "x", ParameterValue::Integer(1));
+        let focus = Term::Literal(Literal::new("focus"));
+        let res = instance.execute(&focus, &[], &store);
+        assert!(
+            matches!(res, Err(ShaclError::UnsupportedOperation(_))),
+            "unknown built-in validator must fail loud, got {res:?}"
+        );
+    }
+
+    #[test]
+    fn regression_script_constraint_is_fail_loud() {
+        use oxirs_core::model::Literal;
+        use oxirs_core::ConcreteStore;
+        let store = ConcreteStore::new().expect("store");
+        let component = ParameterizedConstraintComponent::new(
+            "test:script",
+            "script",
+            vec![],
+            ConstraintImplementation::Script {
+                source: "return true;".to_string(),
+                language: ScriptLanguage::JavaScript,
+            },
+        );
+        let instance = ConstraintInstance {
+            component,
+            parameters: HashMap::new(),
+        };
+        let focus = Term::Literal(Literal::new("focus"));
+        let res = instance.execute(&focus, &[], &store);
+        assert!(
+            matches!(res, Err(ShaclError::UnsupportedOperation(_))),
+            "script constraint must fail loud instead of reporting conformance, got {res:?}"
+        );
+    }
+
+    #[test]
+    fn regression_sparql_ask_executes_against_store() {
+        use oxirs_core::model::{GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject};
+        use oxirs_core::ConcreteStore;
+        let store = ConcreteStore::new().expect("store");
+        let subj = NamedNode::new("http://ex.org/alice").expect("iri");
+        let pred = NamedNode::new("http://ex.org/name").expect("iri");
+        store
+            .insert_quad(Quad::new(
+                Subject::from(subj.clone()),
+                Predicate::from(pred.clone()),
+                Object::from(Literal::new("Alice")),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert");
+
+        let component = ParameterizedConstraintComponent::new(
+            "test:ask",
+            "ask",
+            vec![],
+            ConstraintImplementation::SparqlAsk {
+                query_template: "ASK { $this <http://ex.org/name> ?n }".to_string(),
+            },
+        );
+        let instance = ConstraintInstance {
+            component,
+            parameters: HashMap::new(),
+        };
+
+        // Focus node that HAS a name -> ASK true -> conforms
+        let res = instance
+            .execute(&Term::NamedNode(subj), &[], &store)
+            .expect("exec");
+        assert!(res.conforms, "alice has a name, ASK should conform");
+
+        // Focus node without a name -> ASK false -> violation
+        let bob = NamedNode::new("http://ex.org/bob").expect("iri");
+        let res = instance
+            .execute(&Term::NamedNode(bob), &[], &store)
+            .expect("exec");
+        assert!(!res.conforms, "bob has no name, ASK should violate");
     }
 
     #[test]

@@ -6,8 +6,28 @@
 //! - Result merging from multiple endpoints
 //! - Endpoint discovery and capability detection
 //! - Load balancing and failover
+//!
+//! # Relationship to the internal SERVICE path
+//!
+//! [`FederationExecutor`] is a **standalone, self-contained federation utility**
+//! (connection pooling, replica load-balancing, a half-open circuit breaker,
+//! result caching, and join-aware plan execution) exposed for library consumers
+//! that want to drive federation directly.
+//!
+//! It is *distinct* from the code path OxiRS's own query executor uses to
+//! evaluate an in-query `SERVICE` clause — that path lives in
+//! [`crate::service_federation::execute_service_clause`] and is what
+//! `parallel_executor_ops` / the `QueryExecutor` dispatch to. When federating a
+//! whole conjunctive query through this utility, prefer
+//! [`FederationExecutor::execute_service_query`] (which preserves join/union
+//! semantics) over the lower-level flat [`FederationExecutor::decompose_query`]
+//! + [`FederationExecutor::execute_federated_query`] pair (UNION-only).
 
 use crate::algebra::{Algebra, Binding, Expression, Solution, Term, Variable};
+use crate::federation_plan::{
+    binary_operator_symbol, join_solutions, left_join_solutions, literal_to_sparql,
+    minus_solutions, property_path_to_sparql, CombineOp, FederationPlan,
+};
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use reqwest;
@@ -90,6 +110,12 @@ pub struct FederationExecutor {
     result_cache: Arc<DashMap<QueryCacheKey, CachedResult>>,
     /// Endpoint health status
     endpoint_health: Arc<DashMap<String, EndpointHealth>>,
+    /// Physical replica URLs registered for a logical endpoint IRI. When a
+    /// SERVICE endpoint has registered replicas, one is chosen per request
+    /// according to [`FederationConfig::load_balancing`].
+    endpoint_replicas: Arc<DashMap<String, Vec<String>>>,
+    /// Round-robin cursor shared across replica selections.
+    round_robin_cursor: Arc<std::sync::atomic::AtomicUsize>,
     /// Metrics
     metrics: Arc<FederationMetrics>,
     /// Semaphore for limiting concurrent requests
@@ -105,9 +131,87 @@ impl FederationExecutor {
             connection_pools: Arc::new(DashMap::new()),
             result_cache: Arc::new(DashMap::new()),
             endpoint_health: Arc::new(DashMap::new()),
+            endpoint_replicas: Arc::new(DashMap::new()),
+            round_robin_cursor: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             metrics: Arc::new(FederationMetrics::new()),
             request_semaphore: Arc::new(Semaphore::new(max_concurrent)),
         }
+    }
+
+    /// Register physical replica URLs for a logical endpoint IRI.
+    ///
+    /// When a SERVICE clause targets `logical`, one of the registered replicas
+    /// is selected per request according to
+    /// [`FederationConfig::load_balancing`]. With no registered replicas the
+    /// SERVICE IRI is used directly.
+    pub fn register_replicas(&self, logical: impl Into<String>, replicas: Vec<String>) {
+        self.endpoint_replicas.insert(logical.into(), replicas);
+    }
+
+    /// Select the physical endpoint URL to use for a logical endpoint IRI,
+    /// honoring [`FederationConfig::load_balancing`] across any registered
+    /// replicas. Returns the logical IRI unchanged when no replicas are known.
+    fn select_endpoint(&self, logical: &str) -> String {
+        let replicas = match self.endpoint_replicas.get(logical) {
+            Some(r) if !r.is_empty() => r.clone(),
+            _ => return logical.to_string(),
+        };
+        if replicas.len() == 1 {
+            return replicas[0].clone();
+        }
+        match self.config.load_balancing {
+            LoadBalancingStrategy::RoundRobin => {
+                let idx = self
+                    .round_robin_cursor
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                replicas[idx % replicas.len()].clone()
+            }
+            LoadBalancingStrategy::Random => {
+                let idx = rng().random_range(0..replicas.len());
+                replicas[idx].clone()
+            }
+            LoadBalancingStrategy::LeastLoaded => replicas
+                .iter()
+                .min_by_key(|url| self.endpoint_active_connections(url))
+                .cloned()
+                .unwrap_or_else(|| logical.to_string()),
+            LoadBalancingStrategy::FastestResponse => replicas
+                .iter()
+                .min_by_key(|url| self.endpoint_avg_response(url))
+                .cloned()
+                .unwrap_or_else(|| logical.to_string()),
+            LoadBalancingStrategy::Adaptive => replicas
+                .iter()
+                .filter(|url| {
+                    self.endpoint_health
+                        .get(*url)
+                        .map(|h| h.is_healthy())
+                        .unwrap_or(true)
+                })
+                .min_by_key(|url| {
+                    // Blend current load and historical latency.
+                    self.endpoint_active_connections(url)
+                        .saturating_mul(1 + self.endpoint_avg_response(url))
+                })
+                .cloned()
+                .unwrap_or_else(|| replicas[0].clone()),
+        }
+    }
+
+    /// Current in-flight connection count for `url` (0 if no pool yet).
+    fn endpoint_active_connections(&self, url: &str) -> usize {
+        self.connection_pools
+            .get(url)
+            .map(|pool| pool.size.saturating_sub(pool.available()))
+            .unwrap_or(0)
+    }
+
+    /// Historical average response time for `url` in milliseconds (0 if unknown).
+    fn endpoint_avg_response(&self, url: &str) -> usize {
+        self.endpoint_health
+            .get(url)
+            .map(|h| h.avg_response_time.as_millis() as usize)
+            .unwrap_or(0)
     }
 
     /// Execute a SERVICE query
@@ -117,16 +221,23 @@ impl FederationExecutor {
         pattern: &Algebra,
         silent: bool,
     ) -> Result<Solution> {
-        let endpoint_url = self.extract_endpoint_url(endpoint)?;
+        let logical_url = self.extract_endpoint_url(endpoint)?;
+        // Resolve to a physical replica per the load-balancing strategy.
+        let endpoint_url = self.select_endpoint(&logical_url);
 
-        // Check endpoint health
+        // Check endpoint health with a half-open circuit breaker: an unhealthy
+        // endpoint is retried once its cooldown (health_check_interval) has
+        // elapsed since the last failure, so a transient outage does not
+        // blacklist the endpoint permanently. Only a still-cooling unhealthy
+        // endpoint short-circuits a non-silent request.
         if self.config.enable_health_monitoring {
             let health = self.get_endpoint_health(&endpoint_url);
-            if !health.is_healthy() && !silent {
+            if !health.should_attempt(self.config.health_check_interval) && !silent {
                 return Err(anyhow!(
-                    "Endpoint {} is unhealthy: {}",
+                    "Endpoint {} is unhealthy: {} (cooling down for {:?})",
                     endpoint_url,
-                    health.status_message
+                    health.status_message,
+                    self.config.health_check_interval
                 ));
             }
         }
@@ -155,8 +266,10 @@ impl FederationExecutor {
             .await;
         let elapsed = start.elapsed();
 
-        // Update metrics
-        let _timer_guard = self.metrics.request_duration.start();
+        // Record the real measured request duration in the histogram. Using
+        // `observe(elapsed)` records the actual latency; the previous
+        // `.start()` guard measured only the negligible time until it dropped.
+        self.metrics.request_duration.observe(elapsed);
         match &result {
             Ok(results) => {
                 self.metrics.successful_requests.inc();
@@ -268,9 +381,9 @@ impl FederationExecutor {
                     query.push_str(&format!(
                         "{}{}  {}  {} .\n",
                         indent_str,
-                        self.term_to_sparql(&pattern.subject),
-                        self.term_to_sparql(&pattern.predicate),
-                        self.term_to_sparql(&pattern.object)
+                        self.term_to_sparql(&pattern.subject)?,
+                        self.term_to_sparql(&pattern.predicate)?,
+                        self.term_to_sparql(&pattern.object)?
                     ));
                 }
             }
@@ -310,29 +423,195 @@ impl FederationExecutor {
                     self.expr_to_sparql(condition)?
                 ));
             }
-            _ => {
-                // For other algebra types, use a simplified representation
-                query.push_str(&format!("{}# Complex pattern: {:?}\n", indent_str, algebra));
+            Algebra::PropertyPath {
+                subject,
+                path,
+                object,
+            } => {
+                query.push_str(&format!(
+                    "{}{} {} {} .\n",
+                    indent_str,
+                    self.term_to_sparql(subject)?,
+                    property_path_to_sparql(path)?,
+                    self.term_to_sparql(object)?
+                ));
+            }
+            Algebra::Extend {
+                pattern,
+                variable,
+                expr,
+            } => {
+                self.algebra_to_sparql_recursive(pattern, query, indent)?;
+                query.push_str(&format!(
+                    "{}BIND({} AS ?{})\n",
+                    indent_str,
+                    self.expr_to_sparql(expr)?,
+                    variable.name()
+                ));
+            }
+            Algebra::Graph { graph, pattern } => {
+                query.push_str(&format!(
+                    "{}GRAPH {} {{\n",
+                    indent_str,
+                    self.term_to_sparql(graph)?
+                ));
+                self.algebra_to_sparql_recursive(pattern, query, indent + 1)?;
+                query.push_str(&format!("{indent_str}}}\n"));
+            }
+            Algebra::Minus { left, right } => {
+                self.algebra_to_sparql_recursive(left, query, indent)?;
+                query.push_str(&format!("{indent_str}MINUS {{\n"));
+                self.algebra_to_sparql_recursive(right, query, indent + 1)?;
+                query.push_str(&format!("{indent_str}}}\n"));
+            }
+            Algebra::Service {
+                endpoint,
+                pattern,
+                silent,
+            } => {
+                query.push_str(&format!(
+                    "{}SERVICE {}{} {{\n",
+                    indent_str,
+                    if *silent { "SILENT " } else { "" },
+                    self.term_to_sparql(endpoint)?
+                ));
+                self.algebra_to_sparql_recursive(pattern, query, indent + 1)?;
+                query.push_str(&format!("{indent_str}}}\n"));
+            }
+            Algebra::Values {
+                variables,
+                bindings,
+            } => {
+                query.push_str(&self.values_to_sparql(variables, bindings, &indent_str)?);
+            }
+            Algebra::Table | Algebra::Zero | Algebra::Empty => {
+                // The empty/unit group graph pattern matches the empty solution.
+            }
+            // Solution modifiers (Project/Distinct/Reduced/Slice/OrderBy/Group/
+            // Having) are not part of a group-graph-pattern that can be pushed
+            // into a SERVICE body; emitting them here would produce invalid
+            // SPARQL, so fail loud rather than ship a truncated query.
+            other => {
+                return Err(anyhow!(
+                    "unsupported algebra construct for SERVICE query pushdown: {:?}",
+                    other
+                ));
             }
         }
         Ok(())
     }
 
-    /// Convert Term to SPARQL representation
-    fn term_to_sparql(&self, term: &Term) -> String {
+    /// Serialize a `VALUES` clause block for SERVICE pushdown.
+    fn values_to_sparql(
+        &self,
+        variables: &[Variable],
+        bindings: &[Binding],
+        indent_str: &str,
+    ) -> Result<String> {
+        let vars: Vec<String> = variables.iter().map(|v| format!("?{}", v.name())).collect();
+        let mut out = format!("{}VALUES ({}) {{\n", indent_str, vars.join(" "));
+        for binding in bindings {
+            let mut row = Vec::with_capacity(variables.len());
+            for var in variables {
+                match binding.get(var) {
+                    Some(term) => row.push(self.term_to_sparql(term)?),
+                    None => row.push("UNDEF".to_string()),
+                }
+            }
+            out.push_str(&format!("{}  ({})\n", indent_str, row.join(" ")));
+        }
+        out.push_str(&format!("{indent_str}}}\n"));
+        Ok(out)
+    }
+
+    /// Convert Term to SPARQL representation.
+    ///
+    /// Literals preserve their datatype (`^^<iri>`) or language tag (`@lang`) and
+    /// their lexical form is escaped per the SPARQL string-literal grammar, so a
+    /// typed/language-tagged literal keeps its RDF term identity when sent to a
+    /// remote endpoint (a plain `"value"` would silently change term identity).
+    fn term_to_sparql(&self, term: &Term) -> Result<String> {
         match term {
-            Term::Variable(var) => format!("?{}", var.name()),
-            Term::Iri(iri) => format!("<{}>", iri.as_str()),
-            Term::Literal(lit) => format!("\"{}\"", lit.value),
-            Term::BlankNode(bn_id) => format!("_:{}", bn_id),
-            _ => "?var".to_string(),
+            Term::Variable(var) => Ok(format!("?{}", var.name())),
+            Term::Iri(iri) => Ok(format!("<{}>", iri.as_str())),
+            Term::Literal(lit) => Ok(literal_to_sparql(lit)),
+            Term::BlankNode(bn_id) => Ok(format!("_:{bn_id}")),
+            Term::QuotedTriple(tp) => Ok(format!(
+                "<< {} {} {} >>",
+                self.term_to_sparql(&tp.subject)?,
+                self.term_to_sparql(&tp.predicate)?,
+                self.term_to_sparql(&tp.object)?
+            )),
+            other => Err(anyhow!(
+                "cannot serialize term to SPARQL for SERVICE pushdown: {:?}",
+                other
+            )),
         }
     }
 
-    /// Convert Expression to SPARQL representation
+    /// Convert an Expression to its SPARQL textual form for FILTER pushdown.
+    ///
+    /// Emits real SPARQL syntax (operators, function calls, escaped literals,
+    /// IRIs). An expression construct that cannot be pushed down (e.g. an
+    /// EXISTS subquery) fails loud rather than emitting a placeholder that the
+    /// remote endpoint would reject.
     fn expr_to_sparql(&self, expr: &Expression) -> Result<String> {
-        // Simplified expression conversion
-        Ok(format!("{:?}", expr))
+        match expr {
+            Expression::Variable(var) => Ok(format!("?{}", var.name())),
+            Expression::Literal(lit) => Ok(literal_to_sparql(lit)),
+            Expression::Iri(iri) => Ok(format!("<{}>", iri.as_str())),
+            Expression::Bound(var) => Ok(format!("BOUND(?{})", var.name())),
+            Expression::Function { name, args } => {
+                let rendered: Result<Vec<String>> =
+                    args.iter().map(|a| self.expr_to_sparql(a)).collect();
+                Ok(format!("{}({})", name, rendered?.join(", ")))
+            }
+            Expression::Unary { op, operand } => {
+                let inner = self.expr_to_sparql(operand)?;
+                let rendered = match op {
+                    crate::algebra::UnaryOperator::Not => format!("(!{inner})"),
+                    crate::algebra::UnaryOperator::Plus => format!("(+{inner})"),
+                    crate::algebra::UnaryOperator::Minus => format!("(-{inner})"),
+                    crate::algebra::UnaryOperator::IsIri => format!("isIRI({inner})"),
+                    crate::algebra::UnaryOperator::IsBlank => format!("isBLANK({inner})"),
+                    crate::algebra::UnaryOperator::IsLiteral => format!("isLITERAL({inner})"),
+                    crate::algebra::UnaryOperator::IsNumeric => format!("isNUMERIC({inner})"),
+                };
+                Ok(rendered)
+            }
+            Expression::Binary { op, left, right } => {
+                let left_s = self.expr_to_sparql(left)?;
+                let right_s = self.expr_to_sparql(right)?;
+                match op {
+                    crate::algebra::BinaryOperator::SameTerm => {
+                        Ok(format!("sameTerm({left_s}, {right_s})"))
+                    }
+                    crate::algebra::BinaryOperator::In => Ok(format!("({left_s} IN ({right_s}))")),
+                    crate::algebra::BinaryOperator::NotIn => {
+                        Ok(format!("({left_s} NOT IN ({right_s}))"))
+                    }
+                    _ => {
+                        let sym = binary_operator_symbol(op).ok_or_else(|| {
+                            anyhow!("unsupported binary operator for SERVICE pushdown: {:?}", op)
+                        })?;
+                        Ok(format!("({left_s} {sym} {right_s})"))
+                    }
+                }
+            }
+            Expression::Conditional {
+                condition,
+                then_expr,
+                else_expr,
+            } => Ok(format!(
+                "IF({}, {}, {})",
+                self.expr_to_sparql(condition)?,
+                self.expr_to_sparql(then_expr)?,
+                self.expr_to_sparql(else_expr)?
+            )),
+            Expression::Exists(_) | Expression::NotExists(_) => Err(anyhow!(
+                "EXISTS / NOT EXISTS cannot be serialized for SERVICE FILTER pushdown"
+            )),
+        }
     }
 
     /// Execute query against endpoint
@@ -374,9 +653,8 @@ impl FederationExecutor {
             *active = active.saturating_sub(1);
         }
 
-        // Update metrics
-        let _duration = start_time.elapsed();
-        let _guard = self.metrics.request_duration.start();
+        // Record the real measured query duration in the histogram.
+        self.metrics.request_duration.observe(start_time.elapsed());
 
         match &result {
             Ok(solutions) => {
@@ -528,11 +806,147 @@ impl FederationExecutor {
         }
     }
 
-    /// Decompose query for federated execution
+    /// Decompose a query into a flat list of SERVICE subqueries.
+    ///
+    /// This is a low-level leaf-extraction helper: it discards the algebra
+    /// combinator (Join/Union/…) that connected the SERVICE clauses, so its
+    /// output is only correct for genuinely independent (UNION-style) subqueries.
+    /// For a conjunctive multi-SERVICE query use [`Self::plan_query`] /
+    /// [`Self::execute_service_query`], which preserve the combinator and join
+    /// on shared variables.
+    ///
+    /// Returns an empty list when [`FederationConfig::enable_query_decomposition`]
+    /// is disabled.
     pub fn decompose_query(&self, query: &Algebra) -> Vec<FederatedSubquery> {
+        if !self.config.enable_query_decomposition {
+            return Vec::new();
+        }
         let mut subqueries = Vec::new();
         Self::extract_service_patterns(query, &mut subqueries);
         subqueries
+    }
+
+    /// Build a federation execution plan that preserves the algebra combinator
+    /// (Join/Union/LeftJoin/Minus) joining the SERVICE clauses.
+    ///
+    /// Returns `Ok(None)` when the query subtree contains no SERVICE clause. A
+    /// combinator that mixes a SERVICE branch with a purely local (non-SERVICE)
+    /// branch fails loud, because this executor has no local dataset to evaluate
+    /// the local side — silently dropping it would fabricate wrong bindings.
+    ///
+    /// When [`FederationConfig::enable_query_decomposition`] is disabled, only a
+    /// single top-level SERVICE clause is federable.
+    pub fn plan_query(&self, query: &Algebra) -> Result<Option<FederationPlan>> {
+        let service_leaf = |endpoint: &Term, pattern: &Algebra, silent: bool| {
+            FederationPlan::Service(Box::new(FederatedSubquery {
+                endpoint: endpoint.clone(),
+                pattern: pattern.clone(),
+                silent,
+                dependencies: Vec::new(),
+            }))
+        };
+
+        if !self.config.enable_query_decomposition {
+            return match query {
+                Algebra::Service {
+                    endpoint,
+                    pattern,
+                    silent,
+                } => Ok(Some(service_leaf(endpoint, pattern, *silent))),
+                _ => Ok(None),
+            };
+        }
+
+        match query {
+            Algebra::Service {
+                endpoint,
+                pattern,
+                silent,
+            } => Ok(Some(service_leaf(endpoint, pattern, *silent))),
+            Algebra::Join { left, right } => self.combine_plans(left, right, CombineOp::Join),
+            Algebra::Union { left, right } => self.combine_plans(left, right, CombineOp::Union),
+            Algebra::LeftJoin { left, right, .. } => {
+                self.combine_plans(left, right, CombineOp::LeftJoin)
+            }
+            Algebra::Minus { left, right } => self.combine_plans(left, right, CombineOp::Minus),
+            Algebra::Filter { pattern, .. }
+            | Algebra::Extend { pattern, .. }
+            | Algebra::Graph { pattern, .. }
+            | Algebra::Project { pattern, .. }
+            | Algebra::Distinct { pattern }
+            | Algebra::Reduced { pattern }
+            | Algebra::Slice { pattern, .. }
+            | Algebra::OrderBy { pattern, .. }
+            | Algebra::Group { pattern, .. }
+            | Algebra::Having { pattern, .. } => self.plan_query(pattern),
+            _ => Ok(None),
+        }
+    }
+
+    /// Combine the plans of two algebra branches under a combinator.
+    fn combine_plans(
+        &self,
+        left: &Algebra,
+        right: &Algebra,
+        op: CombineOp,
+    ) -> Result<Option<FederationPlan>> {
+        let left_plan = self.plan_query(left)?;
+        let right_plan = self.plan_query(right)?;
+        match (left_plan, right_plan) {
+            (None, None) => Ok(None),
+            (Some(l), Some(r)) => Ok(Some(op.build(l, r))),
+            (Some(_), None) | (None, Some(_)) => Err(anyhow!(
+                "cannot federate a {:?} that combines a SERVICE branch with a local \
+                 (non-SERVICE) branch: the FederationExecutor has no local dataset — \
+                 run the whole query through the main query executor instead",
+                op
+            )),
+        }
+    }
+
+    /// Execute a federation plan, joining/union-ing subquery results per the
+    /// combinator preserved in the plan tree.
+    pub fn execute_plan<'a>(
+        &'a self,
+        plan: &'a FederationPlan,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Solution>> + Send + 'a>> {
+        Box::pin(async move {
+            match plan {
+                FederationPlan::Service(subquery) => {
+                    self.execute_service(&subquery.endpoint, &subquery.pattern, subquery.silent)
+                        .await
+                }
+                FederationPlan::Join(left, right) => {
+                    let (left_solution, right_solution) =
+                        tokio::try_join!(self.execute_plan(left), self.execute_plan(right))?;
+                    Ok(join_solutions(&left_solution, &right_solution))
+                }
+                FederationPlan::Union(left, right) => {
+                    let (left_solution, right_solution) =
+                        tokio::try_join!(self.execute_plan(left), self.execute_plan(right))?;
+                    Ok(self.merge_results(vec![left_solution, right_solution]))
+                }
+                FederationPlan::LeftJoin(left, right) => {
+                    let (left_solution, right_solution) =
+                        tokio::try_join!(self.execute_plan(left), self.execute_plan(right))?;
+                    Ok(left_join_solutions(&left_solution, &right_solution))
+                }
+                FederationPlan::Minus(left, right) => {
+                    let (left_solution, right_solution) =
+                        tokio::try_join!(self.execute_plan(left), self.execute_plan(right))?;
+                    Ok(minus_solutions(&left_solution, &right_solution))
+                }
+            }
+        })
+    }
+
+    /// Plan and execute a query containing SERVICE clauses, applying correct
+    /// join/union semantics across endpoints.
+    pub async fn execute_service_query(&self, query: &Algebra) -> Result<Solution> {
+        match self.plan_query(query)? {
+            Some(plan) => self.execute_plan(&plan).await,
+            None => Err(anyhow!("query contains no SERVICE clause to federate")),
+        }
     }
 
     /// Extract SERVICE patterns from query
@@ -576,7 +990,17 @@ impl FederationExecutor {
         }
     }
 
-    /// Execute federated query with parallel execution
+    /// Execute a flat list of **independent** SERVICE subqueries in parallel and
+    /// UNION-merge their results.
+    ///
+    /// This is the UNION path: it is correct only when the subqueries do not
+    /// need to be relationally joined (e.g. they came from a UNION, or are truly
+    /// independent). For a conjunctive multi-SERVICE query use
+    /// [`Self::execute_service_query`], which joins on shared variables.
+    ///
+    /// A non-silent subquery failure is propagated (fail-loud); a silent
+    /// subquery that failed already yielded an empty solution inside
+    /// [`Self::execute_service`], so it never surfaces here as an error.
     pub async fn execute_federated_query(
         &self,
         subqueries: Vec<FederatedSubquery>,
@@ -593,17 +1017,18 @@ impl FederationExecutor {
             tasks.push(task);
         }
 
-        // Collect results
+        // Collect results, propagating any non-silent subquery failure instead
+        // of silently dropping it and returning a smaller, wrong result set.
         let mut all_results = Vec::new();
         for task in tasks {
             match task.await {
                 Ok(Ok(results)) => all_results.push(results),
-                Ok(Err(e)) => tracing::warn!("Federated subquery failed: {}", e),
-                Err(e) => tracing::error!("Task join error: {}", e),
+                Ok(Err(e)) => return Err(e),
+                Err(e) => return Err(anyhow!("Federated subquery task join error: {}", e)),
             }
         }
 
-        // Merge all results
+        // Merge all results (UNION semantics).
         Ok(self.merge_results(all_results))
     }
 
@@ -654,6 +1079,8 @@ impl Clone for FederationExecutor {
             connection_pools: Arc::clone(&self.connection_pools),
             result_cache: Arc::clone(&self.result_cache),
             endpoint_health: Arc::clone(&self.endpoint_health),
+            endpoint_replicas: Arc::clone(&self.endpoint_replicas),
+            round_robin_cursor: Arc::clone(&self.round_robin_cursor),
             metrics: Arc::clone(&self.metrics),
             request_semaphore: Arc::clone(&self.request_semaphore),
         }
@@ -737,6 +1164,22 @@ impl EndpointHealth {
 
     fn is_healthy(&self) -> bool {
         self.healthy
+    }
+
+    /// Circuit-breaker gate: whether a request should be attempted against this
+    /// endpoint. A healthy endpoint always passes; an unhealthy one passes in a
+    /// *half-open* fashion once `cooldown` has elapsed since its last failure,
+    /// allowing a single probe that (on success) clears the unhealthy flag via
+    /// [`Self::record_success`]. Without this an endpoint that tripped the
+    /// breaker could never again reach the code path that would recover it.
+    fn should_attempt(&self, cooldown: Duration) -> bool {
+        if self.healthy {
+            return true;
+        }
+        match self.last_failure {
+            Some(when) => when.elapsed() >= cooldown,
+            None => true,
+        }
     }
 
     fn record_success(&mut self, response_time: Duration) {
@@ -1175,5 +1618,261 @@ mod tests {
 
         // Should eliminate duplicates
         assert_eq!(merged.len(), 2); // Only 2 unique bindings
+    }
+
+    fn iri_term(iri: &str) -> Term {
+        Term::Iri(crate::algebra::Iri::new_unchecked(iri))
+    }
+
+    fn binding_of(pairs: &[(&str, Term)]) -> Binding {
+        let mut b = Binding::new();
+        for (name, term) in pairs {
+            b.insert(Variable::new_unchecked(*name), term.clone());
+        }
+        b
+    }
+
+    #[test]
+    fn regression_literal_to_sparql_preserves_datatype_language_and_escapes() {
+        // Typed literal keeps its datatype.
+        let typed = crate::algebra::Literal {
+            value: "5".to_string(),
+            language: None,
+            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                "http://www.w3.org/2001/XMLSchema#integer",
+            )),
+        };
+        assert_eq!(
+            literal_to_sparql(&typed),
+            "\"5\"^^<http://www.w3.org/2001/XMLSchema#integer>"
+        );
+
+        // Language-tagged literal keeps its @lang.
+        let lang = crate::algebra::Literal {
+            value: "chat".to_string(),
+            language: Some("fr".to_string()),
+            datatype: None,
+        };
+        assert_eq!(literal_to_sparql(&lang), "\"chat\"@fr");
+
+        // Embedded quotes / backslashes / newlines are escaped.
+        let tricky = crate::algebra::Literal {
+            value: "he said \"hi\"\n\\path".to_string(),
+            language: None,
+            datatype: None,
+        };
+        assert_eq!(
+            literal_to_sparql(&tricky),
+            "\"he said \\\"hi\\\"\\n\\\\path\""
+        );
+
+        // xsd:string is elided.
+        let plain = crate::algebra::Literal {
+            value: "x".to_string(),
+            language: None,
+            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                "http://www.w3.org/2001/XMLSchema#string",
+            )),
+        };
+        assert_eq!(literal_to_sparql(&plain), "\"x\"");
+    }
+
+    #[test]
+    fn regression_expr_to_sparql_emits_real_sparql_not_debug() {
+        let executor = FederationExecutor::new(FederationConfig::default());
+        let expr = Expression::Binary {
+            op: crate::algebra::BinaryOperator::Greater,
+            left: Box::new(Expression::Variable(Variable::new_unchecked("age"))),
+            right: Box::new(Expression::Literal(crate::algebra::Literal {
+                value: "18".to_string(),
+                language: None,
+                datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                    "http://www.w3.org/2001/XMLSchema#integer",
+                )),
+            })),
+        };
+        let rendered = executor.expr_to_sparql(&expr).expect("serialize");
+        assert_eq!(
+            rendered,
+            "(?age > \"18\"^^<http://www.w3.org/2001/XMLSchema#integer>)"
+        );
+        // Must not be Rust Debug output.
+        assert!(!rendered.contains("Binary"));
+        assert!(!rendered.contains("Variable {"));
+    }
+
+    #[test]
+    fn regression_expr_to_sparql_exists_fails_loud() {
+        let executor = FederationExecutor::new(FederationConfig::default());
+        let expr = Expression::Exists(Box::new(Algebra::Table));
+        assert!(executor.expr_to_sparql(&expr).is_err());
+    }
+
+    #[test]
+    fn regression_term_to_sparql_typed_literal_roundtrips() {
+        let executor = FederationExecutor::new(FederationConfig::default());
+        let term = Term::Literal(crate::algebra::Literal {
+            value: "5".to_string(),
+            language: None,
+            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                "http://www.w3.org/2001/XMLSchema#integer",
+            )),
+        });
+        assert_eq!(
+            executor.term_to_sparql(&term).expect("ok"),
+            "\"5\"^^<http://www.w3.org/2001/XMLSchema#integer>"
+        );
+    }
+
+    #[test]
+    fn regression_algebra_to_sparql_unsupported_variant_fails_loud() {
+        let executor = FederationExecutor::new(FederationConfig::default());
+        // A solution modifier (Project) has no valid group-graph-pattern form
+        // for SERVICE pushdown; it must error, not emit a comment placeholder.
+        let algebra = Algebra::Project {
+            pattern: Box::new(Algebra::Bgp(vec![])),
+            variables: vec![Variable::new_unchecked("s")],
+        };
+        assert!(executor.algebra_to_sparql(&algebra).is_err());
+    }
+
+    #[test]
+    fn regression_algebra_to_sparql_bind_and_path() {
+        let executor = FederationExecutor::new(FederationConfig::default());
+        let bind = Algebra::Extend {
+            pattern: Box::new(Algebra::Bgp(vec![])),
+            variable: Variable::new_unchecked("x"),
+            expr: Expression::Literal(crate::algebra::Literal {
+                value: "1".to_string(),
+                language: None,
+                datatype: None,
+            }),
+        };
+        let sparql = executor.algebra_to_sparql(&bind).expect("ok");
+        assert!(sparql.contains("BIND(\"1\" AS ?x)"), "{sparql}");
+    }
+
+    #[test]
+    fn regression_join_solutions_inner_join_on_shared_var() {
+        // { ?s :name ?name } JOIN { ?s :age ?age } must produce rows with BOTH
+        // ?name and ?age bound — not a flat UNION of each side.
+        let left = vec![binding_of(&[
+            ("s", iri_term("http://ex/a")),
+            ("name", iri_term("http://ex/alice")),
+        ])];
+        let right = vec![
+            binding_of(&[
+                ("s", iri_term("http://ex/a")),
+                ("age", iri_term("http://ex/30")),
+            ]),
+            binding_of(&[
+                ("s", iri_term("http://ex/b")),
+                ("age", iri_term("http://ex/40")),
+            ]),
+        ];
+        let joined = join_solutions(&left, &right);
+        assert_eq!(joined.len(), 1);
+        let row = &joined[0];
+        assert!(row.contains_key(&Variable::new_unchecked("name")));
+        assert!(row.contains_key(&Variable::new_unchecked("age")));
+    }
+
+    #[test]
+    fn regression_minus_solutions_disjoint_domains_remove_nothing() {
+        // MINUS whose right operand shares no variable with the left must NOT
+        // delete any left rows (SPARQL 1.1 §18.5).
+        let left = vec![
+            binding_of(&[("s", iri_term("http://ex/a"))]),
+            binding_of(&[("s", iri_term("http://ex/b"))]),
+        ];
+        let right = vec![binding_of(&[("x", iri_term("http://ex/z"))])];
+        let out = minus_solutions(&left, &right);
+        assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn regression_circuit_breaker_recovers_after_cooldown() {
+        let mut health = EndpointHealth::new();
+        health.record_failure();
+        health.record_failure();
+        health.record_failure();
+        assert!(!health.is_healthy());
+        // Still cooling down for a long interval: should not attempt.
+        assert!(!health.should_attempt(Duration::from_secs(3600)));
+        // Once the cooldown has effectively elapsed (zero interval), a half-open
+        // probe is allowed even while marked unhealthy.
+        assert!(health.should_attempt(Duration::from_secs(0)));
+    }
+
+    #[test]
+    fn regression_decompose_query_respects_enable_flag() {
+        let config = FederationConfig {
+            enable_query_decomposition: false,
+            ..Default::default()
+        };
+        let executor = FederationExecutor::new(config);
+        let service = Algebra::Service {
+            endpoint: iri_term("http://ep/1"),
+            pattern: Box::new(Algebra::Bgp(vec![])),
+            silent: false,
+        };
+        let join = Algebra::Join {
+            left: Box::new(service.clone()),
+            right: Box::new(service),
+        };
+        // Decomposition disabled: no leaf subqueries extracted.
+        assert!(executor.decompose_query(&join).is_empty());
+    }
+
+    #[test]
+    fn regression_plan_query_join_of_two_services_preserves_join() {
+        let executor = FederationExecutor::new(FederationConfig::default());
+        let join = Algebra::Join {
+            left: Box::new(Algebra::Service {
+                endpoint: iri_term("http://ep/1"),
+                pattern: Box::new(Algebra::Bgp(vec![])),
+                silent: false,
+            }),
+            right: Box::new(Algebra::Service {
+                endpoint: iri_term("http://ep/2"),
+                pattern: Box::new(Algebra::Bgp(vec![])),
+                silent: false,
+            }),
+        };
+        let plan = executor.plan_query(&join).expect("plan").expect("some");
+        assert!(matches!(plan, FederationPlan::Join(_, _)));
+    }
+
+    #[test]
+    fn regression_plan_query_service_mixed_with_local_fails_loud() {
+        let executor = FederationExecutor::new(FederationConfig::default());
+        // Join of a SERVICE with a local BGP cannot be federated in isolation.
+        let join = Algebra::Join {
+            left: Box::new(Algebra::Service {
+                endpoint: iri_term("http://ep/1"),
+                pattern: Box::new(Algebra::Bgp(vec![])),
+                silent: false,
+            }),
+            right: Box::new(Algebra::Bgp(vec![])),
+        };
+        assert!(executor.plan_query(&join).is_err());
+    }
+
+    #[test]
+    fn regression_select_endpoint_round_robin_cycles_replicas() {
+        let config = FederationConfig {
+            load_balancing: LoadBalancingStrategy::RoundRobin,
+            ..Default::default()
+        };
+        let executor = FederationExecutor::new(config);
+        executor.register_replicas(
+            "http://logical/ep",
+            vec!["http://r1".to_string(), "http://r2".to_string()],
+        );
+        let a = executor.select_endpoint("http://logical/ep");
+        let b = executor.select_endpoint("http://logical/ep");
+        assert_ne!(a, b, "round-robin must alternate replicas");
+        // Unknown logical endpoint passes through unchanged.
+        assert_eq!(executor.select_endpoint("http://other"), "http://other");
     }
 }

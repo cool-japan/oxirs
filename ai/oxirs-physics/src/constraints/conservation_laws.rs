@@ -67,6 +67,14 @@ impl ConservationChecker {
     }
 
     /// Check a specific conservation law
+    ///
+    /// Walks every recorded state after the first (not just the final
+    /// state), tracking the worst deviation from the initial value seen
+    /// anywhere in the trajectory. This ensures a mid-trajectory
+    /// conservation violation (e.g. a value that spikes and then returns
+    /// close to its initial value by the final recorded step) is still
+    /// detected, matching the stricter per-step checking done by
+    /// `conservation::checkers_impl`.
     fn check_law(
         &self,
         law: ConservationLaw,
@@ -84,35 +92,43 @@ impl ConservationChecker {
             ConservationLaw::Charge => "charge",
         };
 
-        // Extract quantity from first and last state
-        let first_value = trajectory
+        let initial_value = trajectory
             .first()?
             .state
             .get(quantity_name)
             .copied()
             .unwrap_or(0.0);
 
-        let last_value = trajectory
-            .last()?
-            .state
-            .get(quantity_name)
-            .copied()
-            .unwrap_or(0.0);
+        // Track the state with the worst (largest relative) deviation from
+        // the initial value across the *entire* trajectory, not just the
+        // final state.
+        let mut worst_value = initial_value;
+        let mut worst_change = 0.0_f64;
+        let mut worst_relative_change = 0.0_f64;
 
-        let change = (last_value - first_value).abs();
-        let relative_change = if first_value.abs() > 1e-10 {
-            change / first_value.abs()
-        } else {
-            change
-        };
+        for state in trajectory.iter().skip(1) {
+            let value = state.state.get(quantity_name).copied().unwrap_or(0.0);
+            let change = (value - initial_value).abs();
+            let relative_change = if initial_value.abs() > 1e-10 {
+                change / initial_value.abs()
+            } else {
+                change
+            };
 
-        if relative_change > self.tolerance {
+            if relative_change > worst_relative_change {
+                worst_value = value;
+                worst_change = change;
+                worst_relative_change = relative_change;
+            }
+        }
+
+        if worst_relative_change > self.tolerance {
             Some(ViolationReport {
                 law: law.name().to_string(),
-                initial_value: first_value,
-                final_value: last_value,
-                change,
-                relative_change,
+                initial_value,
+                final_value: worst_value,
+                change: worst_change,
+                relative_change: worst_relative_change,
                 tolerance: self.tolerance,
             })
         } else {
@@ -182,5 +198,71 @@ mod tests {
         let violations = checker.check(&trajectory);
         assert!(!violations.is_empty());
         assert_eq!(violations[0].law, "Energy Conservation");
+    }
+
+    /// Regression test for the P1 finding: `check_law` used to compare only
+    /// `trajectory.first()` and `trajectory.last()`, so a violation that
+    /// spikes mid-trajectory and then returns close to the initial value by
+    /// the final recorded step was invisible. This trajectory starts and
+    /// ends near 100.0 (well within the 1% tolerance end-to-end) but spikes
+    /// to 1000.0 in the middle, which must be caught.
+    #[test]
+    fn regression_mid_trajectory_spike_is_detected() {
+        let checker = ConservationChecker::new(0.01);
+
+        let mut trajectory = Vec::new();
+        let energies = [100.0, 100.5, 1000.0, 100.5, 100.2, 100.0];
+        for (i, &e) in energies.iter().enumerate() {
+            let mut state = std::collections::HashMap::new();
+            state.insert("energy".to_string(), e);
+            trajectory.push(StateVector {
+                time: i as f64,
+                state,
+            });
+        }
+
+        // Sanity check: first and last values alone are within tolerance,
+        // so the old endpoints-only comparison would have reported no
+        // violation at all.
+        let first = trajectory.first().expect("non-empty").state["energy"];
+        let last = trajectory.last().expect("non-empty").state["energy"];
+        assert!((last - first).abs() / first.abs() < 0.01);
+
+        let violations = checker.check(&trajectory);
+        assert!(
+            !violations.is_empty(),
+            "mid-trajectory spike to 1000.0 must be detected even though the endpoints match"
+        );
+        let energy_violation = violations
+            .iter()
+            .find(|v| v.law == "Energy Conservation")
+            .expect("expected an energy conservation violation");
+        assert!((energy_violation.final_value - 1000.0).abs() < 1e-9);
+    }
+
+    /// Regression test: a trajectory that never deviates beyond tolerance
+    /// at any intermediate step (not just the endpoints) must still report
+    /// no violations.
+    #[test]
+    fn regression_no_false_positive_within_tolerance_throughout() {
+        let checker = ConservationChecker::new(0.05);
+
+        let mut trajectory = Vec::new();
+        // Small oscillation within 5% band around 100.0 at every step.
+        let energies = [100.0, 102.0, 98.0, 103.0, 99.0, 101.0];
+        for (i, &e) in energies.iter().enumerate() {
+            let mut state = std::collections::HashMap::new();
+            state.insert("energy".to_string(), e);
+            trajectory.push(StateVector {
+                time: i as f64,
+                state,
+            });
+        }
+
+        let violations = checker.check(&trajectory);
+        assert!(
+            violations.is_empty(),
+            "small in-tolerance oscillation must not be flagged: {violations:?}"
+        );
     }
 }

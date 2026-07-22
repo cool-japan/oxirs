@@ -141,15 +141,18 @@ impl StatusList2021 {
         self.bits.iter().filter(|&&b| b).count()
     }
 
-    /// Encode the bitstring for transmission
+    /// Encode the bitstring for transmission.
     ///
-    /// The spec requires GZIP compression + base64url encoding.
-    /// We implement a pure-Rust bit-packing approach (8 bits per byte)
-    /// followed by base64url encoding.
+    /// Produces the exact on-wire format mandated by the W3C StatusList2021
+    /// specification: the credential slots are bit-packed (8 bits per byte,
+    /// MSB-first within each byte), GZIP-compressed (RFC 1952), then
+    /// base64url-encoded (no padding). This is byte-for-byte interoperable with
+    /// spec-conformant external StatusList2021 verifiers.
     ///
-    /// In a production implementation, GZIP (via flate2) would further compress this.
+    /// GZIP is provided by the Pure-Rust `oxiarc-deflate` codec (COOLJAPAN
+    /// OxiARC), so no C/Fortran dependency is introduced.
     pub fn encode_bitstring(&self) -> DidResult<String> {
-        let byte_count = (self.size + 7) / 8;
+        let byte_count = self.size.div_ceil(8);
         let mut bytes = vec![0u8; byte_count];
 
         for (i, &bit) in self.bits.iter().enumerate() {
@@ -160,16 +163,32 @@ impl StatusList2021 {
             }
         }
 
-        // Apply simple RLE-like compression: just base64url-encode the packed bytes
-        // Note: A full implementation would use GZIP here
-        Ok(URL_SAFE_NO_PAD.encode(&bytes))
+        // GZIP-compress the packed bitstring (spec-mandated), then base64url.
+        let compressed = oxiarc_deflate::gzip_compress(&bytes, 6).map_err(|e| {
+            DidError::SerializationError(format!("StatusList2021 gzip compression failed: {}", e))
+        })?;
+        Ok(URL_SAFE_NO_PAD.encode(&compressed))
     }
 
-    /// Decode a bitstring from the encoded format
+    /// Decode a bitstring from the encoded (base64url + GZIP) format.
+    ///
+    /// Reverses [`encode_bitstring`]: base64url-decode, then gunzip, then unpack
+    /// the bits. Malformed input (invalid base64url, or bytes that are not a
+    /// valid gzip stream) is rejected with an error rather than being silently
+    /// misinterpreted as raw bit data.
     pub fn decode_bitstring(encoded: &str, expected_size: usize) -> DidResult<Vec<bool>> {
-        let bytes = URL_SAFE_NO_PAD
+        let compressed = URL_SAFE_NO_PAD
             .decode(encoded)
             .map_err(|e| DidError::SerializationError(format!("Base64 decode error: {}", e)))?;
+
+        // Gunzip the spec-mandated GZIP container. A non-gzip payload fails here
+        // (fail-loud) instead of producing garbage bit values.
+        let bytes = oxiarc_deflate::gzip_decompress(&compressed).map_err(|e| {
+            DidError::SerializationError(format!(
+                "StatusList2021 gzip decompression failed (encodedList is not a valid gzip stream): {}",
+                e
+            ))
+        })?;
 
         let mut bits = Vec::with_capacity(expected_size);
         for byte in &bytes {
@@ -503,6 +522,45 @@ mod tests {
         assert!(decoded[511]);
         assert!(!decoded[1]);
         assert!(!decoded[50]);
+    }
+
+    #[test]
+    fn regression_encoded_list_is_gzip_compressed() {
+        // The StatusList2021 `encodedList` must be a real GZIP (RFC 1952) stream
+        // so external spec-conformant verifiers can gunzip it.
+        let mut list = StatusList2021::new(
+            "https://example.com/status/1",
+            "did:key:z6Mk",
+            MIN_LIST_SIZE,
+        )
+        .unwrap();
+        list.set_status(42, true).unwrap();
+
+        let encoded = list.encode_bitstring().unwrap();
+        let raw = URL_SAFE_NO_PAD.decode(&encoded).unwrap();
+
+        // GZIP magic header: 0x1f 0x8b, compression method DEFLATE (0x08).
+        assert!(raw.len() >= 3, "gzip stream too short");
+        assert_eq!(
+            &raw[0..2],
+            &[0x1f, 0x8b],
+            "encodedList must be a gzip stream"
+        );
+        assert_eq!(raw[2], 0x08, "gzip DEFLATE compression method");
+
+        // And it must still round-trip back to the original bits.
+        let decoded = StatusList2021::decode_bitstring(&encoded, MIN_LIST_SIZE).unwrap();
+        assert!(decoded[42]);
+        assert!(!decoded[43]);
+    }
+
+    #[test]
+    fn regression_decode_bitstring_rejects_non_gzip_input() {
+        // Bytes that are valid base64url but NOT a gzip stream must be rejected
+        // (fail-loud), never silently misread as raw bit data.
+        let junk = URL_SAFE_NO_PAD.encode([0u8, 1, 2, 3, 4, 5, 6, 7]);
+        let result = StatusList2021::decode_bitstring(&junk, 64);
+        assert!(result.is_err(), "non-gzip encodedList must be rejected");
     }
 
     #[test]

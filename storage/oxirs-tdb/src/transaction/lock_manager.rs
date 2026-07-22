@@ -134,21 +134,50 @@ impl LockManager {
         // Simplified: just fail after timeout (real impl would use condvar)
         std::thread::sleep(self.deadlock_timeout);
 
-        // Check if lock was granted
-        let lock_table = self.lock_table.read().expect("lock poisoned");
-        if let Some(entry) = lock_table.get(&page_id) {
+        // Resolve the outcome atomically under the lock-table write lock so a
+        // concurrent release()/promotion cannot slip in between the "was it
+        // granted?" check and the cleanup of our wait-queue entry.
+        let mut lock_table = self.lock_table.write().expect("lock poisoned");
+        if let Some(entry) = lock_table.get_mut(&page_id) {
             if entry.holds_lock(txn_id) {
-                // Lock was granted
+                // Lock was granted while we waited: record it and succeed.
+                drop(lock_table);
                 let mut txn_locks = self.txn_locks.write().expect("lock poisoned");
                 txn_locks.entry(txn_id).or_default().insert((page_id, mode));
                 return Ok(());
             }
+
+            // Timed out while still waiting. Remove our stale waiter from the
+            // queue BEFORE returning: otherwise (1) `try_lock`'s grant gate
+            // (`waiting.is_empty()`) would stay false forever, permanently
+            // blocking every new locker on this page, and (2) a later
+            // `release()` would promote this abandoned request into `granted`,
+            // creating a phantom lock that is never released (a lock leak and
+            // liveness deadlock — precisely NOT the deadlock the timeout is
+            // meant to break).
+            entry.waiting.retain(|req| req.txn_id != txn_id);
+            if entry.granted.is_empty() && entry.waiting.is_empty() {
+                lock_table.remove(&page_id);
+            }
         }
+        drop(lock_table);
 
         // Timeout - deadlock detected
         Err(TdbError::Deadlock {
             txn_id: txn_id.as_u64(),
         })
+    }
+
+    /// Create a lock manager with a custom deadlock/wait timeout.
+    ///
+    /// Primarily for tests that need a short timeout; production uses the default
+    /// (see [`LockManager::new`]).
+    pub fn with_timeout(deadlock_timeout: Duration) -> Self {
+        Self {
+            lock_table: RwLock::new(HashMap::new()),
+            txn_locks: RwLock::new(HashMap::new()),
+            deadlock_timeout,
+        }
     }
 
     /// Try to acquire lock without blocking
@@ -397,6 +426,48 @@ mod tests {
         assert_eq!(locks.len(), 2);
 
         lm.release_all(txn1).unwrap();
+    }
+
+    #[test]
+    fn regression_timed_out_waiter_leaves_no_phantom_lock() {
+        // txn1 holds an exclusive lock; txn2 requests an incompatible lock and
+        // times out. The timed-out waiter must be removed so that (a) the wait
+        // queue is empty, (b) releasing txn1 does NOT promote txn2 into a phantom
+        // grant, and (c) a fresh locker can subsequently acquire the page.
+        let lm = LockManager::with_timeout(Duration::from_millis(50));
+        let txn1 = TxnId::new(1);
+        let txn2 = TxnId::new(2);
+        let txn3 = TxnId::new(3);
+        let page: PageId = 42;
+
+        lm.lock(txn1, page, LockMode::Exclusive).unwrap();
+
+        // txn2 cannot acquire and times out.
+        let err = lm.lock(txn2, page, LockMode::Exclusive);
+        assert!(matches!(err, Err(TdbError::Deadlock { .. })));
+
+        // The stale waiter must be gone.
+        assert!(
+            lm.get_lock_waiters(page).is_empty(),
+            "timed-out waiter must be removed from the queue"
+        );
+
+        // Releasing txn1 must NOT resurrect txn2 as a phantom holder.
+        lm.release_all(txn1).unwrap();
+        let holders: Vec<_> = lm
+            .get_lock_holders(page)
+            .into_iter()
+            .map(|(t, _)| t)
+            .collect();
+        assert!(
+            !holders.contains(&txn2),
+            "abandoned waiter must not be promoted to a phantom grant"
+        );
+
+        // The page is fully free again: a new locker acquires it immediately.
+        assert!(lm.try_lock(txn3, page, LockMode::Exclusive).unwrap());
+
+        lm.release_all(txn3).unwrap();
     }
 
     #[test]

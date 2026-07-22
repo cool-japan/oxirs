@@ -585,8 +585,43 @@ impl MessageBridgeManager {
         Ok(bridge_id)
     }
 
+    /// Whether a real transport is implemented for the given external system.
+    ///
+    /// Only the FileSystem transport is implemented in pure Rust today. Network
+    /// transports (Kafka/RabbitMQ/Redis/HTTP/etc.) are not, so bridges using
+    /// them must fail loud at start rather than reporting Active while silently
+    /// transferring zero messages.
+    fn transport_implemented(system_type: &ExternalSystemType) -> bool {
+        matches!(system_type, ExternalSystemType::FileSystem { .. })
+    }
+
     /// Start a bridge
     pub async fn start_bridge(&self, bridge_id: &str) -> Result<()> {
+        // Validate that both endpoints have an implemented transport BEFORE
+        // marking the bridge active. This upholds the fail-loud contract: a
+        // bridge to an unimplemented backend must error, not silently no-op.
+        {
+            let bridges = self.bridges.read().await;
+            let bridge = bridges
+                .get(bridge_id)
+                .ok_or_else(|| anyhow!("Bridge not found"))?;
+
+            if !Self::transport_implemented(&bridge.source.system_type) {
+                return Err(anyhow!(
+                    "Bridge source transport {:?} is not implemented; cannot start bridge {}",
+                    bridge.source.system_type,
+                    bridge_id
+                ));
+            }
+            if !Self::transport_implemented(&bridge.target.system_type) {
+                return Err(anyhow!(
+                    "Bridge target transport {:?} is not implemented; cannot start bridge {}",
+                    bridge.target.system_type,
+                    bridge_id
+                ));
+            }
+        }
+
         let bridge_exists = {
             let mut bridges = self.bridges.write().await;
             if let Some(bridge) = bridges.get_mut(bridge_id) {
@@ -802,10 +837,10 @@ impl MessageBridgeManager {
                 pattern,
                 watch_mode,
             } => Self::receive_file_messages(directory, pattern, *watch_mode, config).await,
-            _ => {
-                warn!("Message receiving not implemented for this system type");
-                Ok(vec![])
-            }
+            other => Err(anyhow!(
+                "Message receiving is not implemented for system type {:?}",
+                other
+            )),
         }
     }
 
@@ -816,9 +851,9 @@ impl MessageBridgeManager {
         _consumer_group: &Option<String>,
         _config: &BridgeConfig,
     ) -> Result<Vec<ExternalMessage>> {
-        // This would implement Kafka consumer logic
-        // For now, return empty to avoid compilation errors
-        Ok(vec![])
+        Err(anyhow!(
+            "Kafka bridge consumer transport is not implemented"
+        ))
     }
 
     /// Receive messages from RabbitMQ
@@ -829,8 +864,9 @@ impl MessageBridgeManager {
         _queue: &Option<String>,
         _config: &BridgeConfig,
     ) -> Result<Vec<ExternalMessage>> {
-        // This would implement RabbitMQ consumer logic
-        Ok(vec![])
+        Err(anyhow!(
+            "RabbitMQ bridge consumer transport is not implemented"
+        ))
     }
 
     /// Receive messages from Redis
@@ -839,8 +875,9 @@ impl MessageBridgeManager {
         _channels: &[String],
         _config: &BridgeConfig,
     ) -> Result<Vec<ExternalMessage>> {
-        // This would implement Redis Pub/Sub consumer logic
-        Ok(vec![])
+        Err(anyhow!(
+            "Redis Pub/Sub bridge consumer transport is not implemented"
+        ))
     }
 
     /// Receive messages from HTTP endpoints
@@ -850,19 +887,89 @@ impl MessageBridgeManager {
         _headers: &HashMap<String, String>,
         _config: &BridgeConfig,
     ) -> Result<Vec<ExternalMessage>> {
-        // This would implement HTTP polling logic
-        Ok(vec![])
+        Err(anyhow!(
+            "HTTP REST bridge consumer transport is not implemented"
+        ))
     }
 
-    /// Receive messages from file system
+    /// Receive messages from the file system.
+    ///
+    /// Reads files under `directory` whose file name matches `pattern` (a simple
+    /// glob supporting a single leading/trailing `*`, or `*` for everything).
+    /// Each matched file becomes one [`ExternalMessage`] whose payload is the
+    /// file contents; the file is then deleted so it is consumed exactly once.
     async fn receive_file_messages(
-        _directory: &str,
-        _pattern: &str,
+        directory: &str,
+        pattern: &str,
         _watch_mode: bool,
-        _config: &BridgeConfig,
+        config: &BridgeConfig,
     ) -> Result<Vec<ExternalMessage>> {
-        // This would implement file system watching logic
-        Ok(vec![])
+        let mut messages = Vec::new();
+
+        let mut read_dir = match tokio::fs::read_dir(directory).await {
+            Ok(read_dir) => read_dir,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(messages),
+            Err(e) => {
+                return Err(anyhow!(
+                    "Failed to read bridge source directory {}: {}",
+                    directory,
+                    e
+                ))
+            }
+        };
+
+        while let Some(entry) = read_dir.next_entry().await? {
+            if messages.len() >= config.max_queue_size {
+                break;
+            }
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let file_name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+            if !Self::file_name_matches(&file_name, pattern) {
+                continue;
+            }
+
+            let payload = tokio::fs::read(&path).await?;
+            let mut metadata = HashMap::new();
+            metadata.insert("file_name".to_string(), file_name.clone());
+            metadata.insert("directory".to_string(), directory.to_string());
+
+            messages.push(ExternalMessage {
+                id: Uuid::new_v4().to_string(),
+                headers: HashMap::new(),
+                payload,
+                format: MessageFormat::Binary,
+                timestamp: chrono::Utc::now(),
+                source: format!("file://{directory}/{file_name}"),
+                metadata,
+            });
+
+            // Consume the file so it is not re-read on the next poll.
+            tokio::fs::remove_file(&path).await?;
+        }
+
+        Ok(messages)
+    }
+
+    /// Match a file name against a simple glob pattern.
+    ///
+    /// Supports `*` (match everything), `*.ext` (suffix), `prefix*` (prefix),
+    /// and exact names. This intentionally covers the common cases without a
+    /// regex dependency.
+    fn file_name_matches(file_name: &str, pattern: &str) -> bool {
+        if pattern == "*" || pattern.is_empty() {
+            return true;
+        }
+        match (pattern.strip_prefix('*'), pattern.strip_suffix('*')) {
+            (Some(suffix), _) if !pattern.ends_with('*') => file_name.ends_with(suffix),
+            (_, Some(prefix)) if !pattern.starts_with('*') => file_name.starts_with(prefix),
+            _ => file_name == pattern,
+        }
     }
 
     /// Process a message through the bridge
@@ -939,10 +1046,10 @@ impl MessageBridgeManager {
             ExternalSystemType::FileSystem { directory, .. } => {
                 Self::send_file_message(directory, message).await
             }
-            _ => {
-                warn!("Message sending not implemented for this system type");
-                Ok(())
-            }
+            other => Err(anyhow!(
+                "Message sending is not implemented for system type {:?}",
+                other
+            )),
         }
     }
 
@@ -952,8 +1059,9 @@ impl MessageBridgeManager {
         _topics: &[String],
         _message: &ExternalMessage,
     ) -> Result<()> {
-        // This would implement Kafka producer logic
-        Ok(())
+        Err(anyhow!(
+            "Kafka bridge producer transport is not implemented"
+        ))
     }
 
     /// Send message to RabbitMQ
@@ -963,8 +1071,9 @@ impl MessageBridgeManager {
         _routing_key: &str,
         _message: &ExternalMessage,
     ) -> Result<()> {
-        // This would implement RabbitMQ publisher logic
-        Ok(())
+        Err(anyhow!(
+            "RabbitMQ bridge producer transport is not implemented"
+        ))
     }
 
     /// Send message to Redis
@@ -973,8 +1082,9 @@ impl MessageBridgeManager {
         _channels: &[String],
         _message: &ExternalMessage,
     ) -> Result<()> {
-        // This would implement Redis Pub/Sub publisher logic
-        Ok(())
+        Err(anyhow!(
+            "Redis Pub/Sub bridge producer transport is not implemented"
+        ))
     }
 
     /// Send message via HTTP
@@ -984,13 +1094,18 @@ impl MessageBridgeManager {
         _headers: &HashMap<String, String>,
         _message: &ExternalMessage,
     ) -> Result<()> {
-        // This would implement HTTP POST logic
-        Ok(())
+        Err(anyhow!(
+            "HTTP REST bridge producer transport is not implemented"
+        ))
     }
 
-    /// Send message to file system
-    async fn send_file_message(_directory: &str, _message: &ExternalMessage) -> Result<()> {
-        // This would implement file writing logic
+    /// Send a message to the file system by writing its payload to a new file in
+    /// `directory` (named after the message id).
+    async fn send_file_message(directory: &str, message: &ExternalMessage) -> Result<()> {
+        tokio::fs::create_dir_all(directory).await?;
+        let file_path = std::path::Path::new(directory).join(format!("{}.msg", message.id));
+        tokio::fs::write(&file_path, &message.payload).await?;
+        debug!("Wrote bridge message {} to {:?}", message.id, file_path);
         Ok(())
     }
 
@@ -1343,5 +1458,122 @@ mod tests {
 
         let action = engine.evaluate_rules(&[rule], &message).await.unwrap();
         assert!(matches!(action, RuleAction::Forward));
+    }
+
+    #[test]
+    fn regression_file_name_matches_glob() {
+        assert!(MessageBridgeManager::file_name_matches("a.json", "*"));
+        assert!(MessageBridgeManager::file_name_matches("a.json", "*.json"));
+        assert!(!MessageBridgeManager::file_name_matches("a.txt", "*.json"));
+        assert!(MessageBridgeManager::file_name_matches("data_1", "data_*"));
+        assert!(!MessageBridgeManager::file_name_matches("other", "data_*"));
+        assert!(MessageBridgeManager::file_name_matches("exact", "exact"));
+    }
+
+    #[tokio::test]
+    async fn regression_file_transport_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("oxirs-bridge-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let dir_str = dir.to_string_lossy().to_string();
+
+        // Write a message via the real file sender.
+        let message = ExternalMessage {
+            id: "msg-1".to_string(),
+            headers: HashMap::new(),
+            payload: b"hello-bridge".to_vec(),
+            format: MessageFormat::Binary,
+            timestamp: chrono::Utc::now(),
+            source: "test".to_string(),
+            metadata: HashMap::new(),
+        };
+        MessageBridgeManager::send_file_message(&dir_str, &message)
+            .await
+            .unwrap();
+
+        // Receiving must actually read the file back (not return empty).
+        let received = MessageBridgeManager::receive_file_messages(
+            &dir_str,
+            "*",
+            false,
+            &BridgeConfig::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(received.len(), 1);
+        assert_eq!(received[0].payload, b"hello-bridge");
+
+        // File is consumed: a second receive returns nothing.
+        let again = MessageBridgeManager::receive_file_messages(
+            &dir_str,
+            "*",
+            false,
+            &BridgeConfig::default(),
+        )
+        .await
+        .unwrap();
+        assert!(again.is_empty());
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn regression_start_bridge_rejects_unimplemented_transport() {
+        let manager = MessageBridgeManager::new().await.unwrap();
+        manager
+            .register_transformer(Box::new(JsonTransformer))
+            .await;
+
+        let kafka = ExternalSystemConfig {
+            system_type: ExternalSystemType::Kafka {
+                brokers: vec!["localhost:9092".to_string()],
+                topics: vec!["t".to_string()],
+                consumer_group: None,
+            },
+            connection: ConnectionConfig {
+                timeout: Duration::from_secs(1),
+                keep_alive: Duration::from_secs(1),
+                retry: RetryConfig {
+                    max_attempts: 1,
+                    initial_delay: Duration::from_millis(1),
+                    max_delay: Duration::from_millis(1),
+                    exponential_backoff: false,
+                },
+                tls: None,
+            },
+            format: FormatConfig {
+                format: MessageFormat::Json,
+                encoding: "utf-8".to_string(),
+                compression: None,
+                schema_validation: false,
+            },
+            security: SecurityConfig {
+                auth: AuthenticationMethod::None,
+                encryption: EncryptionConfig {
+                    enabled: false,
+                    algorithm: None,
+                    key_id: None,
+                },
+                access_control: AccessControlConfig {
+                    read_permissions: vec![],
+                    write_permissions: vec![],
+                    admin_permissions: vec![],
+                },
+            },
+        };
+
+        let bridge_id = manager
+            .create_bridge(
+                BridgeType::SourceToTarget,
+                kafka.clone(),
+                kafka,
+                "json".to_string(),
+                vec![],
+                BridgeConfig::default(),
+            )
+            .await
+            .unwrap();
+
+        // Starting a bridge with an unimplemented transport must fail loud.
+        assert!(manager.start_bridge(&bridge_id).await.is_err());
     }
 }

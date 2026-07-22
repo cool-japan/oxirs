@@ -24,10 +24,12 @@
 //! ```text
 //! [col_name_len: u16 LE] [col_name: utf-8]
 //! [value_type: u8]  0=Int64, 1=Double, 2=ByteArray
-//! [compression: u8] 0=None, 1=Snappy(sim), 2=Gzip(sim)
+//! [compression: u8] 0=None, 1=Snappy, 2=Gzip
 //! [n_values: u32 LE]
-//! [data_len: u32 LE]
-//! [data: data_len bytes]
+//! [data_len: u32 LE] (length of `data` *after* compression)
+//! [data: data_len bytes] (real Snappy/Gzip-compressed bytes via OxiARC when
+//!                          compression != None; the codec tag always
+//!                          matches the actual encoding of these bytes)
 //! ```
 //!
 //! File footer:
@@ -58,9 +60,9 @@ pub enum ParquetCompression {
     /// No compression — raw data bytes.
     #[default]
     None,
-    /// Simulated Snappy compression (identity in this pure-Rust impl).
+    /// Real Snappy compression (pure Rust, via `oxiarc-snappy`).
     Snappy,
-    /// Simulated Gzip compression (identity in this pure-Rust impl).
+    /// Real Gzip/DEFLATE compression (pure Rust, via `oxiarc-deflate`).
     Gzip,
 }
 
@@ -79,6 +81,36 @@ impl ParquetCompression {
             1 => Some(ParquetCompression::Snappy),
             2 => Some(ParquetCompression::Gzip),
             _ => None,
+        }
+    }
+
+    /// Actually compress `raw` bytes using the codec this variant names.
+    ///
+    /// The codec tag embedded in the column-chunk header must always match
+    /// the real encoding of the bytes that follow it; this is what makes
+    /// that true (previously the compression selection had no effect and
+    /// data was always written uncompressed, regardless of the codec tag).
+    fn compress(&self, raw: &[u8]) -> TsdbResult<Vec<u8>> {
+        match self {
+            ParquetCompression::None => Ok(raw.to_vec()),
+            ParquetCompression::Snappy => Ok(oxiarc_snappy::compress(raw)),
+            ParquetCompression::Gzip => {
+                // Level 6 = balanced (oxiarc-deflate's documented default).
+                oxiarc_deflate::gzip_compress(raw, 6)
+                    .map_err(|e| TsdbError::Compression(format!("Parquet gzip compress: {e}")))
+            }
+        }
+    }
+
+    /// Reverse of [`Self::compress`]: decode wire bytes back to the raw
+    /// (pre-compression) column encoding produced by [`ParquetValues::encode`].
+    fn decompress(&self, data: &[u8]) -> TsdbResult<Vec<u8>> {
+        match self {
+            ParquetCompression::None => Ok(data.to_vec()),
+            ParquetCompression::Snappy => oxiarc_snappy::decompress(data)
+                .map_err(|e| TsdbError::Decompression(format!("Parquet snappy decompress: {e}"))),
+            ParquetCompression::Gzip => oxiarc_deflate::gzip_decompress(data)
+                .map_err(|e| TsdbError::Decompression(format!("Parquet gzip decompress: {e}"))),
         }
     }
 }
@@ -317,10 +349,14 @@ impl ParquetWriter {
         buf.push(col.values.type_code());
         buf.push(self.compression.code());
 
-        // Encode values (compression is simulated as identity).
-        let data = col.values.encode();
+        // Encode values to their raw (uncompressed) wire representation, then
+        // actually apply the codec the header claims — the codec tag written
+        // above must always match the real encoding of the bytes that follow.
+        let raw = col.values.encode();
+        let data = self.compression.compress(&raw)?;
 
-        // n_values and data_len.
+        // n_values (of the logical column) and data_len (of the bytes on the
+        // wire, i.e. post-compression).
         buf.extend_from_slice(&(col.values.n_values() as u32).to_le_bytes());
         buf.extend_from_slice(&(data.len() as u32).to_le_bytes());
 
@@ -426,7 +462,12 @@ impl ParquetReader {
             ));
         }
         let type_code = data[pos];
-        let _compression = ParquetCompression::from_code(data[pos + 1]).unwrap_or_default();
+        let compression_code = data[pos + 1];
+        let compression = ParquetCompression::from_code(compression_code).ok_or_else(|| {
+            TsdbError::Decompression(format!(
+                "Parquet column: unknown compression code {compression_code}"
+            ))
+        })?;
         pos += 2;
 
         let n_values =
@@ -441,7 +482,11 @@ impl ParquetReader {
                 "Parquet column: buffer too short for column data".into(),
             ));
         }
-        let values = ParquetValues::decode(&data[pos..pos + data_len], type_code, n_values)?;
+        // Reverse the codec named by the header before decoding the logical
+        // column values, so the codec tag always describes the bytes that
+        // were actually written.
+        let raw = compression.decompress(&data[pos..pos + data_len])?;
+        let values = ParquetValues::decode(&raw, type_code, n_values)?;
         pos += data_len;
 
         Ok((ParquetColumn { name, values }, pos))
@@ -586,6 +631,95 @@ mod tests {
         let col = ParquetColumn::new("x", ParquetValues::Int64(vec![1, 2, 3]));
         assert_eq!(col.len(), 3);
         assert!(!col.is_empty());
+    }
+
+    #[test]
+    fn regression_snappy_compression_actually_shrinks_repetitive_data() {
+        // Highly repetitive data compresses well under real Snappy; a
+        // codec that "compresses" as identity would produce byte-identical
+        // output to `None`, which this test rules out.
+        let repetitive: Vec<i64> = std::iter::repeat_n(42i64, 5000).collect();
+        let cols = vec![ParquetColumn::new(
+            "v",
+            ParquetValues::Int64(repetitive.clone()),
+        )];
+
+        let none_writer = ParquetWriter::new(ParquetCompression::None);
+        let none_bytes = none_writer.write_columns(&cols).expect("should succeed");
+
+        let snappy_writer = ParquetWriter::new(ParquetCompression::Snappy);
+        let snappy_bytes = snappy_writer.write_columns(&cols).expect("should succeed");
+
+        assert!(
+            snappy_bytes.len() < none_bytes.len(),
+            "snappy-compressed output ({} bytes) must be smaller than \
+             uncompressed output ({} bytes) for highly repetitive data",
+            snappy_bytes.len(),
+            none_bytes.len()
+        );
+
+        // And it must still round-trip losslessly.
+        let decoded = ParquetReader::read_columns(&snappy_bytes).expect("should succeed");
+        assert_eq!(cols, decoded);
+    }
+
+    #[test]
+    fn regression_gzip_compression_actually_shrinks_repetitive_data() {
+        let repetitive: Vec<i64> = std::iter::repeat_n(7i64, 5000).collect();
+        let cols = vec![ParquetColumn::new(
+            "v",
+            ParquetValues::Int64(repetitive.clone()),
+        )];
+
+        let none_writer = ParquetWriter::new(ParquetCompression::None);
+        let none_bytes = none_writer.write_columns(&cols).expect("should succeed");
+
+        let gzip_writer = ParquetWriter::new(ParquetCompression::Gzip);
+        let gzip_bytes = gzip_writer.write_columns(&cols).expect("should succeed");
+
+        assert!(
+            gzip_bytes.len() < none_bytes.len(),
+            "gzip-compressed output ({} bytes) must be smaller than \
+             uncompressed output ({} bytes) for highly repetitive data",
+            gzip_bytes.len(),
+            none_bytes.len()
+        );
+
+        let decoded = ParquetReader::read_columns(&gzip_bytes).expect("should succeed");
+        assert_eq!(cols, decoded);
+    }
+
+    #[test]
+    fn regression_compression_codec_tag_matches_actual_bytes() {
+        // A reader that trusts the codec tag and tries to decode a Snappy
+        // stream as Gzip (or vice versa) must fail, proving the tag isn't
+        // just decorative: it genuinely reflects the encoding on the wire.
+        let cols = vec![ParquetColumn::new(
+            "v",
+            ParquetValues::Int64(vec![1, 2, 3, 4, 5]),
+        )];
+        let snappy_writer = ParquetWriter::new(ParquetCompression::Snappy);
+        let snappy_bytes = snappy_writer.write_columns(&cols).expect("should succeed");
+
+        // Flip the compression-code byte in the (single) column chunk header
+        // from Snappy(1) to Gzip(2) without touching the payload, then
+        // verify decoding now fails instead of silently returning garbage.
+        let magic_len = 4;
+        let name_len_pos = magic_len;
+        let name_len =
+            u16::from_le_bytes([snappy_bytes[name_len_pos], snappy_bytes[name_len_pos + 1]])
+                as usize;
+        let compression_byte_pos = name_len_pos + 2 + name_len + 1; // + type_code byte
+        let mut corrupted = snappy_bytes.clone();
+        assert_eq!(corrupted[compression_byte_pos], 1, "expected Snappy code");
+        corrupted[compression_byte_pos] = 2; // claim Gzip instead
+
+        let result = ParquetReader::read_columns(&corrupted);
+        assert!(
+            result.is_err(),
+            "decoding Snappy bytes mislabeled as Gzip must fail loudly, not \
+             silently return wrong data"
+        );
     }
 
     #[test]

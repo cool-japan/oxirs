@@ -502,6 +502,16 @@ pub struct MultiLevelCache {
     default_ttl: Duration,
 }
 
+impl fmt::Debug for MultiLevelCache {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MultiLevelCache")
+            .field("default_ttl", &self.default_ttl)
+            .field("l1_len", &self.l1_len())
+            .field("l2_len", &self.l2_len())
+            .finish()
+    }
+}
+
 impl MultiLevelCache {
     /// Create a multi-level cache with the given L1 capacity and default TTL.
     ///
@@ -513,6 +523,34 @@ impl MultiLevelCache {
             l2: Arc::new(Mutex::new(l2)),
             default_ttl,
         })
+    }
+
+    /// Create a multi-level cache without ever failing.
+    ///
+    /// Attempts a unique temporary directory for L2; if that cannot be created,
+    /// falls back to the base temp directory (which always exists). Used by
+    /// long-lived services that construct the cache in an infallible context.
+    pub fn new_ephemeral(l1_capacity: usize, default_ttl: Duration) -> Self {
+        let base = std::env::temp_dir();
+        let unique = base.join(format!(
+            "oxirs-federate-l2-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let l2 = DiskCache::open(&unique)
+            .or_else(|_| DiskCache::open(&base))
+            .unwrap_or_else(|_| DiskCache {
+                dir: base.clone(),
+                hits: 0,
+                misses: 0,
+            });
+        Self {
+            l1: Arc::new(Mutex::new(MemoryCache::new(l1_capacity))),
+            l2: Arc::new(Mutex::new(l2)),
+            default_ttl,
+        }
     }
 
     /// Create a multi-level cache with a specific directory for L2.

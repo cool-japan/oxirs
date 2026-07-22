@@ -13,7 +13,7 @@ pub struct CanFrameView {
     pub sa: u8,
     pub da: Option<u8>,
     pub data_hex: String,
-    pub length: u8,
+    pub length: u16,
     pub timestamp_us: u64,
     pub pgn_name: String,
     pub decoded_signals: Vec<SignalView>,
@@ -256,13 +256,21 @@ fn decode_frame(
     };
 
     let seq = rt.frame_count.load(Ordering::Relaxed);
+    // Use the reassembled J1939 message payload (`message.data`), not the
+    // raw physical `frame.data`: for multi-packet transfers (BAM/RTS-CTS,
+    // e.g. DM1 DTCs or VIN broadcasts, up to 1785 bytes) `frame` is only the
+    // final TP.DT segment that triggered reassembly, while `decoded_signals`
+    // below are derived from the full reassembled `message`. For
+    // single-frame messages `message.data` equals `frame.data` (see
+    // `J1939Message::from_frame`), so this is a strict improvement with no
+    // change in behavior for the common case.
     Some(CanFrameView {
         id: format!("live_{seq}"),
         pgn,
         sa: message.header.source_address,
         da: message.header.destination_address,
-        data_hex: hex_encode(&frame.data),
-        length: frame.data.len() as u8,
+        data_hex: hex_encode(&message.data),
+        length: message.data.len() as u16,
         timestamp_us: rt.started_at.elapsed().as_micros() as u64,
         pgn_name,
         decoded_signals,
@@ -308,9 +316,35 @@ pub fn get_frames(filter: Option<FrameFilter>, limit: Option<u32>) -> AppResult<
         }
     };
 
-    let frames: Vec<CanFrameView> = rt
-        .lock_frames()
+    let frames = select_recent_frames(&rt.lock_frames(), &filter, limit);
+
+    Ok(FramesResponse {
+        frames,
+        demo,
+        source_configured,
+        error,
+    })
+}
+
+/// Select up to `limit` of the most recently buffered frames matching
+/// `filter`, returned in chronological (oldest-first) order.
+///
+/// `buffer` is a ring buffer filled via `push_back` (newest at the back) and
+/// evicted via `pop_front` (oldest at the front) once full. Iterating from
+/// the back (`.rev()`) and taking `limit` therefore yields the most recently
+/// observed matching frames rather than the oldest ones stuck at the front —
+/// critical for a live monitor where `limit` is typically much smaller than
+/// the buffer's total occupancy. The newest-first results are reversed
+/// before returning so callers see frames in the chronological order they
+/// expect.
+fn select_recent_frames(
+    buffer: &VecDeque<CanFrameView>,
+    filter: &FrameFilter,
+    limit: usize,
+) -> Vec<CanFrameView> {
+    let mut frames: Vec<CanFrameView> = buffer
         .iter()
+        .rev()
         .filter(|f| {
             if let Some(pgn) = filter.pgn {
                 if f.pgn != pgn {
@@ -332,13 +366,8 @@ pub fn get_frames(filter: Option<FrameFilter>, limit: Option<u32>) -> AppResult<
         .take(limit)
         .cloned()
         .collect();
-
-    Ok(FramesResponse {
-        frames,
-        demo,
-        source_configured,
-        error,
-    })
+    frames.reverse();
+    frames
 }
 
 /// Return current bus statistics.
@@ -780,5 +809,126 @@ mod tests {
         let back: BusStatsResponse = serde_json::from_str(&json).expect("deserialize");
         assert!(!back.source_configured);
         assert_eq!(back.error.as_deref(), Some("no CAN source configured"));
+    }
+
+    fn view(id: &str, timestamp_us: u64) -> CanFrameView {
+        CanFrameView {
+            id: id.to_string(),
+            pgn: 61_444,
+            sa: 0,
+            da: None,
+            data_hex: "00".to_string(),
+            length: 1,
+            timestamp_us,
+            pgn_name: "EEC1".to_string(),
+            decoded_signals: vec![],
+        }
+    }
+
+    /// Regression test for the P0 finding: with a buffer holding more frames
+    /// than `limit`, `select_recent_frames` must return the most recently
+    /// pushed frames (largest timestamps), not the oldest ones stuck at the
+    /// front of the ring buffer, and must preserve chronological order in
+    /// the response.
+    #[test]
+    fn regression_select_recent_frames_returns_newest_not_oldest() {
+        let mut buf: VecDeque<CanFrameView> = VecDeque::new();
+        for i in 0..100u64 {
+            buf.push_back(view(&format!("f{i}"), i));
+        }
+
+        let filter = FrameFilter::default();
+        let result = select_recent_frames(&buf, &filter, 10);
+
+        assert_eq!(result.len(), 10);
+        // Must be the 10 most recently pushed frames: ids f90..f99.
+        let ids: Vec<&str> = result.iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec!["f90", "f91", "f92", "f93", "f94", "f95", "f96", "f97", "f98", "f99"]
+        );
+        // Chronological order (oldest of the selected window first).
+        for pair in result.windows(2) {
+            assert!(pair[0].timestamp_us < pair[1].timestamp_us);
+        }
+    }
+
+    /// A second poll with the buffer unchanged except for one newly pushed
+    /// frame must reflect that new frame at `limit`-sized windows — i.e. the
+    /// "live monitor never advances" regression must not reappear.
+    #[test]
+    fn regression_select_recent_frames_advances_as_new_frames_arrive() {
+        let mut buf: VecDeque<CanFrameView> = VecDeque::new();
+        for i in 0..20u64 {
+            buf.push_back(view(&format!("f{i}"), i));
+        }
+        let filter = FrameFilter::default();
+        let first_poll = select_recent_frames(&buf, &filter, 5);
+        assert_eq!(
+            first_poll.iter().map(|f| f.id.clone()).collect::<Vec<_>>(),
+            vec!["f15", "f16", "f17", "f18", "f19"]
+        );
+
+        buf.push_back(view("f20", 20));
+        let second_poll = select_recent_frames(&buf, &filter, 5);
+        assert_eq!(
+            second_poll.iter().map(|f| f.id.clone()).collect::<Vec<_>>(),
+            vec!["f16", "f17", "f18", "f19", "f20"]
+        );
+        assert_ne!(
+            first_poll.last().map(|f| &f.id),
+            second_poll.last().map(|f| &f.id)
+        );
+    }
+
+    /// Filtering combined with the newest-first selection must still return
+    /// the most recent frames satisfying the filter, not the oldest.
+    #[test]
+    fn regression_select_recent_frames_respects_filter_and_recency() {
+        let mut buf: VecDeque<CanFrameView> = VecDeque::new();
+        for i in 0..10u64 {
+            let mut f = view(&format!("a{i}"), i);
+            f.pgn = 1;
+            buf.push_back(f);
+        }
+        for i in 10..20u64 {
+            let mut f = view(&format!("b{i}"), i);
+            f.pgn = 2;
+            buf.push_back(f);
+        }
+        // Interleave a couple more pgn=1 frames near the end.
+        buf.push_back({
+            let mut f = view("a_late1", 20);
+            f.pgn = 1;
+            f
+        });
+        buf.push_back({
+            let mut f = view("a_late2", 21);
+            f.pgn = 1;
+            f
+        });
+
+        let filter = FrameFilter {
+            pgn: Some(1),
+            sa: None,
+            min_timestamp_us: None,
+        };
+        let result = select_recent_frames(&buf, &filter, 2);
+        let ids: Vec<&str> = result.iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(ids, vec!["a_late1", "a_late2"]);
+    }
+
+    /// Regression test for the P1 finding: `CanFrameView::length` must be
+    /// wide enough to hold a reassembled J1939 transport-protocol message
+    /// (up to 1785 bytes per SAE J1939-21), which overflows a `u8`.
+    #[test]
+    fn regression_frame_view_length_holds_max_j1939_tp_message_size() {
+        let max_j1939_tp_len: u16 = 1785;
+        let f = view("tp_full", 0);
+        let mut f = f;
+        f.length = max_j1939_tp_len;
+        let json = serde_json::to_string(&f).expect("serialize");
+        let back: CanFrameView = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.length, 1785);
     }
 }

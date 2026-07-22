@@ -673,6 +673,18 @@ impl BetaJoinNode {
     pub fn get_stats(&self) -> &MemoryStats {
         &self.memory.stats
     }
+
+    /// Reset the runtime token memory of this join node while preserving its
+    /// compiled structure (join variables, conditions, conflict strategy).
+    ///
+    /// Used by `ReteNetwork::clear()` so that clearing *facts* does not discard
+    /// the compiled rule graph — dropping the enhanced node would otherwise
+    /// force later joins onto the fallback path, which cannot evaluate the
+    /// comparison/type/domain-range conditions stored here.
+    pub fn clear_memory(&mut self) {
+        let strategy = *self.memory.memory_strategy();
+        self.memory = BetaMemory::new(strategy);
+    }
 }
 
 /// Check if two terms are compatible (can unify)
@@ -812,6 +824,22 @@ fn evaluate_builtin(
                 Ok(false)
             }
         }
+        // Structural join markers emitted by `analyze_join_conditions` when one
+        // side of the join is an `rdf:type` assertion (`type_check`) or a
+        // `rdfs:domain`/`rdfs:range` axiom pattern (`domain_range_check`).
+        //
+        // These markers carry no arguments: the real constraint they stand for
+        // is *already* enforced by the join itself. The alpha nodes feeding the
+        // beta join only fire for facts that structurally match the type /
+        // domain-range triple pattern, and the shared join variables force those
+        // matches to agree with the partner atom. There is therefore nothing
+        // left to re-check here, and the join holds by construction.
+        //
+        // Returning `Ok(true)` is the correct semantics (not a stub): returning
+        // `false` — as the old fall-through `_` arm did — silently suppressed
+        // every `rdf:type`/domain-range-bearing multi-atom rule (the overwhelming
+        // majority of RDFS/OWL-RL rule bodies) from ever firing.
+        "type_check" | "domain_range_check" => Ok(true),
         _ => {
             warn!("Unknown builtin predicate: {}", predicate);
             Ok(false)

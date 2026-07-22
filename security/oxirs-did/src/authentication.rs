@@ -277,13 +277,25 @@ impl Authenticator {
     /// failure.  Never returns `Err` — all error paths are represented in
     /// `VerificationResult::error`.
     ///
+    /// # Single-use challenges (replay protection)
+    /// The matched challenge is **consumed** (removed from `active_challenges`)
+    /// on the very first verification attempt, regardless of whether that
+    /// attempt succeeds or fails. A challenge nonce is therefore usable for at
+    /// most one `verify_response` call: replaying a previously-valid
+    /// `(challenge_id, signature)` pair a second time fails with
+    /// "challenge not found". This upholds the single-use-nonce property of the
+    /// challenge-response protocol; without it a captured valid response would
+    /// remain replayable until the challenge's TTL naturally elapsed.
+    ///
     /// # Verification contract
     /// The response is accepted only when `response.signature` is a valid
     /// cryptographic signature over `challenge.challenge_bytes` under the public
     /// key registered for the DID (see [`verify_signature_over_challenge`]).
-    pub fn verify_response(&self, response: &AuthResponse, now_ms: u64) -> VerificationResult {
-        // Look up the active challenge.
-        let challenge = match self.active_challenges.get(&response.challenge_id) {
+    pub fn verify_response(&mut self, response: &AuthResponse, now_ms: u64) -> VerificationResult {
+        // Look up AND consume the active challenge. Removing it up front makes
+        // every issued challenge single-use: a captured valid response cannot be
+        // replayed because the challenge is gone after the first attempt.
+        let challenge = match self.active_challenges.remove(&response.challenge_id) {
             Some(c) => c,
             None => {
                 return VerificationResult {
@@ -724,6 +736,68 @@ mod tests {
         // DID registered + challenge exists + valid signature → passes.
         let result = auth.verify_response(&response, 2000);
         assert!(result.verified);
+    }
+
+    #[test]
+    fn regression_challenge_single_use_prevents_replay() {
+        // A valid response must verify exactly once. A second verify_response
+        // with the SAME (challenge_id, signature) pair must fail because the
+        // challenge is consumed on first use (replay protection).
+        let mut auth = make_auth();
+        let did = "did:example:alice";
+        let (pk_hex, signer) = ed25519_identity(31);
+        auth.register_did(did, AuthMethod::Ed25519(pk_hex.clone()));
+        let ch = auth.issue_challenge(did, 1000).expect("challenge");
+
+        let response = AuthResponse {
+            challenge_id: ch.challenge_id.clone(),
+            did: did.to_string(),
+            signature: signer.sign(&ch.challenge_bytes),
+            method: AuthMethod::Ed25519(pk_hex),
+        };
+
+        // First attempt: valid.
+        let first = auth.verify_response(&response, 2000);
+        assert!(first.verified, "first use of a valid response must verify");
+        assert_eq!(auth.active_challenges(), 0, "challenge must be consumed");
+
+        // Second attempt (replay): rejected — challenge no longer exists.
+        let second = auth.verify_response(&response, 2000);
+        assert!(!second.verified, "replayed response must be rejected");
+        assert!(second
+            .error
+            .expect("error present")
+            .contains("challenge not found"));
+    }
+
+    #[test]
+    fn regression_challenge_consumed_even_on_failed_attempt() {
+        // Even a FAILED verification consumes the challenge, so an attacker
+        // cannot brute-force signatures against a single live challenge.
+        let mut auth = make_auth();
+        let did = "did:example:alice";
+        let (pk_hex, signer) = ed25519_identity(41);
+        auth.register_did(did, AuthMethod::Ed25519(pk_hex.clone()));
+        let ch = auth.issue_challenge(did, 1000).expect("challenge");
+
+        // First attempt: wrong (forged) signature → fails.
+        let forged = AuthResponse {
+            challenge_id: ch.challenge_id.clone(),
+            did: did.to_string(),
+            signature: vec![0u8; 64],
+            method: AuthMethod::Ed25519(pk_hex.clone()),
+        };
+        assert!(!auth.verify_response(&forged, 2000).verified);
+        assert_eq!(auth.active_challenges(), 0, "challenge consumed on failure");
+
+        // Now even the CORRECT signature cannot reuse the spent challenge.
+        let correct = AuthResponse {
+            challenge_id: ch.challenge_id.clone(),
+            did: did.to_string(),
+            signature: signer.sign(&ch.challenge_bytes),
+            method: AuthMethod::Ed25519(pk_hex),
+        };
+        assert!(!auth.verify_response(&correct, 2000).verified);
     }
 
     // ── purge expired ─────────────────────────────────────────────────────────

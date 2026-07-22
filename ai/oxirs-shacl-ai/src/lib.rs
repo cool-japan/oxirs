@@ -1143,6 +1143,9 @@ pub enum ShaclAiError {
 
     #[error("Benchmark error: {0}")]
     Benchmark(String),
+
+    #[error("Unsupported operation: {0}")]
+    Unsupported(String),
 }
 
 /// Result type alias for SHACL-AI operations

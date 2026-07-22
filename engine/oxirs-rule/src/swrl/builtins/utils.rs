@@ -27,6 +27,27 @@ pub(crate) fn extract_string_value(arg: &SwrlArgument) -> Result<String> {
     }
 }
 
+/// Extract the items of a list-valued SWRL argument.
+///
+/// The supported representation of a list in this (store-less) evaluation
+/// context is a comma-encoded **literal** (e.g. `"a,b,c"`). If the argument is
+/// instead an `Individual` — i.e. an IRI/blank node that heads a genuine
+/// `rdf:List` (`rdf:first`/`rdf:rest`) in the triple store — we cannot resolve
+/// it here, so we fail loud rather than silently splitting the IRI string on
+/// commas and returning a wrong result. An unbound variable is likewise an
+/// error.
+pub(crate) fn extract_list_items(arg: &SwrlArgument) -> Result<Vec<String>> {
+    match arg {
+        SwrlArgument::Literal(value) => Ok(value.split(',').map(|s| s.to_string()).collect()),
+        SwrlArgument::Individual(iri) => Err(anyhow::anyhow!(
+            "SWRL list built-in received RDF list resource '{iri}': genuine rdf:List \
+             (rdf:first/rdf:rest) traversal is not supported in this literal-list context; \
+             supply a comma-encoded literal instead"
+        )),
+        SwrlArgument::Variable(name) => Err(anyhow::anyhow!("Unbound variable: {}", name)),
+    }
+}
+
 /// Extract boolean value from SWRL argument
 pub(crate) fn extract_boolean_value(arg: &SwrlArgument) -> Result<bool> {
     match arg {

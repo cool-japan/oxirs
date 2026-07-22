@@ -84,6 +84,8 @@ argon2.workspace = true
 chrono.workspace = true
 dialoguer = "0.12"  # Interactive prompts
 oxiarc-deflate.workspace = true  # DEFLATE/gzip compression (Pure Rust)
+oxiarc-bzip2.workspace = true    # BZip2 compression (Pure Rust)
+oxiarc-archive.workspace = true  # XZ container compression (Pure Rust; also ZIP/TAR/LZH support)
 hostname = "0.4"    # System hostname for test reports
 md5.workspace = true
 hex.workspace = true         # Hex encoding for checksums
@@ -99,13 +101,30 @@ quick-xml.workspace = true   # XML parsing for SPARQL Results XML (SRX) format
 [dev-dependencies]
 criterion.workspace = true
 wiremock.workspace = true
+# `serve --graphql` regression test: drive the fuseki production router
+# in-process via `tower::ServiceExt::oneshot` (no socket bind).
+axum.workspace = true
+tower = { workspace = true, features = ["util"] }
 
 [features]
 default = []
-all-features = [
+# The full recommended CLI feature set: every optional feature *except*
+# `tsdb-duckdb`. Renamed from the old `all-features` (which only enabled
+# text/geo/pdf-export and silently omitted excel-export/system-keyring/
+# tsdb-duckdb) because `all-features` reads as parity with `cargo build
+# --all-features`, which it never was. `tsdb-duckdb` is deliberately excluded
+# even here — unlike every other feature listed, it pulls libduckdb C FFI via
+# the `oxirs-tsdb-adapter-duckdb` quarantine crate, so an operator must opt
+# into it explicitly (`--features tsdb-duckdb`) per the COOLJAPAN Pure Rust
+# default policy. `text` also leaves the default Pure-Rust build (it pulls
+# Tantivy, which pulls C `zstd-sys`) but is kept in this bundle since it
+# predates this fix and was already part of the old `all-features` list.
+full-cli = [
     "text",
     "geo",
-    "pdf-export"
+    "pdf-export",
+    "excel-export",
+    "system-keyring"
 ]
 excel-export = ["rust_xlsxwriter"]
 pdf-export = ["dep:printpdf"]

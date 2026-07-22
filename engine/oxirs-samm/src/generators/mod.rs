@@ -51,3 +51,71 @@ pub use python::{generate_python, PythonOptions};
 pub use scala::{generate_scala, ScalaOptions};
 pub use sql::{generate_sql, SqlDialect};
 pub use typescript::{generate_typescript, TsOptions};
+
+// ── Shared identifier sanitization ──────────────────────────────────────────
+
+/// Ensure `candidate` is a syntactically valid identifier for a generated
+/// target language (TypeScript enum member, Java enum constant, Python
+/// class attribute, …).
+///
+/// Any character that is not ASCII alphanumeric or `_` is replaced with
+/// `_` (SAMM enumeration/state values are free-form strings and may
+/// contain characters — spaces aside from the caller's own separator
+/// handling, symbols, etc. — that are not valid in a bare identifier).
+/// Additionally, since none of the supported target languages accept a
+/// bare identifier that starts with a digit (a common real-world case:
+/// numeric status codes such as `"1"`, `"2"`, `"3"`), `prefix` is prepended
+/// whenever the sanitized name would start with a digit or be empty.
+///
+/// `prefix` should already carry the separator/casing appropriate for the
+/// target language, e.g. `"Value"` for PascalCase TypeScript enum members
+/// or `"VALUE_"` for `SCREAMING_SNAKE_CASE` Java/Python constants.
+pub(crate) fn ensure_valid_identifier(candidate: &str, prefix: &str) -> String {
+    let sanitized: String = candidate
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    if sanitized.is_empty() {
+        return format!("{prefix}Empty");
+    }
+    if sanitized.starts_with(|c: char| c.is_ascii_digit()) {
+        format!("{prefix}{sanitized}")
+    } else {
+        sanitized
+    }
+}
+
+#[cfg(test)]
+mod identifier_sanitization_tests {
+    use super::ensure_valid_identifier;
+
+    #[test]
+    fn regression_ensure_valid_identifier_prefixes_leading_digit() {
+        assert_eq!(ensure_valid_identifier("1", "Value"), "Value1");
+        assert_eq!(ensure_valid_identifier("2", "VALUE_"), "VALUE_2");
+    }
+
+    #[test]
+    fn regression_ensure_valid_identifier_replaces_invalid_characters() {
+        assert_eq!(ensure_valid_identifier("A+B", "Value"), "A_B");
+        assert_eq!(ensure_valid_identifier("50%", "VALUE_"), "VALUE_50_");
+    }
+
+    #[test]
+    fn regression_ensure_valid_identifier_leaves_valid_identifier_untouched() {
+        assert_eq!(ensure_valid_identifier("Active", "Value"), "Active");
+        assert_eq!(ensure_valid_identifier("ACTIVE", "VALUE_"), "ACTIVE");
+    }
+
+    #[test]
+    fn regression_ensure_valid_identifier_handles_empty_input() {
+        assert_eq!(ensure_valid_identifier("", "Value"), "ValueEmpty");
+    }
+}

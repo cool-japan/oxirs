@@ -272,12 +272,12 @@ futures = "0.3"
 
 # SciRS2 dependencies (Scientific Computing Library) - crates.io
 # Note: scirs2 meta crate removed - we only use specific sub-crates as needed
-scirs2-core = { version = "0.6.1", features = ["random"] }
-scirs2-linalg = "0.6.1"
-scirs2-stats = "0.6.1"
-scirs2-neural = "0.6.1"
-scirs2-graph = "0.6.1"
-scirs2-integrate = "0.6.1"
+scirs2-core = { version = "0.6.2", features = ["random"] }
+scirs2-linalg = "0.6.2"
+scirs2-stats = "0.6.2"
+scirs2-neural = "0.6.2"
+scirs2-graph = "0.6.2"
+scirs2-integrate = "0.6.2"
 # array! macro is now in scirs2-core, scirs2-autograd not needed
 
 # Proc-macro utilities (used by oxirs-core api_surface module)
@@ -326,6 +326,7 @@ oxiarc-lzma = "0.3.6"  # LZMA/LZMA2 compression (Pure Rust, replaces xz2/lzma-sy
 oxiarc-brotli  = "0.3.6"  # Brotli compression (Pure Rust)
 oxiarc-snappy  = "0.3.6"  # Snappy compression (Pure Rust)
 oxiarc-deflate = "0.3.6"  # DEFLATE compression (Pure Rust)
+oxiarc-bzip2 = "0.3.6"  # BZip2 compression (Pure Rust, replaces the `bzip2` C-FFI crate)
 
 # Memory and data structures
 memmap2 = "0.9"

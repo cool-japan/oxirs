@@ -254,44 +254,142 @@ impl LLMProvider for AnthropicProvider {
         model: &str,
         request: &LLMRequest,
     ) -> Result<LLMResponseStream> {
-        // Note: This is a simplified implementation. Production version would implement actual streaming
-        // using Anthropic's streaming API when available.
+        use futures_util::StreamExt;
 
-        // For now, simulate streaming by breaking response into chunks
-        // In production, this would use Anthropic's streaming API
-        let response = self.generate(model, request).await?;
-        let words: Vec<String> = response
-            .content
-            .split_whitespace()
-            .map(String::from)
-            .collect();
-        let chunk_size = 5; // Words per chunk
+        // Build the request body with real server-sent-event streaming enabled.
+        let mut messages = Vec::new();
+        let mut system_messages = Vec::new();
+        for msg in &request.messages {
+            match msg.role {
+                ChatRole::System => system_messages.push(msg.content.clone()),
+                ChatRole::User => messages.push(serde_json::json!({
+                    "role": "user",
+                    "content": msg.content
+                })),
+                ChatRole::Assistant => messages.push(serde_json::json!({
+                    "role": "assistant",
+                    "content": msg.content
+                })),
+            }
+        }
+        let mut system_content = Vec::new();
+        if let Some(ref system_prompt) = request.system_prompt {
+            system_content.push(system_prompt.clone());
+        }
+        system_content.extend(system_messages);
+
+        let mut body = serde_json::json!({
+            "model": model,
+            "messages": messages,
+            "max_tokens": request.max_tokens.unwrap_or(4096),
+            "temperature": request.temperature,
+            "stream": true,
+        });
+        if !system_content.is_empty() {
+            body["system"] = serde_json::Value::String(system_content.join("\n\n"));
+        }
+
+        let response = self
+            .client
+            .post(format!("{}/v1/messages", self.base_url))
+            .header("x-api-key", &self.api_key)
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            error!("Anthropic streaming API error: {} - {}", status, text);
+            return Err(anyhow!(
+                "Anthropic streaming API error: {} - {}",
+                status,
+                text
+            ));
+        }
 
         let model_name = model.to_string();
         let provider_name = "anthropic".to_string();
         let started_at = Instant::now();
 
-        // Create chunks with owned data
-        let chunks: Vec<Result<LLMResponseChunk>> = words
-            .chunks(chunk_size)
-            .enumerate()
-            .map(|(index, chunk)| {
-                let total_words = words.len();
-                let is_final = (index + 1) * chunk_size >= total_words;
-                Ok(LLMResponseChunk {
-                    content: chunk.join(" ") + if !is_final { " " } else { "" },
-                    is_final,
-                    chunk_index: index,
-                    model_used: model_name.clone(),
-                    provider_used: provider_name.clone(),
-                    latency: started_at.elapsed(),
-                    metadata: HashMap::new(),
-                })
-            })
-            .collect();
+        // Parse the Anthropic SSE stream incrementally, emitting one chunk per
+        // `content_block_delta` text delta as the model produces it.
+        let stream = futures_util::stream::unfold(
+            (
+                Box::pin(response.bytes_stream()),
+                String::new(),                               // SSE line buffer
+                std::collections::VecDeque::<String>::new(), // pending text deltas
+                0usize,                                      // chunk index
+                false,                                       // saw message_stop / EOF
+                false,                                       // final chunk emitted
+            ),
+            move |(mut bytes, mut buffer, mut pending, mut index, mut done, mut final_emitted)| {
+                let model = model_name.clone();
+                let provider = provider_name.clone();
+                async move {
+                    loop {
+                        if let Some(text) = pending.pop_front() {
+                            let chunk = LLMResponseChunk {
+                                content: text,
+                                is_final: false,
+                                chunk_index: index,
+                                model_used: model.clone(),
+                                provider_used: provider.clone(),
+                                latency: started_at.elapsed(),
+                                metadata: HashMap::new(),
+                            };
+                            index += 1;
+                            return Some((
+                                Ok(chunk),
+                                (bytes, buffer, pending, index, done, final_emitted),
+                            ));
+                        }
+                        if final_emitted {
+                            return None;
+                        }
+                        if done {
+                            final_emitted = true;
+                            let chunk = LLMResponseChunk {
+                                content: String::new(),
+                                is_final: true,
+                                chunk_index: index,
+                                model_used: model.clone(),
+                                provider_used: provider.clone(),
+                                latency: started_at.elapsed(),
+                                metadata: HashMap::new(),
+                            };
+                            index += 1;
+                            return Some((
+                                Ok(chunk),
+                                (bytes, buffer, pending, index, done, final_emitted),
+                            ));
+                        }
 
-        // Create stream from owned chunks
-        let stream = futures_util::stream::iter(chunks);
+                        match bytes.next().await {
+                            Some(Ok(b)) => {
+                                buffer.push_str(&String::from_utf8_lossy(&b));
+                                while let Some(pos) = buffer.find("\n\n") {
+                                    let event: String = buffer.drain(..pos + 2).collect();
+                                    parse_anthropic_sse_event(&event, &mut pending, &mut done);
+                                }
+                                continue;
+                            }
+                            Some(Err(e)) => {
+                                final_emitted = true;
+                                return Some((
+                                    Err(anyhow!("Anthropic stream error: {e}")),
+                                    (bytes, buffer, pending, index, done, final_emitted),
+                                ));
+                            }
+                            None => {
+                                done = true;
+                                continue;
+                            }
+                        }
+                    }
+                }
+            },
+        );
 
         Ok(LLMResponseStream {
             stream: Box::pin(stream),
@@ -299,5 +397,43 @@ impl LLMProvider for AnthropicProvider {
             provider_used: "anthropic".to_string(),
             started_at,
         })
+    }
+}
+
+/// Parse one Anthropic SSE event block, pushing any `text_delta` content onto
+/// `pending` and setting `done` when a `message_stop` event is seen.
+fn parse_anthropic_sse_event(
+    event: &str,
+    pending: &mut std::collections::VecDeque<String>,
+    done: &mut bool,
+) {
+    for line in event.lines() {
+        let line = line.trim();
+        let data = match line.strip_prefix("data:") {
+            Some(rest) => rest.trim(),
+            None => continue,
+        };
+        if data.is_empty() || data == "[DONE]" {
+            continue;
+        }
+        let json: serde_json::Value = match serde_json::from_str(data) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        match json.get("type").and_then(|t| t.as_str()) {
+            Some("content_block_delta") => {
+                if let Some(text) = json
+                    .get("delta")
+                    .and_then(|d| d.get("text"))
+                    .and_then(|t| t.as_str())
+                {
+                    if !text.is_empty() {
+                        pending.push_back(text.to_string());
+                    }
+                }
+            }
+            Some("message_stop") => *done = true,
+            _ => {}
+        }
     }
 }

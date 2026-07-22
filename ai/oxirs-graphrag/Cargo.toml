@@ -54,6 +54,9 @@ rayon.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
 criterion.workspace = true
+# Real SPARQL parser used by regression tests to round-trip generated query
+# text (rather than only trusting a mock `SparqlEngineTrait`).
+oxirs-arq.workspace = true
 
 [features]
 default = ["community-detection", "hierarchical-summarization"]

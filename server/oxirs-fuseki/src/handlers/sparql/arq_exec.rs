@@ -153,7 +153,7 @@ pub fn execute_construct(
     let triples = instantiate_construct(&query.construct_template, &solution).map_err(|e| {
         FusekiError::query_execution(format!("CONSTRUCT instantiation failed: {e}"))
     })?;
-    let graph = serialize_arq_graph(&triples);
+    let graph = serialize_arq_graph(&triples)?;
     Ok(construct_result(graph, triples.len()))
 }
 
@@ -228,7 +228,7 @@ pub fn execute_describe(
 
     let triples = describe(&targets, &target_vars, &solution, &view)
         .map_err(|e| FusekiError::query_execution(format!("DESCRIBE failed: {e}")))?;
-    let graph = serialize_arq_graph(&triples);
+    let graph = serialize_arq_graph(&triples)?;
     Ok(describe_result(graph, triples.len()))
 }
 
@@ -532,47 +532,99 @@ fn term_to_json(term: &ArqTerm) -> FusekiResult<serde_json::Value> {
 /// Serialize a set of arq graph triples (CONSTRUCT / DESCRIBE output) to Turtle,
 /// reusing the shared core serializer after converting to oxirs-core triples.
 ///
-/// Triples that cannot form a well-formed RDF triple in the core model (e.g. an
-/// RDF-star quoted-triple term the serializer does not render) are dropped, so
-/// the serialized graph never contains an ill-formed statement.
-fn serialize_arq_graph(triples: &[ArqTriple]) -> String {
-    let core: Vec<CoreTriple> = triples.iter().filter_map(arq_triple_to_core).collect();
-    serialize_triples_to_turtle(&core)
+/// RDF-star quoted-triple subjects/objects are represented in the output
+/// (Turtle-star `<< s p o >>`), not dropped. A term that genuinely cannot
+/// occupy its position in a well-formed RDF triple — an unbound variable
+/// that survived instantiation, a bare property-path term, or a quoted
+/// triple used as a predicate — is a construction bug, not a value to
+/// silently omit: this returns an explicit error so the caller surfaces a
+/// 500 instead of a silently-incomplete graph.
+fn serialize_arq_graph(triples: &[ArqTriple]) -> FusekiResult<String> {
+    let core: Vec<CoreTriple> = triples
+        .iter()
+        .map(arq_triple_to_core)
+        .collect::<Result<_, String>>()
+        .map_err(|e| {
+            FusekiError::query_execution(format!("cannot serialize constructed triple: {e}"))
+        })?;
+    Ok(serialize_triples_to_turtle(&core))
 }
 
-/// Convert an arq algebra `Triple` into an oxirs-core `Triple`, or `None` when a
-/// term is not valid in its position (dropping the triple).
-fn arq_triple_to_core(triple: &ArqTriple) -> Option<CoreTriple> {
+/// Convert an arq algebra `Triple` into an oxirs-core `Triple`. Returns an
+/// error describing the offending term/position when the triple cannot be
+/// represented in the core RDF-star model.
+fn arq_triple_to_core(triple: &ArqTriple) -> Result<CoreTriple, String> {
     let subject = arq_term_to_subject(&triple.subject)?;
     let predicate = arq_term_to_predicate(&triple.predicate)?;
     let object = arq_term_to_object(&triple.object)?;
-    Some(CoreTriple::new(subject, predicate, object))
+    Ok(CoreTriple::new(subject, predicate, object))
 }
 
-/// Map an arq term to a core subject (IRI or blank node).
-fn arq_term_to_subject(term: &ArqTerm) -> Option<Subject> {
+/// Map an arq term to a core subject (IRI, blank node, or RDF-star quoted triple).
+fn arq_term_to_subject(term: &ArqTerm) -> Result<Subject, String> {
     match term {
-        ArqTerm::Iri(iri) => Some(Subject::NamedNode(iri.clone())),
-        ArqTerm::BlankNode(id) => BlankNode::new(id).ok().map(Subject::BlankNode),
-        _ => None,
+        ArqTerm::Iri(iri) => Ok(Subject::NamedNode(iri.clone())),
+        ArqTerm::BlankNode(id) => BlankNode::new(id)
+            .map(Subject::BlankNode)
+            .map_err(|e| format!("invalid blank node id '{id}': {e}")),
+        ArqTerm::QuotedTriple(inner) => {
+            let core_inner = arq_triple_to_core(inner)?;
+            Ok(Subject::QuotedTriple(Box::new(
+                oxirs_core::model::star::QuotedTriple::new(core_inner),
+            )))
+        }
+        ArqTerm::Variable(v) => Err(format!(
+            "unbound variable ?{} in constructed triple subject position",
+            v.name()
+        )),
+        ArqTerm::Literal(lit) => Err(format!(
+            "literal '{}' cannot be used as a triple subject",
+            lit.value
+        )),
+        ArqTerm::PropertyPath(path) => Err(format!(
+            "property path term cannot be a constructed triple subject: {path}"
+        )),
     }
 }
 
-/// Map an arq term to a core predicate (IRI only).
-fn arq_term_to_predicate(term: &ArqTerm) -> Option<Predicate> {
+/// Map an arq term to a core predicate (IRI only: RDF-star forbids a
+/// quoted triple, literal, or variable in predicate position of a
+/// constructed triple).
+fn arq_term_to_predicate(term: &ArqTerm) -> Result<Predicate, String> {
     match term {
-        ArqTerm::Iri(iri) => Some(Predicate::NamedNode(iri.clone())),
-        _ => None,
+        ArqTerm::Iri(iri) => Ok(Predicate::NamedNode(iri.clone())),
+        ArqTerm::Variable(v) => Err(format!(
+            "unbound variable ?{} in constructed triple predicate position",
+            v.name()
+        )),
+        other => Err(format!(
+            "term cannot be used as a constructed triple predicate: {other}"
+        )),
     }
 }
 
-/// Map an arq term to a core object (IRI, literal or blank node).
-fn arq_term_to_object(term: &ArqTerm) -> Option<Object> {
+/// Map an arq term to a core object (IRI, literal, blank node, or
+/// RDF-star quoted triple).
+fn arq_term_to_object(term: &ArqTerm) -> Result<Object, String> {
     match term {
-        ArqTerm::Iri(iri) => Some(Object::NamedNode(iri.clone())),
-        ArqTerm::BlankNode(id) => BlankNode::new(id).ok().map(Object::BlankNode),
-        ArqTerm::Literal(lit) => Some(Object::Literal(arq_literal_to_core(lit))),
-        _ => None,
+        ArqTerm::Iri(iri) => Ok(Object::NamedNode(iri.clone())),
+        ArqTerm::BlankNode(id) => BlankNode::new(id)
+            .map(Object::BlankNode)
+            .map_err(|e| format!("invalid blank node id '{id}': {e}")),
+        ArqTerm::Literal(lit) => Ok(Object::Literal(arq_literal_to_core(lit))),
+        ArqTerm::QuotedTriple(inner) => {
+            let core_inner = arq_triple_to_core(inner)?;
+            Ok(Object::QuotedTriple(Box::new(
+                oxirs_core::model::star::QuotedTriple::new(core_inner),
+            )))
+        }
+        ArqTerm::Variable(v) => Err(format!(
+            "unbound variable ?{} in constructed triple object position",
+            v.name()
+        )),
+        ArqTerm::PropertyPath(path) => Err(format!(
+            "property path term cannot be a constructed triple object: {path}"
+        )),
     }
 }
 

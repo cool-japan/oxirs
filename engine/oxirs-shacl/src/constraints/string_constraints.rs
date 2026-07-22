@@ -54,6 +54,18 @@ use super::{
 };
 use crate::{Result, ShaclError};
 
+/// Extract the SPARQL `STR()` representation of a value node, for use by
+/// constraints defined (per SHACL Core) in terms of `STRLEN(STR(?value))` or
+/// `REGEX(STR(?value), ...)`. `STR()` is defined for both IRIs and literals —
+/// only blank nodes have no string form and must be excluded by the caller.
+fn term_string_form(value: &Term) -> Option<&str> {
+    match value {
+        Term::Literal(literal) => Some(literal.value()),
+        Term::NamedNode(node) => Some(node.as_str()),
+        _ => None,
+    }
+}
+
 /// SHACL `sh:minLength` constraint that validates the minimum string length.
 ///
 /// This constraint ensures that literal values have at least the specified number
@@ -105,9 +117,8 @@ impl ConstraintEvaluator for MinLengthConstraint {
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
-            match value {
-                Term::Literal(literal) => {
-                    let string_value = literal.value();
+            match term_string_form(value) {
+                Some(string_value) => {
                     if (string_value.chars().count() as u32) < self.min_length {
                         return Ok(ConstraintEvaluationResult::violated(
                             Some(value.clone()),
@@ -119,10 +130,13 @@ impl ConstraintEvaluator for MinLengthConstraint {
                         ));
                     }
                 }
-                _ => {
+                None => {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
-                        Some("Value must be a literal for length validation".to_string()),
+                        Some(
+                            "Value must be a literal or IRI (STR()-representable) for length validation"
+                                .to_string(),
+                        ),
                     ));
                 }
             }
@@ -182,9 +196,8 @@ impl ConstraintEvaluator for MaxLengthConstraint {
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
-            match value {
-                Term::Literal(literal) => {
-                    let string_value = literal.value();
+            match term_string_form(value) {
+                Some(string_value) => {
                     if (string_value.chars().count() as u32) > self.max_length {
                         return Ok(ConstraintEvaluationResult::violated(
                             Some(value.clone()),
@@ -196,10 +209,13 @@ impl ConstraintEvaluator for MaxLengthConstraint {
                         ));
                     }
                 }
-                _ => {
+                None => {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
-                        Some("Value must be a literal for length validation".to_string()),
+                        Some(
+                            "Value must be a literal or IRI (STR()-representable) for length validation"
+                                .to_string(),
+                        ),
                     ));
                 }
             }
@@ -330,9 +346,8 @@ impl ConstraintEvaluator for PatternConstraint {
 
         // Check each value against the pattern
         for value in &context.values {
-            match value {
-                Term::Literal(literal) => {
-                    let string_value = literal.value();
+            match term_string_form(value) {
+                Some(string_value) => {
                     if !regex.is_match(string_value) {
                         let message = self.message.clone().unwrap_or_else(|| {
                             format!(
@@ -346,11 +361,11 @@ impl ConstraintEvaluator for PatternConstraint {
                         ));
                     }
                 }
-                _ => {
+                None => {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
                         Some(format!(
-                            "Value {value} is not a literal, cannot check pattern"
+                            "Value {value} has no STR() representation, cannot check pattern"
                         )),
                     ));
                 }
@@ -569,15 +584,14 @@ impl ConstraintEvaluator for UniqueLangConstraint {
                         }
                         seen_languages.insert(lang);
                     }
+                    // Literals without a language tag are excluded from the
+                    // uniqueness check per SHACL Core semantics.
                 }
                 _ => {
-                    return Ok(ConstraintEvaluationResult::violated(
-                        Some(value.clone()),
-                        Some(
-                            "Value must be a literal for language uniqueness validation"
-                                .to_string(),
-                        ),
-                    ));
+                    // Per SHACL Core, sh:uniqueLang's condition only concerns
+                    // pairwise-equal, non-empty language tags among literal
+                    // value nodes; non-literal value nodes are simply excluded
+                    // from the check, not treated as violations.
                 }
             }
         }
@@ -842,12 +856,35 @@ mod tests {
     }
 
     #[test]
-    fn test_unique_lang_iri_value_violated() {
+    fn regression_unique_lang_iri_value_is_excluded_not_violated() {
+        // Per SHACL Core, sh:uniqueLang only concerns pairwise-equal language
+        // tags among literal value nodes; non-literal value nodes (like IRIs)
+        // are simply excluded from the check, not treated as violations.
         let c = UniqueLangConstraint { unique_lang: true };
         let store = ConcreteStore::new().expect("store");
         let ctx = ctx_with_values(vec![iri_term("http://example.org/resource")]);
-        // IRIs are not literals, should be violated
-        assert!(c.evaluate(&store, &ctx).expect("eval").is_violated());
+        assert!(
+            c.evaluate(&store, &ctx).expect("eval").is_satisfied(),
+            "a lone IRI value node must not cause a uniqueLang violation"
+        );
+    }
+
+    #[test]
+    fn regression_unique_lang_iri_mixed_with_distinct_lang_literals_satisfied() {
+        // An IRI value node alongside literals that individually satisfy
+        // uniqueLang (all-distinct language tags) must not turn the overall
+        // result into a violation purely because one value happens to be an IRI.
+        let c = UniqueLangConstraint { unique_lang: true };
+        let store = ConcreteStore::new().expect("store");
+        let ctx = ctx_with_values(vec![
+            lang_lit("Hello", "en"),
+            lang_lit("Bonjour", "fr"),
+            iri_term("http://example.org/resource"),
+        ]);
+        assert!(
+            c.evaluate(&store, &ctx).expect("eval").is_satisfied(),
+            "a non-literal value node must be excluded from the uniqueLang check, not violate it"
+        );
     }
 
     #[test]
@@ -934,6 +971,82 @@ mod tests {
         let store = ConcreteStore::new().expect("store");
         let ctx = ctx_with_values(vec![plain_lit("hello")]); // exactly 5 chars
         assert!(c.evaluate(&store, &ctx).expect("eval").is_satisfied());
+    }
+
+    // ---- IRI values must be measured by their STR() form, not auto-rejected ----
+
+    #[test]
+    fn regression_min_length_measures_iri_string_form() {
+        // 33 characters long -> well over the min_length of 10.
+        let c = MinLengthConstraint { min_length: 10 };
+        let store = ConcreteStore::new().expect("store");
+        let ctx = ctx_with_values(vec![iri_term("http://example.org/very/long/resource/id")]);
+        assert!(
+            c.evaluate(&store, &ctx).expect("eval").is_satisfied(),
+            "a sufficiently long IRI must satisfy sh:minLength, not be auto-rejected"
+        );
+    }
+
+    #[test]
+    fn regression_min_length_short_iri_still_violates() {
+        let c = MinLengthConstraint { min_length: 100 };
+        let store = ConcreteStore::new().expect("store");
+        let ctx = ctx_with_values(vec![iri_term("http://example.org/x")]);
+        assert!(
+            c.evaluate(&store, &ctx).expect("eval").is_violated(),
+            "an IRI shorter than min_length must still violate"
+        );
+    }
+
+    #[test]
+    fn regression_max_length_measures_iri_string_form() {
+        let c = MaxLengthConstraint { max_length: 5 };
+        let store = ConcreteStore::new().expect("store");
+        let ctx = ctx_with_values(vec![iri_term(
+            "http://example.org/way/too/long/for/five/chars",
+        )]);
+        assert!(
+            c.evaluate(&store, &ctx).expect("eval").is_violated(),
+            "an IRI longer than max_length must violate, measured by its STR() form"
+        );
+    }
+
+    #[test]
+    fn regression_pattern_matches_against_iri_string_form() {
+        let c = PatternConstraint {
+            pattern: r"^http://example\.org/.*$".to_string(),
+            flags: None,
+            message: None,
+        };
+        let store = ConcreteStore::new().expect("store");
+        let ctx = ctx_with_values(vec![iri_term("http://example.org/resource")]);
+        assert!(
+            c.evaluate(&store, &ctx).expect("eval").is_satisfied(),
+            "sh:pattern must match against the IRI's string form, not auto-reject IRIs"
+        );
+    }
+
+    #[test]
+    fn regression_pattern_non_matching_iri_violates() {
+        let c = PatternConstraint {
+            pattern: r"^https://.*$".to_string(),
+            flags: None,
+            message: None,
+        };
+        let store = ConcreteStore::new().expect("store");
+        let ctx = ctx_with_values(vec![iri_term("http://example.org/resource")]);
+        assert!(c.evaluate(&store, &ctx).expect("eval").is_violated());
+    }
+
+    #[test]
+    fn regression_min_length_blank_node_still_violates() {
+        // Blank nodes have no STR() form and must remain a violation.
+        let c = MinLengthConstraint { min_length: 1 };
+        let store = ConcreteStore::new().expect("store");
+        let ctx = ctx_with_values(vec![Term::BlankNode(
+            oxirs_core::model::BlankNode::new_unchecked("b1"),
+        )]);
+        assert!(c.evaluate(&store, &ctx).expect("eval").is_violated());
     }
 
     // ---- BCP47 language_range_matches tests ----

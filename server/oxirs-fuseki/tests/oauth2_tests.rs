@@ -140,6 +140,7 @@ async fn test_oauth2_handler_authorization_flow() {
         audit_logger: std::sync::Arc::new(oxirs_core::audit::InMemoryAuditLogger::new()),
         #[cfg(feature = "rate-limit")]
         rate_limiter: None,
+        sparql_cache: None,
     };
 
     // Create router with OAuth2 routes

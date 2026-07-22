@@ -118,8 +118,14 @@ OxiRS v0.3.1 completes SHACL Advanced Features, finishes the COOLJAPAN Pure-Rust
 ### Usage
 
 ```bash
-# Initialize a new knowledge graph (alphanumeric, _, - only)
-oxirs init mykg
+# Initialize a new knowledge graph (alphanumeric, _, - only).
+# `--format memory` matches what `oxirs import`/`oxirs query` use by default
+# below; `oxirs init` also accepts `--format tdb2` for the on-disk backend,
+# but `oxirs query` cannot read tdb2 datasets yet (use `oxirs tdbquery`
+# instead) and `oxirs import`/`oxirs query` do not read the backend back out
+# of the dataset's own oxirs.toml, so pass `--dataset-type` explicitly on
+# every command instead of relying on `init`'s declared storage format.
+oxirs init mykg --format memory
 
 # Import RDF data (automatically persisted to mykg/data.nq)
 oxirs import mykg data.ttl --format turtle
@@ -142,7 +148,7 @@ oxirs serve mykg/oxirs.toml --port 3030
 
 Open:
 - http://localhost:3030 for the Fuseki-style admin UI
-- http://localhost:3030/graphql for GraphiQL (if enabled)
+- http://localhost:3030/graphql/playground for the browsable GraphiQL IDE (the GraphQL routes are mounted unconditionally by the server; `/graphql` itself is a POST-only JSON API endpoint, not a browser page — opening it with a plain `GET` returns 405)
 
 ## Published Crates
 
@@ -387,26 +393,41 @@ them are published to crates.io.
 
 ### Dataset Configuration (TOML)
 
+This is the `oxirs-fuseki` server config format (`ServerConfig`, loaded via
+`oxirs-fuseki.toml`/`--config`), keyed under `[datasets.NAME]` (plural — see
+`DatasetConfig` in `server/oxirs-fuseki/src/config_server.rs`). This is a
+fragment showing the dataset/ReBAC sections in isolation — merge it into a
+complete config alongside the required top-level `[server]`/`[security]`
+sections; see the repo root [`oxirs.toml`](./oxirs.toml) for a full,
+working reference file:
+
 ```toml
-[dataset.mykg]
-type      = "tdb2"
-location  = "/data"
-text      = { enabled = true, analyzer = "english" }
-shacl     = ["./shapes/person.ttl"]
+[datasets.mykg]
+name         = "mykg"
+location     = "./data/mykg"
+read_only    = false
+shacl_shapes = ["./shapes/person.ttl"]
+services     = []
 
-# ReBAC Authorization (optional)
-[security.policy_engine]
-mode = "Combined"  # RbacOnly | RebacOnly | Combined | Both
+[datasets.mykg.text_index]
+enabled     = true
+analyzer    = "english"
+max_results = 100
+stemming    = true
+stop_words  = []
 
+# ReBAC Authorization (optional; see RebacConfig in config_security.rs)
 [security.rebac]
-backend = "InMemory"  # InMemory | RdfNative
-namespace = "http://oxirs.org/auth#"
-inference_enabled = true
+enabled        = true
+policy_mode    = "combined"  # rbac_only | rebac_only | combined
+storage        = "memory"    # memory | open_fga | rdf
+audit_enabled  = true
+cache_ttl_secs = 300
 
 [[security.rebac.initial_relationships]]
-subject = "user:alice"
+subject  = "user:alice"
 relation = "owner"
-object = "dataset:mykg"
+object   = "dataset:mykg"
 ```
 
 ### GraphQL Query (auto-generated)
@@ -423,13 +444,35 @@ query {
 
 ### Vector Similarity SPARQL Service (opt-in AI)
 
+`oxirs-vec`'s `sparql_integration` module exposes a `vec:` predicate/function
+vocabulary (`vec:searchText`, `vec:similar`, `vec:similarity`, ...) and can
+generate the query below via `VectorSparqlIntegration::generate_service_query`
+(see `engine/oxirs-vec/src/sparql_integration/config.rs`). It is standard,
+grammar-valid SPARQL — unlike an IRI such as `<vec:similar(...)>`, which is
+invalid (SPARQL `IRIREF`s may not contain spaces, quotes, or parentheses):
+
 ```sparql
-SELECT ?s ?score WHERE {
-  SERVICE <vec:similar ( "LLM embeddings of 'semantic web'" 0.8 )> {
-    ?s ?score .
+PREFIX vec: <http://oxirs.org/vec#>
+
+SELECT ?resource ?similarity WHERE {
+  SERVICE <http://oxirs.org/vec/> {
+    SELECT ?resource ?similarity WHERE {
+      ?resource vec:searchText "semantic web" .
+      ?resource vec:similarity ?similarity .
+      FILTER(?similarity >= 0.8)
+    }
+    ORDER BY DESC(?similarity)
   }
 }
 ```
+
+Note: `SERVICE` always issues a real outbound HTTP SPARQL federation call
+(`oxirs-arq`'s `service_federation` module) — there is no built-in listener
+on `http://oxirs.org/vec/`, and `oxirs-arq` does not (yet) special-case a
+`vec:` scheme. To run this for real today, stand up your own vector-aware
+SPARQL endpoint at the target URI (`VectorSparqlIntegration` gives you the
+query text to send it), or call `oxirs_vec::sparql_integration` directly
+from Rust instead of through a live `SERVICE` clause.
 
 ### Live Deployment: OxiEphemeris LOD (CloudFlare + OxiRS)
 
@@ -499,6 +542,8 @@ client.subscribe(vec![
             graph_pattern: Some("urn:factory:sensors".to_string()),
             type_uri: None,
             timestamp_field: None,
+            timestamp_predicate: None,
+            transformations: vec![],
         },
         options: None,
     },
@@ -508,27 +553,51 @@ client.subscribe(vec![
 ### Data Sovereignty Policy (IDS/Gaia-X)
 
 ```rust
-use oxirs_fuseki::ids::policy::{OdrlPolicy, Permission, Constraint};
+use chrono::{Duration, Utc};
+use oxirs_fuseki::ids::policy::constraint_evaluator::{
+    ComparisonOperator, Purpose, SpatialRestriction, TemporalOperand,
+};
+use oxirs_fuseki::ids::policy::odrl_parser::PolicyType;
+use oxirs_fuseki::ids::policy::{Constraint, OdrlAction, OdrlPolicy, Permission};
+use oxirs_fuseki::ids::residency::Region;
+use oxirs_fuseki::ids::types::IdsUri;
 
 let policy = OdrlPolicy {
-    uid: "urn:policy:catena-x:battery-data:001".into(),
+    uid: IdsUri::new("urn:policy:catena-x:battery-data:001")?,
+    policy_type: PolicyType::Agreement,
+    context: None,
+    profile: None,
     permissions: vec![
         Permission {
+            uid: None,
             action: OdrlAction::Use,
             constraints: vec![
                 Constraint::Purpose {
-                    allowed_purposes: vec![Purpose::Research],
+                    allowed_purposes: vec![Purpose::ResearchUse],
                 },
                 Constraint::Spatial {
-                    allowed_regions: vec![Region::eu(), Region::japan()],
+                    allowed_regions: vec![Region::eu_member("DE", "Germany"), Region::japan()],
+                    restriction_type: SpatialRestriction::Within,
                 },
                 Constraint::Temporal {
-                    operator: ComparisonOperator::LessThanOrEqual,
+                    left_operand: TemporalOperand::DateTime,
+                    operator: ComparisonOperator::Lteq,
                     right_operand: Utc::now() + Duration::days(90),
                 },
             ],
+            duties: vec![],
+            target: None,
+            assignee: None,
+            assigner: None,
         }
     ],
+    prohibitions: vec![],
+    obligations: vec![],
+    targets: vec![],
+    assigner: None,
+    assignee: None,
+    inherits_from: None,
+    conflict: None,
 };
 ```
 

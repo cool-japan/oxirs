@@ -340,6 +340,9 @@ pub struct TablingEngine {
     rules: Vec<Rule>,
     /// Base facts
     facts: HashSet<String>,
+    /// Base facts as structured atoms, for pattern-matching goals that contain
+    /// variables (kept in sync with `facts`).
+    fact_atoms: Vec<RuleAtom>,
     /// Table directives
     directives: Vec<TableDirective>,
     /// The table: variant -> entry
@@ -359,6 +362,7 @@ impl TablingEngine {
             config,
             rules: Vec::new(),
             facts: HashSet::new(),
+            fact_atoms: Vec::new(),
             directives: Vec::new(),
             table: HashMap::new(),
             call_stack: Vec::new(),
@@ -385,7 +389,9 @@ impl TablingEngine {
     /// Add a fact
     pub fn add_fact(&mut self, fact: RuleAtom) {
         let key = Self::atom_to_key(&fact);
-        self.facts.insert(key);
+        if self.facts.insert(key) {
+            self.fact_atoms.push(fact);
+        }
     }
 
     /// Add facts
@@ -406,9 +412,62 @@ impl TablingEngine {
 
         let variant = CallVariant::from_atom(goal).ok_or_else(|| anyhow!("Invalid goal"))?;
 
-        let answers = self.evaluate_goal(&variant, goal, 0)?;
+        let answers = match self.config.loop_strategy {
+            // These strategies resolve loops by resuming with partial answers and
+            // iterating to a fixpoint, so they need the outer driver.
+            LoopStrategy::DelayAndResume | LoopStrategy::WellFounded => {
+                self.evaluate_with_fixpoint(&variant, goal)?
+            }
+            // FailOnLoop / ReturnPartial keep their single-pass semantics.
+            LoopStrategy::FailOnLoop | LoopStrategy::ReturnPartial => {
+                self.evaluate_goal(&variant, goal, 0)?
+            }
+        };
 
         Ok(answers)
+    }
+
+    /// Drive a tabled query to a fixpoint for delay-and-resume / well-founded
+    /// strategies.
+    ///
+    /// Each pass recomputes every tabled goal, but looped goals resume with the
+    /// answers accumulated in previous passes (see the `DelayAndResume` branch of
+    /// `evaluate_goal`). Answers only ever grow (monotonic union) and are bounded
+    /// by the finite Herbrand base, so the total answer count is non-decreasing
+    /// and must stabilize. We iterate until two consecutive passes produce the
+    /// same total; if it fails to converge within the configured bound we fail
+    /// loud rather than return a silently-incomplete answer set.
+    fn evaluate_with_fixpoint(
+        &mut self,
+        variant: &CallVariant,
+        goal: &RuleAtom,
+    ) -> Result<Vec<RuleAtom>> {
+        let max_iterations = self.config.max_recursion_depth.max(1);
+        let mut prev_total: Option<usize> = None;
+
+        for _ in 0..=max_iterations {
+            self.check_timeout()?;
+            self.call_stack.clear();
+            // Reset transient statuses so goals recompute this pass, while
+            // keeping their accumulated answers for loop resumption.
+            for entry in self.table.values_mut() {
+                entry.status = GoalStatus::New;
+            }
+
+            let answers = self.evaluate_goal(variant, goal, 0)?;
+
+            let total: usize = self.table.values().map(|e| e.answers.len()).sum();
+            if prev_total == Some(total) {
+                return Ok(answers);
+            }
+            prev_total = Some(total);
+        }
+
+        Err(anyhow!(
+            "Tabled fixpoint for predicate '{}' did not converge within {} iterations",
+            variant.predicate,
+            max_iterations
+        ))
     }
 
     fn evaluate_goal(
@@ -454,9 +513,16 @@ impl TablingEngine {
                     return Ok(Vec::new());
                 }
                 LoopStrategy::DelayAndResume | LoopStrategy::WellFounded => {
-                    // Mark as looped, return empty for now
+                    // Delay-and-resume: on a loop, resume with the answers this
+                    // goal has accumulated so far (from previous fixpoint
+                    // iterations). The outer `evaluate_with_fixpoint` driver
+                    // re-runs evaluation until the answer sets stop growing, so
+                    // returning the current partial answers here (rather than a
+                    // silent empty set) lets recursive/mutually-recursive tabled
+                    // predicates converge to their complete answer set.
                     if let Some(entry) = self.table.get_mut(variant) {
                         entry.status = GoalStatus::Looped;
+                        return Ok(entry.answers.clone());
                     }
                     return Ok(Vec::new());
                 }
@@ -494,8 +560,13 @@ impl TablingEngine {
             self.statistics.misses.fetch_add(1, Ordering::Relaxed);
         }
 
-        // Create new entry
-        let mut entry = TableEntry::new(variant.clone());
+        // Create (or reuse) the entry. Under fixpoint strategies a prior
+        // iteration may already have accumulated answers for this variant; we
+        // must preserve them so a loop back to this goal resumes with them.
+        let mut entry = self
+            .table
+            .remove(variant)
+            .unwrap_or_else(|| TableEntry::new(variant.clone()));
         entry.status = GoalStatus::Active;
         self.table.insert(variant.clone(), entry);
 
@@ -508,9 +579,14 @@ impl TablingEngine {
         // Pop from call stack
         self.call_stack.pop();
 
-        // Update entry
+        // Merge this iteration's answers into the entry (monotonic union) and
+        // mark complete for the remainder of this pass.
         if let Some(entry) = self.table.get_mut(variant) {
-            entry.answers = answers.clone();
+            for answer in &answers {
+                if !entry.answers.contains(answer) {
+                    entry.answers.push(answer.clone());
+                }
+            }
             entry.status = GoalStatus::Complete;
         }
 
@@ -526,10 +602,14 @@ impl TablingEngine {
     fn evaluate_directly(&mut self, goal: &RuleAtom, depth: usize) -> Result<Vec<RuleAtom>> {
         let mut answers = Vec::new();
 
-        // Check facts first
-        let goal_key = Self::atom_to_key(goal);
-        if self.facts.contains(&goal_key) {
-            answers.push(goal.clone());
+        // Check facts first. A goal may contain variables, so we pattern-match
+        // (unify) against every stored fact rather than only testing exact
+        // membership — otherwise a body atom like `edge(?X, ?Y)` would never bind
+        // against ground facts and recursion could never make progress.
+        for fact in &self.fact_atoms {
+            if Self::unify(goal, fact).is_some() && !answers.contains(fact) {
+                answers.push(fact.clone());
+            }
         }
 
         // Match against rules
@@ -775,6 +855,7 @@ impl TablingEngine {
         self.table.clear();
         self.rules.clear();
         self.facts.clear();
+        self.fact_atoms.clear();
         self.directives.clear();
         self.call_stack.clear();
         self.statistics.reset();
@@ -1070,6 +1151,47 @@ mod tests {
         stats.misses.store(20, Ordering::Relaxed);
 
         assert!((stats.hit_rate() - 0.8).abs() < 0.01);
+    }
+
+    /// Regression: under the default `DelayAndResume` strategy a genuinely
+    /// recursive (cyclic) tabled query must return its complete answer set, not
+    /// a silently-empty result.
+    #[test]
+    fn regression_tabling_recursive_delay_and_resume() -> Result<(), Box<dyn std::error::Error>> {
+        // Default config uses LoopStrategy::DelayAndResume.
+        let mut engine = TablingEngine::default();
+        engine.add_table_directive(TableDirective::all());
+
+        // Cyclic graph: a <-> b
+        engine.add_fact(triple("a", "edge", "b"));
+        engine.add_fact(triple("b", "edge", "a"));
+
+        // reachable(X,Y) :- edge(X,Y)
+        engine.add_rule(Rule {
+            name: "reach_base".to_string(),
+            body: vec![triple("?X", "edge", "?Y")],
+            head: vec![triple("?X", "reachable", "?Y")],
+        });
+        // reachable(X,Y) :- edge(X,Z), reachable(Z,Y)
+        engine.add_rule(Rule {
+            name: "reach_rec".to_string(),
+            body: vec![triple("?X", "edge", "?Z"), triple("?Z", "reachable", "?Y")],
+            head: vec![triple("?X", "reachable", "?Y")],
+        });
+
+        let results = engine.query(&triple("a", "reachable", "?Y"))?;
+
+        // a reaches b directly, and reaches a via the cycle a->b->a.
+        assert!(
+            results.contains(&triple("a", "reachable", "b")),
+            "expected reachable(a,b); got: {results:?}"
+        );
+        assert!(
+            results.contains(&triple("a", "reachable", "a")),
+            "expected reachable(a,a) via cycle; recursion must not silently \
+             return empty; got: {results:?}"
+        );
+        Ok(())
     }
 
     #[test]

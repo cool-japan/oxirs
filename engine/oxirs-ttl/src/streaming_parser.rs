@@ -96,26 +96,28 @@ impl StreamingParser {
     }
 
     /// Flush any remaining buffered content, returning any remaining triples.
+    ///
+    /// `parse_buffer()` (invoked by every `feed()` call) only ever leaves the
+    /// internal buffer non-empty in two cases: it is waiting for more input
+    /// to complete the statement currently being parsed, or it is genuinely
+    /// empty — any statement that already parses cleanly is consumed and
+    /// removed from the buffer immediately, and any outright syntax error is
+    /// already surfaced as an `Err` from `feed()` itself. Therefore, if any
+    /// non-whitespace, non-comment content remains in the buffer once the
+    /// caller declares the stream finished, that content is by definition an
+    /// incomplete, truncated statement. Per this project's fail-loud
+    /// contract, that must be reported as an error rather than silently
+    /// discarded as an empty, successful result.
     pub fn flush(&mut self) -> Result<Vec<ParsedTriple>, StreamParseError> {
-        // Try to parse whatever remains in the buffer
-        // Trim trailing whitespace/comments
-        let trimmed = self.buffer.trim().to_string();
-        if trimmed.is_empty() {
-            self.buffer.clear();
-            return Ok(vec![]);
-        }
-        // If there's unparseable content, return error
+        let remaining = self
+            .skip_whitespace_and_comments(self.buffer.trim_start())
+            .trim_end()
+            .to_string();
         self.buffer.clear();
-        if !trimmed.is_empty() {
-            // Check if it looks like an incomplete triple
-            if trimmed.ends_with('.') || trimmed.is_empty() {
-                Ok(vec![])
-            } else {
-                // Incomplete statement — treat as error in strict mode, or ignore
-                Ok(vec![])
-            }
-        } else {
+        if remaining.is_empty() {
             Ok(vec![])
+        } else {
+            Err(StreamParseError::UnexpectedEof)
         }
     }
 
@@ -982,6 +984,62 @@ mod tests {
             .expect("should succeed");
         let result = parser.flush().expect("should succeed");
         assert!(result.is_empty()); // already parsed
+    }
+
+    #[test]
+    fn regression_flush_errors_on_truncated_trailing_statement() {
+        // Feeding a statement that never gets a trailing '.' before the
+        // stream ends must surface as an error at flush() time, not a
+        // silent, successful empty result (fail-loud contract).
+        let mut parser = StreamingParser::new();
+        parser
+            .feed("<http://s> <http://p> <http://o>")
+            .expect("feed of an incomplete statement should not itself error");
+        let result = parser.flush();
+        assert!(
+            matches!(result, Err(StreamParseError::UnexpectedEof)),
+            "flush() on a truncated trailing statement must return Err(UnexpectedEof), got {result:?}"
+        );
+    }
+
+    #[test]
+    fn regression_flush_errors_on_partial_iri_token() {
+        let mut parser = StreamingParser::new();
+        parser
+            .feed("<http://s> <http://p> <http://incomplete")
+            .expect("feed of a partial token should not itself error");
+        let result = parser.flush();
+        assert!(
+            result.is_err(),
+            "a dangling, unterminated token must error at flush"
+        );
+    }
+
+    #[test]
+    fn regression_parse_complete_errors_on_truncated_document() {
+        // parse_complete() = feed() + flush(); a document that ends
+        // mid-statement must propagate an error rather than silently
+        // dropping the trailing (incomplete) statement.
+        let input = "<http://s1> <http://p> <http://o1> .\n<http://s2> <http://p> <http://o2>";
+        let result = StreamingParser::parse_complete(input);
+        assert!(
+            result.is_err(),
+            "a document truncated mid-statement must fail rather than succeed with a silently dropped triple"
+        );
+    }
+
+    #[test]
+    fn regression_flush_still_ok_for_trailing_comment_only() {
+        // A trailing comment-only remainder (no real dangling content) must
+        // still flush cleanly, not be misclassified as truncated input.
+        let mut parser = StreamingParser::new();
+        parser
+            .feed("<http://s> <http://p> <http://o> .\n# trailing comment")
+            .expect("should succeed");
+        let result = parser
+            .flush()
+            .expect("trailing comment-only remainder should not error");
+        assert!(result.is_empty());
     }
 
     // ---- errors ----

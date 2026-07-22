@@ -20,6 +20,7 @@ use tracing::{debug, info};
 
 // Module declarations
 pub mod api_key_service; // API key management with rotation and revocation
+pub mod cert_verify; // Pure-Rust X.509 certificate signature verification
 pub mod certificate;
 pub mod cluster_auth; // Cross-node authentication tokens for cluster communication (Track A24)
 pub mod graph_acl; // Graph-level ACL on top of dataset RBAC (v1.0 LTS)
@@ -823,7 +824,6 @@ use axum::{
     extract::{FromRequestParts, OptionalFromRequestParts},
     http::{request::Parts, StatusCode},
 };
-use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
 
 impl<S> FromRequestParts<S> for AuthUser
 where
@@ -832,18 +832,20 @@ where
     type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // Try to extract authorization header
-        if let Some(auth_header) = parts.headers.typed_get::<Authorization<Bearer>>() {
-            // Extract token from header
-            let _token = auth_header.token();
-
-            // Get auth service from app state (this would need to be properly implemented)
-            // For now, return unauthorized
-            return Err(StatusCode::UNAUTHORIZED);
+        // The `authenticate` middleware (see `crate::middleware::authenticate`)
+        // validates the caller's Bearer/JWT/session credential once, up front,
+        // and stores the resolved identity in the request extensions as
+        // `AuthenticatedUser`. Handlers obtain that identity through this
+        // extractor rather than re-parsing/re-validating the credential on
+        // every extraction.
+        if let Some(crate::middleware::AuthenticatedUser(user)) =
+            parts
+                .extensions
+                .get::<crate::middleware::AuthenticatedUser>()
+        {
+            return Ok(AuthUser((**user).clone()));
         }
 
-        // Try session-based authentication
-        // This would need proper cookie handling implementation
         Err(StatusCode::UNAUTHORIZED)
     }
 }

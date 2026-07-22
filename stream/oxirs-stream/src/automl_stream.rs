@@ -36,6 +36,16 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tracing::info;
 
+/// Numerically-stable logistic sigmoid.
+fn sigmoid(z: f64) -> f64 {
+    if z >= 0.0 {
+        1.0 / (1.0 + (-z).exp())
+    } else {
+        let e = z.exp();
+        e / (1.0 + e)
+    }
+}
+
 /// Machine learning task type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskType {
@@ -343,7 +353,20 @@ impl AutoML {
         );
 
         let start_time = std::time::Instant::now();
-        let candidate_algorithms = Algorithm::for_task(self.config.task_type);
+        // Only search over algorithms we actually implement a learner for. This
+        // avoids fabricating scores for unimplemented algorithms: the search
+        // never claims to have trained something it cannot train.
+        let candidate_algorithms: Vec<Algorithm> = Algorithm::for_task(self.config.task_type)
+            .into_iter()
+            .filter(|algorithm| Self::is_supported(*algorithm))
+            .collect();
+        if candidate_algorithms.is_empty() {
+            return Err(anyhow!(
+                "AutoML has no implemented learner for task {:?}; supported algorithms are \
+                 LinearRegression, LogisticRegression and OnlineSGD",
+                self.config.task_type
+            ));
+        }
 
         let mut best_overall_score = f64::NEG_INFINITY;
         let mut trials_without_improvement = 0;
@@ -540,32 +563,223 @@ impl AutoML {
         Ok(scores)
     }
 
-    /// Evaluate a single fold
-    async fn evaluate_fold(
-        &self,
-        _algorithm: Algorithm,
-        _hyperparams: &HyperParameters,
-        _features: &Array2<f64>,
-        _labels: &Array1<f64>,
-        _val_start: usize,
-        _val_end: usize,
-    ) -> Result<f64> {
-        // Simplified evaluation - train on all data except validation fold
-        // and evaluate on validation fold
-
-        // For simplicity, return a random score
-        // In production, actually train and evaluate
-        let mut rng = self.rng.lock().await;
-        Ok(0.7 + rng.random::<f64>() * 0.3) // Score between 0.7 and 1.0
+    /// Whether AutoML has a real learner implemented for this algorithm.
+    ///
+    /// The model representation used throughout this module is a linear model
+    /// (weights + bias, with an optional sigmoid activation). Only the
+    /// algorithms that map onto that representation are supported; everything
+    /// else is rejected rather than being faked.
+    fn is_supported(algorithm: Algorithm) -> bool {
+        matches!(
+            algorithm,
+            Algorithm::LinearRegression | Algorithm::LogisticRegression | Algorithm::OnlineSGD
+        )
     }
 
-    /// Compute various performance metrics
+    /// Whether the task uses a sigmoid (classification-style) activation.
+    fn is_classification_task(task: TaskType) -> bool {
+        matches!(task, TaskType::Classification | TaskType::AnomalyDetection)
+    }
+
+    /// Fit a linear (or logistic) model by gradient descent.
+    ///
+    /// Features are standardized internally for numerical stability regardless
+    /// of scale, and the learned parameters are converted back to raw feature
+    /// space so callers can apply them directly to un-normalized inputs. When
+    /// `skip` is `Some((start, end))` the rows in that half-open range are held
+    /// out (used for cross-validation folds).
+    fn fit_linear(
+        features: &Array2<f64>,
+        labels: &Array1<f64>,
+        hyperparams: &HyperParameters,
+        is_classification: bool,
+        skip: Option<(usize, usize)>,
+    ) -> (Vec<f64>, f64) {
+        let n_samples = features.shape()[0];
+        let n_features = features.shape()[1];
+
+        // Compute mean/std per feature over the included rows for standardization.
+        let mut mean = vec![0.0f64; n_features];
+        let mut included: f64 = 0.0;
+        for i in 0..n_samples {
+            if let Some((start, end)) = skip {
+                if i >= start && i < end {
+                    continue;
+                }
+            }
+            for j in 0..n_features {
+                mean[j] += features[[i, j]];
+            }
+            included += 1.0;
+        }
+        if included == 0.0 {
+            return (vec![0.0; n_features], 0.0);
+        }
+        for m in mean.iter_mut() {
+            *m /= included;
+        }
+        let mut std = vec![0.0f64; n_features];
+        for i in 0..n_samples {
+            if let Some((start, end)) = skip {
+                if i >= start && i < end {
+                    continue;
+                }
+            }
+            for j in 0..n_features {
+                let diff = features[[i, j]] - mean[j];
+                std[j] += diff * diff;
+            }
+        }
+        for s in std.iter_mut() {
+            *s = (*s / included).sqrt();
+            if *s < 1e-8 {
+                *s = 1.0;
+            }
+        }
+
+        let lr = hyperparams.learning_rate.max(1e-6);
+        let l2 = hyperparams.regularization.max(0.0);
+        let epochs = hyperparams.n_estimators.clamp(10, 300);
+
+        // Gradient descent in standardized feature space.
+        let mut std_weights = vec![0.0f64; n_features];
+        let mut std_bias = 0.0f64;
+        for _ in 0..epochs {
+            let mut grad_w = vec![0.0f64; n_features];
+            let mut grad_b = 0.0f64;
+            for i in 0..n_samples {
+                if let Some((start, end)) = skip {
+                    if i >= start && i < end {
+                        continue;
+                    }
+                }
+                let mut z = std_bias;
+                for j in 0..n_features {
+                    let x = (features[[i, j]] - mean[j]) / std[j];
+                    z += std_weights[j] * x;
+                }
+                let pred = if is_classification { sigmoid(z) } else { z };
+                let error = pred - labels[i];
+                for j in 0..n_features {
+                    let x = (features[[i, j]] - mean[j]) / std[j];
+                    grad_w[j] += error * x;
+                }
+                grad_b += error;
+            }
+            let inv = 1.0 / included;
+            for j in 0..n_features {
+                std_weights[j] -= lr * (grad_w[j] * inv + l2 * std_weights[j]);
+            }
+            std_bias -= lr * grad_b * inv;
+        }
+
+        // Convert standardized-space parameters back to raw feature space:
+        //   z = b' + Σ w'_j (x_j - mean_j)/std_j
+        //     = (b' - Σ w'_j mean_j/std_j) + Σ (w'_j/std_j) x_j
+        let mut weights = vec![0.0f64; n_features];
+        let mut bias = std_bias;
+        for j in 0..n_features {
+            weights[j] = std_weights[j] / std[j];
+            bias -= std_weights[j] * mean[j] / std[j];
+        }
+
+        (weights, bias)
+    }
+
+    /// Score a single row using raw-space parameters.
+    fn linear_score(weights: &[f64], bias: f64, features: &Array2<f64>, row: usize) -> f64 {
+        let n_features = features.shape()[1].min(weights.len());
+        let mut z = bias;
+        for j in 0..n_features {
+            z += weights[j] * features[[row, j]];
+        }
+        z
+    }
+
+    /// Evaluate a single fold by training on the complement and scoring the
+    /// held-out validation rows.
+    async fn evaluate_fold(
+        &self,
+        algorithm: Algorithm,
+        hyperparams: &HyperParameters,
+        features: &Array2<f64>,
+        labels: &Array1<f64>,
+        val_start: usize,
+        val_end: usize,
+    ) -> Result<f64> {
+        if !Self::is_supported(algorithm) {
+            return Err(anyhow!(
+                "AutoML training for algorithm {:?} is not implemented",
+                algorithm
+            ));
+        }
+
+        let is_classification = Self::is_classification_task(self.config.task_type);
+        let (weights, bias) = Self::fit_linear(
+            features,
+            labels,
+            hyperparams,
+            is_classification,
+            Some((val_start, val_end)),
+        );
+
+        if val_end <= val_start {
+            return Ok(0.0);
+        }
+
+        if is_classification {
+            let mut correct = 0usize;
+            let mut total = 0usize;
+            for i in val_start..val_end {
+                let z = Self::linear_score(&weights, bias, features, i);
+                let predicted = sigmoid(z) >= 0.5;
+                let actual = labels[i] >= 0.5;
+                if predicted == actual {
+                    correct += 1;
+                }
+                total += 1;
+            }
+            Ok(if total > 0 {
+                correct as f64 / total as f64
+            } else {
+                0.0
+            })
+        } else {
+            // Coefficient of determination (R²) on the validation fold.
+            let mut sum = 0.0;
+            let mut count = 0.0;
+            for i in val_start..val_end {
+                sum += labels[i];
+                count += 1.0;
+            }
+            if count == 0.0 {
+                return Ok(0.0);
+            }
+            let mean = sum / count;
+            let mut ss_res = 0.0;
+            let mut ss_tot = 0.0;
+            for i in val_start..val_end {
+                let z = Self::linear_score(&weights, bias, features, i);
+                ss_res += (labels[i] - z).powi(2);
+                ss_tot += (labels[i] - mean).powi(2);
+            }
+            let r2 = if ss_tot > 0.0 {
+                1.0 - ss_res / ss_tot
+            } else {
+                0.0
+            };
+            // Clamp to [0, 1] for use as a selection score.
+            Ok(r2.clamp(0.0, 1.0))
+        }
+    }
+
+    /// Compute real performance metrics from actual predictions vs. labels.
     async fn compute_metrics(
         &self,
-        _algorithm: Algorithm,
-        _hyperparams: &HyperParameters,
-        _features: &Array2<f64>,
-        _labels: &Array1<f64>,
+        algorithm: Algorithm,
+        hyperparams: &HyperParameters,
+        features: &Array2<f64>,
+        labels: &Array1<f64>,
     ) -> Result<(
         Option<f64>,
         Option<f64>,
@@ -574,40 +788,101 @@ impl AutoML {
         Option<f64>,
         Option<f64>,
     )> {
-        // Simplified metrics computation
-        let mut rng = self.rng.lock().await;
+        if !Self::is_supported(algorithm) {
+            return Err(anyhow!(
+                "AutoML training for algorithm {:?} is not implemented",
+                algorithm
+            ));
+        }
+
+        let is_classification = Self::is_classification_task(self.config.task_type);
+        let (weights, bias) =
+            Self::fit_linear(features, labels, hyperparams, is_classification, None);
+        let n_samples = features.shape()[0];
 
         match self.config.task_type {
-            TaskType::Classification => {
-                let accuracy = Some(0.7 + rng.random::<f64>() * 0.3);
-                let precision = Some(0.7 + rng.random::<f64>() * 0.3);
-                let recall = Some(0.7 + rng.random::<f64>() * 0.3);
-                let f1 = Some(0.7 + rng.random::<f64>() * 0.3);
-                Ok((accuracy, precision, recall, f1, None, None))
+            TaskType::Classification | TaskType::AnomalyDetection => {
+                let (mut tp, mut fp, mut fn_, mut tn) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+                for i in 0..n_samples {
+                    let z = Self::linear_score(&weights, bias, features, i);
+                    let predicted = sigmoid(z) >= 0.5;
+                    let actual = labels[i] >= 0.5;
+                    match (predicted, actual) {
+                        (true, true) => tp += 1.0,
+                        (true, false) => fp += 1.0,
+                        (false, true) => fn_ += 1.0,
+                        (false, false) => tn += 1.0,
+                    }
+                }
+                let total = tp + fp + fn_ + tn;
+                let accuracy = if total > 0.0 { (tp + tn) / total } else { 0.0 };
+                let precision = if tp + fp > 0.0 { tp / (tp + fp) } else { 0.0 };
+                let recall = if tp + fn_ > 0.0 { tp / (tp + fn_) } else { 0.0 };
+                let f1 = if precision + recall > 0.0 {
+                    2.0 * precision * recall / (precision + recall)
+                } else {
+                    0.0
+                };
+                Ok((
+                    Some(accuracy),
+                    Some(precision),
+                    Some(recall),
+                    Some(f1),
+                    None,
+                    None,
+                ))
             }
             TaskType::Regression | TaskType::TimeSeries => {
-                let mse = Some(0.1 + rng.random::<f64>() * 0.9);
-                let r_squared = Some(0.5 + rng.random::<f64>() * 0.5);
-                Ok((None, None, None, None, mse, r_squared))
+                let mut ss_res = 0.0;
+                let mut sum = 0.0;
+                for i in 0..n_samples {
+                    sum += labels[i];
+                }
+                let mean = if n_samples > 0 {
+                    sum / n_samples as f64
+                } else {
+                    0.0
+                };
+                let mut ss_tot = 0.0;
+                for i in 0..n_samples {
+                    let z = Self::linear_score(&weights, bias, features, i);
+                    ss_res += (labels[i] - z).powi(2);
+                    ss_tot += (labels[i] - mean).powi(2);
+                }
+                let mse = if n_samples > 0 {
+                    ss_res / n_samples as f64
+                } else {
+                    0.0
+                };
+                let r_squared = if ss_tot > 0.0 {
+                    1.0 - ss_res / ss_tot
+                } else {
+                    0.0
+                };
+                Ok((None, None, None, None, Some(mse), Some(r_squared)))
             }
             _ => Ok((None, None, None, None, None, None)),
         }
     }
 
-    /// Train final model with best hyperparameters
+    /// Train the final model with the given hyperparameters on all data.
     async fn train_final_model(
         &self,
-        _algorithm: Algorithm,
-        _hyperparams: &HyperParameters,
+        algorithm: Algorithm,
+        hyperparams: &HyperParameters,
         features: &Array2<f64>,
-        _labels: &Array1<f64>,
+        labels: &Array1<f64>,
     ) -> Result<ModelParameters> {
-        // Simplified model training - just create placeholder parameters
-        let n_features = features.shape()[1];
+        if !Self::is_supported(algorithm) {
+            return Err(anyhow!(
+                "AutoML training for algorithm {:?} is not implemented",
+                algorithm
+            ));
+        }
 
-        let mut rng = self.rng.lock().await;
-        let weights: Vec<f64> = (0..n_features).map(|_| rng.random::<f64>() - 0.5).collect();
-        let bias = rng.random::<f64>() - 0.5;
+        let is_classification = Self::is_classification_task(self.config.task_type);
+        let (weights, bias) =
+            Self::fit_linear(features, labels, hyperparams, is_classification, None);
 
         Ok(ModelParameters {
             weights,
@@ -924,6 +1199,53 @@ mod tests {
 
         let pred = prediction.unwrap();
         assert!((0.0..=1.0).contains(&pred)); // Should be probability for classification
+    }
+
+    #[tokio::test]
+    async fn regression_linear_fit_is_data_dependent() {
+        // y = 2x + 1 over a clean single-feature dataset.
+        let config = AutoMLConfig {
+            task_type: TaskType::Regression,
+            max_training_time_secs: 10,
+            n_trials: 25,
+            cv_folds: 3,
+            enable_ensemble: false,
+            ..Default::default()
+        };
+        let mut automl = AutoML::new(config).unwrap();
+
+        let xs: Vec<f64> = (0..30).map(|x| x as f64).collect();
+        let features = Array2::from_shape_vec((30, 1), xs.clone()).unwrap();
+        let labels = Array1::from_vec(xs.iter().map(|x| 2.0 * x + 1.0).collect());
+
+        automl.fit(&features, &labels).await.unwrap();
+
+        // Prediction must track the real linear relationship, not random noise.
+        let prediction = automl.predict(&Array1::from_vec(vec![10.0])).await.unwrap();
+        assert!(
+            (prediction - 21.0).abs() < 3.0,
+            "expected ~21 for y=2x+1 at x=10, got {prediction}"
+        );
+
+        // The best model should have a strong fit (real R²), not a fabricated score.
+        let (_, _, perf) = automl.get_best_model_info().await.unwrap();
+        assert!(perf.r_squared.unwrap_or(0.0) > 0.8);
+    }
+
+    #[tokio::test]
+    async fn regression_unsupported_task_fails_loud() {
+        let config = AutoMLConfig {
+            task_type: TaskType::Clustering,
+            n_trials: 2,
+            max_training_time_secs: 2,
+            ..Default::default()
+        };
+        let mut automl = AutoML::new(config).unwrap();
+        let features = Array2::from_shape_vec((4, 2), (0..8).map(|x| x as f64).collect()).unwrap();
+        let labels = Array1::from_vec(vec![0.0, 1.0, 0.0, 1.0]);
+
+        // Clustering has no implemented learner => fit must error, not fake it.
+        assert!(automl.fit(&features, &labels).await.is_err());
     }
 
     #[tokio::test]

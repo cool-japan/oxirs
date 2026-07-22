@@ -431,15 +431,18 @@ impl DodEncoder {
         if dod == 0 {
             self.writer.write_bit(false); // single 0 bit
             self.zero_dod_count += 1;
-        } else if (-63..=64).contains(&dod) {
+        } else if (-64..=63).contains(&dod) {
+            // 7-bit two's complement covers exactly -64..=63.
             self.writer.write_bits(0b10, 2);
             // 7-bit signed value
             self.writer.write_bits((dod as u64) & 0x7F, 7);
-        } else if (-255..=256).contains(&dod) {
+        } else if (-256..=255).contains(&dod) {
+            // 9-bit two's complement covers exactly -256..=255.
             self.writer.write_bits(0b110, 3);
             // 9-bit signed value
             self.writer.write_bits((dod as u64) & 0x1FF, 9);
-        } else if (-2047..=2048).contains(&dod) {
+        } else if (-2048..=2047).contains(&dod) {
+            // 12-bit two's complement covers exactly -2048..=2047.
             self.writer.write_bits(0b1110, 4);
             // 12-bit signed value
             self.writer.write_bits((dod as u64) & 0xFFF, 12);
@@ -910,6 +913,62 @@ mod tests {
         let mut dec = DodDecoder::new(data);
         let decoded = dec.decode_all(2);
         assert_eq!(decoded, vec![1000, 1060]);
+    }
+
+    #[test]
+    fn regression_dod_boundary_positive_7_9_12_bit() {
+        // dod at exactly +64, +256, +2048 must round-trip losslessly.
+        // delta1 = 1000 (encode_second, uncompressed);
+        // dod2 = +64  -> delta2 = 1064
+        // dod3 = +256 -> delta3 = 1320
+        // dod4 = +2048 -> delta4 = 3368
+        let t0 = 1_640_000_000_000i64;
+        let t1 = t0 + 1000;
+        let t2 = t1 + 1064;
+        let t3 = t2 + 1320;
+        let t4 = t3 + 3368;
+        let timestamps = vec![t0, t1, t2, t3, t4];
+
+        let mut enc = DodEncoder::new();
+        enc.encode_first(timestamps[0]);
+        enc.encode_second(timestamps[1]);
+        for t in timestamps.iter().skip(2) {
+            enc.encode(*t);
+        }
+        let (writer, count, _) = enc.finish();
+        assert_eq!(count, timestamps.len());
+        let data = writer.finish();
+
+        let mut dec = DodDecoder::new(data);
+        let decoded = dec.decode_all(timestamps.len());
+        assert_eq!(decoded, timestamps);
+    }
+
+    #[test]
+    fn regression_dod_boundary_negative_7_9_12_bit() {
+        // dod at exactly -64, -256, -2048 must round-trip losslessly.
+        // delta1 = 1000; dod2 = -64 -> delta2 = 936;
+        // dod3 = -256 -> delta3 = 680; dod4 = -2048 -> delta4 = -1368.
+        let t0 = 1_640_000_000_000i64;
+        let t1 = t0 + 1000;
+        let t2 = t1 + 936;
+        let t3 = t2 + 680;
+        let t4 = t3 - 1368;
+        let timestamps = vec![t0, t1, t2, t3, t4];
+
+        let mut enc = DodEncoder::new();
+        enc.encode_first(timestamps[0]);
+        enc.encode_second(timestamps[1]);
+        for t in timestamps.iter().skip(2) {
+            enc.encode(*t);
+        }
+        let (writer, count, _) = enc.finish();
+        assert_eq!(count, timestamps.len());
+        let data = writer.finish();
+
+        let mut dec = DodDecoder::new(data);
+        let decoded = dec.decode_all(timestamps.len());
+        assert_eq!(decoded, timestamps);
     }
 
     // ── Full block compression ──────────────────────────────────────────────

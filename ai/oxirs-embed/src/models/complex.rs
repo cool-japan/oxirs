@@ -6,6 +6,7 @@
 //!
 //! Reference: Trouillon et al. "Complex Embeddings for Simple Link Prediction" (2016)
 
+use crate::models::serialization::{BaseModelSnapshot, MatrixF64};
 use crate::models::{common::*, BaseModel};
 use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
@@ -14,10 +15,25 @@ use scirs2_core::ndarray_ext::Array2;
 #[allow(unused_imports)]
 use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
 use std::ops::AddAssign;
+use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;
+
+/// Serializable representation of a ComplEx model for persistence.
+#[derive(Debug, Serialize, Deserialize)]
+struct ComplExSerializable {
+    base: BaseModelSnapshot,
+    entity_embeddings_real: MatrixF64,
+    entity_embeddings_imag: MatrixF64,
+    relation_embeddings_real: MatrixF64,
+    relation_embeddings_imag: MatrixF64,
+    embeddings_initialized: bool,
+    regularization: RegularizationType,
+}
 
 /// Type alias for gradient tensors
 type GradientTuple = (Array2<f64>, Array2<f64>, Array2<f64>, Array2<f64>);
@@ -622,11 +638,50 @@ impl EmbeddingModel for ComplEx {
 
     fn save(&self, path: &str) -> Result<()> {
         info!("Saving ComplEx model to {}", path);
+
+        let serializable = ComplExSerializable {
+            base: BaseModelSnapshot::capture(&self.base),
+            entity_embeddings_real: MatrixF64::from_array(&self.entity_embeddings_real),
+            entity_embeddings_imag: MatrixF64::from_array(&self.entity_embeddings_imag),
+            relation_embeddings_real: MatrixF64::from_array(&self.relation_embeddings_real),
+            relation_embeddings_imag: MatrixF64::from_array(&self.relation_embeddings_imag),
+            embeddings_initialized: self.embeddings_initialized,
+            regularization: self.regularization,
+        };
+
+        let file = File::create(path)
+            .map_err(|e| anyhow!("Failed to create model file {}: {}", path, e))?;
+        let writer = BufWriter::new(file);
+        oxicode::serde::encode_into_std_write(&serializable, writer, oxicode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize ComplEx model: {}", e))?;
+
+        info!("ComplEx model saved successfully");
         Ok(())
     }
 
     fn load(&mut self, path: &str) -> Result<()> {
         info!("Loading ComplEx model from {}", path);
+
+        if !Path::new(path).exists() {
+            return Err(anyhow!("Model file not found: {}", path));
+        }
+
+        let file =
+            File::open(path).map_err(|e| anyhow!("Failed to open model file {}: {}", path, e))?;
+        let reader = BufReader::new(file);
+        let (serializable, _): (ComplExSerializable, _) =
+            oxicode::serde::decode_from_std_read(reader, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize ComplEx model: {}", e))?;
+
+        self.entity_embeddings_real = serializable.entity_embeddings_real.to_array()?;
+        self.entity_embeddings_imag = serializable.entity_embeddings_imag.to_array()?;
+        self.relation_embeddings_real = serializable.relation_embeddings_real.to_array()?;
+        self.relation_embeddings_imag = serializable.relation_embeddings_imag.to_array()?;
+        self.embeddings_initialized = serializable.embeddings_initialized;
+        self.regularization = serializable.regularization;
+        serializable.base.restore_into(&mut self.base);
+
+        info!("ComplEx model loaded successfully");
         Ok(())
     }
 

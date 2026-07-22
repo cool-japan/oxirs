@@ -4,7 +4,7 @@
 //! with optimization, explanation, and multiple data source support.
 
 use super::{utils, ToolResult, ToolStats};
-use oxirs_core::model::Triple;
+use oxirs_core::model::{Term, Triple};
 use oxirs_core::rdf_store::{QueryResults as CoreQueryResults, RdfStore};
 use oxirs_ttl::formats::nquads::NQuadsParser;
 use oxirs_ttl::formats::ntriples::NTriplesParser;
@@ -180,7 +180,57 @@ enum QueryResultType {
 
 #[derive(Debug)]
 struct QueryBinding {
+    /// Human-readable (`Display`) rendering of each bound value — used by the
+    /// table/csv/html/markdown formatters, which have always shown terms this
+    /// way and are unaffected by this fix.
     values: std::collections::HashMap<String, String>,
+    /// The bound value's real term kind (IRI/blank node/literal, with its
+    /// unwrapped lexical value and any language tag/datatype) — used by the
+    /// W3C-SPARQL-Results-format-sensitive JSON/XML formatters so a binding
+    /// is never mislabeled as `"type": "literal"` just because it was
+    /// convenient to stringify.
+    kinds: std::collections::HashMap<String, BoundTermKind>,
+}
+
+/// A query-result term's real kind, independent of its `Display` rendering.
+#[derive(Debug, Clone)]
+enum BoundTermKind {
+    Uri(String),
+    BlankNode(String),
+    Literal {
+        value: String,
+        language: Option<String>,
+        datatype: Option<String>,
+    },
+}
+
+/// `xsd:string`, the implicit datatype of an untyped, non-language-tagged
+/// RDF literal — SPARQL Results JSON/XML omit an explicit `datatype`
+/// attribute for it (it is the default), so it is only emitted when it
+/// differs.
+const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+
+/// Classify an `oxirs_core` `Term` into its `BoundTermKind` for result
+/// formatting, preserving IRI/blank-node/literal identity instead of
+/// collapsing everything to a single `Display`-derived string.
+fn classify_term(term: &Term) -> BoundTermKind {
+    match term {
+        Term::NamedNode(n) => BoundTermKind::Uri(n.as_str().to_string()),
+        Term::BlankNode(b) => BoundTermKind::BlankNode(b.as_str().to_string()),
+        Term::Literal(l) => BoundTermKind::Literal {
+            value: l.value().to_string(),
+            language: l.language().map(|s| s.to_string()),
+            datatype: Some(l.datatype().as_str().to_string()),
+        },
+        // A bound query-result value is never itself a variable in practice;
+        // fall back to its lexical text rather than panicking or fabricating
+        // a literal type for it.
+        Term::Variable(v) => BoundTermKind::Uri(v.to_string()),
+        // RDF-star quoted triples have no direct term type in the W3C SPARQL
+        // Results formats; represent them via their canonical text rather
+        // than mislabeling them as a plain literal.
+        Term::QuotedTriple(_) => BoundTermKind::Uri(term.to_string()),
+    }
 }
 
 /// Parse and validate SPARQL query
@@ -611,12 +661,14 @@ fn execute_sparql_query(
             let mut bindings = Vec::with_capacity(rows.len());
             for row in rows {
                 let mut values = std::collections::HashMap::new();
+                let mut kinds = std::collections::HashMap::new();
                 for var in oxirs_results.variables() {
                     if let Some(term) = row.get(var) {
                         values.insert(format!("?{var}"), term.to_string());
+                        kinds.insert(format!("?{var}"), classify_term(term));
                     }
                 }
-                bindings.push(QueryBinding { values });
+                bindings.push(QueryBinding { values, kinds });
             }
             QueryResults {
                 variables,
@@ -637,11 +689,21 @@ fn execute_sparql_query(
             ];
             let mut bindings = Vec::with_capacity(quads.len());
             for quad in quads {
+                let s_term: Term = quad.subject().clone().into();
+                let p_term: Term = quad.predicate().clone().into();
+                let o_term: Term = quad.object().clone().into();
+
                 let mut values = std::collections::HashMap::new();
-                values.insert("?subject".to_string(), quad.subject().to_string());
-                values.insert("?predicate".to_string(), quad.predicate().to_string());
-                values.insert("?object".to_string(), quad.object().to_string());
-                bindings.push(QueryBinding { values });
+                values.insert("?subject".to_string(), s_term.to_string());
+                values.insert("?predicate".to_string(), p_term.to_string());
+                values.insert("?object".to_string(), o_term.to_string());
+
+                let mut kinds = std::collections::HashMap::new();
+                kinds.insert("?subject".to_string(), classify_term(&s_term));
+                kinds.insert("?predicate".to_string(), classify_term(&p_term));
+                kinds.insert("?object".to_string(), classify_term(&o_term));
+
+                bindings.push(QueryBinding { values, kinds });
             }
             let result_type = if query_info.query_type == "DESCRIBE" {
                 QueryResultType::Describe
@@ -763,6 +825,66 @@ fn format_csv_results(results: &QueryResults, separator: &str) -> ToolResult<()>
     Ok(())
 }
 
+/// Render one bound value as a W3C SPARQL Results-JSON term object body
+/// (the `{ "type": ..., "value": ..., ... }` object), preserving the term's
+/// real IRI/blank-node/literal kind and unwrapped lexical value instead of
+/// mislabeling every binding `"type": "literal"` with the quoted/bracketed
+/// `Display` text as its `"value"`.
+fn json_term_object(kind: &BoundTermKind) -> String {
+    match kind {
+        BoundTermKind::Uri(v) => {
+            format!("{{ \"type\": \"uri\", \"value\": \"{}\" }}", json_escape(v))
+        }
+        BoundTermKind::BlankNode(v) => {
+            format!(
+                "{{ \"type\": \"bnode\", \"value\": \"{}\" }}",
+                json_escape(v)
+            )
+        }
+        BoundTermKind::Literal {
+            value,
+            language,
+            datatype,
+        } => {
+            if let Some(lang) = language {
+                format!(
+                    "{{ \"type\": \"literal\", \"value\": \"{}\", \"xml:lang\": \"{}\" }}",
+                    json_escape(value),
+                    json_escape(lang)
+                )
+            } else if let Some(dt) = datatype.as_deref().filter(|dt| *dt != XSD_STRING) {
+                format!(
+                    "{{ \"type\": \"literal\", \"value\": \"{}\", \"datatype\": \"{}\" }}",
+                    json_escape(value),
+                    json_escape(dt)
+                )
+            } else {
+                format!(
+                    "{{ \"type\": \"literal\", \"value\": \"{}\" }}",
+                    json_escape(value)
+                )
+            }
+        }
+    }
+}
+
+/// Escape a string for embedding inside a JSON string literal.
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// Format results as JSON
 fn format_json_results(results: &QueryResults) -> ToolResult<()> {
     println!("{{");
@@ -784,9 +906,11 @@ fn format_json_results(results: &QueryResults) -> ToolResult<()> {
         println!("      {{");
         for (j, var) in results.variables.iter().enumerate() {
             let var_name = var.trim_start_matches('?');
-            let empty_string = String::new();
-            let value = binding.values.get(var).unwrap_or(&empty_string);
-            print!("        \"{var_name}\": {{ \"type\": \"literal\", \"value\": \"{value}\" }}");
+            let term_object = match binding.kinds.get(var) {
+                Some(kind) => json_term_object(kind),
+                None => "{ \"type\": \"literal\", \"value\": \"\" }".to_string(),
+            };
+            print!("        \"{var_name}\": {term_object}");
             if j < results.variables.len() - 1 {
                 print!(",");
             }
@@ -806,6 +930,38 @@ fn format_json_results(results: &QueryResults) -> ToolResult<()> {
     Ok(())
 }
 
+/// Render one bound value as a W3C SPARQL Results-XML `<binding>` element,
+/// using `<uri>`/`<bnode>`/`<literal>` per the term's real kind instead of
+/// always wrapping the value in `<literal>`.
+fn xml_binding_element(var_name: &str, kind: &BoundTermKind) -> String {
+    let body = match kind {
+        BoundTermKind::Uri(v) => format!("<uri>{}</uri>", html_escape(v)),
+        BoundTermKind::BlankNode(v) => format!("<bnode>{}</bnode>", html_escape(v)),
+        BoundTermKind::Literal {
+            value,
+            language,
+            datatype,
+        } => {
+            if let Some(lang) = language {
+                format!(
+                    "<literal xml:lang=\"{}\">{}</literal>",
+                    html_escape(lang),
+                    html_escape(value)
+                )
+            } else if let Some(dt) = datatype.as_deref().filter(|dt| *dt != XSD_STRING) {
+                format!(
+                    "<literal datatype=\"{}\">{}</literal>",
+                    html_escape(dt),
+                    html_escape(value)
+                )
+            } else {
+                format!("<literal>{}</literal>", html_escape(value))
+            }
+        }
+    };
+    format!("      <binding name=\"{var_name}\">\n        {body}\n      </binding>")
+}
+
 /// Format results as XML
 fn format_xml_results(results: &QueryResults) -> ToolResult<()> {
     println!("<?xml version=\"1.0\"?>");
@@ -821,10 +977,8 @@ fn format_xml_results(results: &QueryResults) -> ToolResult<()> {
         println!("    <result>");
         for var in &results.variables {
             let var_name = var.trim_start_matches('?');
-            if let Some(value) = binding.values.get(var) {
-                println!("      <binding name=\"{var_name}\">");
-                println!("        <literal>{value}</literal>");
-                println!("      </binding>");
+            if let Some(kind) = binding.kinds.get(var) {
+                println!("{}", xml_binding_element(var_name, kind));
             }
         }
         println!("    </result>");
@@ -1125,5 +1279,132 @@ mod tests {
         assert_eq!(quads.len(), 1);
 
         let _ = fs::remove_dir_all(&dataset_dir);
+    }
+
+    // ─── Regression: JSON/XML results must label terms by their real kind,
+    // not always "literal" (P2 finding) ─────────────────────────────────────
+
+    #[test]
+    fn regression_json_term_object_labels_uri_bnode_and_literal_correctly() {
+        let uri = BoundTermKind::Uri("http://example.org/s".to_string());
+        assert_eq!(
+            json_term_object(&uri),
+            "{ \"type\": \"uri\", \"value\": \"http://example.org/s\" }"
+        );
+
+        let bnode = BoundTermKind::BlankNode("b0".to_string());
+        assert_eq!(
+            json_term_object(&bnode),
+            "{ \"type\": \"bnode\", \"value\": \"b0\" }"
+        );
+
+        let plain_literal = BoundTermKind::Literal {
+            value: "hello".to_string(),
+            language: None,
+            datatype: Some(XSD_STRING.to_string()),
+        };
+        assert_eq!(
+            json_term_object(&plain_literal),
+            "{ \"type\": \"literal\", \"value\": \"hello\" }",
+            "implicit xsd:string must not emit a redundant datatype attribute"
+        );
+
+        let lang_literal = BoundTermKind::Literal {
+            value: "bonjour".to_string(),
+            language: Some("fr".to_string()),
+            datatype: None,
+        };
+        assert_eq!(
+            json_term_object(&lang_literal),
+            "{ \"type\": \"literal\", \"value\": \"bonjour\", \"xml:lang\": \"fr\" }"
+        );
+
+        let typed_literal = BoundTermKind::Literal {
+            value: "42".to_string(),
+            language: None,
+            datatype: Some("http://www.w3.org/2001/XMLSchema#integer".to_string()),
+        };
+        assert_eq!(
+            json_term_object(&typed_literal),
+            "{ \"type\": \"literal\", \"value\": \"42\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\" }"
+        );
+    }
+
+    #[test]
+    fn regression_json_term_object_escapes_quotes_and_backslashes() {
+        let literal = BoundTermKind::Literal {
+            value: "he said \"hi\" \\ bye".to_string(),
+            language: None,
+            datatype: None,
+        };
+        let out = json_term_object(&literal);
+        assert!(out.contains("he said \\\"hi\\\" \\\\ bye"));
+    }
+
+    #[test]
+    fn regression_xml_binding_element_uses_uri_and_bnode_tags_not_literal() {
+        let uri = BoundTermKind::Uri("http://example.org/s".to_string());
+        let out = xml_binding_element("s", &uri);
+        assert!(out.contains("<uri>http://example.org/s</uri>"));
+        assert!(!out.contains("<literal>"));
+
+        let bnode = BoundTermKind::BlankNode("b0".to_string());
+        let out = xml_binding_element("s", &bnode);
+        assert!(out.contains("<bnode>b0</bnode>"));
+        assert!(!out.contains("<literal>"));
+
+        let literal = BoundTermKind::Literal {
+            value: "hi".to_string(),
+            language: None,
+            datatype: Some(XSD_STRING.to_string()),
+        };
+        let out = xml_binding_element("o", &literal);
+        assert!(out.contains("<literal>hi</literal>"));
+    }
+
+    #[test]
+    fn regression_classify_term_distinguishes_uri_bnode_and_literal() {
+        use oxirs_core::model::{BlankNode, Literal, NamedNode};
+
+        let iri_term = Term::NamedNode(NamedNode::new("http://example.org/x").expect("valid iri"));
+        assert!(
+            matches!(classify_term(&iri_term), BoundTermKind::Uri(v) if v == "http://example.org/x")
+        );
+
+        let bnode_term = Term::BlankNode(BlankNode::new("b1").expect("valid bnode id"));
+        assert!(matches!(classify_term(&bnode_term), BoundTermKind::BlankNode(v) if v == "b1"));
+
+        let lit_term = Term::Literal(Literal::new("hi"));
+        assert!(
+            matches!(classify_term(&lit_term), BoundTermKind::Literal { ref value, .. } if value == "hi")
+        );
+    }
+
+    #[test]
+    fn regression_execute_select_classifies_iri_and_literal_terms() {
+        let dir = unique_temp_dir("select_kinds");
+        let ttl_path = write_temp_ttl(
+            &dir,
+            "data.ttl",
+            "@prefix ex: <http://example.org/> .\nex:alice ex:name \"Alice\" .\n",
+        );
+
+        let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
+        let query_info = parse_and_validate_query(query).expect("parse query");
+        let results = execute_sparql_query(query, &query_info, &[DataSource::File(ttl_path)])
+            .expect("execute query");
+
+        assert_eq!(results.bindings.len(), 1);
+        let binding = &results.bindings[0];
+        assert!(
+            matches!(binding.kinds.get("?s"), Some(BoundTermKind::Uri(_))),
+            "subject must be classified as a uri, not a literal"
+        );
+        assert!(
+            matches!(binding.kinds.get("?o"), Some(BoundTermKind::Literal { .. })),
+            "object must be classified as a literal"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

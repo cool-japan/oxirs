@@ -19,7 +19,7 @@ use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::{mpsc, RwLock},
+    sync::{broadcast, mpsc, RwLock},
     task::JoinHandle,
 };
 use tracing::{error, info, warn};
@@ -145,8 +145,8 @@ pub struct ClusterNode {
     node_info: Arc<RwLock<NodeInfo>>,
     /// Communication interface
     communication: Arc<dyn NodeCommunication>,
-    /// Event sender
-    event_sender: mpsc::UnboundedSender<NodeEvent>,
+    /// Event sender (broadcast so every subscriber sees membership events)
+    event_sender: broadcast::Sender<NodeEvent>,
     /// Known cluster members
     cluster_members: Arc<RwLock<HashMap<String, NodeInfo>>>,
     /// Last heartbeat times
@@ -200,7 +200,10 @@ impl ClusterNode {
             last_heartbeat: chrono::Utc::now().timestamp_millis(),
         }));
 
-        let (event_sender, _) = mpsc::unbounded_channel();
+        // Broadcast channel keeps a live sender in the node; each caller of
+        // `get_event_receiver` gets its own independent subscription that
+        // actually receives Joined/Left/StateChanged/MetadataUpdated events.
+        let (event_sender, _) = broadcast::channel(1024);
 
         // Initialise sysinfo with only the refresh kinds we actually use.
         let sys_monitor = Arc::new(parking_lot::Mutex::new(System::new_with_specifics(
@@ -635,21 +638,48 @@ impl ClusterNode {
         false
     }
 
-    /// Get event receiver
-    pub fn get_event_receiver(&self) -> mpsc::UnboundedReceiver<NodeEvent> {
-        let (_, receiver) = mpsc::unbounded_channel();
-        receiver
+    /// Subscribe to cluster membership events.
+    ///
+    /// Returns a live receiver bound to the node's own `event_sender`, so
+    /// Joined/Left/StateChanged/MetadataUpdated events emitted by the
+    /// join/leave/heartbeat paths are actually delivered. Multiple callers each
+    /// get an independent subscription.
+    pub fn get_event_receiver(&self) -> broadcast::Receiver<NodeEvent> {
+        self.event_sender.subscribe()
     }
 }
 
 /// Type alias for the guarded optional inbound channel receiver.
 type InboundRx = Arc<tokio::sync::Mutex<Option<mpsc::Receiver<(String, NodeMessage)>>>>;
 
+/// Shared type for the optional Byzantine-fault-tolerant signing identity.
+type BftIdentity = Arc<tokio::sync::Mutex<crate::clustering::byzantine_raft::BftNodeState>>;
+
+/// Wire-level body of a frame: either a plain (unsigned) `NodeMessage`, or a
+/// `NodeMessage` wrapped in a BFT-signed envelope (see [`WireBody`] docs on
+/// [`TcpNodeCommunication`]).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum WireBody {
+    Plain(NodeMessage),
+    Signed(crate::clustering::byzantine_raft::SignedPayload),
+}
+
 /// TCP-based node communication implementation.
 ///
 /// Frames are length-prefixed (4-byte big-endian u32) JSON blobs that carry a
-/// `(sender_id, NodeMessage)` tuple so the receiver can always identify the
+/// `(sender_id, WireBody)` tuple so the receiver can always identify the
 /// source without relying on unstable ephemeral source ports.
+///
+/// When constructed with a Byzantine-fault-tolerant identity (see
+/// [`TcpNodeCommunication::with_bft_identity`]), every outbound message is
+/// Ed25519-signed via [`BftNodeState::sign_payload`](crate::clustering::byzantine_raft::BftNodeState::sign_payload)
+/// and every inbound message is verified via
+/// [`BftNodeState::verify_payload`](crate::clustering::byzantine_raft::BftNodeState::verify_payload)
+/// before being handed to the caller — an unsigned message, a signature that
+/// doesn't verify, a replayed message, or a message from an unregistered
+/// sender is dropped rather than delivered. Without a BFT identity, messages
+/// are sent and accepted unsigned (`WireBody::Plain`), matching the previous
+/// behaviour.
 ///
 /// Call [`TcpNodeCommunication::start_listener`] once (before handing the
 /// instance to [`ClusterNode::new`]) to begin accepting inbound connections.
@@ -672,6 +702,10 @@ pub struct TcpNodeCommunication {
     /// running); it does not abort it.  Explicit abort-on-drop is not
     /// implemented in this slice.
     _listener_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
+    /// Optional Byzantine-fault-tolerant signing/verification identity. When
+    /// present, every send is signed and every receive is verified (see the
+    /// struct docs above).
+    bft: Option<BftIdentity>,
 }
 
 impl TcpNodeCommunication {
@@ -694,7 +728,41 @@ impl TcpNodeCommunication {
             inbound_tx,
             inbound_rx: Arc::new(tokio::sync::Mutex::new(Some(inbound_rx))),
             _listener_handle: Arc::new(tokio::sync::Mutex::new(None)),
+            bft: None,
         }
+    }
+
+    /// Create with an explicit node ID and a Byzantine-fault-tolerant signing
+    /// identity: every outbound `NodeMessage` this instance sends is
+    /// Ed25519-signed, and every inbound message is verified before being
+    /// forwarded to `receive_messages()`'s caller (see struct docs).
+    ///
+    /// Peers' public keys must still be registered via
+    /// [`register_peer_public_key`](Self::register_peer_public_key) — signed
+    /// messages from unregistered senders fail verification.
+    pub fn with_bft_identity(bind_addr: SocketAddr, own_node_id: String, bft: BftIdentity) -> Self {
+        let mut this = Self::with_node_id(bind_addr, own_node_id);
+        this.bft = Some(bft);
+        this
+    }
+
+    /// Register a peer's Ed25519 public key so that BFT-signed messages from
+    /// that peer can be verified. Requires this instance to have been
+    /// constructed with [`with_bft_identity`](Self::with_bft_identity).
+    pub async fn register_peer_public_key(
+        &self,
+        node_id: String,
+        public_key: Vec<u8>,
+    ) -> FusekiResult<()> {
+        let bft = self.bft.as_ref().ok_or_else(|| {
+            FusekiError::internal(
+                "register_peer_public_key called but this TcpNodeCommunication has no BFT \
+                 identity (constructed via `new`/`with_node_id`, not `with_bft_identity`)"
+                    .to_string(),
+            )
+        })?;
+        bft.lock().await.add_public_key(node_id, public_key);
+        Ok(())
     }
 
     pub async fn add_node(&self, node_id: String, addr: SocketAddr) {
@@ -720,14 +788,16 @@ impl TcpNodeCommunication {
         info!("TCP node listener bound to {}", self.bind_addr);
 
         let inbound_tx = self.inbound_tx.clone();
+        let bft = self.bft.clone();
 
         let handle = tokio::spawn(async move {
             loop {
                 match listener.accept().await {
                     Ok((stream, peer_addr)) => {
                         let tx = inbound_tx.clone();
+                        let bft = bft.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = handle_connection(stream, tx).await {
+                            if let Err(e) = handle_connection(stream, tx, bft).await {
                                 warn!("Connection from {} error: {}", peer_addr, e);
                             }
                         });
@@ -763,9 +833,20 @@ impl TcpNodeCommunication {
 /// Handle a single inbound TCP connection: read length-prefixed frames until
 /// EOF or error and forward each decoded `(sender_id, NodeMessage)` to the
 /// inbound channel.
+///
+/// When `bft` is `Some`, every frame must carry a `WireBody::Signed` envelope
+/// that verifies against a registered peer public key; a `WireBody::Plain`
+/// frame, an unverifiable signature, a replayed message, or a message from an
+/// unregistered/blacklisted sender is dropped (logged, not forwarded) rather
+/// than delivered — this node requires authenticated messages once BFT is
+/// enabled. When `bft` is `None`, both `WireBody::Plain` and `WireBody::Signed`
+/// frames are accepted; a `Signed` frame received without a local BFT
+/// identity cannot be verified, so it is also dropped rather than trusted
+/// blindly.
 async fn handle_connection(
     mut stream: TcpStream,
     tx: mpsc::Sender<(String, NodeMessage)>,
+    bft: Option<BftIdentity>,
 ) -> FusekiResult<()> {
     loop {
         // read_exact on an EOF'd stream returns `UnexpectedEof`; treat it as a
@@ -794,8 +875,48 @@ async fn handle_connection(
             .await
             .map_err(|e| FusekiError::internal(format!("TCP read payload: {e}")))?;
 
-        let (sender_id, message): (String, NodeMessage) = serde_json::from_slice(&payload)
+        let (sender_id, body): (String, WireBody) = serde_json::from_slice(&payload)
             .map_err(|e| FusekiError::internal(format!("deserialize node message frame: {e}")))?;
+
+        let message = match (body, &bft) {
+            (WireBody::Plain(message), None) => message,
+            (WireBody::Plain(_), Some(_)) => {
+                warn!(
+                    sender = %sender_id,
+                    "rejecting unsigned message from {sender_id}: this node requires \
+                     BFT-signed messages"
+                );
+                continue;
+            }
+            (WireBody::Signed(_), None) => {
+                warn!(
+                    sender = %sender_id,
+                    "rejecting signed message from {sender_id}: this node has no BFT identity \
+                     configured to verify it"
+                );
+                continue;
+            }
+            (WireBody::Signed(signed), Some(bft)) => {
+                let verified = match bft.lock().await.verify_payload(&signed) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!(sender = %sender_id, error = %e, "BFT verification error, dropping message");
+                        continue;
+                    }
+                };
+                if !verified {
+                    warn!(sender = %sender_id, "rejecting message that failed BFT verification");
+                    continue;
+                }
+                match serde_json::from_slice::<NodeMessage>(&signed.payload) {
+                    Ok(message) => message,
+                    Err(e) => {
+                        warn!(sender = %sender_id, error = %e, "failed to deserialize verified payload");
+                        continue;
+                    }
+                }
+            }
+        };
 
         if tx.send((sender_id, message)).await.is_err() {
             // Channel closed — the node is shutting down.
@@ -807,10 +928,13 @@ async fn handle_connection(
 #[async_trait]
 impl NodeCommunication for TcpNodeCommunication {
     /// Open a fresh TCP connection to `target`, write a single length-prefixed
-    /// JSON frame containing `(own_node_id, message)`, then close the stream.
+    /// JSON frame containing `(own_node_id, body)`, then close the stream.
+    /// `body` is a signed [`WireBody::Signed`] envelope when this instance was
+    /// constructed with a BFT identity ([`with_bft_identity`](Self::with_bft_identity)),
+    /// or an unsigned [`WireBody::Plain`] message otherwise.
     ///
     /// Returns `Err` if the target is not in `known_nodes`, if TCP connect
-    /// fails, or if serialisation/write fails.
+    /// fails, or if signing/serialisation/write fails.
     async fn send_message(&self, target: &str, message: NodeMessage) -> FusekiResult<()> {
         let target_addr = {
             let nodes = self.known_nodes.read().await;
@@ -820,7 +944,18 @@ impl NodeCommunication for TcpNodeCommunication {
                 .ok_or_else(|| FusekiError::internal(format!("Unknown target node: {target}")))?
         };
 
-        let envelope: Vec<u8> = serde_json::to_vec(&(&self.own_node_id, &message))
+        let body = match &self.bft {
+            Some(bft) => {
+                let message_bytes = serde_json::to_vec(&message).map_err(|e| {
+                    FusekiError::internal(format!("serialize node message payload: {e}"))
+                })?;
+                let signed = bft.lock().await.sign_payload(&message_bytes)?;
+                WireBody::Signed(signed)
+            }
+            None => WireBody::Plain(message),
+        };
+
+        let envelope: Vec<u8> = serde_json::to_vec(&(&self.own_node_id, &body))
             .map_err(|e| FusekiError::internal(format!("serialize node message envelope: {e}")))?;
 
         let mut stream = TcpStream::connect(target_addr)
@@ -898,6 +1033,28 @@ mod tests {
         assert_eq!(info.id, config.node_id);
         assert_eq!(info.addr, config.bind_addr);
         assert_eq!(info.state, NodeState::Joining);
+    }
+
+    /// Regression: `get_event_receiver` must return a live receiver bound to the
+    /// node's own sender, not a pre-closed placeholder channel.
+    #[tokio::test]
+    async fn regression_event_receiver_delivers_events() {
+        let config = test_config("127.0.0.1:17001");
+        let communication = Arc::new(TcpNodeCommunication::new(config.bind_addr));
+        let node = ClusterNode::new(config, communication)
+            .await
+            .expect("node creation should succeed");
+
+        let mut receiver = node.get_event_receiver();
+        // Emit an event through the same sender the join/leave paths use.
+        node.event_sender
+            .send(NodeEvent::Left("peer-1".to_string()))
+            .expect("subscriber should be live");
+
+        match receiver.recv().await {
+            Ok(NodeEvent::Left(id)) => assert_eq!(id, "peer-1"),
+            other => panic!("expected a delivered Left event, got {other:?}"),
+        }
     }
 
     /// Verify that `send_message` returns an error when the target is not in
@@ -1007,6 +1164,144 @@ mod tests {
             }
             _ => panic!("received wrong message variant"),
         }
+    }
+
+    /// Regression test for the "Byzantine-fault-tolerant Raft layer never
+    /// wired to any RPC path" finding: when both ends are constructed with a
+    /// BFT identity and have exchanged public keys, a message sent over the
+    /// real TCP transport is signed on the wire and verified on receipt —
+    /// end to end, not just at the `BftNodeState` unit level.
+    #[tokio::test]
+    async fn regression_bft_signed_message_delivered_over_tcp() {
+        use crate::clustering::byzantine_raft::BftNodeState;
+
+        let probe = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("probe bind");
+        let receiver_addr = probe.local_addr().expect("local_addr");
+        drop(probe);
+
+        let sender_bft = Arc::new(tokio::sync::Mutex::new(
+            BftNodeState::new("sender-node".to_string()).expect("sender bft identity"),
+        ));
+        let receiver_bft = Arc::new(tokio::sync::Mutex::new(
+            BftNodeState::new("receiver-node".to_string()).expect("receiver bft identity"),
+        ));
+        let sender_public_key = sender_bft.lock().await.public_key().to_vec();
+
+        let receiver_comm = Arc::new(TcpNodeCommunication::with_bft_identity(
+            receiver_addr,
+            "receiver-node".to_string(),
+            receiver_bft,
+        ));
+        // The receiver must know the sender's public key to verify its signed
+        // messages.
+        receiver_comm
+            .register_peer_public_key("sender-node".to_string(), sender_public_key)
+            .await
+            .expect("register sender public key");
+        receiver_comm
+            .start_listener()
+            .await
+            .expect("receiver start_listener");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let sender_comm = TcpNodeCommunication::with_bft_identity(
+            "127.0.0.1:0".parse().expect("valid"),
+            "sender-node".to_string(),
+            sender_bft,
+        );
+        sender_comm
+            .add_node("receiver-node".to_string(), receiver_addr)
+            .await;
+
+        let mut rx = receiver_comm
+            .receive_messages()
+            .await
+            .expect("receive_messages");
+
+        let sent_msg = NodeMessage::LeaderElection {
+            candidate_id: "sender-node".to_string(),
+            term: 7,
+        };
+        sender_comm
+            .send_message("receiver-node", sent_msg.clone())
+            .await
+            .expect("BFT-signed send_message should succeed");
+
+        let received = tokio::time::timeout(Duration::from_millis(500), rx.recv())
+            .await
+            .expect("BFT-signed message should arrive within 500 ms")
+            .expect("inbound channel should not be closed");
+
+        assert_eq!(received.0, "sender-node");
+        match received.1 {
+            NodeMessage::LeaderElection { candidate_id, term } => {
+                assert_eq!(candidate_id, "sender-node");
+                assert_eq!(term, 7);
+            }
+            other => panic!("unexpected message variant: {other:?}"),
+        }
+    }
+
+    /// A BFT-enabled receiver must reject an unsigned (`Plain`) message
+    /// instead of silently accepting it — otherwise BFT signing would be
+    /// security theatre (opt-in on the sender side only).
+    #[tokio::test]
+    async fn regression_bft_receiver_rejects_unsigned_message() {
+        use crate::clustering::byzantine_raft::BftNodeState;
+
+        let probe = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("probe bind");
+        let receiver_addr = probe.local_addr().expect("local_addr");
+        drop(probe);
+
+        let receiver_bft = Arc::new(tokio::sync::Mutex::new(
+            BftNodeState::new("receiver-node".to_string()).expect("receiver bft identity"),
+        ));
+        let receiver_comm = Arc::new(TcpNodeCommunication::with_bft_identity(
+            receiver_addr,
+            "receiver-node".to_string(),
+            receiver_bft,
+        ));
+        receiver_comm
+            .start_listener()
+            .await
+            .expect("receiver start_listener");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // A plain (non-BFT) sender talking to a BFT-enabled receiver.
+        let sender_comm = TcpNodeCommunication::with_node_id(
+            "127.0.0.1:0".parse().expect("valid"),
+            "sender-node".to_string(),
+        );
+        sender_comm
+            .add_node("receiver-node".to_string(), receiver_addr)
+            .await;
+
+        let mut rx = receiver_comm
+            .receive_messages()
+            .await
+            .expect("receive_messages");
+
+        sender_comm
+            .send_message(
+                "receiver-node",
+                NodeMessage::LeaderElection {
+                    candidate_id: "sender-node".to_string(),
+                    term: 1,
+                },
+            )
+            .await
+            .expect("unsigned send itself succeeds at the transport level");
+
+        // The receiver must drop the unsigned message rather than deliver it.
+        let result = tokio::time::timeout(Duration::from_millis(200), rx.recv()).await;
+        assert!(
+            result.is_err(),
+            "BFT-enabled receiver must not deliver an unsigned message"
+        );
     }
 
     /// Unit test: verify the frame encode/decode round-trip without a real

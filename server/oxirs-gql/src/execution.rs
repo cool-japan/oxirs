@@ -241,18 +241,37 @@ impl QueryExecutor {
         document: &Document,
         context: &ExecutionContext,
     ) -> Result<ExecutionResult> {
-        // Generate a unique key for deduplication
-        // In a real implementation, we should probably hash the document and variables
-        // For now, we'll use a simple combination of operation name and variables
+        // Generate a unique key for deduplication.
+        //
+        // The key MUST incorporate the full query document, not just the
+        // operation name: anonymous queries share an empty operation name, so
+        // keying on name+variables alone would let two unrelated concurrent
+        // anonymous queries with identical variables (e.g. both `{}`) collide
+        // and receive each other's in-flight result. We hash the serialized
+        // document AST so only textually-identical queries deduplicate.
         let op_name = context.operation_name.clone().unwrap_or_default();
         let vars_str = format!("{:?}", context.variables);
-        let deduplication_key = format!("{}:{}", op_name, vars_str);
+        let document_hash = Self::hash_document(document);
+        let deduplication_key = format!("{op_name}:{document_hash}:{vars_str}");
 
         self.deduplicator
             .deduplicate(deduplication_key, || async move {
                 self.execute_internal(document, context).await
             })
             .await
+    }
+
+    /// Produce a stable, collision-resistant hex digest of a query document so
+    /// it can safely disambiguate the request-deduplication key. Falls back to
+    /// the Debug representation if serialization ever fails, so distinct
+    /// documents still produce distinct keys.
+    fn hash_document(document: &Document) -> String {
+        use sha2::{Digest, Sha256};
+        let serialized =
+            serde_json::to_vec(document).unwrap_or_else(|_| format!("{document:?}").into_bytes());
+        let mut hasher = Sha256::new();
+        hasher.update(&serialized);
+        hex::encode(hasher.finalize())
     }
 
     async fn execute_internal(
@@ -1199,6 +1218,32 @@ mod union_type_resolution_tests {
         let result =
             executor.resolve_union_type(&empty_union, &Value::ObjectValue(HashMap::new()), &schema);
         assert!(result.is_err());
+    }
+}
+
+#[cfg(test)]
+mod dedup_key_regression_tests {
+    use super::*;
+
+    #[test]
+    fn regression_hash_document_distinguishes_different_queries() {
+        let a = crate::parser::parse_document("{ subjects }").expect("parse a");
+        let b = crate::parser::parse_document("{ predicates }").expect("parse b");
+        let ha = QueryExecutor::hash_document(&a);
+        let hb = QueryExecutor::hash_document(&b);
+        // Two unrelated anonymous queries must NOT share a dedup hash.
+        assert_ne!(ha, hb, "distinct documents must hash differently");
+    }
+
+    #[test]
+    fn regression_hash_document_stable_for_identical_queries() {
+        let a = crate::parser::parse_document("{ subjects objects }").expect("parse a");
+        let b = crate::parser::parse_document("{ subjects objects }").expect("parse b");
+        assert_eq!(
+            QueryExecutor::hash_document(&a),
+            QueryExecutor::hash_document(&b),
+            "identical documents must hash identically"
+        );
     }
 }
 

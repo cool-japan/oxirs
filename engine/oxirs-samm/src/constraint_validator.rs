@@ -23,6 +23,27 @@ pub enum EncodingType {
     Hex,
 }
 
+impl EncodingType {
+    /// Parse the free-form `samm-c:EncodingConstraint` encoding string (as
+    /// stored on [`crate::metamodel::Constraint::EncodingConstraint`]) into
+    /// an [`EncodingType`], accepting common spelling variants
+    /// (`"UTF-8"`, `"utf8"`, `"US-ASCII"`, `"ascii"`, `"base64"`, `"hex"`, …).
+    ///
+    /// Returns `None` for an encoding name this validator does not
+    /// recognize.
+    pub(crate) fn from_samm_str(s: &str) -> Option<Self> {
+        let normalized = s.trim().to_ascii_uppercase().replace([' ', '_'], "-");
+        match normalized.as_str() {
+            "UTF-8" | "UTF8" => Some(EncodingType::Utf8),
+            "UTF-16" | "UTF16" | "UTF-16BE" | "UTF-16LE" => Some(EncodingType::Utf16),
+            "US-ASCII" | "ASCII" => Some(EncodingType::Ascii),
+            "BASE64" | "BASE-64" => Some(EncodingType::Base64),
+            "HEX" | "HEXADECIMAL" => Some(EncodingType::Hex),
+            _ => None,
+        }
+    }
+}
+
 // ── SammConstraint ────────────────────────────────────────────────────────────
 
 /// Supported SAMM constraint types that can be applied to characteristic values.
@@ -56,6 +77,79 @@ pub enum SammConstraint {
         /// The required encoding type.
         encoding: EncodingType,
     },
+}
+
+impl SammConstraint {
+    /// Convert a real, TTL-parser-produced [`crate::metamodel::Constraint`]
+    /// into a [`SammConstraint`] that [`ConstraintValidator`] can check a
+    /// value against.
+    ///
+    /// This is the bridge between the crate's actual parsing pipeline and
+    /// the value-checking logic in this module. Returns `None` for:
+    ///
+    /// - Constraint kinds with no direct value-checking equivalent here
+    ///   (`LanguageConstraint`, `LocaleConstraint`, `FixedPointConstraint`).
+    /// - A `RangeConstraint`/`LengthConstraint` with neither bound set
+    ///   (vacuously true — nothing to check).
+    /// - An `EncodingConstraint` naming an encoding
+    ///   [`EncodingType::from_samm_str`] does not recognize.
+    pub fn from_metamodel(constraint: &crate::metamodel::Constraint) -> Option<Self> {
+        use crate::metamodel::{BoundDefinition, Constraint};
+
+        match constraint {
+            Constraint::RangeConstraint {
+                min_value,
+                max_value,
+                lower_bound_definition,
+                upper_bound_definition,
+            } => {
+                let min = min_value.as_deref().and_then(|s| s.parse::<f64>().ok());
+                let max = max_value.as_deref().and_then(|s| s.parse::<f64>().ok());
+                let (min, max) = match (min, max) {
+                    (Some(min), Some(max)) => (min, max),
+                    (Some(min), None) => (min, f64::INFINITY),
+                    (None, Some(max)) => (f64::NEG_INFINITY, max),
+                    (None, None) => return None,
+                };
+                let is_exclusive = |bound: &BoundDefinition| {
+                    matches!(
+                        bound,
+                        BoundDefinition::Open
+                            | BoundDefinition::GreaterThan
+                            | BoundDefinition::LessThan
+                    )
+                };
+                Some(SammConstraint::Range {
+                    min,
+                    max,
+                    min_inclusive: !is_exclusive(lower_bound_definition),
+                    max_inclusive: !is_exclusive(upper_bound_definition),
+                })
+            }
+            Constraint::LengthConstraint {
+                min_value,
+                max_value,
+            } => {
+                if min_value.is_none() && max_value.is_none() {
+                    return None;
+                }
+                Some(SammConstraint::Length {
+                    min_length: min_value.map(|v| v as usize).unwrap_or(0),
+                    max_length: max_value.map(|v| v as usize).unwrap_or(usize::MAX),
+                })
+            }
+            Constraint::RegularExpressionConstraint { pattern } => {
+                Some(SammConstraint::RegularExpression {
+                    pattern: pattern.clone(),
+                })
+            }
+            Constraint::EncodingConstraint { encoding } => EncodingType::from_samm_str(encoding)
+                .map(|encoding| SammConstraint::Encoding { encoding }),
+            Constraint::LanguageConstraint { .. }
+            | Constraint::LocaleConstraint { .. }
+            | Constraint::FixedPointConstraint { .. } => None,
+        }
+    }
 }
 
 // ── ConstraintResult ──────────────────────────────────────────────────────────
@@ -603,6 +697,52 @@ impl ConstraintValidator {
             .iter()
             .all(|c| self.validate_string(value, c).is_valid())
     }
+}
+
+// ── Real-model entry point ──────────────────────────────────────────────────
+
+/// Validate every `samm:exampleValue` declared on `property` against the
+/// real SAMM constraints (`samm-c:RangeConstraint`,
+/// `samm-c:LengthConstraint`, `samm-c:RegularExpressionConstraint`,
+/// `samm-c:EncodingConstraint`) attached to its characteristic.
+///
+/// This is the crate's supported entry point for checking a
+/// parser-produced [`crate::metamodel::Property`] with
+/// [`ConstraintValidator`]/[`SammConstraint`] — the only place in a parsed
+/// SAMM `Aspect` model where genuine instance-like values (as opposed to
+/// schema definitions) are available to validate against. Each
+/// [`crate::metamodel::Constraint`] is translated via
+/// [`SammConstraint::from_metamodel`].
+///
+/// Returns one `(example_value, violations)` pair per example value that
+/// violates at least one constraint, in declaration order; an example value
+/// that satisfies every constraint is omitted from the result. Returns an
+/// empty `Vec` if the property has no characteristic, no translatable
+/// constraints, or no example values.
+pub fn validate_property_example_values(
+    property: &crate::metamodel::Property,
+) -> Vec<(String, Vec<ConstraintResult>)> {
+    let Some(characteristic) = &property.characteristic else {
+        return Vec::new();
+    };
+    let constraints: Vec<SammConstraint> = characteristic
+        .constraints
+        .iter()
+        .filter_map(SammConstraint::from_metamodel)
+        .collect();
+    if constraints.is_empty() {
+        return Vec::new();
+    }
+
+    let validator = ConstraintValidator::new();
+    let mut violations = Vec::new();
+    for example in &property.example_values {
+        let results = validator.validate_all(example, &constraints);
+        if results.iter().any(|r| !r.is_valid()) {
+            violations.push((example.clone(), results));
+        }
+    }
+    violations
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1217,5 +1357,148 @@ mod tests {
     #[test]
     fn constraint_validator_default() {
         let _v = ConstraintValidator;
+    }
+
+    // ── SammConstraint::from_metamodel / validate_property_example_values ──
+
+    #[test]
+    fn regression_from_metamodel_range_constraint_maps_bound_definitions() {
+        use crate::metamodel::{BoundDefinition, Constraint};
+
+        let open_lower = Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: BoundDefinition::GreaterThan,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        };
+        let converted =
+            SammConstraint::from_metamodel(&open_lower).expect("range constraint must convert");
+        assert_eq!(
+            converted,
+            SammConstraint::Range {
+                min: 0.0,
+                max: 100.0,
+                min_inclusive: false,
+                max_inclusive: true,
+            }
+        );
+    }
+
+    #[test]
+    fn regression_from_metamodel_range_constraint_vacuous_bounds_is_none() {
+        use crate::metamodel::{BoundDefinition, Constraint};
+
+        let vacuous = Constraint::RangeConstraint {
+            min_value: None,
+            max_value: None,
+            lower_bound_definition: BoundDefinition::AtLeast,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        };
+        assert!(SammConstraint::from_metamodel(&vacuous).is_none());
+    }
+
+    #[test]
+    fn regression_from_metamodel_length_and_regex_constraints_convert() {
+        use crate::metamodel::Constraint;
+
+        let length = Constraint::LengthConstraint {
+            min_value: Some(3),
+            max_value: Some(10),
+        };
+        assert_eq!(
+            SammConstraint::from_metamodel(&length),
+            Some(SammConstraint::Length {
+                min_length: 3,
+                max_length: 10,
+            })
+        );
+
+        let regex = Constraint::RegularExpressionConstraint {
+            pattern: "^[A-Z]+$".to_string(),
+        };
+        assert_eq!(
+            SammConstraint::from_metamodel(&regex),
+            Some(SammConstraint::RegularExpression {
+                pattern: "^[A-Z]+$".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn regression_from_metamodel_language_constraint_has_no_equivalent() {
+        use crate::metamodel::Constraint;
+
+        let lang = Constraint::LanguageConstraint {
+            language_code: "en".to_string(),
+        };
+        assert!(SammConstraint::from_metamodel(&lang).is_none());
+    }
+
+    #[test]
+    fn regression_validate_property_example_values_flags_out_of_range_example() {
+        use crate::metamodel::{
+            BoundDefinition, Characteristic, CharacteristicKind, Constraint, Property,
+        };
+
+        let characteristic = Characteristic::new(
+            "urn:samm:org.example:1.0.0#PercentageChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string())
+        .with_constraint(Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: BoundDefinition::AtLeast,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        });
+
+        let mut property = Property::new("urn:samm:org.example:1.0.0#percentage".to_string())
+            .with_characteristic(characteristic);
+        property.example_values = vec!["42".to_string(), "150".to_string()];
+
+        let violations = validate_property_example_values(&property);
+
+        assert_eq!(
+            violations.len(),
+            1,
+            "only the out-of-range example should be flagged"
+        );
+        assert_eq!(violations[0].0, "150");
+        assert!(violations[0].1.iter().any(|r| !r.is_valid()));
+    }
+
+    #[test]
+    fn regression_validate_property_example_values_all_valid_returns_empty() {
+        use crate::metamodel::{
+            BoundDefinition, Characteristic, CharacteristicKind, Constraint, Property,
+        };
+
+        let characteristic = Characteristic::new(
+            "urn:samm:org.example:1.0.0#PercentageChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string())
+        .with_constraint(Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: BoundDefinition::AtLeast,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        });
+
+        let mut property = Property::new("urn:samm:org.example:1.0.0#percentage".to_string())
+            .with_characteristic(characteristic);
+        property.example_values = vec!["0".to_string(), "50".to_string(), "100".to_string()];
+
+        assert!(validate_property_example_values(&property).is_empty());
+    }
+
+    #[test]
+    fn regression_validate_property_example_values_no_characteristic_is_empty() {
+        use crate::metamodel::Property;
+
+        let mut property = Property::new("urn:samm:org.example:1.0.0#unconstrained".to_string());
+        property.example_values = vec!["anything".to_string()];
+
+        assert!(validate_property_example_values(&property).is_empty());
     }
 }

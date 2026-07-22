@@ -5,6 +5,7 @@
 //!
 //! Reference: Bordes et al. "Translating Embeddings for Modeling Multi-relational Data" (2013)
 
+use crate::models::serialization::{BaseModelSnapshot, MatrixF64};
 use crate::models::{common::*, BaseModel};
 use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
@@ -13,10 +14,24 @@ use scirs2_core::ndarray_ext::{Array1, Array2};
 #[allow(unused_imports)]
 use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
 use std::ops::{AddAssign, SubAssign};
+use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;
+
+/// Serializable representation of a TransE model for persistence.
+#[derive(Debug, Serialize, Deserialize)]
+struct TransESerializable {
+    base: BaseModelSnapshot,
+    entity_embeddings: MatrixF64,
+    relation_embeddings: MatrixF64,
+    embeddings_initialized: bool,
+    distance_metric: DistanceMetric,
+    margin: f64,
+}
 
 /// TransE embedding model
 #[derive(Debug, Clone)]
@@ -357,8 +372,12 @@ impl TransE {
                     let pos_distance = -pos_score;
                     let neg_distance = -neg_score;
 
-                    // Compute margin loss
-                    let loss = margin_loss(pos_distance, neg_distance, self.margin);
+                    // Compute margin loss. margin_loss(positive_score, negative_score, margin)
+                    // = max(0, margin + negative_score - positive_score). For TransE the hinge
+                    // loss is max(0, margin + pos_distance - neg_distance), so pass neg_distance
+                    // as the positive-score slot and pos_distance as the negative-score slot to
+                    // match compute_gradients' internal `margin + pos_distance - neg_distance`.
+                    let loss = margin_loss(neg_distance, pos_distance, self.margin);
                     batch_loss += loss;
 
                     if loss > 0.0 {
@@ -645,16 +664,49 @@ impl EmbeddingModel for TransE {
     }
 
     fn save(&self, path: &str) -> Result<()> {
-        // For now, just a placeholder
-        // In a full implementation, this would serialize the model to file
         info!("Saving TransE model to {}", path);
+
+        let serializable = TransESerializable {
+            base: BaseModelSnapshot::capture(&self.base),
+            entity_embeddings: MatrixF64::from_array(&self.entity_embeddings),
+            relation_embeddings: MatrixF64::from_array(&self.relation_embeddings),
+            embeddings_initialized: self.embeddings_initialized,
+            distance_metric: self.distance_metric,
+            margin: self.margin,
+        };
+
+        let file = File::create(path)
+            .map_err(|e| anyhow!("Failed to create model file {}: {}", path, e))?;
+        let writer = BufWriter::new(file);
+        oxicode::serde::encode_into_std_write(&serializable, writer, oxicode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize TransE model: {}", e))?;
+
+        info!("TransE model saved successfully");
         Ok(())
     }
 
     fn load(&mut self, path: &str) -> Result<()> {
-        // For now, just a placeholder
-        // In a full implementation, this would deserialize the model from file
         info!("Loading TransE model from {}", path);
+
+        if !Path::new(path).exists() {
+            return Err(anyhow!("Model file not found: {}", path));
+        }
+
+        let file =
+            File::open(path).map_err(|e| anyhow!("Failed to open model file {}: {}", path, e))?;
+        let reader = BufReader::new(file);
+        let (serializable, _): (TransESerializable, _) =
+            oxicode::serde::decode_from_std_read(reader, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize TransE model: {}", e))?;
+
+        self.entity_embeddings = serializable.entity_embeddings.to_array()?;
+        self.relation_embeddings = serializable.relation_embeddings.to_array()?;
+        self.embeddings_initialized = serializable.embeddings_initialized;
+        self.distance_metric = serializable.distance_metric;
+        self.margin = serializable.margin;
+        serializable.base.restore_into(&mut self.base);
+
+        info!("TransE model loaded successfully");
         Ok(())
     }
 
@@ -785,6 +837,73 @@ mod tests {
         // This tests that the cosine distance implementation works
         println!("L1 score: {score_l1}, L2 score: {score_l2}, Cosine score: {score_cosine}");
 
+        Ok(())
+    }
+
+    /// Regression: the TransE training loop must gate gradient updates on the
+    /// correct hinge loss `max(0, margin + pos_distance - neg_distance)`. The
+    /// previous code passed distances in the wrong argument order, inverting the
+    /// sign so that badly-violated triples (the ones most needing an update)
+    /// produced zero loss and were skipped.
+    #[test]
+    fn regression_transe_margin_loss_orientation() {
+        use crate::models::common::margin_loss;
+        let margin = 1.0;
+
+        // Badly-violated triple: positive distance far larger than negative.
+        // Correct hinge loss must be strictly positive so an update happens.
+        let pos_distance = 5.0;
+        let neg_distance = 1.0;
+        let loss = margin_loss(neg_distance, pos_distance, margin);
+        assert!(
+            loss > 0.0,
+            "violated triple must yield positive hinge loss, got {loss}"
+        );
+        assert!((loss - (margin + pos_distance - neg_distance)).abs() < 1e-9);
+
+        // Well-separated triple: positive close, negative far => zero loss.
+        let good = margin_loss(5.0, 0.0, margin);
+        assert_eq!(good, 0.0, "well-separated triple must yield zero loss");
+    }
+
+    /// Regression: save()/load() were no-ops that silently lost all trained
+    /// weights. A round-trip through disk must reproduce identical embeddings.
+    #[tokio::test]
+    async fn regression_transe_save_load_roundtrip() -> Result<()> {
+        let config = ModelConfig::default()
+            .with_dimensions(16)
+            .with_max_epochs(5)
+            .with_seed(7);
+        let mut model = TransE::new(config);
+
+        let alice = NamedNode::new("http://example.org/alice")?;
+        let knows = NamedNode::new("http://example.org/knows")?;
+        let bob = NamedNode::new("http://example.org/bob")?;
+        model.add_triple(Triple::new(alice.clone(), knows.clone(), bob.clone()))?;
+        model.add_triple(Triple::new(bob.clone(), knows.clone(), alice.clone()))?;
+        model.train(Some(5)).await?;
+
+        let before = model.get_entity_embedding("http://example.org/alice")?;
+
+        let path = std::env::temp_dir().join(format!("transe-roundtrip-{}.bin", Uuid::new_v4()));
+        let path_str = path.to_string_lossy().to_string();
+        model.save(&path_str)?;
+
+        // Fresh, untrained model of the same type; load must restore weights.
+        let mut restored = TransE::new(ModelConfig::default());
+        restored.load(&path_str)?;
+
+        assert!(restored.is_trained());
+        let after = restored.get_entity_embedding("http://example.org/alice")?;
+        assert_eq!(before.dimensions, after.dimensions);
+        for (x, y) in before.values.iter().zip(after.values.iter()) {
+            assert!(
+                (x - y).abs() < 1e-9,
+                "embedding mismatch after load: {x} vs {y}"
+            );
+        }
+
+        let _ = std::fs::remove_file(&path);
         Ok(())
     }
 }

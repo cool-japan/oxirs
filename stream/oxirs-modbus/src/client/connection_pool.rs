@@ -197,13 +197,21 @@ impl ModbusConnectionPool {
             Ok(Err(e)) => {
                 let mut stats = self.stats.lock().await;
                 stats.connection_errors += 1;
-                permit.forget();
+                // Do NOT call `permit.forget()` here: no `PooledModbusClient`
+                // is created on this failure path, so nothing would ever call
+                // `semaphore.add_permits(1)` to give the permit back. Let
+                // `permit` drop normally instead -- `SemaphorePermit::drop`
+                // returns the permit to the semaphore automatically, so a
+                // transient connection failure does not permanently shrink
+                // the pool's effective capacity.
                 return Err(e);
             }
             Err(_) => {
                 let mut stats = self.stats.lock().await;
                 stats.connection_errors += 1;
-                permit.forget();
+                // Same reasoning as above: let `permit` drop normally on
+                // the connect-timeout path so the permit is returned to
+                // the semaphore instead of being permanently lost.
                 return Err(ModbusError::Timeout(connect_timeout));
             }
         };
@@ -424,6 +432,67 @@ mod tests {
         let stats = pool.stats().await;
         assert_eq!(stats.total_created, 0);
         assert_eq!(stats.total_acquires, 0);
+    }
+
+    /// Regression test for the "forgotten semaphore permit on connect
+    /// failure" bug: each failed `acquire()` (e.g. connection refused)
+    /// used to call `permit.forget()`, permanently discarding a permit
+    /// with no `PooledModbusClient` ever created to hand it back. After
+    /// `max_connections` transient failures the pool would be permanently
+    /// exhausted (every subsequent `acquire()` would time out) even once
+    /// the device became reachable again.
+    #[tokio::test]
+    async fn regression_permit_returned_on_connect_failure() {
+        // Bind then immediately drop a listener to obtain a port that is
+        // guaranteed to have nothing listening on it (connection refused).
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind ephemeral port");
+        let addr = listener.local_addr().expect("local addr");
+        drop(listener);
+
+        let config = PoolConfig {
+            max_connections: 1,
+            min_idle: 0,
+            connect_timeout_ms: 500,
+            acquire_timeout_ms: 1000,
+            auto_reconnect: true,
+            health_check_interval_secs: 60,
+        };
+        let pool = ModbusConnectionPool::new(addr.to_string(), 1, config);
+
+        // First acquire fails because nothing is listening on `addr`.
+        let first = pool.acquire().await;
+        assert!(first.is_err(), "expected connection to be refused");
+        assert_eq!(
+            pool.active_count().await,
+            0,
+            "permit must be returned to the semaphore after a connect failure"
+        );
+
+        // If the permit had been forgotten instead of returned, the
+        // semaphore (capacity 1) would now be exhausted and this second
+        // acquire would hang until `acquire_timeout_ms` and return a
+        // Timeout error instead of failing fast with a connection error.
+        let start = std::time::Instant::now();
+        let second = pool.acquire().await;
+        let elapsed = start.elapsed();
+
+        assert!(second.is_err(), "expected connection to be refused again");
+        assert!(
+            elapsed < Duration::from_millis(900),
+            "second acquire took {:?}, suggesting the semaphore permit was \
+             never returned (pool exhausted, waited for acquire_timeout)",
+            elapsed
+        );
+        assert_eq!(pool.active_count().await, 0);
+
+        let stats = pool.stats().await;
+        assert_eq!(stats.connection_errors, 2);
+        assert_eq!(
+            stats.acquire_timeouts, 0,
+            "acquire itself must not time out once the permit is correctly returned"
+        );
     }
 
     #[tokio::test]

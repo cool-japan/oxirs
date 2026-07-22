@@ -259,6 +259,24 @@ impl Superblock {
 
         let page = file_manager.read_page(SUPERBLOCK_PAGE_ID)?;
 
+        // Verify the page checksum FIRST. The superblock is written in place by a
+        // single 4 KiB `write_page` (which stamps a CRC32 over the payload via
+        // `Page::update_header`), and a 4 KiB write is not power-loss atomic on
+        // most storage. A crash mid-write can leave a torn page 0 whose magic and
+        // length prefix still match the old image while the payload is partially
+        // updated. Without this check `read()` would silently decode inconsistent
+        // B+Tree roots and counts, yielding wrong query results or data loss.
+        // Fail loudly instead so the caller (store open) reports the corruption
+        // rather than serving a mangled catalog.
+        if !page.verify_checksum() {
+            return Err(TdbError::Other(
+                "Corrupt superblock at page 0: checksum mismatch. The catalog page was likely \
+                 torn by a crash during an in-place write; the store cannot be opened safely. \
+                 Restore from backup or recover from the WAL."
+                    .to_string(),
+            ));
+        }
+
         let len_bytes = page.read_at(LEN_OFFSET, 4)?;
         let mut len_arr = [0u8; 4];
         len_arr.copy_from_slice(len_bytes);
@@ -389,6 +407,49 @@ mod tests {
         assert_eq!(Superblock::slot_to_option(3), Some(3));
         assert_eq!(Superblock::option_to_slot(None), 0);
         assert_eq!(Superblock::option_to_slot(Some(3)), 3);
+    }
+
+    #[test]
+    fn regression_superblock_rejects_torn_page_with_intact_magic() {
+        // Simulate a torn in-place superblock write: the magic and length prefix
+        // survive (from the old image) but a payload byte is corrupted and the
+        // checksum is NOT recomputed. read() must reject it on the checksum,
+        // rather than silently decoding inconsistent B+Tree roots.
+        let dir = env::temp_dir().join(format!("oxirs_tdb_sb_torn_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("data.tdb");
+
+        {
+            let fm = FileManager::open(&path, false).expect("open fm");
+            fm.allocate_page().expect("allocate page 0");
+            let mut sb = Superblock::new_empty(NodeId::FIRST.as_u64());
+            sb.spo_root = 7;
+            sb.triple_count = 99;
+            sb.write(&fm).expect("write superblock");
+            fm.flush().expect("flush");
+        }
+
+        // Corrupt one payload byte on disk deep in the serialized struct (past
+        // the magic/version header) without touching the page's stored checksum.
+        {
+            let mut bytes = std::fs::read(&path).expect("read data file");
+            // Page 0 header is 32 bytes; the payload's serialized struct begins a
+            // few bytes in. Byte 64 is safely inside a root/count field.
+            let corrupt_at = 64;
+            assert!(bytes.len() > corrupt_at);
+            bytes[corrupt_at] ^= 0xFF;
+            std::fs::write(&path, &bytes).expect("write corrupted data file");
+        }
+
+        let fm = FileManager::open(&path, false).expect("reopen fm");
+        let err = Superblock::read(&fm).expect_err("torn superblock must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("checksum"),
+            "expected a checksum-mismatch error, got: {msg}"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

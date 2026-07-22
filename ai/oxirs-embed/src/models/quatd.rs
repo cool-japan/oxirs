@@ -5,15 +5,31 @@
 //!
 //! Reference: Zhang et al. "Quaternion Knowledge Graph Embeddings" (2019)
 
+use crate::models::serialization::{BaseModelSnapshot, MatrixF64};
 use crate::models::BaseModel;
 use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use scirs2_core::ndarray_ext::Array2;
 use scirs2_core::random::{Random, SliceRandom};
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;
+
+/// Serializable representation of a QuatD model for persistence.
+#[derive(Debug, Serialize, Deserialize)]
+struct QuatDSerializable {
+    base: BaseModelSnapshot,
+    entity_embeddings: MatrixF64,
+    relation_embeddings: MatrixF64,
+    embeddings_initialized: bool,
+    scoring_function: QuatDScoringFunction,
+    quaternion_regularization: f64,
+}
 
 /// Quaternion representation for embeddings
 #[derive(Debug, Clone, Copy)]
@@ -135,7 +151,7 @@ pub struct QuatD {
 }
 
 /// Scoring function variants for QuatD
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum QuatDScoringFunction {
     /// Original QuatD scoring function
     Standard,
@@ -754,11 +770,48 @@ impl EmbeddingModel for QuatD {
 
     fn save(&self, path: &str) -> Result<()> {
         info!("Saving QuatD model to {}", path);
+
+        let serializable = QuatDSerializable {
+            base: BaseModelSnapshot::capture(&self.base),
+            entity_embeddings: MatrixF64::from_array(&self.entity_embeddings),
+            relation_embeddings: MatrixF64::from_array(&self.relation_embeddings),
+            embeddings_initialized: self.embeddings_initialized,
+            scoring_function: self.scoring_function,
+            quaternion_regularization: self.quaternion_regularization,
+        };
+
+        let file = File::create(path)
+            .map_err(|e| anyhow!("Failed to create model file {}: {}", path, e))?;
+        let writer = BufWriter::new(file);
+        oxicode::serde::encode_into_std_write(&serializable, writer, oxicode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize QuatD model: {}", e))?;
+
+        info!("QuatD model saved successfully");
         Ok(())
     }
 
     fn load(&mut self, path: &str) -> Result<()> {
         info!("Loading QuatD model from {}", path);
+
+        if !Path::new(path).exists() {
+            return Err(anyhow!("Model file not found: {}", path));
+        }
+
+        let file =
+            File::open(path).map_err(|e| anyhow!("Failed to open model file {}: {}", path, e))?;
+        let reader = BufReader::new(file);
+        let (serializable, _): (QuatDSerializable, _) =
+            oxicode::serde::decode_from_std_read(reader, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize QuatD model: {}", e))?;
+
+        self.entity_embeddings = serializable.entity_embeddings.to_array()?;
+        self.relation_embeddings = serializable.relation_embeddings.to_array()?;
+        self.embeddings_initialized = serializable.embeddings_initialized;
+        self.scoring_function = serializable.scoring_function;
+        self.quaternion_regularization = serializable.quaternion_regularization;
+        serializable.base.restore_into(&mut self.base);
+
+        info!("QuatD model loaded successfully");
         Ok(())
     }
 

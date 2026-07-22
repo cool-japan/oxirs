@@ -1,16 +1,48 @@
-//! SPARQL extension functions for GraphRAG queries
-
+//! `graphrag:*` function **metadata and query-text tooling** for GraphRAG.
+//!
+//! # What this module is
+//!
+//! [`GraphRAGFunctions`] is a registry of function *signatures*
+//! (`graphrag:query`, `graphrag:similar`, `graphrag:expand`,
+//! `graphrag:community`, `graphrag:embed`) plus two helpers built on top of
+//! that registry:
+//!
+//! - [`GraphRAGFunctions::parse_query`] — a regex-based scanner that finds
+//!   `graphrag:foo(...)` call sites in a block of SPARQL query *text* and
+//!   reports them as [`FunctionCall`]s (name + raw argument strings).
+//! - [`QueryBuilder`] — a fluent string builder that *emits* SPARQL query
+//!   text containing `graphrag:*` calls (e.g. for constructing a request to
+//!   send to an external endpoint via `SERVICE`).
+//!
+//! # What this module is **not**
+//!
+//! It is **not** wired into any SPARQL execution engine. No `graphrag:*`
+//! name is registered with `oxirs-arq`'s expression evaluator or extension
+//! function registry (`oxirs_arq::extensions::ExtensionRegistry` /
+//! `CustomFunction`), and `oxirs-fuseki` has no knowledge of `graphrag:*`
+//! either. Sending a query built by [`QueryBuilder`] (or containing a
+//! `graphrag:*` call written by hand) to a real oxirs SPARQL endpoint will
+//! fail with an "unknown function" parse/evaluation error — which is
+//! correct, fail-loud behavior for an unsupported construct, not a bug to
+//! route around here.
+//!
+//! Wiring real execution semantics would mean either (a) implementing
+//! `oxirs_arq::extensions::CustomFunction` for each `graphrag:*` name and
+//! registering them with a live engine's `ExtensionRegistry` — which
+//! requires a synchronous `execute()` entry point bridging into this
+//! (inherently async) crate's retrieval/generation pipeline — or (b)
+//! standing up `graphrag:*` as an actual `SERVICE <...>` federation
+//! endpoint. Neither exists today; this module only provides the
+//! signature/metadata catalogue and text-generation conveniences that such
+//! a future integration could build on.
 use crate::{GraphRAGResult, Triple};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// GraphRAG SPARQL function definitions
-///
-/// These functions extend SPARQL with GraphRAG capabilities:
-/// - graphrag:query(text) - Execute GraphRAG query
-/// - graphrag:similar(entity, threshold) - Find similar entities
-/// - graphrag:expand(entity, hops) - Expand from entity
-/// - graphrag:community(graph) - Detect communities
+/// Catalogue of `graphrag:*` function *signatures* (name, parameter types,
+/// return type, description) — metadata only. See the module doc for what
+/// this registry does and does not provide; in particular, nothing here is
+/// registered with, or executable by, a real SPARQL engine.
 #[derive(Debug, Clone)]
 pub struct GraphRAGFunctions {
     /// Function registry
@@ -199,7 +231,14 @@ impl GraphRAGFunctions {
         self.functions.values()
     }
 
-    /// Generate SPARQL SERVICE clause for GraphRAG
+    /// Generate SPARQL query *text* for a `SERVICE <...> { ?result
+    /// graphrag:fn(...) }` federation clause targeting `function`'s
+    /// registered URI.
+    ///
+    /// This only formats text; it does not register, execute, or validate
+    /// that any endpoint at that URI actually understands the clause (see
+    /// the module doc). Errs if `function` is not a name known to this
+    /// registry.
     pub fn generate_service_clause(&self, function: &str, args: &[&str]) -> GraphRAGResult<String> {
         let func_def = self.get(function).ok_or_else(|| {
             crate::GraphRAGError::SparqlError(format!("Unknown function: {}", function))
@@ -212,11 +251,15 @@ impl GraphRAGFunctions {
         ))
     }
 
-    /// Parse SPARQL query for GraphRAG function calls
+    /// Scan SPARQL query *text* for `graphrag:foo(...)` call sites and
+    /// report them as [`FunctionCall`]s. This is a textual scan (regex),
+    /// not a SPARQL parse — it does not validate that the surrounding text
+    /// is otherwise well-formed SPARQL, and it does not execute anything
+    /// (see the module doc for what calling `graphrag:*` against a real
+    /// SPARQL engine actually does today: fails with "unknown function").
     pub fn parse_query(&self, sparql: &str) -> Vec<FunctionCall> {
         let mut calls = Vec::new();
 
-        // Simple regex-based parsing (full implementation would use SPARQL parser)
         let re = regex::Regex::new(r"graphrag:(\w+)\(([^)]*)\)")
             .expect("GraphRAG function regex pattern is valid");
 

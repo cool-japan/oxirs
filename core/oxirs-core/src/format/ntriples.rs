@@ -611,7 +611,22 @@ impl<W: Write> WriterNTriplesSerializer<W> {
                 let var_str = var.as_str();
                 write!(self.writer, "?{var_str}")?;
             }
+            SubjectRef::QuotedTriple(qt) => {
+                self.serialize_quoted_triple(qt.inner())?;
+            }
         }
+        Ok(())
+    }
+
+    /// Serialize an RDF-star quoted triple as `<< s p o >>`
+    fn serialize_quoted_triple(&mut self, inner: &crate::model::Triple) -> SerializeResult<()> {
+        write!(self.writer, "<< ")?;
+        self.serialize_subject(inner.subject().into())?;
+        write!(self.writer, " ")?;
+        self.serialize_predicate(inner.predicate().into())?;
+        write!(self.writer, " ")?;
+        self.serialize_object(inner.object().into())?;
+        write!(self.writer, " >>")?;
         Ok(())
     }
 
@@ -655,6 +670,9 @@ impl<W: Write> WriterNTriplesSerializer<W> {
             ObjectRef::Variable(var) => {
                 let var_str = var.as_str();
                 write!(self.writer, "?{var_str}")?;
+            }
+            ObjectRef::QuotedTriple(qt) => {
+                self.serialize_quoted_triple(qt.inner())?;
             }
         }
         Ok(())

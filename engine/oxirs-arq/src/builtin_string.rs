@@ -826,7 +826,38 @@ impl CustomFunction for ReplaceFunction {
             _ => bail!("replace() third argument must be a string"),
         };
 
-        let result = input.replace(pattern, replacement);
+        // SPARQL REPLACE is fn:replace: `pattern` is a regular expression and
+        // `$N` in `replacement` refers to capture group N. Honor the optional
+        // 4th flags argument (i/m/s/x).
+        let mut builder = regex::RegexBuilder::new(pattern);
+        if args.len() == 4 {
+            let flags = match &args[3] {
+                Value::String(s) => s.clone(),
+                Value::Literal { value, .. } => value.clone(),
+                _ => bail!("replace() fourth argument must be a string"),
+            };
+            for flag in flags.chars() {
+                match flag {
+                    'i' => {
+                        builder.case_insensitive(true);
+                    }
+                    'm' => {
+                        builder.multi_line(true);
+                    }
+                    's' => {
+                        builder.dot_matches_new_line(true);
+                    }
+                    'x' => {
+                        builder.ignore_whitespace(true);
+                    }
+                    other => bail!("Unknown REPLACE flag: {other}"),
+                }
+            }
+        }
+        let regex = builder
+            .build()
+            .map_err(|e| anyhow::anyhow!("Invalid REPLACE pattern: {e}"))?;
+        let result = regex.replace_all(input, replacement.as_str()).to_string();
         Ok(Value::String(result))
     }
 }

@@ -62,7 +62,6 @@ pub mod bgp_optimizer_types;
 pub mod buffer_management;
 pub mod builtin;
 pub(crate) mod builtin_datetime;
-pub mod builtin_fixed;
 pub(crate) mod builtin_numeric;
 pub(crate) mod builtin_string;
 pub mod cache;
@@ -77,6 +76,7 @@ pub mod expression;
 pub mod expression_compiler;
 pub mod extensions;
 pub mod federation;
+pub mod federation_plan;
 pub mod gpu_accelerated_ops;
 pub mod graphql_translator;
 pub mod integrated_query_planner;
@@ -338,6 +338,7 @@ pub use federation::{
     EndpointCapabilities, EndpointCriteria, EndpointDiscovery, EndpointHealth, FederatedSubquery,
     FederationConfig, FederationExecutor, FederationStats, LoadBalancingStrategy,
 };
+pub use federation_plan::FederationPlan;
 pub use gpu_accelerated_ops::{DeviceSelection, GpuConfig, GpuOperationStats, GpuQueryEngine};
 pub use interactive_query_builder::{
     helpers as query_helpers, InteractiveQueryBuilder, PatternBuilder, QueryType,

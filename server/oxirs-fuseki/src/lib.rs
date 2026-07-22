@@ -91,6 +91,7 @@ pub mod health;
 pub mod http_protocol;
 pub mod ids;
 pub mod k8s_operator;
+pub mod logging;
 pub mod memory_pool;
 pub mod metrics;
 pub mod middleware;
@@ -207,6 +208,28 @@ impl Server {
             .run()
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    }
+
+    /// Build the production axum [`Router`](axum::Router) this server serves --
+    /// route-for-route identical to the one `run()` mounts -- **without**
+    /// binding a socket or starting `Runtime::initialize_services()`'s
+    /// background services.
+    ///
+    /// This is the embedding/inspection seam that lets a caller mount the full
+    /// OxiRS HTTP surface (SPARQL, Graph Store Protocol, GraphQL at `/graphql`,
+    /// health, metrics, ...) inside a larger axum application, and that lets the
+    /// `oxirs serve --graphql` regression test assert the `/graphql` endpoint
+    /// the CLI advertises is genuinely mounted (a dropped route would 404 here)
+    /// -- fast, with no network bind. It reuses the exact `Runtime::build_app`
+    /// path `run()` drives, so what this returns is what production serves.
+    pub async fn build_router(&self) -> Result<axum::Router, Box<dyn std::error::Error>> {
+        let runtime = server::Runtime::new(self.addr, self.store.clone(), self.config.clone());
+        let state = std::sync::Arc::new(server::build_minimal_app_state(
+            self.store.clone(),
+            self.config.clone(),
+        ));
+        let router = runtime.build_app(state).await?;
+        Ok(router)
     }
 
     /// Assemble the `AppState` that `run()` would eventually hand to

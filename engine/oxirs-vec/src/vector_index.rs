@@ -7,15 +7,42 @@ use crate::similarity;
 use crate::Vector;
 use crate::VectorId;
 
-/// Vector index trait for efficient similarity search
+/// Vector index trait for efficient similarity search.
+///
+/// # Score contract (must be honored by every implementation)
+///
+/// All `VectorIndex` methods that return `(id, score)` tuples use **similarity**
+/// semantics, *not* raw distance:
+///
+/// * The `f32` score is a **similarity**: larger means *more similar / closer*.
+/// * [`VectorIndex::search_knn`] returns results sorted by **descending**
+///   similarity (best match first).
+/// * [`VectorIndex::search_threshold`] returns every vector whose similarity is
+///   `>= threshold` (i.e. the comparison is `similarity >= threshold`, never
+///   `distance <= threshold`).
+///
+/// This mirrors the public [`crate::VectorStore::similarity_search`] API and the
+/// reference [`MemoryVectorIndex`] implementation. Backends whose internal
+/// algorithm works in distance space (HNSW, LSH, memory-mapped, IVF, PQ, NSG)
+/// **must** convert their distances to a monotonically-decreasing similarity
+/// (the crate convention is `similarity = 1.0 / (1.0 + distance)`) before
+/// returning, so that all backends agree on units and ordering. A caller that
+/// dispatches the same logical query to different backends (e.g.
+/// `DynamicIndexSelector`) must be able to compare and re-rank the returned
+/// scores without knowing which backend produced them.
 pub trait VectorIndex: Send + Sync {
     /// Insert a vector with associated URI
     fn insert(&mut self, uri: String, vector: Vector) -> Result<()>;
 
-    /// Find k nearest neighbors
+    /// Find the `k` nearest neighbors, returned as `(id, similarity)` sorted by
+    /// **descending** similarity (best match first). See the trait-level score
+    /// contract: the score is a similarity, not a distance.
     fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>>;
 
-    /// Find all vectors within threshold similarity
+    /// Find all vectors whose **similarity** to `query` is `>= threshold`.
+    ///
+    /// The score is a similarity (larger = closer), consistent with
+    /// [`VectorIndex::search_knn`]; the filter is `similarity >= threshold`.
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>>;
 
     /// Get a vector by its URI

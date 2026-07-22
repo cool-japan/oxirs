@@ -130,6 +130,7 @@ impl QueryParser {
             "WITH" => Token::With,
             "USING" => Token::Using,
             "SILENT" => Token::Silent,
+            "UNDEF" => Token::Undef,
             "ALL" => Token::All,
             "DEFAULT" => Token::Default,
             "TO" => Token::To,

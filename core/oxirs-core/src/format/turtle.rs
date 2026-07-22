@@ -270,7 +270,16 @@ impl<W: Write> WriterTurtleSerializer<W> {
                 let var_str = var.as_str();
                 Ok(format!("?{var_str}"))
             }
+            SubjectRef::QuotedTriple(qt) => self.serialize_quoted_triple(qt.inner()),
         }
+    }
+
+    /// Serialize an RDF-star quoted triple as `<< s p o >>`
+    fn serialize_quoted_triple(&self, inner: &crate::model::Triple) -> SerializeResult<String> {
+        let s = self.serialize_subject(inner.subject().into())?;
+        let p = self.serialize_predicate(inner.predicate().into())?;
+        let o = self.serialize_object(inner.object().into())?;
+        Ok(format!("<< {s} {p} {o} >>"))
     }
 
     /// Serialize a predicate (NamedNode or Variable)
@@ -311,6 +320,7 @@ impl<W: Write> WriterTurtleSerializer<W> {
                 let var_str = var.as_str();
                 Ok(format!("?{var_str}"))
             }
+            ObjectRef::QuotedTriple(qt) => self.serialize_quoted_triple(qt.inner()),
         }
     }
 
@@ -393,12 +403,21 @@ impl<W: Write> WriterTurtleSerializer<W> {
 
 impl<W: Write> QuadSerializer<W> for WriterTurtleSerializer<W> {
     fn serialize_quad(&mut self, quad: QuadRef<'_>) -> SerializeResult<()> {
-        // Turtle only supports default graph, so ignore named graphs
+        // Turtle cannot express named graphs. Rather than silently dropping
+        // quads outside the default graph (which would produce an
+        // incomplete-but-"successful" serialization), fail loudly so the
+        // caller knows to pick a graph-aware format (TriG, N-Quads) instead.
         if quad.graph_name().is_default_graph() {
             self.serialize_triple(quad.triple())
         } else {
-            // Could log a warning here about ignoring named graph
-            Ok(())
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                format!(
+                    "Turtle cannot represent named graphs; quad has graph name {}. \
+                     Use TriG or N-Quads to serialize datasets with named graphs.",
+                    quad.graph_name()
+                ),
+            ))
         }
     }
 

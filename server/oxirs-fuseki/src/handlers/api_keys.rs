@@ -181,14 +181,29 @@ pub async fn create_api_key(
     // Validate scopes
     validate_api_key_scopes(&request.scopes, &user)?;
 
+    // Enforce the configured per-user key cap (security.api_keys.max_keys_per_user).
+    let api_key_service = get_api_key_service(&state).await?;
+    let existing = api_key_service.active_key_count_for(&user.username).await;
+    if existing >= api_key_service.max_keys_per_user() as usize {
+        return Err(FusekiError::forbidden(format!(
+            "API key limit reached: user '{}' already holds {} active key(s) (max {})",
+            user.username,
+            existing,
+            api_key_service.max_keys_per_user()
+        )));
+    }
+
     // Generate secure API key
     let raw_key = generate_api_key();
     let key_hash = hash_api_key(&raw_key)?;
 
-    // Calculate expiration
-    let expires_at = request
+    // Calculate expiration. When the request omits `expires_in_days`, fall back to
+    // the configured default (security.api_keys.default_expiration_days) rather
+    // than minting a non-expiring key.
+    let effective_days = request
         .expires_in_days
-        .map(|days| Utc::now() + Duration::days(days as i64));
+        .unwrap_or_else(|| api_key_service.default_expiration_days());
+    let expires_at = Some(Utc::now() + Duration::days(effective_days as i64));
 
     // Create API key record
     let api_key = ApiKey {
@@ -202,13 +217,18 @@ pub async fn create_api_key(
         last_used: None,
         is_active: true,
         usage_count: 0,
-        rate_limit: request.rate_limit.clone(),
+        // Fall back to the configured `security.api_keys.default_rate_limit`
+        // when the request omits an explicit limit, rather than minting an
+        // unlimited key by default.
+        rate_limit: request
+            .rate_limit
+            .clone()
+            .or_else(|| api_key_service.default_rate_limit()),
         allowed_ips: request.allowed_ips.unwrap_or_default(),
         description: request.description.clone(),
     };
 
-    // Store API key
-    let api_key_service = get_api_key_service(&state).await?;
+    // Store API key (service already resolved above for the per-user cap check).
     api_key_service.store_api_key(&api_key).await?;
 
     info!(
@@ -697,13 +717,88 @@ struct ApiKeyFile {
 pub struct ApiKeyService {
     path: std::path::PathBuf,
     keys: RwLock<HashMap<String, ApiKey>>,
+    /// Maximum active keys a single user may hold (`security.api_keys.max_keys_per_user`).
+    max_keys_per_user: u32,
+    /// Default key TTL in days used when a create request omits `expires_in_days`
+    /// (`security.api_keys.default_expiration_days`).
+    default_expiration_days: u32,
+    /// Default rate limit applied to a key when a create request omits an
+    /// explicit `rate_limit` (`security.api_keys.default_rate_limit`). When
+    /// `None`, keys created without an explicit rate limit remain
+    /// unlimited, matching the pre-existing behaviour.
+    default_rate_limit: Option<RateLimit>,
 }
 
-impl ApiKeyService {
-    /// Open (or create) the API key store at `path`.
-    pub async fn open(path: impl Into<std::path::PathBuf>) -> FusekiResult<Self> {
-        let path = path.into();
+/// Default per-user key cap when no `security.api_keys` config is supplied.
+const DEFAULT_MAX_KEYS_PER_USER: u32 = 100;
+/// Default key TTL (days) when no `security.api_keys` config is supplied.
+const DEFAULT_KEY_EXPIRATION_DAYS: u32 = 365;
 
+impl ApiKeyService {
+    /// Maximum active keys permitted per user.
+    pub fn max_keys_per_user(&self) -> u32 {
+        self.max_keys_per_user
+    }
+
+    /// Default key expiration (days) applied when a request omits `expires_in_days`.
+    pub fn default_expiration_days(&self) -> u32 {
+        self.default_expiration_days
+    }
+
+    /// Default rate limit applied when a create request omits an explicit
+    /// `rate_limit` (`security.api_keys.default_rate_limit`).
+    pub fn default_rate_limit(&self) -> Option<RateLimit> {
+        self.default_rate_limit.clone()
+    }
+
+    /// Count the active (non-revoked) keys currently owned by `owner`.
+    pub async fn active_key_count_for(&self, owner: &str) -> usize {
+        self.keys
+            .read()
+            .await
+            .values()
+            .filter(|k| k.owner == owner && k.is_active)
+            .count()
+    }
+
+    /// Open (or create) the API key store at `path` with policy limits taken
+    /// from the `security.api_keys` configuration.
+    pub async fn open_with_config(
+        path: impl Into<std::path::PathBuf>,
+        config: &crate::config::config_security::ApiKeyConfig,
+    ) -> FusekiResult<Self> {
+        let default_rate_limit = config.default_rate_limit.as_ref().map(|r| RateLimit {
+            requests_per_minute: r.requests_per_minute,
+            requests_per_hour: r.requests_per_hour,
+            requests_per_day: r.requests_per_day,
+            burst_limit: r.burst_limit,
+        });
+        Self::open_inner(
+            path.into(),
+            config.max_keys_per_user,
+            config.default_expiration_days,
+            default_rate_limit,
+        )
+        .await
+    }
+
+    /// Open (or create) the API key store at `path` with default policy limits.
+    pub async fn open(path: impl Into<std::path::PathBuf>) -> FusekiResult<Self> {
+        Self::open_inner(
+            path.into(),
+            DEFAULT_MAX_KEYS_PER_USER,
+            DEFAULT_KEY_EXPIRATION_DAYS,
+            None,
+        )
+        .await
+    }
+
+    async fn open_inner(
+        path: std::path::PathBuf,
+        max_keys_per_user: u32,
+        default_expiration_days: u32,
+        default_rate_limit: Option<RateLimit>,
+    ) -> FusekiResult<Self> {
         let keys = if path.exists() {
             let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
                 FusekiError::internal(format!("Failed to read API key store {path:?}: {e}"))
@@ -734,6 +829,9 @@ impl ApiKeyService {
         Ok(Self {
             path,
             keys: RwLock::new(keys),
+            max_keys_per_user,
+            default_expiration_days,
+            default_rate_limit,
         })
     }
 
@@ -905,6 +1003,107 @@ mod tests {
             label,
             uuid::Uuid::new_v4()
         ))
+    }
+
+    #[tokio::test]
+    async fn regression_api_key_config_limits_applied() {
+        use crate::config::config_security::{
+            ApiKeyConfig, ApiKeyStorageBackend, ApiKeyStorageConfig,
+        };
+        let path = unique_temp_store_path("limits");
+        let config = ApiKeyConfig {
+            enabled: true,
+            default_expiration_days: 7,
+            max_keys_per_user: 2,
+            default_rate_limit: None,
+            usage_analytics: false,
+            storage: ApiKeyStorageConfig {
+                backend: ApiKeyStorageBackend::File,
+                connection: path.to_string_lossy().to_string(),
+                encryption_key: None,
+            },
+        };
+        let service = ApiKeyService::open_with_config(&path, &config)
+            .await
+            .expect("service opens");
+
+        // The configured limits are honoured (previously these fields had no effect).
+        assert_eq!(service.max_keys_per_user(), 2);
+        assert_eq!(service.default_expiration_days(), 7);
+
+        // active_key_count_for reflects stored keys.
+        assert_eq!(service.active_key_count_for("bob").await, 0);
+        let key = ApiKey {
+            id: "k".to_string(),
+            name: "n".to_string(),
+            key_hash: "h".to_string(),
+            scopes: vec![ApiKeyScope::SparqlRead],
+            owner: "bob".to_string(),
+            created_at: Utc::now(),
+            expires_at: None,
+            last_used: None,
+            is_active: true,
+            usage_count: 0,
+            rate_limit: None,
+            allowed_ips: vec![],
+            description: None,
+        };
+        service.store_api_key(&key).await.expect("store");
+        assert_eq!(service.active_key_count_for("bob").await, 1);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Regression test for the `ApiKeyConfig.default_rate_limit` finding:
+    /// the configured default must be surfaced through `default_rate_limit()`
+    /// so `create_api_key` can apply it to keys created without an explicit
+    /// `rate_limit`, instead of the field being silently unenforced.
+    #[tokio::test]
+    async fn regression_api_key_default_rate_limit_applied() {
+        use crate::config::config_security::{
+            ApiKeyConfig, ApiKeyRateLimit, ApiKeyStorageBackend, ApiKeyStorageConfig,
+        };
+        let path = unique_temp_store_path("rate_limit");
+        let config = ApiKeyConfig {
+            enabled: true,
+            default_expiration_days: 30,
+            max_keys_per_user: 10,
+            default_rate_limit: Some(ApiKeyRateLimit {
+                requests_per_minute: 60,
+                requests_per_hour: 1000,
+                requests_per_day: 10000,
+                burst_limit: 10,
+            }),
+            usage_analytics: false,
+            storage: ApiKeyStorageConfig {
+                backend: ApiKeyStorageBackend::File,
+                connection: path.to_string_lossy().to_string(),
+                encryption_key: None,
+            },
+        };
+        let service = ApiKeyService::open_with_config(&path, &config)
+            .await
+            .expect("service opens");
+
+        let default_limit = service
+            .default_rate_limit()
+            .expect("configured default_rate_limit must be surfaced");
+        assert_eq!(default_limit.requests_per_minute, 60);
+        assert_eq!(default_limit.requests_per_hour, 1000);
+        assert_eq!(default_limit.requests_per_day, 10000);
+        assert_eq!(default_limit.burst_limit, 10);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A service opened without an explicit `ApiKeyConfig` (or with
+    /// `default_rate_limit: None`) must not fabricate a rate limit.
+    #[tokio::test]
+    async fn regression_api_key_no_default_rate_limit_when_unconfigured() {
+        let path = unique_temp_store_path("no_rate_limit");
+        let service = ApiKeyService::open(&path).await.expect("service opens");
+        assert!(service.default_rate_limit().is_none());
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]

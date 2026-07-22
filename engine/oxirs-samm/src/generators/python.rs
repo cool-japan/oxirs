@@ -111,7 +111,12 @@ fn generate_enum_class(name: &str, values: &[String], options: &PythonOptions) -
     }
 
     for value in values {
-        let member_name = value.to_uppercase().replace(['-', ' '], "_");
+        // A bare Python class attribute name cannot start with a digit or
+        // contain symbol characters — see `super::ensure_valid_identifier`.
+        let member_name = super::ensure_valid_identifier(
+            &value.to_uppercase().replace(['-', ' '], "_"),
+            "VALUE_",
+        );
         enum_def.push_str(&format!("    {} = \"{}\"\n", member_name, value));
     }
 
@@ -382,5 +387,32 @@ mod tests {
         assert!(options.add_validation);
         assert!(options.generate_docstrings);
         assert!(options.snake_case_fields);
+    }
+
+    #[test]
+    fn test_enum_generation() {
+        let values = vec!["green".to_string(), "yellow".to_string(), "red".to_string()];
+        let options = PythonOptions::default();
+        let enum_def = generate_enum_class("TrafficLight", &values, &options);
+
+        assert!(enum_def.contains("class TrafficLight(Enum)"));
+        assert!(enum_def.contains("GREEN = \"green\""));
+        assert!(enum_def.contains("YELLOW = \"yellow\""));
+        assert!(enum_def.contains("RED = \"red\""));
+    }
+
+    #[test]
+    fn regression_enum_generation_numeric_values_produce_valid_identifiers() {
+        let values = vec!["1".to_string(), "2".to_string(), "3".to_string()];
+        let options = PythonOptions::default();
+        let enum_def = generate_enum_class("StatusCode", &values, &options);
+
+        assert!(
+            !enum_def.contains("    1 = \"1\""),
+            "a bare numeric literal is not a legal Python class attribute name: {enum_def}"
+        );
+        assert!(enum_def.contains("VALUE_1 = \"1\""), "{enum_def}");
+        assert!(enum_def.contains("VALUE_2 = \"2\""), "{enum_def}");
+        assert!(enum_def.contains("VALUE_3 = \"3\""), "{enum_def}");
     }
 }

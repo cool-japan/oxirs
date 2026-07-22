@@ -317,7 +317,31 @@ impl PartitionManager {
         Ok(())
     }
 
-    /// Move a partition to a new node
+    /// Move a partition to a new node.
+    ///
+    /// # Data transfer is not wired in this build
+    ///
+    /// `PartitionManager` tracks partition-to-node *assignment* metadata but
+    /// holds a single shared [`Store`] (not one storage backend per node) and
+    /// has no [`crate::clustering::node::NodeCommunication`] handle capable of
+    /// streaming RDF quads to another node. There is therefore no mechanism
+    /// here that can actually move a partition's data from `from_node` to
+    /// `to_node`.
+    ///
+    /// Previously this method flipped the partition's state straight from
+    /// `Migrating` to `Active` and rewrote the node assignment without
+    /// transferring a single byte — any caller observing
+    /// [`PartitionState::Active`] afterwards would wrongly believe the
+    /// partition was fully and correctly served by `to_node`. Per the
+    /// fail-loud contract, this now refuses to fabricate that success: the
+    /// partition is left in [`PartitionState::Migrating`] (never silently
+    /// promoted to `Active`), the node assignment is left untouched, and an
+    /// explicit error is returned so callers can never mistake "not moved"
+    /// for "moved". Implement a real transport-backed transfer (streaming the
+    /// partition's quads to `to_node` over a wired [`NodeCommunication`]
+    /// implementation) before this can honestly report success.
+    ///
+    /// [`NodeCommunication`]: crate::clustering::node::NodeCommunication
     pub async fn move_partition(
         &self,
         partition_id: u32,
@@ -325,37 +349,29 @@ impl PartitionManager {
         to_node: &str,
     ) -> FusekiResult<()> {
         let mut partitions = self.partitions.write().await;
-        let mut assignment = self.assignment.write().await;
 
-        // Update partition state
-        if let Some(partition) = partitions.get_mut(&partition_id) {
-            partition.state = PartitionState::Migrating;
+        let partition = partitions
+            .get_mut(&partition_id)
+            .ok_or_else(|| FusekiError::not_found(format!("Partition {partition_id}")))?;
 
-            // TODO: Implement actual data migration
-
-            // Update assignment
-            if let Some(nodes) = partition.nodes.iter_mut().find(|n| *n == from_node) {
-                *nodes = to_node.to_string();
-            }
-
-            partition.state = PartitionState::Active;
-            partition.updated_at = chrono::Utc::now().timestamp_millis();
+        if !partition.nodes.iter().any(|n| n == from_node) {
+            return Err(FusekiError::bad_request(format!(
+                "Partition {partition_id} is not currently assigned to node '{from_node}'"
+            )));
         }
 
-        // Update node assignments
-        if let Some(from_partitions) = assignment.nodes.get_mut(from_node) {
-            from_partitions.retain(|&id| id != partition_id);
-        }
+        // Record that a migration was requested without fabricating its
+        // completion: no data has moved.
+        partition.state = PartitionState::Migrating;
+        partition.updated_at = chrono::Utc::now().timestamp_millis();
 
-        assignment
-            .nodes
-            .entry(to_node.to_string())
-            .or_insert_with(Vec::new)
-            .push(partition_id);
-
-        assignment.version += 1;
-
-        Ok(())
+        Err(FusekiError::service_unavailable(format!(
+            "partition {partition_id} migration from '{from_node}' to '{to_node}' cannot \
+             complete: no inter-node data-transfer transport is wired into PartitionManager in \
+             this build. The partition has been marked Migrating and its node assignment left \
+             unchanged; a real transport-backed transfer must be implemented before this \
+             partition can be promoted to Active on '{to_node}'."
+        )))
     }
 
     /// Get partition statistics
@@ -440,5 +456,70 @@ mod tests {
         };
 
         assert_eq!(assignment.version, 1);
+    }
+
+    /// Regression test for the "move_partition marks a partition migrated
+    /// without moving any data" finding: the call must fail loud (no wired
+    /// transport exists to actually move data), and must never leave the
+    /// partition in `Active` state as if the migration had completed.
+    #[tokio::test]
+    async fn regression_move_partition_fails_loud_never_reports_active() {
+        let store = Arc::new(Store::new().expect("store"));
+        let manager = PartitionManager::new(PartitionConfig::default(), store);
+        manager.start().await.expect("start");
+
+        // Manually assign partition 0 to "node-a" (bypassing full
+        // assign_partitions/hash-ring machinery, which is not the subject of
+        // this test).
+        {
+            let mut partitions = manager.partitions.write().await;
+            let partition = partitions.get_mut(&0).expect("partition 0 exists");
+            partition.nodes = vec!["node-a".to_string()];
+            partition.state = PartitionState::Active;
+        }
+
+        let result = manager.move_partition(0, "node-a", "node-b").await;
+        assert!(
+            result.is_err(),
+            "move_partition must fail loud: no data-transfer transport is wired"
+        );
+
+        // The partition must be left in Migrating, never fabricated as Active.
+        let partitions = manager.partitions.read().await;
+        let partition = partitions.get(&0).expect("partition 0 exists");
+        assert_eq!(partition.state, PartitionState::Migrating);
+        // The node assignment must be left untouched (still on node-a, not
+        // silently rewritten to node-b as if the transfer had happened).
+        assert_eq!(partition.nodes, vec!["node-a".to_string()]);
+    }
+
+    /// move_partition on a partition not currently assigned to `from_node`
+    /// must reject the request rather than silently "moving" nothing.
+    #[tokio::test]
+    async fn regression_move_partition_rejects_wrong_from_node() {
+        let store = Arc::new(Store::new().expect("store"));
+        let manager = PartitionManager::new(PartitionConfig::default(), store);
+        manager.start().await.expect("start");
+
+        {
+            let mut partitions = manager.partitions.write().await;
+            let partition = partitions.get_mut(&0).expect("partition 0 exists");
+            partition.nodes = vec!["node-a".to_string()];
+        }
+
+        let result = manager.move_partition(0, "node-x", "node-b").await;
+        assert!(result.is_err());
+    }
+
+    /// move_partition on a nonexistent partition ID must return a not-found
+    /// error rather than silently succeeding.
+    #[tokio::test]
+    async fn regression_move_partition_unknown_partition_not_found() {
+        let store = Arc::new(Store::new().expect("store"));
+        let manager = PartitionManager::new(PartitionConfig::default(), store);
+        manager.start().await.expect("start");
+
+        let result = manager.move_partition(999_999, "node-a", "node-b").await;
+        assert!(result.is_err());
     }
 }

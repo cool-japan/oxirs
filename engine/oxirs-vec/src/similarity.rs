@@ -101,8 +101,16 @@ impl SimilarityMetric {
             SimilarityMetric::JensenShannon => jensen_shannon_similarity(a, b)?,
             SimilarityMetric::Bhattacharyya => bhattacharyya_similarity(a, b)?,
             SimilarityMetric::Mahalanobis => {
-                // Requires covariance matrix - use identity for now
-                euclidean_similarity(a, b)
+                // Mahalanobis requires a covariance matrix, which this stateless
+                // metric API does not carry. Do not silently return Euclidean
+                // (Mahalanobis with Σ = I) mislabeled as Mahalanobis — fail loud.
+                // Use `SemanticSimilarity::set_covariance_matrix` +
+                // `SemanticSimilarity::mahalanobis_similarity` for the real metric.
+                return Err(anyhow!(
+                    "Mahalanobis similarity requires a covariance matrix; use \
+                     SemanticSimilarity::set_covariance_matrix() rather than the \
+                     stateless SimilarityMetric::Mahalanobis"
+                ));
             }
             SimilarityMetric::Hamming => hamming_similarity(a, b),
             SimilarityMetric::Canberra => canberra_similarity(a, b),
@@ -176,12 +184,70 @@ impl SemanticSimilarity {
         self.covariance_matrix = Some(matrix);
     }
 
+    /// Compute the true Mahalanobis distance `sqrt((a-b)ᵀ · Σ⁻¹ · (a-b))` using
+    /// the configured covariance matrix Σ (set via
+    /// [`Self::set_covariance_matrix`]).
+    ///
+    /// Fails loudly if no covariance matrix has been configured or if it is not
+    /// a square matrix matching the vector dimensionality / is singular — never
+    /// silently degrades to Euclidean distance.
+    pub fn mahalanobis_distance(&self, a: &[f32], b: &[f32]) -> Result<f32> {
+        if a.len() != b.len() {
+            return Err(anyhow!("Vector dimensions must match"));
+        }
+        let cov = self.covariance_matrix.as_ref().ok_or_else(|| {
+            anyhow!(
+                "Mahalanobis distance requires a covariance matrix; call \
+                 SemanticSimilarity::set_covariance_matrix() first"
+            )
+        })?;
+        let n = a.len();
+        if cov.len() != n || cov.iter().any(|row| row.len() != n) {
+            return Err(anyhow!(
+                "Covariance matrix must be {n}x{n} to match the vector dimensionality"
+            ));
+        }
+        let inv = invert_matrix(cov)
+            .ok_or_else(|| anyhow!("Covariance matrix is singular and cannot be inverted"))?;
+
+        // diff = a - b
+        let diff: Vec<f32> = a.iter().zip(b).map(|(x, y)| x - y).collect();
+        // tmp = Σ⁻¹ · diff
+        let mut quadratic = 0.0f32;
+        for (i, &di) in diff.iter().enumerate() {
+            let mut row_sum = 0.0f32;
+            for (j, &dj) in diff.iter().enumerate() {
+                row_sum += inv[i][j] * dj;
+            }
+            quadratic += di * row_sum;
+        }
+        // Numerical guard: a valid inverse-covariance is PSD so quadratic >= 0,
+        // but clamp tiny negative round-off to 0 before sqrt.
+        Ok(quadratic.max(0.0).sqrt())
+    }
+
+    /// Mahalanobis *similarity* in `[0, 1]` derived from the distance as
+    /// `1 / (1 + d)` (larger = more similar), consistent with the crate's
+    /// distance→similarity convention.
+    pub fn mahalanobis_similarity(&self, a: &[f32], b: &[f32]) -> Result<f32> {
+        let d = self.mahalanobis_distance(a, b)?;
+        Ok(1.0 / (1.0 + d))
+    }
+
     /// Calculate similarity using primary metric
     pub fn similarity(&self, a: &Vector, b: &Vector) -> Result<f32> {
         let a_f32 = a.as_f32();
         let b_f32 = b.as_f32();
 
-        let mut similarity = self.config.primary_metric.similarity(&a_f32, &b_f32)?;
+        // Mahalanobis is stateful (needs the covariance matrix), so it is
+        // handled here rather than via the stateless `SimilarityMetric` path,
+        // which deliberately fails loudly for this variant.
+        let mut similarity = if matches!(self.config.primary_metric, SimilarityMetric::Mahalanobis)
+        {
+            self.mahalanobis_similarity(&a_f32, &b_f32)?
+        } else {
+            self.config.primary_metric.similarity(&a_f32, &b_f32)?
+        };
 
         // Apply feature weighting if available
         if let Some(ref weights) = self.feature_weights {
@@ -661,6 +727,75 @@ fn vector_magnitude(vector: &[f32]) -> f32 {
     vector.iter().map(|x| x * x).sum::<f32>().sqrt()
 }
 
+/// Invert a square matrix via Gauss-Jordan elimination with partial pivoting.
+///
+/// Returns `None` if the matrix is singular (or numerically indistinguishable
+/// from singular). Used to obtain Σ⁻¹ for the Mahalanobis distance. Pure Rust,
+/// no external linear-algebra dependency.
+fn invert_matrix(matrix: &[Vec<f32>]) -> Option<Vec<Vec<f32>>> {
+    let n = matrix.len();
+    if n == 0 || matrix.iter().any(|row| row.len() != n) {
+        return None;
+    }
+
+    // Build the augmented matrix [A | I] in f64 for numerical stability.
+    let mut aug: Vec<Vec<f64>> = matrix
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let mut r: Vec<f64> = row.iter().map(|&v| v as f64).collect();
+            r.extend((0..n).map(|j| if i == j { 1.0 } else { 0.0 }));
+            r
+        })
+        .collect();
+
+    for col in 0..n {
+        // Partial pivot: pick the row with the largest absolute value in `col`.
+        let mut pivot = col;
+        let mut best = aug[col][col].abs();
+        for (row, aug_row) in aug.iter().enumerate().skip(col + 1) {
+            let v = aug_row[col].abs();
+            if v > best {
+                best = v;
+                pivot = row;
+            }
+        }
+        if best < 1e-12 {
+            return None; // Singular.
+        }
+        aug.swap(col, pivot);
+
+        // Normalize the pivot row.
+        let pivot_val = aug[col][col];
+        for x in aug[col].iter_mut() {
+            *x /= pivot_val;
+        }
+
+        // Eliminate `col` from every other row. Clone the (already normalized)
+        // pivot row so we can iterate the target row mutably without a second
+        // index into `aug`.
+        let pivot_row = aug[col].clone();
+        for (row, target_row) in aug.iter_mut().enumerate() {
+            if row == col {
+                continue;
+            }
+            let factor = target_row[col];
+            if factor != 0.0 {
+                for (target, &pv) in target_row.iter_mut().zip(pivot_row.iter()) {
+                    *target -= factor * pv;
+                }
+            }
+        }
+    }
+
+    // Extract the right half (the inverse), back into f32.
+    Some(
+        aug.into_iter()
+            .map(|row| row[n..].iter().map(|&v| v as f32).collect())
+            .collect(),
+    )
+}
+
 // Distance function implementations (lower values mean more similar)
 
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
@@ -823,4 +958,79 @@ fn generate_similarity_id(uri: &str, similarity: f32) -> String {
     timestamp.hash(&mut hasher);
 
     format!("sim_{:x}", hasher.finish())
+}
+
+#[cfg(test)]
+mod mahalanobis_tests {
+    use super::*;
+    use crate::distance_metrics::ExtendedDistanceMetric;
+
+    #[test]
+    fn regression_stateless_mahalanobis_fails_loud() {
+        // The stateless metric APIs must NOT silently return Euclidean disguised
+        // as Mahalanobis — they must error.
+        let a = [1.0f32, 2.0, 3.0];
+        let b = [4.0f32, 5.0, 6.0];
+        assert!(SimilarityMetric::Mahalanobis.similarity(&a, &b).is_err());
+        let va = Vector::new(a.to_vec());
+        let vb = Vector::new(b.to_vec());
+        assert!(SimilarityMetric::Mahalanobis.distance(&va, &vb).is_err());
+        assert!(ExtendedDistanceMetric::Mahalanobis
+            .distance(&va, &vb)
+            .is_err());
+    }
+
+    #[test]
+    fn regression_mahalanobis_identity_equals_euclidean() -> Result<()> {
+        // With Σ = I, Mahalanobis distance reduces to Euclidean distance.
+        let mut sem = SemanticSimilarity::new(SimilarityConfig {
+            primary_metric: SimilarityMetric::Mahalanobis,
+            ..Default::default()
+        });
+        sem.set_covariance_matrix(vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ]);
+        let a = [1.0f32, 2.0, 3.0];
+        let b = [4.0f32, 6.0, 3.0];
+        let maha = sem.mahalanobis_distance(&a, &b)?;
+        let eucl = ((3.0f32).powi(2) + (4.0f32).powi(2)).sqrt(); // = 5.0
+        assert!((maha - eucl).abs() < 1e-4, "maha={maha}, eucl={eucl}");
+        Ok(())
+    }
+
+    #[test]
+    fn regression_mahalanobis_uses_covariance() -> Result<()> {
+        // A diagonal covariance with a large variance on axis 0 should shrink
+        // that axis's contribution, so it must differ from plain Euclidean.
+        let mut sem = SemanticSimilarity::new(SimilarityConfig {
+            primary_metric: SimilarityMetric::Mahalanobis,
+            ..Default::default()
+        });
+        sem.set_covariance_matrix(vec![vec![100.0, 0.0], vec![0.0, 1.0]]);
+        let a = [0.0f32, 0.0];
+        let b = [10.0f32, 0.0];
+        // d = sqrt((10)^2 / 100) = 1.0, NOT the Euclidean 10.0.
+        let maha = sem.mahalanobis_distance(&a, &b)?;
+        assert!((maha - 1.0).abs() < 1e-4, "maha={maha}");
+        Ok(())
+    }
+
+    #[test]
+    fn regression_mahalanobis_requires_covariance() {
+        let sem = SemanticSimilarity::new(SimilarityConfig {
+            primary_metric: SimilarityMetric::Mahalanobis,
+            ..Default::default()
+        });
+        assert!(sem.mahalanobis_distance(&[1.0, 2.0], &[3.0, 4.0]).is_err());
+    }
+
+    #[test]
+    fn regression_mahalanobis_singular_covariance_errs() {
+        let mut sem = SemanticSimilarity::new(SimilarityConfig::default());
+        // A zero matrix is singular -> must error, not silently proceed.
+        sem.set_covariance_matrix(vec![vec![0.0, 0.0], vec![0.0, 0.0]]);
+        assert!(sem.mahalanobis_distance(&[1.0, 2.0], &[3.0, 4.0]).is_err());
+    }
 }

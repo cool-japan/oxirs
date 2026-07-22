@@ -36,12 +36,16 @@ crc32fast = { workspace = true }
 bit-vec.workspace = true
 lru.workspace = true
 humantime-serde.workspace = true
+oxiarc-snappy.workspace = true
+oxiarc-deflate.workspace = true
+reqwest.workspace = true
 
 thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+wiremock.workspace = true
 
 [features]
 default = ["compression"]

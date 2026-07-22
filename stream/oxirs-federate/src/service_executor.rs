@@ -731,8 +731,17 @@ impl JoinExecutor {
 
     // ============= COMPREHENSIVE CROSS-SERVICE JOIN ALGORITHMS =============
 
-    /// Bind join implementation - sends bindings from one result to filter the other
-    /// Most efficient for selective joins where one side is much smaller
+    /// Local bind-style join over two already-materialized result sets.
+    ///
+    /// This is the fallback used by [`join_sparql_adaptive`] when both sides have
+    /// already been fetched and the originating endpoint/query are no longer
+    /// available, so the standard federation optimization of pushing the smaller
+    /// side's bindings to the remote endpoint (a `VALUES` clause) cannot be
+    /// applied here. It intersects the two sides on their shared variables in
+    /// batches, producing a correct join result at local (hash-join) cost — it
+    /// does NOT reduce network transfer. For genuine remote VALUES injection use
+    /// [`execute_with_values_binding`], which issues a scoped request against a
+    /// live service before both sides are materialized.
     pub async fn join_sparql_bind_join(
         &self,
         left: &SparqlResults,
@@ -770,11 +779,11 @@ impl JoinExecutor {
 
         // Process bindings in batches to avoid overwhelming the remote service
         for batch in bind_side.results.bindings.chunks(batch_size) {
-            // Convert batch to SparqlBinding format for VALUES clause injection
+            // Take this batch of bindings from the smaller side.
             let sparql_bindings: Vec<SparqlBinding> = batch.to_vec();
 
-            // Execute query with bindings (this would call the remote service)
-            // For now, simulate by filtering the query_side results
+            // Restrict the other side to rows whose join keys are present in this
+            // batch (local intersection on the join variables).
             let filtered_results =
                 self.filter_results_with_bindings(query_side, &sparql_bindings, &join_vars)?;
 
@@ -1130,7 +1139,7 @@ impl JoinExecutor {
 
             // One side much smaller - use bind join for efficiency
             (l, r) if l < r / 10 || r < l / 10 => {
-                debug!("Using bind join for skewed data sizes");
+                debug!("Using local bind-style join for skewed data sizes");
                 self.join_sparql_bind_join(left, right, service_executor)
                     .await
             }
@@ -1178,7 +1187,9 @@ impl JoinExecutor {
         false
     }
 
-    /// Filter results using bindings (simulates VALUES clause injection)
+    /// Restrict `results` to the rows whose join-key values appear in `bindings`
+    /// (a local intersection on `join_vars`). This is a purely local operation
+    /// over already-fetched results, not a remote VALUES-clause push-down.
     fn filter_results_with_bindings(
         &self,
         results: &SparqlResults,

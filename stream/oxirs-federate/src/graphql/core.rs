@@ -25,6 +25,7 @@ impl GraphQLFederation {
             schemas: Arc::new(RwLock::new(HashMap::new())),
             config: GraphQLFederationConfig::default(),
             cache: None,
+            service_endpoints: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -34,6 +35,7 @@ impl GraphQLFederation {
             schemas: Arc::new(RwLock::new(HashMap::new())),
             config,
             cache: None,
+            service_endpoints: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -46,7 +48,21 @@ impl GraphQLFederation {
             schemas: Arc::new(RwLock::new(HashMap::new())),
             config,
             cache: Some(cache),
+            service_endpoints: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Register (or update) the GraphQL HTTP endpoint URL for a service so that
+    /// entity resolution can issue real `_entities` requests against it.
+    pub async fn register_service_endpoint(&self, service_id: String, endpoint: String) {
+        let mut endpoints = self.service_endpoints.write().await;
+        endpoints.insert(service_id, endpoint);
+    }
+
+    /// Remove a service's registered endpoint (e.g. on deregistration).
+    pub async fn unregister_service_endpoint(&self, service_id: &str) {
+        let mut endpoints = self.service_endpoints.write().await;
+        endpoints.remove(service_id);
     }
 
     /// Register a GraphQL schema for federation
@@ -195,14 +211,77 @@ impl GraphQLFederation {
                         Err(e) => (Err(e), Duration::from_millis(0)),
                     }
                 }
-                _ => {
-                    // For non-GraphQL steps, return a success result
+                crate::StepType::EntityResolution => {
+                    // Delegate to the real entity-resolution step executor.
+                    match crate::executor::step_execution::execute_entity_resolution(
+                        step,
+                        completed_steps,
+                    )
+                    .await
+                    {
+                        Ok(data) => (Ok(data), Duration::from_millis(0)),
+                        Err(e) => (Err(e), Duration::from_millis(0)),
+                    }
+                }
+                crate::StepType::ResultStitching => {
+                    match crate::executor::step_execution::execute_result_stitching(
+                        step,
+                        completed_steps,
+                    )
+                    .await
+                    {
+                        Ok(data) => (Ok(data), Duration::from_millis(0)),
+                        Err(e) => (Err(e), Duration::from_millis(0)),
+                    }
+                }
+                crate::StepType::Join => {
+                    match crate::executor::step_execution::execute_join(step, completed_steps).await
+                    {
+                        Ok(data) => (Ok(data), Duration::from_millis(0)),
+                        Err(e) => (Err(e), Duration::from_millis(0)),
+                    }
+                }
+                crate::StepType::Union => {
+                    match crate::executor::step_execution::execute_union(step, completed_steps)
+                        .await
+                    {
+                        Ok(data) => (Ok(data), Duration::from_millis(0)),
+                        Err(e) => (Err(e), Duration::from_millis(0)),
+                    }
+                }
+                crate::StepType::Filter => {
+                    match crate::executor::step_execution::execute_filter(step, completed_steps)
+                        .await
+                    {
+                        Ok(data) => (Ok(data), Duration::from_millis(0)),
+                        Err(e) => (Err(e), Duration::from_millis(0)),
+                    }
+                }
+                crate::StepType::Aggregate => {
+                    match crate::executor::step_execution::execute_aggregate(step, completed_steps)
+                        .await
+                    {
+                        Ok(data) => (Ok(data), Duration::from_millis(0)),
+                        Err(e) => (Err(e), Duration::from_millis(0)),
+                    }
+                }
+                crate::StepType::Sort => {
+                    match crate::executor::step_execution::execute_sort(step, completed_steps).await
+                    {
+                        Ok(data) => (Ok(data), Duration::from_millis(0)),
+                        Err(e) => (Err(e), Duration::from_millis(0)),
+                    }
+                }
+                crate::StepType::ServiceQuery => {
+                    // A raw SPARQL service query is not valid inside a GraphQL
+                    // execution plan. Fail loudly instead of returning a
+                    // fabricated empty success result.
                     (
-                        Ok(QueryResultData::GraphQL(GraphQLResponse {
-                            data: serde_json::Value::Null,
-                            errors: Vec::new(),
-                            extensions: None,
-                        })),
+                        Err(anyhow!(
+                            "Unsupported step type {:?} for GraphQL execution (step {})",
+                            step.step_type,
+                            step.step_id
+                        )),
                         Duration::from_millis(0),
                     )
                 }

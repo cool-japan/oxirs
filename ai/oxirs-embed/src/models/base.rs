@@ -163,27 +163,43 @@ impl BaseModel {
         let mut negative_samples = Vec::new();
         let num_entities = self.num_entities();
 
-        while negative_samples.len() < num_samples {
+        // Guard against inputs where no negative can ever be produced: an empty
+        // triple set, or an entity space too small to corrupt a triple into a
+        // non-existent one (e.g. a single self-referencing triple with
+        // num_entities == 1). Without a bound the loop below would spin forever
+        // because every corrupted candidate collides with an existing positive.
+        if self.triples.is_empty() || num_entities == 0 {
+            return negative_samples;
+        }
+
+        // Cap the number of corruption attempts so we always make progress even
+        // when the entity space is saturated. Returning fewer (or zero) negatives
+        // is safe for the callers (they simply train on what is available); an
+        // unbounded retry loop is a genuine hang/DoS vector.
+        let max_attempts = num_samples.saturating_mul(100).max(1000);
+        let mut attempts = 0usize;
+
+        while negative_samples.len() < num_samples && attempts < max_attempts {
+            attempts += 1;
+
             // Choose a random positive triple
-            if !self.triples.is_empty() {
-                let idx = rng.random_range(0..self.triples.len());
-                let &(s, p, o) = &self.triples[idx];
+            let idx = rng.random_range(0..self.triples.len());
+            let &(s, p, o) = &self.triples[idx];
 
-                // Corrupt either subject or object
-                let corrupt_subject = rng.random_bool_with_chance(0.5);
+            // Corrupt either subject or object
+            let corrupt_subject = rng.random_bool_with_chance(0.5);
 
-                let negative_triple = if corrupt_subject {
-                    let new_subject = rng.random_range(0..num_entities);
-                    (new_subject, p, o)
-                } else {
-                    let new_object = rng.random_range(0..num_entities);
-                    (s, p, new_object)
-                };
+            let negative_triple = if corrupt_subject {
+                let new_subject = rng.random_range(0..num_entities);
+                (new_subject, p, o)
+            } else {
+                let new_object = rng.random_range(0..num_entities);
+                (s, p, new_object)
+            };
 
-                // Make sure it's actually negative
-                if !self.has_triple(negative_triple.0, negative_triple.1, negative_triple.2) {
-                    negative_samples.push(negative_triple);
-                }
+            // Make sure it's actually negative
+            if !self.has_triple(negative_triple.0, negative_triple.1, negative_triple.2) {
+                negative_samples.push(negative_triple);
             }
         }
 
@@ -220,5 +236,50 @@ impl BaseModel {
     pub fn mark_trained(&mut self) {
         self.is_trained = true;
         self.last_training_time = Some(Utc::now());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{NamedNode, Triple};
+    use scirs2_core::random::Random;
+
+    /// Regression: negative sampling on a saturated entity space (a single
+    /// self-referencing triple with only one entity) previously looped forever
+    /// because every corruption reproduced the original positive triple. It must
+    /// now terminate, returning fewer (here zero) negatives rather than hanging.
+    #[test]
+    fn regression_negative_sampling_terminates_on_saturated_space() {
+        let mut base = BaseModel::new(ModelConfig::default());
+        let x = NamedNode::new("http://example.org/x").expect("valid iri");
+        let p = NamedNode::new("http://example.org/p").expect("valid iri");
+        base.add_triple(Triple::new(x.clone(), p.clone(), x.clone()))
+            .expect("add triple");
+        assert_eq!(base.num_entities(), 1);
+
+        let mut rng = Random::default();
+        // If this returns at all, the unbounded-loop hang is fixed.
+        let negatives = base.generate_negative_samples(5, &mut rng);
+        assert!(
+            negatives.len() <= 5,
+            "must not exceed requested count: {}",
+            negatives.len()
+        );
+    }
+
+    /// A healthy entity space must still yield the requested negatives.
+    #[test]
+    fn regression_negative_sampling_produces_samples_when_possible() {
+        let mut base = BaseModel::new(ModelConfig::default());
+        for i in 0..10 {
+            let s = NamedNode::new(format!("http://example.org/e{i}").as_str()).expect("iri");
+            let p = NamedNode::new("http://example.org/p").expect("iri");
+            let o = NamedNode::new(format!("http://example.org/e{}", i + 1).as_str()).expect("iri");
+            base.add_triple(Triple::new(s, p, o)).expect("add triple");
+        }
+        let mut rng = Random::default();
+        let negatives = base.generate_negative_samples(5, &mut rng);
+        assert_eq!(negatives.len(), 5);
     }
 }

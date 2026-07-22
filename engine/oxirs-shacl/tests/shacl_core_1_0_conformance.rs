@@ -1363,12 +1363,26 @@ fn xone_non_conforming() {
 
 // ─── sh:qualifiedValueShape ────────────────────────────────────────────────
 //
-// The QualifiedValueShapeConstraint needs a shapes_registry on the context
-// to resolve the referenced shape. When tested via Validator::validate_store,
-// the engine passes shapes through the constraint context.  However the
-// fallback path (basic_type_conformance_check) is still used when the context
-// has no registry, so we also exercise the direct constraint unit test path
-// for the qualified min/max count core assertions.
+// The QualifiedValueShapeConstraint needs a shapes_registry on the context to
+// resolve the referenced shape. When tested via Validator::validate_store, the
+// engine threads the shapes registry through the constraint context. These
+// direct constraint unit tests replicate that by attaching the referenced shape
+// definition to the context via `with_shape_definitions`, so the constraint
+// resolves and evaluates real nested conformance (a node conforms to FriendShape
+// iff it is an instance of ex:Friend). A missing registry now fails loud rather
+// than falling back to a fabricated shape-name heuristic.
+
+/// FriendShape: a node conforms iff it has rdf:type ex:Friend (sh:class ex:Friend).
+fn friend_shape() -> Shape {
+    let mut shape = Shape::node_shape(sid(&ex("FriendShape")));
+    shape.add_constraint(
+        cid("sh:ClassConstraintComponent"),
+        Constraint::Class(ClassConstraint {
+            class_iri: iri(&ex("Friend")),
+        }),
+    );
+    shape
+}
 
 #[test]
 fn qualified_value_shape_min_count_conforming() {
@@ -1378,7 +1392,7 @@ fn qualified_value_shape_min_count_conforming() {
 
     let store = ConcreteStore::new().expect("store");
 
-    // Insert a Friend-typed node for the fallback check
+    // A Friend-typed node conforms to FriendShape (sh:class ex:Friend).
     let friend = iri_term(&ex("friendNode"));
     insert(&store, &friend, RDF_TYPE, iri_term(&ex("Friend")));
 
@@ -1388,7 +1402,8 @@ fn qualified_value_shape_min_count_conforming() {
 
     let ctx = ConstraintContext::new(iri_term(&ex("focusNode")), sid(&ex("TestShape")))
         .with_path(prop_path(EX_KNOWS))
-        .with_values(vec![friend]);
+        .with_values(vec![friend])
+        .with_shape_definitions(vec![friend_shape()]);
 
     let result = constraint
         .evaluate(&ctx, &store)
@@ -1407,7 +1422,7 @@ fn qualified_value_shape_min_count_non_conforming() {
 
     let store = ConcreteStore::new().expect("store");
 
-    // Node without rdf:type Friend — fallback returns false
+    // Node without rdf:type Friend — does not conform to FriendShape.
     let stranger = iri_term(&ex("strangerNode"));
 
     let constraint =
@@ -1415,7 +1430,8 @@ fn qualified_value_shape_min_count_non_conforming() {
 
     let ctx = ConstraintContext::new(iri_term(&ex("focusNode2")), sid(&ex("TestShape")))
         .with_path(prop_path(EX_KNOWS))
-        .with_values(vec![stranger]);
+        .with_values(vec![stranger])
+        .with_shape_definitions(vec![friend_shape()]);
 
     let result = constraint
         .evaluate(&ctx, &store)
@@ -1449,7 +1465,8 @@ fn qualified_value_shape_max_count_non_conforming() {
 
     let ctx = ConstraintContext::new(iri_term(&ex("focusNode3")), sid(&ex("TestShape")))
         .with_path(prop_path(EX_KNOWS))
-        .with_values(friends);
+        .with_values(friends)
+        .with_shape_definitions(vec![friend_shape()]);
 
     let result = constraint
         .evaluate(&ctx, &store)

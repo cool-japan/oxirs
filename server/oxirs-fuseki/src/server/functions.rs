@@ -64,8 +64,16 @@ async fn auth_middleware(
     }
     next.run(request).await
 }
-/// Metrics collection middleware
-async fn metrics_middleware(
+/// Metrics collection middleware.
+///
+/// Records every HTTP request/response (method, path, status, duration)
+/// into the shared `MetricsService`, which is what backs the Prometheus
+/// `http_requests_total` counter and the `/metrics` summary's
+/// `requests_total` / `requests_per_second`. Layered unconditionally in
+/// [`Runtime::apply_middleware_stack`] — when no `metrics_service` is
+/// configured this is a cheap passthrough (the `if let Some` below is
+/// simply skipped).
+pub(crate) async fn metrics_middleware(
     State(state): State<Arc<AppState>>,
     request: Request,
     next: Next,
@@ -87,12 +95,31 @@ async fn metrics_middleware(
     }
     response
 }
-/// Rate limiting middleware
+/// Rate limiting middleware.
+///
+/// Enforces the configured `performance.rate_limiting.requests_per_minute`
+/// quota by consulting the keyed governor limiter stored in `AppState`. Each
+/// client (identified by `x-forwarded-for` / `x-real-ip`) gets its own bucket;
+/// a client that exceeds the quota receives `429 Too Many Requests` with a
+/// `Retry-After` header instead of being served. When no limiter is configured
+/// the middleware is a transparent passthrough.
 #[cfg(feature = "rate-limit")]
-async fn rate_limiting_middleware(request: Request, next: Next) -> Response {
-    let client_key = extract_client_identifier(&request);
-    let response = next.run(request).await;
-    response
+pub(crate) async fn rate_limiting_middleware(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if let Some(limiter) = &state.rate_limiter {
+        let client_key = extract_client_identifier(&request);
+        if limiter.check_key(&client_key).is_err() {
+            return axum::response::Response::builder()
+                .status(StatusCode::TOO_MANY_REQUESTS)
+                .header(axum::http::header::RETRY_AFTER, "1")
+                .body(axum::body::Body::from("Rate limit exceeded"))
+                .unwrap_or_else(|_| StatusCode::TOO_MANY_REQUESTS.into_response());
+        }
+    }
+    next.run(request).await
 }
 #[cfg(feature = "rate-limit")]
 fn extract_client_identifier(request: &Request) -> String {
@@ -556,6 +583,7 @@ mod tests {
             startup_time: Instant::now(),
             system_monitor: Arc::new(parking_lot::Mutex::new(sysinfo::System::new_all())),
             audit_logger: Arc::new(oxirs_core::audit::InMemoryAuditLogger::new()),
+            sparql_cache: None,
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
         };

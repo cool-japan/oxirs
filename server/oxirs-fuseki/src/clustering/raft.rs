@@ -12,7 +12,11 @@ use tokio::{
     time::interval,
 };
 
-use crate::{clustering::RaftConfig, error::FusekiResult, store::Store};
+use crate::{
+    clustering::RaftConfig,
+    error::{FusekiError, FusekiResult},
+    store::Store,
+};
 
 /// Raft node states
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -236,8 +240,24 @@ impl RaftNode {
         })
     }
 
-    /// Start the Raft node
-    pub async fn start(&self) -> FusekiResult<()> {
+    /// Start the Raft node.
+    ///
+    /// This in-process Raft implementation does not wire a cross-node RPC
+    /// transport (see [`RaftNode::send_rpc`]). A genuine multi-node cluster
+    /// therefore cannot exchange votes or replicate entries, so rather than
+    /// letting every node fabricate votes and self-elect (split-brain), starting
+    /// with more than one configured member is rejected with an explicit error.
+    /// Single-node operation (via [`RaftNode::bootstrap`]) is fully functional.
+    pub async fn start(self: &Arc<Self>) -> FusekiResult<()> {
+        let member_count = self.cluster_config.read().await.members.len();
+        if member_count > 1 {
+            return Err(FusekiError::internal(format!(
+                "multi-node Raft ({member_count} members) requires a wired RPC transport that is \
+                 not available in this build; refusing to start to avoid split-brain. Use a \
+                 single-node configuration or the oxirs-cluster consensus backend."
+            )));
+        }
+
         // Start RPC handler
         self.start_rpc_handler().await;
 
@@ -275,9 +295,9 @@ impl RaftNode {
     }
 
     /// Start RPC handler
-    async fn start_rpc_handler(&self) {
+    async fn start_rpc_handler(self: &Arc<Self>) {
         let rpc_rx = self.rpc_rx.clone();
-        let node = self.clone_refs();
+        let node = Arc::clone(self);
 
         tokio::spawn(async move {
             let mut rx = rpc_rx.lock().await;
@@ -311,8 +331,8 @@ impl RaftNode {
     }
 
     /// Start election timer
-    async fn start_election_timer(&self) {
-        let node = self.clone_refs();
+    async fn start_election_timer(self: &Arc<Self>) {
+        let node = Arc::clone(self);
         let config = self.config.clone();
 
         tokio::spawn(async move {
@@ -338,8 +358,8 @@ impl RaftNode {
     }
 
     /// Start heartbeat timer
-    async fn start_heartbeat_timer(&self) {
-        let node = self.clone_refs();
+    async fn start_heartbeat_timer(self: &Arc<Self>) {
+        let node = Arc::clone(self);
         let interval_duration = self.config.heartbeat_interval;
 
         tokio::spawn(async move {
@@ -357,8 +377,8 @@ impl RaftNode {
     }
 
     /// Start log applier
-    async fn start_log_applier(&self) {
-        let node = self.clone_refs();
+    async fn start_log_applier(self: &Arc<Self>) {
+        let node = Arc::clone(self);
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_millis(100));
@@ -396,9 +416,9 @@ impl RaftNode {
         *self.state.write().await = RaftState::Candidate;
         *self.election_timer.write().await = Instant::now();
 
-        // Request votes from all other nodes
+        // Request votes from all other nodes.
         let config = self.cluster_config.read().await;
-        let mut votes = 1; // Vote for self
+        let votes = 1; // Vote for self; peer votes require a wired transport.
         let majority = (config.members.len() / 2) + 1;
 
         for member in &config.members {
@@ -410,15 +430,19 @@ impl RaftNode {
                     last_log_term,
                 };
 
-                // Send vote request
-                if let Ok(()) = self.send_rpc(member, RpcMessage::RequestVote(req)).await {
-                    // In real implementation, would handle response asynchronously
-                    votes += 1;
+                // A vote is counted ONLY when a peer actually returns a granted
+                // RequestVoteResponse. Because this build has no wired RPC
+                // transport (`send_rpc` fails loud), a peer vote can never be
+                // confirmed here — so `votes` stays at 1 and a multi-node node
+                // never self-elects. Counting a vote merely because the send call
+                // returned would be the split-brain bug this guards against.
+                if let Err(e) = self.send_rpc(member, RpcMessage::RequestVote(req)).await {
+                    tracing::debug!("vote request to {member} could not be sent: {e}");
                 }
             }
         }
 
-        // Check if won election
+        // Check if won election (single-node clusters have majority == 1).
         if votes >= majority {
             self.become_leader().await;
         }
@@ -676,94 +700,17 @@ impl RaftNode {
         volatile.last_applied = end;
     }
 
-    /// Send RPC to another node
-    async fn send_rpc(&self, target: &str, message: RpcMessage) -> FusekiResult<()> {
-        // Future enhancement: Implement actual network RPC (gRPC/HTTP).
-        // For v0.1.0: Simulated for local testing. Raft protocol logic is production-ready.
-        tracing::debug!("Sending {:?} to {}", message, target);
-        Ok(())
-    }
-
-    /// Clone references for spawning tasks
-    fn clone_refs(&self) -> RaftNodeRefs {
-        RaftNodeRefs {
-            id: self.id.clone(),
-            config: self.config.clone(),
-            state: self.state.clone(),
-            persistent: self.persistent.clone(),
-            volatile: self.volatile.clone(),
-            leader_state: self.leader_state.clone(),
-            current_leader: self.current_leader.clone(),
-            cluster_config: self.cluster_config.clone(),
-            election_timer: self.election_timer.clone(),
-        }
-    }
-}
-
-/// References to RaftNode fields for async tasks
-struct RaftNodeRefs {
-    id: String,
-    config: RaftConfig,
-    state: Arc<RwLock<RaftState>>,
-    persistent: Arc<RwLock<PersistentState>>,
-    volatile: Arc<RwLock<VolatileState>>,
-    leader_state: Arc<RwLock<Option<LeaderState>>>,
-    current_leader: Arc<RwLock<Option<String>>>,
-    cluster_config: Arc<RwLock<ClusterConfig>>,
-    election_timer: Arc<RwLock<Instant>>,
-}
-
-// Implement the same methods for RaftNodeRefs (simplified for the example)
-impl RaftNodeRefs {
-    async fn start_election(&self) {
-        // Implementation would be similar to RaftNode::start_election
-    }
-
-    async fn become_leader(&self) {
-        // Implementation would be similar to RaftNode::become_leader
-    }
-
-    async fn send_heartbeats(&self) {
-        // Implementation would be similar to RaftNode::send_heartbeats
-    }
-
-    async fn handle_append_entries(&self, _req: AppendEntriesRequest) -> AppendEntriesResponse {
-        // Implementation would be similar to RaftNode::handle_append_entries
-        AppendEntriesResponse {
-            term: 0,
-            success: false,
-            last_log_index: 0,
-        }
-    }
-
-    async fn handle_request_vote(&self, _req: RequestVoteRequest) -> RequestVoteResponse {
-        // Implementation would be similar to RaftNode::handle_request_vote
-        RequestVoteResponse {
-            term: 0,
-            vote_granted: false,
-        }
-    }
-
-    async fn handle_install_snapshot(
-        &self,
-        _req: InstallSnapshotRequest,
-    ) -> InstallSnapshotResponse {
-        // Implementation would be similar to RaftNode::handle_install_snapshot
-        InstallSnapshotResponse { term: 0 }
-    }
-
-    async fn apply_committed_entries(&self, _start: u64, _end: u64) {
-        // Implementation would be similar to RaftNode::apply_committed_entries
-    }
-
-    async fn append_log_entry(&self, _command: Command) -> FusekiResult<u64> {
-        // Implementation would be similar to RaftNode::append_log_entry
-        Ok(0)
-    }
-
-    async fn send_rpc(&self, _target: &str, _message: RpcMessage) -> FusekiResult<()> {
-        // Implementation would be similar to RaftNode::send_rpc
-        Ok(())
+    /// Send an RPC to another node.
+    ///
+    /// No cross-node network transport is wired in this in-process Raft
+    /// implementation. Returning `Ok(())` here (as the previous stub did) made
+    /// [`RaftNode::start_election`] treat every peer as having granted its vote,
+    /// so every node self-elected — a split-brain. This now fails loud so that
+    /// caller vote/replication logic can never mistake "not sent" for "delivered".
+    async fn send_rpc(&self, target: &str, _message: RpcMessage) -> FusekiResult<()> {
+        Err(FusekiError::internal(format!(
+            "Raft RPC transport is not wired in this build; cannot send to {target}"
+        )))
     }
 }
 
@@ -795,5 +742,51 @@ mod tests {
         assert_ne!(RaftState::Follower, RaftState::Candidate);
         assert_ne!(RaftState::Candidate, RaftState::Leader);
         assert_ne!(RaftState::Leader, RaftState::Follower);
+    }
+
+    /// Regression: a node with multiple configured members must refuse to start
+    /// (no wired transport → would split-brain), and `send_rpc` must fail loud
+    /// rather than fabricate a successful delivery.
+    #[tokio::test]
+    async fn regression_multinode_start_fails_loud_and_no_fake_rpc() {
+        use crate::store::Store;
+        let store = Arc::new(Store::new().expect("store"));
+        let node = Arc::new(
+            RaftNode::new("n1".to_string(), RaftConfig::default(), store)
+                .await
+                .expect("node"),
+        );
+
+        // send_rpc must not silently succeed (this was the split-brain source).
+        let vote = RpcMessage::RequestVote(RequestVoteRequest {
+            term: 1,
+            candidate_id: "n1".to_string(),
+            last_log_index: 0,
+            last_log_term: 0,
+        });
+        assert!(node.send_rpc("n2", vote).await.is_err());
+
+        // Configure a 3-node cluster and assert start refuses.
+        {
+            let mut cfg = node.cluster_config.write().await;
+            cfg.members = vec!["n1".to_string(), "n2".to_string(), "n3".to_string()];
+        }
+        assert!(node.start().await.is_err());
+    }
+
+    /// Regression: a single-node cluster bootstraps to leader for real (majority
+    /// of 1 is satisfied by the self-vote alone).
+    #[tokio::test]
+    async fn regression_single_node_bootstrap_becomes_leader() {
+        use crate::store::Store;
+        let store = Arc::new(Store::new().expect("store"));
+        let node = Arc::new(
+            RaftNode::new("solo".to_string(), RaftConfig::default(), store)
+                .await
+                .expect("node"),
+        );
+        node.bootstrap().await.expect("bootstrap");
+        assert_eq!(*node.state.read().await, RaftState::Leader);
+        node.start().await.expect("single-node start ok");
     }
 }

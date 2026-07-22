@@ -67,6 +67,16 @@ impl ConsensusManager {
         self
     }
 
+    /// Configure the directory used to durably persist this node's Raft state
+    /// (log, vote, committed index, snapshot, state machine). Must be set
+    /// before `init()`; without it, Raft storage is in-memory only and does
+    /// not survive a process restart.
+    #[cfg(feature = "raft")]
+    pub fn with_raft_storage_dir(mut self, dir: std::path::PathBuf) -> Self {
+        self.raft_node.set_data_dir(dir);
+        self
+    }
+
     /// Initialize the consensus system
     #[cfg(feature = "raft")]
     pub async fn init(&mut self) -> Result<()> {
@@ -255,20 +265,33 @@ impl ConsensusManager {
             ));
         }
 
-        // Create configuration change command
-        let command = RdfCommand::AddNode { node_id, address };
-
-        // Submit through consensus
-        let response = self.propose_command(command).await?;
-
-        // Update local peer set on success
-        if matches!(response, RdfResponse::Success) {
-            self.add_peer(node_id);
-            tracing::info!(
-                "Successfully added node {} to cluster through consensus",
-                node_id
-            );
+        // Route the membership change through OpenRaft's real reconfiguration
+        // APIs (`add_learner` + `change_membership`) so the new node actually
+        // becomes a quorum-counting voter and starts receiving replication —
+        // NOT a no-op state-machine command that reports success while
+        // changing nothing.
+        #[cfg(feature = "raft")]
+        {
+            let parsed: SocketAddr = address.parse().map_err(|e| {
+                anyhow::anyhow!("invalid address '{address}' for node {node_id}: {e}")
+            })?;
+            self.raft_node.add_node(node_id, parsed).await?;
+            // Register the joiner for health probes too.
+            self.register_peer_address(node_id, parsed);
         }
+        #[cfg(not(feature = "raft"))]
+        {
+            // Non-Raft build: there is no real multi-node consensus to
+            // reconfigure. Honestly reflect the local peer set only; do not
+            // claim a consensus-backed change was committed.
+            let _ = &address;
+        }
+
+        self.add_peer(node_id);
+        tracing::info!(
+            "Successfully added node {} to cluster through consensus",
+            node_id
+        );
 
         Ok(())
     }
@@ -286,20 +309,19 @@ impl ConsensusManager {
             return Err(anyhow::anyhow!("Node {} not found in cluster", node_id));
         }
 
-        // Create configuration change command
-        let command = RdfCommand::RemoveNode { node_id };
-
-        // Submit through consensus
-        let response = self.propose_command(command).await?;
-
-        // Update local peer set on success
-        if matches!(response, RdfResponse::Success) {
-            self.remove_peer(node_id);
-            tracing::info!(
-                "Successfully removed node {} from cluster through consensus",
-                node_id
-            );
+        // Commit a real membership change through OpenRaft so the removed node
+        // stops counting toward quorum and replication to it stops — instead
+        // of a no-op command that leaves it counted as a live voter forever.
+        #[cfg(feature = "raft")]
+        {
+            self.raft_node.remove_node(node_id).await?;
         }
+
+        self.remove_peer(node_id);
+        tracing::info!(
+            "Successfully removed node {} from cluster through consensus",
+            node_id
+        );
 
         Ok(())
     }
@@ -345,12 +367,21 @@ impl ConsensusManager {
             ));
         }
 
-        // Submit leadership transfer command
-        let command = RdfCommand::TransferLeadership { target_node };
-        self.propose_command(command).await?;
-
-        tracing::info!("Leadership transfer initiated to node {}", target_node);
-        Ok(())
+        // Perform a real Raft §3.10 leadership handoff (TimeoutNow to the
+        // caught-up target) instead of replicating a no-op command. On a
+        // non-Raft build there is no leadership to move.
+        #[cfg(feature = "raft")]
+        {
+            self.raft_node.transfer_leadership(target_node).await?;
+            tracing::info!("Leadership transfer initiated to node {}", target_node);
+            Ok(())
+        }
+        #[cfg(not(feature = "raft"))]
+        {
+            Err(anyhow::anyhow!(
+                "leadership transfer requires the 'raft' feature; no consensus leadership exists"
+            ))
+        }
     }
 
     /// Force evict a non-responsive node
@@ -361,17 +392,17 @@ impl ConsensusManager {
 
         tracing::warn!("Force evicting non-responsive node {}", node_id);
 
-        // Create force eviction command
-        let command = RdfCommand::ForceEvictNode { node_id };
-
-        // Submit through consensus
-        let response = self.propose_command(command).await?;
-
-        // Update local peer set on success
-        if matches!(response, RdfResponse::Success) {
-            self.remove_peer(node_id);
-            tracing::info!("Successfully force evicted node {}", node_id);
+        // Eviction is a real membership change: drop the unresponsive node from
+        // the voter set through OpenRaft so quorum no longer waits on it. The
+        // leader can still commit this as long as the *remaining* nodes form a
+        // quorum. (No-op command replaced.)
+        #[cfg(feature = "raft")]
+        {
+            self.raft_node.remove_node(node_id).await?;
         }
+
+        self.remove_peer(node_id);
+        tracing::info!("Successfully force evicted node {}", node_id);
 
         Ok(())
     }
@@ -394,7 +425,15 @@ impl ConsensusManager {
     /// any connection failure, timeout, or unexpected reply marks it unhealthy.
     async fn check_single_node_health(&self, node_id: OxirsNodeId) -> NodeHealthStatus {
         let start_time = Instant::now();
-        let is_responsive = self.probe_node_liveness(node_id).await;
+        // Prefer liveness reported by the running consensus instance itself
+        // (real replication/leadership state) when it can answer for this peer;
+        // fall back to an explicit heartbeat RPC over the health transport
+        // otherwise. This is what lets a healthy cluster's leader report its
+        // followers as reachable instead of the old "always unreachable".
+        let is_responsive = match self.raft_reported_liveness(node_id).await {
+            Some(live) => live,
+            None => self.probe_node_liveness(node_id).await,
+        };
         let elapsed = start_time.elapsed();
 
         NodeHealthStatus {
@@ -407,6 +446,39 @@ impl ConsensusManager {
             },
             latency_ms: elapsed.as_millis() as u64,
         }
+    }
+
+    /// Liveness of `node_id` as reported by this node's own running Raft
+    /// instance, or `None` when the running consensus cannot answer for that
+    /// peer (no Raft instance, or this node is a follower asked about a peer
+    /// other than the leader).
+    ///
+    /// - Leader: a peer is live if replication metrics show a matched log id
+    ///   for it (the leader has successfully replicated to it at least once,
+    ///   i.e. it is reachable). A voter with no matched entry is reported not
+    ///   live.
+    /// - Follower: it can only vouch for the current leader's liveness; for any
+    ///   other peer it returns `None` so the caller falls back to a probe.
+    #[cfg(feature = "raft")]
+    async fn raft_reported_liveness(&self, node_id: OxirsNodeId) -> Option<bool> {
+        let metrics = self.raft_node.get_metrics().await?;
+        let leader = metrics.current_leader?;
+        if leader == self.node_id {
+            // We are the leader: consult per-follower replication progress.
+            let replication = metrics.replication.as_ref()?;
+            let matched = replication.get(&node_id).copied().flatten();
+            Some(matched.is_some())
+        } else if node_id == leader {
+            // We are a follower and we currently have a leader: it is live.
+            Some(true)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(not(feature = "raft"))]
+    async fn raft_reported_liveness(&self, _node_id: OxirsNodeId) -> Option<bool> {
+        None
     }
 
     /// Issue a real heartbeat RPC to `node_id` and report whether it answered.
@@ -452,44 +524,79 @@ impl ConsensusManager {
         }
     }
 
-    /// Attempt to recover from a partition or failure
+    /// Attempt to recover from a partition or transient leader loss.
+    ///
+    /// This deliberately does **not** re-initialize a live Raft node the way an
+    /// earlier version did: rebuilding `OxirsStorage` from scratch and
+    /// re-binding the already-bound RPC listener would fail with
+    /// `EADDRINUSE`, discard committed state, and — by unilaterally shrinking
+    /// `self.peers` to only the currently-reachable subset — risk split-brain
+    /// by dropping voters outside of a committed membership change.
+    ///
+    /// Instead recovery is non-destructive and driven through the running
+    /// consensus instance:
+    /// 1. Assess peer health over the real transport. If no health transport
+    ///    is configured (so health can't be assessed), fail loud rather than
+    ///    acting on fabricated "all-down" data.
+    /// 2. If the reachable voters (including self) cannot form a quorum, fail
+    ///    loud — no membership change can be committed and forcing one would be
+    ///    unsafe.
+    /// 3. If a quorum is reachable but the cluster currently has no leader,
+    ///    trigger a fresh election so OpenRaft can converge on one. Membership
+    ///    is left intact; OpenRaft re-replicates to voters as they come back.
     pub async fn attempt_recovery(&mut self) -> Result<()> {
         tracing::info!("Attempting cluster recovery");
 
-        // Check if we have enough healthy nodes for quorum
         let health_statuses = self.check_peer_health().await?;
         let healthy_nodes: Vec<_> = health_statuses
             .iter()
             .filter(|status| status.is_responsive)
             .collect();
 
-        let quorum_size = (self.peers.len() + 1) / 2 + 1; // +1 for self
+        // Quorum of the *configured* voter set (self + peers), not of some
+        // shrunken subset — we must never silently reduce the cluster.
+        let cluster_size = self.peers.len() + 1; // +1 for self
+        let quorum_size = cluster_size / 2 + 1;
+        let reachable = healthy_nodes.len() + 1; // +1: self is reachable to itself
 
-        if healthy_nodes.len() + 1 >= quorum_size {
-            tracing::info!("Sufficient nodes for quorum, attempting to re-establish consensus");
-
-            // Re-initialize consensus with healthy nodes only
-            let healthy_node_ids: std::collections::BTreeSet<_> =
-                healthy_nodes.iter().map(|status| status.node_id).collect();
-
-            self.peers = healthy_node_ids;
-            self.init().await?;
-
-            tracing::info!(
-                "Recovery completed with {} healthy nodes",
-                healthy_nodes.len()
-            );
-        } else {
+        if reachable < quorum_size {
             tracing::error!(
-                "Insufficient nodes for quorum: {} healthy out of {} required",
-                healthy_nodes.len() + 1,
+                "Insufficient reachable nodes for quorum: {} reachable out of {} required",
+                reachable,
                 quorum_size
             );
             return Err(anyhow::anyhow!(
-                "Cannot recover: insufficient nodes for quorum"
+                "Cannot recover: insufficient reachable nodes for quorum ({reachable}/{quorum_size})"
             ));
         }
 
+        // A quorum is reachable. If there is no current leader, nudge an
+        // election; otherwise the cluster is already healthy and OpenRaft will
+        // catch lagging followers up on its own. Never re-init, never shrink
+        // the membership.
+        #[cfg(feature = "raft")]
+        {
+            let has_leader = self
+                .raft_node
+                .get_metrics()
+                .await
+                .and_then(|m| m.current_leader)
+                .is_some();
+            if !has_leader {
+                tracing::info!("Quorum reachable but no leader; triggering an election");
+                self.raft_node.trigger_election().await?;
+            } else {
+                tracing::info!(
+                    "Quorum reachable and a leader is present; no recovery action needed"
+                );
+            }
+        }
+
+        tracing::info!(
+            "Recovery check completed: {} of {} nodes reachable",
+            reachable,
+            cluster_size
+        );
         Ok(())
     }
 }
@@ -640,6 +747,35 @@ mod tests {
             "an unreachable peer must be reported unhealthy, not healthy"
         );
         assert!(statuses[0].last_seen.is_none());
+    }
+
+    /// Regression: `transfer_leadership` must fail loud when there is no
+    /// running multi-node consensus to move leadership within, instead of
+    /// reporting a fabricated success via a no-op state-machine command (the
+    /// old behavior).
+    #[tokio::test]
+    async fn regression_transfer_leadership_fails_loud_without_consensus() {
+        let manager = ConsensusManager::new(1, vec![2]);
+        let result = manager.transfer_leadership(2).await;
+        assert!(
+            result.is_err(),
+            "leadership transfer with no running consensus must fail, not fake success"
+        );
+    }
+
+    /// Regression: `attempt_recovery` must fail loud when a quorum of nodes is
+    /// not reachable, rather than re-initializing a live node or silently
+    /// shrinking the membership.
+    #[tokio::test]
+    async fn regression_attempt_recovery_requires_quorum() {
+        let mut manager = ConsensusManager::new(1, vec![2, 3, 4]);
+        // No transport and no running raft → no peer is reachable → 1 of 4,
+        // below the quorum of 3.
+        let result = manager.attempt_recovery().await;
+        assert!(
+            result.is_err(),
+            "recovery must fail when a quorum is unreachable"
+        );
     }
 
     #[test]

@@ -35,6 +35,7 @@
 //! ```
 
 use crate::error::{GeoSparqlError, Result};
+use crate::geometry::coord3d::Coord3D;
 use crate::geometry::{Crs, Geometry};
 use geo_types::{
     Coord, Geometry as GeoGeometry, LineString, MultiLineString, MultiPoint, MultiPolygon, Point,
@@ -153,6 +154,12 @@ fn parse_prj_to_uri(wkt: &str) -> String {
 fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geometry>> {
     use shapefile::Shape as ShpShape;
 
+    // For Z-variant shapes, `coord3d` carries the Z values (in the same
+    // coordinate order the resulting geo-types geometry iterates via
+    // `coords_iter()`) alongside the flattened 2D `geo_geom`, mirroring how
+    // `wkt_parser.rs` preserves Z data via the `Coord3D` side-channel.
+    let mut coord3d = Coord3D::xy();
+
     let geo_geom = match shape {
         // Point types
         ShpShape::Point(point) => {
@@ -164,9 +171,8 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
             GeoGeometry::Point(pt)
         }
         ShpShape::PointZ(point) => {
-            // Note: geo-types doesn't support 3D coordinates natively,
-            // so we drop the Z coordinate for now
             let pt = Point::new(point.x, point.y);
+            coord3d = Coord3D::xyz(vec![point.z]);
             GeoGeometry::Point(pt)
         }
 
@@ -193,6 +199,8 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
                 .iter()
                 .map(|p| Point::new(p.x, p.y))
                 .collect();
+            let z_values: Vec<f64> = multipoint.points().iter().map(|p| p.z).collect();
+            coord3d = Coord3D::xyz(z_values);
             GeoGeometry::MultiPoint(MultiPoint(points))
         }
 
@@ -246,6 +254,8 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
             } else if parts.len() == 1 {
                 let coords: Vec<Coord<f64>> =
                     parts[0].iter().map(|p| Coord { x: p.x, y: p.y }).collect();
+                let z_values: Vec<f64> = parts[0].iter().map(|p| p.z).collect();
+                coord3d = Coord3D::xyz(z_values);
                 GeoGeometry::LineString(LineString(coords))
             } else {
                 let lines: Vec<LineString<f64>> = parts
@@ -256,6 +266,11 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
                         LineString(coords)
                     })
                     .collect();
+                let z_values: Vec<f64> = parts
+                    .iter()
+                    .flat_map(|part| part.iter().map(|p| p.z))
+                    .collect();
+                coord3d = Coord3D::xyz(z_values);
                 GeoGeometry::MultiLineString(MultiLineString(lines))
             }
         }
@@ -290,11 +305,13 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
             }
         }
         ShpShape::PolygonZ(polygon) => {
-            let polygons = polygon_rings_to_polygons_z(polygon.rings())?;
+            let (polygons, z_values) = polygon_rings_to_polygons_z(polygon.rings())?;
 
             if polygons.is_empty() {
                 return Ok(None);
-            } else if polygons.len() == 1 {
+            }
+            coord3d = Coord3D::xyz(z_values);
+            if polygons.len() == 1 {
                 match polygons.into_iter().next() {
                     Some(poly) => GeoGeometry::Polygon(poly),
                     None => return Ok(None),
@@ -315,7 +332,11 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
         }
     };
 
-    Ok(Some(Geometry::with_crs(geo_geom, crs.clone())))
+    Ok(Some(Geometry::with_crs_and_coord3d(
+        geo_geom,
+        crs.clone(),
+        coord3d,
+    )))
 }
 
 /// Convert shapefile polygon rings (Point type) to geo-types polygons
@@ -397,14 +418,21 @@ fn polygon_rings_to_polygons_m(
     Ok(polygons)
 }
 
-/// Convert shapefile polygon rings (PointZ type) to geo-types polygons
+/// Convert shapefile polygon rings (PointZ type) to geo-types polygons,
+/// along with the Z values for every coordinate flattened in the exact
+/// order the resulting `Polygon`/`MultiPolygon` iterates via
+/// `coords_iter()` (per polygon: exterior ring first, then holes in ring
+/// order; polygons in the order they appear in `polygons`).
 #[cfg(feature = "shapefile-support")]
 fn polygon_rings_to_polygons_z(
     rings: &[shapefile::PolygonRing<shapefile::PointZ>],
-) -> Result<Vec<Polygon<f64>>> {
+) -> Result<(Vec<Polygon<f64>>, Vec<f64>)> {
     let mut polygons = Vec::new();
     let mut current_exterior: Option<LineString<f64>> = None;
     let mut current_holes: Vec<LineString<f64>> = Vec::new();
+    let mut all_z: Vec<f64> = Vec::new();
+    let mut current_exterior_z: Option<Vec<f64>> = None;
+    let mut current_holes_z: Vec<Vec<f64>> = Vec::new();
 
     for ring in rings {
         let coords: Vec<Coord<f64>> = ring
@@ -412,26 +440,41 @@ fn polygon_rings_to_polygons_z(
             .iter()
             .map(|p| Coord { x: p.x, y: p.y })
             .collect();
+        let z_values: Vec<f64> = ring.points().iter().map(|p| p.z).collect();
         let linestring = LineString(coords);
 
         match ring {
             shapefile::PolygonRing::Outer(_) => {
                 if let Some(exterior) = current_exterior.take() {
                     polygons.push(Polygon::new(exterior, std::mem::take(&mut current_holes)));
+                    if let Some(ext_z) = current_exterior_z.take() {
+                        all_z.extend(ext_z);
+                    }
+                    for hole_z in current_holes_z.drain(..) {
+                        all_z.extend(hole_z);
+                    }
                 }
                 current_exterior = Some(linestring);
+                current_exterior_z = Some(z_values);
             }
             shapefile::PolygonRing::Inner(_) => {
                 current_holes.push(linestring);
+                current_holes_z.push(z_values);
             }
         }
     }
 
     if let Some(exterior) = current_exterior {
         polygons.push(Polygon::new(exterior, current_holes));
+        if let Some(ext_z) = current_exterior_z {
+            all_z.extend(ext_z);
+        }
+        for hole_z in current_holes_z {
+            all_z.extend(hole_z);
+        }
     }
 
-    Ok(polygons)
+    Ok((polygons, all_z))
 }
 
 /// Write geometries to a shapefile
@@ -949,5 +992,125 @@ mod tests {
         let _ = fs::remove_file(temp_path.with_extension("shx"));
         let _ = fs::remove_file(temp_path.with_extension("prj"));
         let _ = fs::remove_file(temp_path.with_extension("dbf"));
+    }
+
+    // ========================================================================
+    // Regression tests: Z-variant shapefile shapes must preserve their Z
+    // coordinate via `Coord3D` instead of silently dropping it.
+    // ========================================================================
+
+    #[test]
+    fn regression_shapefile_point_z_preserves_z() {
+        use shapefile::{PointZ, ShapeWriter};
+        use std::env::temp_dir;
+        use std::fs;
+
+        let temp_path = temp_dir().join("test_regression_point_z.shp");
+
+        {
+            let mut writer =
+                ShapeWriter::from_path(&temp_path).expect("create ShapeWriter for PointZ");
+            let point = PointZ::new(1.0, 2.0, 42.5, shapefile::NO_DATA);
+            writer.write_shape(&point).expect("write PointZ shape");
+        }
+
+        let geometries = read_shapefile(&temp_path).expect("read_shapefile should succeed");
+        assert_eq!(geometries.len(), 1);
+
+        match &geometries[0].geom {
+            GeoGeometry::Point(p) => {
+                assert!((p.x() - 1.0).abs() < 1e-9);
+                assert!((p.y() - 2.0).abs() < 1e-9);
+            }
+            other => panic!("Expected Point geometry, got: {:?}", other),
+        }
+        assert!(
+            geometries[0].coord3d.has_z(),
+            "PointZ must produce a Geometry with Z coordinates, not silently drop them"
+        );
+        assert_eq!(
+            geometries[0].coord3d.z_at(0),
+            Some(42.5),
+            "Z value must round-trip exactly from the shapefile"
+        );
+
+        let _ = fs::remove_file(&temp_path);
+        let _ = fs::remove_file(temp_path.with_extension("shx"));
+    }
+
+    #[test]
+    fn regression_shapefile_multipoint_z_preserves_z() {
+        use shapefile::{MultipointZ, PointZ, ShapeWriter};
+        use std::env::temp_dir;
+        use std::fs;
+
+        let temp_path = temp_dir().join("test_regression_multipoint_z.shp");
+
+        {
+            let mut writer =
+                ShapeWriter::from_path(&temp_path).expect("create ShapeWriter for MultipointZ");
+            let points = vec![
+                PointZ::new(0.0, 0.0, 10.0, shapefile::NO_DATA),
+                PointZ::new(1.0, 1.0, 20.0, shapefile::NO_DATA),
+                PointZ::new(2.0, 2.0, 30.0, shapefile::NO_DATA),
+            ];
+            let multipoint = MultipointZ::from(points);
+            writer
+                .write_shape(&multipoint)
+                .expect("write MultipointZ shape");
+        }
+
+        let geometries = read_shapefile(&temp_path).expect("read_shapefile should succeed");
+        assert_eq!(geometries.len(), 1);
+
+        match &geometries[0].geom {
+            GeoGeometry::MultiPoint(mp) => assert_eq!(mp.0.len(), 3),
+            other => panic!("Expected MultiPoint geometry, got: {:?}", other),
+        }
+        assert!(geometries[0].coord3d.has_z());
+        assert_eq!(geometries[0].coord3d.z_at(0), Some(10.0));
+        assert_eq!(geometries[0].coord3d.z_at(1), Some(20.0));
+        assert_eq!(geometries[0].coord3d.z_at(2), Some(30.0));
+
+        let _ = fs::remove_file(&temp_path);
+        let _ = fs::remove_file(temp_path.with_extension("shx"));
+    }
+
+    #[test]
+    fn regression_shapefile_polyline_z_preserves_z() {
+        use shapefile::{PointZ, PolylineZ, ShapeWriter};
+        use std::env::temp_dir;
+        use std::fs;
+
+        let temp_path = temp_dir().join("test_regression_polyline_z.shp");
+
+        {
+            let mut writer =
+                ShapeWriter::from_path(&temp_path).expect("create ShapeWriter for PolylineZ");
+            let points = vec![
+                PointZ::new(0.0, 0.0, 5.0, shapefile::NO_DATA),
+                PointZ::new(1.0, 1.0, 15.0, shapefile::NO_DATA),
+                PointZ::new(2.0, 0.0, 25.0, shapefile::NO_DATA),
+            ];
+            let polyline = PolylineZ::new(points);
+            writer
+                .write_shape(&polyline)
+                .expect("write PolylineZ shape");
+        }
+
+        let geometries = read_shapefile(&temp_path).expect("read_shapefile should succeed");
+        assert_eq!(geometries.len(), 1);
+
+        match &geometries[0].geom {
+            GeoGeometry::LineString(ls) => assert_eq!(ls.0.len(), 3),
+            other => panic!("Expected LineString geometry, got: {:?}", other),
+        }
+        assert!(geometries[0].coord3d.has_z());
+        assert_eq!(geometries[0].coord3d.z_at(0), Some(5.0));
+        assert_eq!(geometries[0].coord3d.z_at(1), Some(15.0));
+        assert_eq!(geometries[0].coord3d.z_at(2), Some(25.0));
+
+        let _ = fs::remove_file(&temp_path);
+        let _ = fs::remove_file(temp_path.with_extension("shx"));
     }
 }

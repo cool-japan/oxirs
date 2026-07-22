@@ -411,6 +411,11 @@ pub struct FederationEngine {
     monitor: Arc<FederationMonitor>,
     /// Advanced caching system
     cache: Arc<FederationCache>,
+    /// Multi-level (L1 memory + L2 disk) result cache with per-endpoint
+    /// dependency invalidation. Query results are stored here keyed by the
+    /// contributing endpoints so that removing a service can precisely purge
+    /// exactly the affected cached results.
+    result_cache_v2: Arc<crate::cache_v2::MultiLevelCache>,
     /// Automatic service discovery
     auto_discovery: Arc<RwLock<Option<AutoDiscovery>>>,
     /// Vector similarity federation
@@ -427,6 +432,10 @@ impl FederationEngine {
         let graphql_federation = Arc::new(GraphQLFederation::new());
         let monitor = Arc::new(FederationMonitor::new());
         let cache = Arc::new(FederationCache::new());
+        let result_cache_v2 = Arc::new(crate::cache_v2::MultiLevelCache::new_ephemeral(
+            1024,
+            Duration::from_secs(300),
+        ));
 
         Self {
             service_registry,
@@ -436,6 +445,7 @@ impl FederationEngine {
             graphql_federation,
             monitor,
             cache,
+            result_cache_v2,
             auto_discovery: Arc::new(RwLock::new(None)),
             vector_federation: Arc::new(RwLock::new(None)),
         }
@@ -452,6 +462,10 @@ impl FederationEngine {
         let graphql_federation = Arc::new(GraphQLFederation::with_config(config.graphql_config));
         let monitor = Arc::new(FederationMonitor::with_config(config.monitor_config));
         let cache = Arc::new(FederationCache::with_config(config.cache_config));
+        let result_cache_v2 = Arc::new(crate::cache_v2::MultiLevelCache::new_ephemeral(
+            1024,
+            Duration::from_secs(300),
+        ));
 
         Self {
             service_registry,
@@ -461,6 +475,7 @@ impl FederationEngine {
             graphql_federation,
             monitor,
             cache,
+            result_cache_v2,
             auto_discovery: Arc::new(RwLock::new(None)),
             vector_federation: Arc::new(RwLock::new(None)),
         }
@@ -468,14 +483,34 @@ impl FederationEngine {
 
     /// Register a new federated service
     pub async fn register_service(&self, service: FederatedService) -> Result<()> {
+        // Make the endpoint available to the GraphQL federation layer so entity
+        // resolution can issue real `_entities` requests against it.
+        if matches!(service.service_type, ServiceType::GraphQL) {
+            self.graphql_federation
+                .register_service_endpoint(service.id.clone(), service.endpoint.clone())
+                .await;
+        }
         let registry = self.service_registry.write().await;
         registry.register(service).await
     }
 
     /// Unregister a federated service
     pub async fn unregister_service(&self, service_id: &str) -> Result<()> {
-        let registry = self.service_registry.write().await;
-        registry.unregister(service_id).await
+        {
+            let registry = self.service_registry.write().await;
+            registry.unregister(service_id).await?;
+        }
+
+        // Purge every cached artifact that could have been produced with this
+        // service, so stale/now-invalid federated results are never served after
+        // the topology changes.
+        self.graphql_federation
+            .unregister_service_endpoint(service_id)
+            .await;
+        self.cache.invalidate_service(service_id).await;
+        self.result_cache_v2.invalidate_endpoint(service_id);
+
+        Ok(())
     }
 
     /// Execute a federated SPARQL query
@@ -718,6 +753,32 @@ impl FederationEngine {
                 self.cache
                     .put_query_result(&cache_key, QueryResultCache::Sparql(cached_result), None)
                     .await;
+
+                // Also record the result in the multi-level cache keyed by the
+                // endpoints that contributed to it, enabling precise per-endpoint
+                // invalidation when a service is deregistered.
+                let contributing_endpoints: Vec<String> = execution_plan
+                    .steps
+                    .iter()
+                    .filter_map(|s| s.service_id.clone())
+                    .collect();
+                if !contributing_endpoints.is_empty() {
+                    let v2_bindings: Vec<HashMap<String, String>> = result_bindings
+                        .iter()
+                        .map(|binding| {
+                            binding
+                                .iter()
+                                .map(|(var, term)| (var.clone(), term.to_string()))
+                                .collect()
+                        })
+                        .collect();
+                    let v2_key = crate::cache_v2::CacheKey::from_query(
+                        query,
+                        contributing_endpoints.clone(),
+                    );
+                    self.result_cache_v2
+                        .put_result(v2_key, v2_bindings, contributing_endpoints);
+                }
             }
         }
 
@@ -860,9 +921,28 @@ impl FederationEngine {
         self.cache.get_stats().await
     }
 
-    /// Invalidate cache for a specific service
+    /// Invalidate cache for a specific service, across both the primary
+    /// federation cache and the multi-level result cache.
     pub async fn invalidate_service_cache(&self, service_id: &str) {
         self.cache.invalidate_service(service_id).await;
+        self.result_cache_v2.invalidate_endpoint(service_id);
+    }
+
+    /// Look up a previously cached SPARQL result in the multi-level cache by
+    /// query text and the set of contributing endpoints. Returns raw bindings
+    /// (variable name -> value string).
+    pub fn cached_result_v2(
+        &self,
+        query: &str,
+        endpoints: Vec<String>,
+    ) -> Option<Vec<HashMap<String, String>>> {
+        let key = crate::cache_v2::CacheKey::from_query(query, endpoints);
+        self.result_cache_v2.get(&key).map(|e| e.result_bindings)
+    }
+
+    /// Snapshot of the multi-level result cache statistics.
+    pub fn result_cache_v2_stats(&self) -> crate::cache_v2::MultiLevelCacheStats {
+        self.result_cache_v2.stats()
     }
 
     /// Invalidate all query caches

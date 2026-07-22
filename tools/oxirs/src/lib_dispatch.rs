@@ -1016,15 +1016,23 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             }
             ResultCacheAction::Config { max_size, ttl } => {
                 let cache = crate::commands::result_cache::global_lru_cache();
+                if max_size.is_none() && ttl.is_none() {
+                    if let Some(cfg) = cache.current_config() {
+                        println!("Max entries: {}", cfg.max_entries);
+                        println!("Default TTL: {}s", cfg.default_ttl_secs);
+                    }
+                    return Ok(());
+                }
+                // Actually apply the requested limits to the running cache
+                // (previously this printed a confirmation and discarded both
+                // values).
+                cache.reconfigure(max_size, ttl);
                 if let Some(sz) = max_size {
-                    println!("Max entries updated to {}", sz);
-                    let _ = sz; // config applied at init time
+                    println!("Max entries updated to {sz}");
                 }
                 if let Some(t) = ttl {
-                    println!("Default TTL updated to {}s", t);
-                    let _ = t;
+                    println!("Default TTL updated to {t}s");
                 }
-                let _ = cache;
                 Ok(())
             }
         },

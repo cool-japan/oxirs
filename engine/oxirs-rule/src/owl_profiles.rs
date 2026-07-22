@@ -332,44 +332,72 @@ impl QLReasoner {
             object,
         } = query
         {
-            // If querying for type, expand to superclasses
+            // If querying for type, expand to the *transitive* superclass closure
+            // so multi-hop chains (Dog ⊑ Mammal ⊑ Animal) are covered.
             if predicate == &Term::Constant("rdf:type".to_string()) {
                 if let Term::Constant(class) = object {
-                    // Find all superclasses
-                    for axiom in &ontology.axioms {
-                        if let Axiom::SubClassOf(Concept::Atomic(sub), Concept::Atomic(sup)) = axiom
-                        {
-                            if sub == class {
-                                rewritten.push(RuleAtom::Triple {
-                                    subject: subject.clone(),
-                                    predicate: predicate.clone(),
-                                    object: Term::Constant(sup.clone()),
-                                });
-                                self.stats.rewritten_queries += 1;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // If querying for property, expand to super-properties
-            for axiom in &ontology.axioms {
-                if let Axiom::SubPropertyOf(Role { name: sub_prop }, Role { name: super_prop }) =
-                    axiom
-                {
-                    if predicate == &Term::Constant(sub_prop.clone()) {
+                    for sup in Self::transitive_superclasses(ontology, class) {
                         rewritten.push(RuleAtom::Triple {
                             subject: subject.clone(),
-                            predicate: Term::Constant(super_prop.clone()),
-                            object: object.clone(),
+                            predicate: predicate.clone(),
+                            object: Term::Constant(sup),
                         });
                         self.stats.rewritten_queries += 1;
                     }
                 }
             }
+
+            // If querying for a property, expand to the transitive super-property
+            // closure (P ⊑ Q ⊑ R).
+            if let Term::Constant(prop) = predicate {
+                for super_prop in Self::transitive_superproperties(ontology, prop) {
+                    rewritten.push(RuleAtom::Triple {
+                        subject: subject.clone(),
+                        predicate: Term::Constant(super_prop),
+                        object: object.clone(),
+                    });
+                    self.stats.rewritten_queries += 1;
+                }
+            }
         }
 
         Ok(rewritten)
+    }
+
+    /// Compute the transitive set of superclasses of `class` from the ontology's
+    /// atomic `SubClassOf` axioms (a fixpoint over the subclass edges).
+    fn transitive_superclasses(ontology: &Ontology, class: &str) -> Vec<String> {
+        let mut supers: HashSet<String> = HashSet::new();
+        let mut stack = vec![class.to_string()];
+        while let Some(current) = stack.pop() {
+            for axiom in &ontology.axioms {
+                if let Axiom::SubClassOf(Concept::Atomic(sub), Concept::Atomic(sup)) = axiom {
+                    if *sub == current && supers.insert(sup.clone()) {
+                        stack.push(sup.clone());
+                    }
+                }
+            }
+        }
+        supers.into_iter().collect()
+    }
+
+    /// Compute the transitive set of super-properties of `prop` from the
+    /// ontology's `SubPropertyOf` axioms.
+    fn transitive_superproperties(ontology: &Ontology, prop: &str) -> Vec<String> {
+        let mut supers: HashSet<String> = HashSet::new();
+        let mut stack = vec![prop.to_string()];
+        while let Some(current) = stack.pop() {
+            for axiom in &ontology.axioms {
+                if let Axiom::SubPropertyOf(Role { name: sub_prop }, Role { name: super_prop }) =
+                    axiom
+                {
+                    if *sub_prop == current && supers.insert(super_prop.clone()) {
+                        stack.push(super_prop.clone());
+                    }
+                }
+            }
+        }
+        supers.into_iter().collect()
     }
 
     /// Answer query with reasoning
@@ -547,53 +575,215 @@ impl RLReasoner {
         Ok(facts)
     }
 
-    /// Apply a single rule to facts (simplified - no full unification)
+    /// Apply a single rule to facts using real unification.
+    ///
+    /// Finds every substitution that jointly satisfies all body atoms (variables
+    /// shared across atoms must bind consistently), then instantiates the head
+    /// atoms under each substitution. Only fully-ground head atoms are emitted —
+    /// this is what prevents leaking `Term::Variable` "facts" like
+    /// `?x rdfs:subPropertyOf ?R` into the materialized set.
     fn apply_rule(&self, rule: &Rule, facts: &HashSet<RuleAtom>) -> Result<Vec<RuleAtom>> {
         let mut derived = Vec::new();
 
-        // Simplified rule application - would need full unification in production
-        // For now, just check if all body atoms exist in facts
-        let body_satisfied = rule.body.iter().all(|atom| {
-            facts
-                .iter()
-                .any(|fact| self.atoms_structurally_match(atom, fact))
-        });
-
-        if body_satisfied {
-            // Derive head atoms
+        let substitutions = Self::find_body_substitutions(&rule.body, facts)?;
+        for subst in &substitutions {
             for head_atom in &rule.head {
-                // In production, would apply substitution from body to head
-                derived.push(head_atom.clone());
+                let grounded = Self::apply_substitution(head_atom, subst);
+                // Never emit a head atom that still contains unbound variables.
+                if Self::is_ground(&grounded) {
+                    derived.push(grounded);
+                }
             }
         }
 
         Ok(derived)
     }
 
-    /// Simplified structural matching (production needs unification)
-    fn atoms_structurally_match(&self, pattern: &RuleAtom, fact: &RuleAtom) -> bool {
-        match (pattern, fact) {
-            (
-                RuleAtom::Triple {
-                    subject: s1,
-                    predicate: p1,
-                    object: o1,
-                },
-                RuleAtom::Triple {
-                    subject: s2,
-                    predicate: p2,
-                    object: o2,
-                },
-            ) => self.terms_match(s1, s2) && self.terms_match(p1, p2) && self.terms_match(o1, o2),
+    /// Enumerate all substitutions satisfying the full body via a left-to-right
+    /// join, carrying bindings across atoms so shared variables stay consistent.
+    fn find_body_substitutions(
+        body: &[RuleAtom],
+        facts: &HashSet<RuleAtom>,
+    ) -> Result<Vec<HashMap<String, Term>>> {
+        let mut substitutions: Vec<HashMap<String, Term>> = vec![HashMap::new()];
+
+        for atom in body {
+            let mut next = Vec::new();
+            for subst in &substitutions {
+                Self::extend_substitution(atom, subst, facts, &mut next)?;
+            }
+            substitutions = next;
+            if substitutions.is_empty() {
+                break;
+            }
+        }
+
+        Ok(substitutions)
+    }
+
+    /// Extend `base` with every way `atom` can be satisfied given the current
+    /// bindings and the fact base.
+    fn extend_substitution(
+        atom: &RuleAtom,
+        base: &HashMap<String, Term>,
+        facts: &HashSet<RuleAtom>,
+        out: &mut Vec<HashMap<String, Term>>,
+    ) -> Result<()> {
+        match atom {
+            RuleAtom::Triple { .. } => {
+                let grounded = Self::apply_substitution(atom, base);
+                for fact in facts {
+                    if let Some(extended) = Self::unify_atoms(&grounded, fact, base) {
+                        out.push(extended);
+                    }
+                }
+            }
+            // Constraint atoms act as filters: they must be ground under the
+            // current bindings and then hold; they never introduce new bindings.
+            RuleAtom::NotEqual { .. }
+            | RuleAtom::GreaterThan { .. }
+            | RuleAtom::LessThan { .. } => {
+                let grounded = Self::apply_substitution(atom, base);
+                if Self::is_ground(&grounded) && Self::evaluate_constraint(&grounded) {
+                    out.push(base.clone());
+                }
+            }
+            RuleAtom::Builtin { .. } => {
+                return Err(anyhow::anyhow!(
+                    "OWL 2 RL materialization does not support builtin body atoms: {atom:?}"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Unify a (possibly partially-ground) triple pattern against a fact,
+    /// extending `base` with any newly bound variables. Returns None on clash.
+    fn unify_atoms(
+        pattern: &RuleAtom,
+        fact: &RuleAtom,
+        base: &HashMap<String, Term>,
+    ) -> Option<HashMap<String, Term>> {
+        if let (
+            RuleAtom::Triple {
+                subject: ps,
+                predicate: pp,
+                object: po,
+            },
+            RuleAtom::Triple {
+                subject: fs,
+                predicate: fp,
+                object: fo,
+            },
+        ) = (pattern, fact)
+        {
+            let mut subst = base.clone();
+            if Self::unify_term(ps, fs, &mut subst)
+                && Self::unify_term(pp, fp, &mut subst)
+                && Self::unify_term(po, fo, &mut subst)
+            {
+                return Some(subst);
+            }
+        }
+        None
+    }
+
+    /// Unify a single pattern term against a (ground) fact term.
+    fn unify_term(pattern: &Term, value: &Term, subst: &mut HashMap<String, Term>) -> bool {
+        match pattern {
+            Term::Variable(var) => match subst.get(var) {
+                Some(bound) => Self::terms_equal(bound, value),
+                None => {
+                    subst.insert(var.clone(), value.clone());
+                    true
+                }
+            },
+            _ => Self::terms_equal(pattern, value),
+        }
+    }
+
+    fn terms_equal(a: &Term, b: &Term) -> bool {
+        match (a, b) {
+            (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
+            (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
+            (Term::Constant(c), Term::Literal(l)) | (Term::Literal(l), Term::Constant(c)) => c == l,
+            (Term::Variable(v1), Term::Variable(v2)) => v1 == v2,
             _ => false,
         }
     }
 
-    fn terms_match(&self, t1: &Term, t2: &Term) -> bool {
-        match (t1, t2) {
-            (Term::Variable(_), _) | (_, Term::Variable(_)) => true,
-            (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
-            (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
+    /// Apply a substitution to an atom.
+    fn apply_substitution(atom: &RuleAtom, subst: &HashMap<String, Term>) -> RuleAtom {
+        match atom {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => RuleAtom::Triple {
+                subject: Self::substitute_term(subject, subst),
+                predicate: Self::substitute_term(predicate, subst),
+                object: Self::substitute_term(object, subst),
+            },
+            RuleAtom::NotEqual { left, right } => RuleAtom::NotEqual {
+                left: Self::substitute_term(left, subst),
+                right: Self::substitute_term(right, subst),
+            },
+            RuleAtom::GreaterThan { left, right } => RuleAtom::GreaterThan {
+                left: Self::substitute_term(left, subst),
+                right: Self::substitute_term(right, subst),
+            },
+            RuleAtom::LessThan { left, right } => RuleAtom::LessThan {
+                left: Self::substitute_term(left, subst),
+                right: Self::substitute_term(right, subst),
+            },
+            RuleAtom::Builtin { name, args } => RuleAtom::Builtin {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|a| Self::substitute_term(a, subst))
+                    .collect(),
+            },
+        }
+    }
+
+    fn substitute_term(term: &Term, subst: &HashMap<String, Term>) -> Term {
+        match term {
+            Term::Variable(var) => subst.get(var).cloned().unwrap_or_else(|| term.clone()),
+            _ => term.clone(),
+        }
+    }
+
+    fn is_ground(atom: &RuleAtom) -> bool {
+        let is_ground_term = |t: &Term| !matches!(t, Term::Variable(_));
+        match atom {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => is_ground_term(subject) && is_ground_term(predicate) && is_ground_term(object),
+            RuleAtom::NotEqual { left, right }
+            | RuleAtom::GreaterThan { left, right }
+            | RuleAtom::LessThan { left, right } => is_ground_term(left) && is_ground_term(right),
+            RuleAtom::Builtin { args, .. } => args.iter().all(is_ground_term),
+        }
+    }
+
+    /// Evaluate a ground constraint atom.
+    fn evaluate_constraint(atom: &RuleAtom) -> bool {
+        let numeric = |t: &Term| match t {
+            Term::Constant(s) | Term::Literal(s) => s.parse::<f64>().ok(),
+            _ => None,
+        };
+        match atom {
+            RuleAtom::NotEqual { left, right } => !Self::terms_equal(left, right),
+            RuleAtom::GreaterThan { left, right } => match (numeric(left), numeric(right)) {
+                (Some(l), Some(r)) => l > r,
+                _ => false,
+            },
+            RuleAtom::LessThan { left, right } => match (numeric(left), numeric(right)) {
+                (Some(l), Some(r)) => l < r,
+                _ => false,
+            },
             _ => false,
         }
     }
@@ -700,6 +890,45 @@ mod tests {
         Ok(())
     }
 
+    /// Regression: QL query rewriting must follow the full transitive subclass
+    /// chain, not just one hop (Dog ⊑ Mammal ⊑ Animal ⇒ type(x,Dog) rewrites to
+    /// include type(x,Mammal) AND type(x,Animal)).
+    #[test]
+    fn regression_ql_transitive_subclass_rewrite() -> Result<(), Box<dyn std::error::Error>> {
+        let mut reasoner = QLReasoner::new();
+        let mut ontology = Ontology::new();
+        ontology.add_subsumption(
+            Concept::Atomic("Dog".to_string()),
+            Concept::Atomic("Mammal".to_string()),
+        );
+        ontology.add_subsumption(
+            Concept::Atomic("Mammal".to_string()),
+            Concept::Atomic("Animal".to_string()),
+        );
+
+        let query = RuleAtom::Triple {
+            subject: Term::Variable("x".to_string()),
+            predicate: Term::Constant("rdf:type".to_string()),
+            object: Term::Constant("Dog".to_string()),
+        };
+        let rewritten = reasoner.rewrite_query(&query, &ontology)?;
+
+        let has_object = |c: &str| {
+            rewritten
+                .iter()
+                .any(|a| matches!(a, RuleAtom::Triple { object: Term::Constant(o), .. } if o == c))
+        };
+        assert!(
+            has_object("Mammal"),
+            "missing one-hop Mammal: {rewritten:?}"
+        );
+        assert!(
+            has_object("Animal"),
+            "missing transitive Animal: {rewritten:?}"
+        );
+        Ok(())
+    }
+
     #[test]
     fn test_rl_rule_initialization() {
         let reasoner = RLReasoner::new();
@@ -726,6 +955,64 @@ mod tests {
 
         // Should include original facts plus inferred facts
         assert!(materialized.len() >= facts.len());
+
+        Ok(())
+    }
+
+    /// Regression: OWL 2 RL materialization must perform real cross-atom
+    /// unification and must never emit head atoms that still contain variables.
+    #[test]
+    fn regression_rl_real_unification_no_variable_leak() -> Result<(), Box<dyn std::error::Error>> {
+        let mut reasoner = RLReasoner::new();
+
+        let mut facts = HashSet::new();
+        // Class chain: A ⊑ B ⊑ C  (scm-cls should derive A ⊑ C)
+        facts.insert(RuleAtom::Triple {
+            subject: Term::Constant("A".to_string()),
+            predicate: Term::Constant("rdfs:subClassOf".to_string()),
+            object: Term::Constant("B".to_string()),
+        });
+        facts.insert(RuleAtom::Triple {
+            subject: Term::Constant("B".to_string()),
+            predicate: Term::Constant("rdfs:subClassOf".to_string()),
+            object: Term::Constant("C".to_string()),
+        });
+        // Type + subclass: fido:A , A ⊑ B  (cls-hv1 should derive fido:B, fido:C)
+        facts.insert(RuleAtom::Triple {
+            subject: Term::Constant("fido".to_string()),
+            predicate: Term::Constant("rdf:type".to_string()),
+            object: Term::Constant("A".to_string()),
+        });
+
+        let materialized = reasoner.materialize(&facts)?;
+
+        // Real join derived the transitive subclass edge.
+        assert!(
+            materialized.contains(&RuleAtom::Triple {
+                subject: Term::Constant("A".to_string()),
+                predicate: Term::Constant("rdfs:subClassOf".to_string()),
+                object: Term::Constant("C".to_string()),
+            }),
+            "expected transitive A ⊑ C; got: {materialized:?}"
+        );
+
+        // Real join propagated the type through the subclass chain.
+        assert!(
+            materialized.contains(&RuleAtom::Triple {
+                subject: Term::Constant("fido".to_string()),
+                predicate: Term::Constant("rdf:type".to_string()),
+                object: Term::Constant("C".to_string()),
+            }),
+            "expected fido:C via type propagation; got: {materialized:?}"
+        );
+
+        // No fact may contain an unbound variable term.
+        for fact in &materialized {
+            assert!(
+                RLReasoner::is_ground(fact),
+                "materialized fact leaked a variable: {fact:?}"
+            );
+        }
 
         Ok(())
     }

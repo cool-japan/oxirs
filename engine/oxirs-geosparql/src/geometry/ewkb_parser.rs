@@ -4,7 +4,9 @@
 //! EWKB extends WKB with SRID information and support for Z/M coordinates.
 
 use crate::error::{GeoSparqlError, Result};
+use crate::geometry::coord3d::Coord3D;
 use crate::geometry::{Crs, Geometry};
+use geo::algorithm::coords_iter::CoordsIter;
 use geo_types::{
     Coord, Geometry as GeoGeometry, LineString, MultiLineString, MultiPoint, MultiPolygon, Point,
     Polygon,
@@ -90,8 +92,10 @@ fn parse_ewkb_geometry(cursor: &mut Cursor<&[u8]>) -> Result<Geometry> {
     // Read geometry type (with flags)
     let geom_type_with_flags = read_u32(cursor, byte_order)?;
 
-    // Extract SRID flag
+    // Extract SRID, Z and M flags
     let has_srid = (geom_type_with_flags & type_codes::SRID_FLAG) != 0;
+    let has_z = (geom_type_with_flags & type_codes::Z_FLAG) != 0;
+    let has_m = (geom_type_with_flags & type_codes::M_FLAG) != 0;
 
     // Extract base geometry type (remove flags)
     let geom_type = geom_type_with_flags & 0x000000FF;
@@ -104,30 +108,76 @@ fn parse_ewkb_geometry(cursor: &mut Cursor<&[u8]>) -> Result<Geometry> {
         Crs::default()
     };
 
-    // Parse geometry based on type
+    // Parse geometry based on type, collecting any Z/M values in flat
+    // `coords_iter()` order alongside the flattened 2D geometry.
+    let mut z_values: Vec<f64> = Vec::new();
+    let mut m_values: Vec<f64> = Vec::new();
+
     let geom = match geom_type {
         type_codes::POINT => {
-            let point = parse_point(cursor, byte_order)?;
+            let point = parse_point(
+                cursor,
+                byte_order,
+                has_z,
+                has_m,
+                &mut z_values,
+                &mut m_values,
+            )?;
             GeoGeometry::Point(point)
         }
         type_codes::LINESTRING => {
-            let linestring = parse_linestring(cursor, byte_order)?;
+            let linestring = parse_linestring(
+                cursor,
+                byte_order,
+                has_z,
+                has_m,
+                &mut z_values,
+                &mut m_values,
+            )?;
             GeoGeometry::LineString(linestring)
         }
         type_codes::POLYGON => {
-            let polygon = parse_polygon(cursor, byte_order)?;
+            let polygon = parse_polygon(
+                cursor,
+                byte_order,
+                has_z,
+                has_m,
+                &mut z_values,
+                &mut m_values,
+            )?;
             GeoGeometry::Polygon(polygon)
         }
         type_codes::MULTIPOINT => {
-            let multipoint = parse_multipoint(cursor, byte_order)?;
+            let multipoint = parse_multipoint(
+                cursor,
+                byte_order,
+                has_z,
+                has_m,
+                &mut z_values,
+                &mut m_values,
+            )?;
             GeoGeometry::MultiPoint(multipoint)
         }
         type_codes::MULTILINESTRING => {
-            let multilinestring = parse_multilinestring(cursor, byte_order)?;
+            let multilinestring = parse_multilinestring(
+                cursor,
+                byte_order,
+                has_z,
+                has_m,
+                &mut z_values,
+                &mut m_values,
+            )?;
             GeoGeometry::MultiLineString(multilinestring)
         }
         type_codes::MULTIPOLYGON => {
-            let multipolygon = parse_multipolygon(cursor, byte_order)?;
+            let multipolygon = parse_multipolygon(
+                cursor,
+                byte_order,
+                has_z,
+                has_m,
+                &mut z_values,
+                &mut m_values,
+            )?;
             GeoGeometry::MultiPolygon(multipolygon)
         }
         _ => {
@@ -138,29 +188,69 @@ fn parse_ewkb_geometry(cursor: &mut Cursor<&[u8]>) -> Result<Geometry> {
         }
     };
 
-    Ok(Geometry::with_crs(geom, crs))
+    let coord3d = match (has_z, has_m) {
+        (false, false) => Coord3D::xy(),
+        (true, false) => Coord3D::xyz(z_values),
+        (false, true) => Coord3D::xym(m_values),
+        (true, true) => Coord3D::xyzm(z_values, m_values),
+    };
+
+    Ok(Geometry::with_crs_and_coord3d(geom, crs, coord3d))
 }
 
-fn parse_point(cursor: &mut Cursor<&[u8]>, byte_order: ByteOrder) -> Result<Point<f64>> {
+fn parse_point(
+    cursor: &mut Cursor<&[u8]>,
+    byte_order: ByteOrder,
+    has_z: bool,
+    has_m: bool,
+    z_out: &mut Vec<f64>,
+    m_out: &mut Vec<f64>,
+) -> Result<Point<f64>> {
     let x = read_f64(cursor, byte_order)?;
     let y = read_f64(cursor, byte_order)?;
+    if has_z {
+        z_out.push(read_f64(cursor, byte_order)?);
+    }
+    if has_m {
+        m_out.push(read_f64(cursor, byte_order)?);
+    }
     Ok(Point::new(x, y))
 }
 
-fn parse_linestring(cursor: &mut Cursor<&[u8]>, byte_order: ByteOrder) -> Result<LineString<f64>> {
+fn parse_linestring(
+    cursor: &mut Cursor<&[u8]>,
+    byte_order: ByteOrder,
+    has_z: bool,
+    has_m: bool,
+    z_out: &mut Vec<f64>,
+    m_out: &mut Vec<f64>,
+) -> Result<LineString<f64>> {
     let num_points = read_u32(cursor, byte_order)? as usize;
     let mut coords = Vec::with_capacity(num_points);
 
     for _ in 0..num_points {
         let x = read_f64(cursor, byte_order)?;
         let y = read_f64(cursor, byte_order)?;
+        if has_z {
+            z_out.push(read_f64(cursor, byte_order)?);
+        }
+        if has_m {
+            m_out.push(read_f64(cursor, byte_order)?);
+        }
         coords.push(Coord { x, y });
     }
 
     Ok(LineString::from(coords))
 }
 
-fn parse_polygon(cursor: &mut Cursor<&[u8]>, byte_order: ByteOrder) -> Result<Polygon<f64>> {
+fn parse_polygon(
+    cursor: &mut Cursor<&[u8]>,
+    byte_order: ByteOrder,
+    has_z: bool,
+    has_m: bool,
+    z_out: &mut Vec<f64>,
+    m_out: &mut Vec<f64>,
+) -> Result<Polygon<f64>> {
     let num_rings = read_u32(cursor, byte_order)? as usize;
 
     if num_rings == 0 {
@@ -169,27 +259,39 @@ fn parse_polygon(cursor: &mut Cursor<&[u8]>, byte_order: ByteOrder) -> Result<Po
     }
 
     // Read exterior ring
-    let exterior = parse_linestring(cursor, byte_order)?;
+    let exterior = parse_linestring(cursor, byte_order, has_z, has_m, z_out, m_out)?;
 
     // Read interior rings (holes)
     let mut interiors = Vec::with_capacity(num_rings.saturating_sub(1));
     for _ in 1..num_rings {
-        interiors.push(parse_linestring(cursor, byte_order)?);
+        interiors.push(parse_linestring(
+            cursor, byte_order, has_z, has_m, z_out, m_out,
+        )?);
     }
 
     Ok(Polygon::new(exterior, interiors))
 }
 
-fn parse_multipoint(cursor: &mut Cursor<&[u8]>, byte_order: ByteOrder) -> Result<MultiPoint<f64>> {
+fn parse_multipoint(
+    cursor: &mut Cursor<&[u8]>,
+    byte_order: ByteOrder,
+    has_z: bool,
+    has_m: bool,
+    z_out: &mut Vec<f64>,
+    m_out: &mut Vec<f64>,
+) -> Result<MultiPoint<f64>> {
     let num_points = read_u32(cursor, byte_order)? as usize;
     let mut points = Vec::with_capacity(num_points);
 
     for _ in 0..num_points {
-        // Each point has its own byte order and type
+        // Each point has its own byte order and type marker; the
+        // dimensionality (Z/M) is taken from the parent geometry's flags,
+        // matching how this crate's own writer emits sub-geometry type
+        // words (consistent flags at every level).
         let _sub_byte_order_byte = read_u8(cursor)?;
         let _sub_geom_type = read_u32(cursor, byte_order)?;
 
-        let point = parse_point(cursor, byte_order)?;
+        let point = parse_point(cursor, byte_order, has_z, has_m, z_out, m_out)?;
         points.push(point);
     }
 
@@ -199,6 +301,10 @@ fn parse_multipoint(cursor: &mut Cursor<&[u8]>, byte_order: ByteOrder) -> Result
 fn parse_multilinestring(
     cursor: &mut Cursor<&[u8]>,
     byte_order: ByteOrder,
+    has_z: bool,
+    has_m: bool,
+    z_out: &mut Vec<f64>,
+    m_out: &mut Vec<f64>,
 ) -> Result<MultiLineString<f64>> {
     let num_linestrings = read_u32(cursor, byte_order)? as usize;
     let mut linestrings = Vec::with_capacity(num_linestrings);
@@ -207,7 +313,7 @@ fn parse_multilinestring(
         let _sub_byte_order_byte = read_u8(cursor)?;
         let _sub_geom_type = read_u32(cursor, byte_order)?;
 
-        let linestring = parse_linestring(cursor, byte_order)?;
+        let linestring = parse_linestring(cursor, byte_order, has_z, has_m, z_out, m_out)?;
         linestrings.push(linestring);
     }
 
@@ -217,6 +323,10 @@ fn parse_multilinestring(
 fn parse_multipolygon(
     cursor: &mut Cursor<&[u8]>,
     byte_order: ByteOrder,
+    has_z: bool,
+    has_m: bool,
+    z_out: &mut Vec<f64>,
+    m_out: &mut Vec<f64>,
 ) -> Result<MultiPolygon<f64>> {
     let num_polygons = read_u32(cursor, byte_order)? as usize;
     let mut polygons = Vec::with_capacity(num_polygons);
@@ -225,7 +335,7 @@ fn parse_multipolygon(
         let _sub_byte_order_byte = read_u8(cursor)?;
         let _sub_geom_type = read_u32(cursor, byte_order)?;
 
-        let polygon = parse_polygon(cursor, byte_order)?;
+        let polygon = parse_polygon(cursor, byte_order, has_z, has_m, z_out, m_out)?;
         polygons.push(polygon);
     }
 
@@ -256,6 +366,54 @@ pub fn geometry_to_ewkb(geometry: &Geometry) -> Result<Vec<u8>> {
     Ok(buffer)
 }
 
+/// Compute the Z/M flag bits (per EWKB spec: `0x80000000` for Z, `0x40000000`
+/// for M) to OR into a geometry-type word, based on a `Coord3D`'s dimension.
+fn zm_flags(coord3d: &Coord3D) -> u32 {
+    let mut flags = 0u32;
+    if coord3d.has_z() {
+        flags |= type_codes::Z_FLAG;
+    }
+    if coord3d.has_m() {
+        flags |= type_codes::M_FLAG;
+    }
+    flags
+}
+
+/// Write the Z and/or M value for the coordinate at flat index `idx` (in
+/// `coords_iter()` order), if `coord3d` declares that dimension present.
+///
+/// Errors (rather than silently defaulting to 0.0) if `coord3d` declares Z
+/// or M present but no value is available at `idx` -- this can only happen
+/// if a `Geometry` was constructed with a `Coord3D` whose value count
+/// doesn't match its actual coordinate count, which is a caller bug that
+/// must surface loudly rather than silently truncate to 2D EWKB.
+fn write_zm(
+    buffer: &mut Vec<u8>,
+    coord3d: &Coord3D,
+    idx: usize,
+    byte_order: ByteOrder,
+) -> Result<()> {
+    if coord3d.has_z() {
+        let z = coord3d.z_at(idx).ok_or_else(|| {
+            GeoSparqlError::SerializationError(format!(
+                "Geometry declares Z coordinates but is missing a Z value at index {}",
+                idx
+            ))
+        })?;
+        write_f64(buffer, z, byte_order)?;
+    }
+    if coord3d.has_m() {
+        let m = coord3d.m_at(idx).ok_or_else(|| {
+            GeoSparqlError::SerializationError(format!(
+                "Geometry declares M coordinates but is missing an M value at index {}",
+                idx
+            ))
+        })?;
+        write_f64(buffer, m, byte_order)?;
+    }
+    Ok(())
+}
+
 fn write_ewkb_geometry(
     buffer: &mut Vec<u8>,
     geometry: &Geometry,
@@ -281,8 +439,21 @@ fn write_ewkb_geometry(
         }
     };
 
-    // Add SRID flag if we have an EPSG code
-    let mut geom_type = base_type;
+    // If the geometry carries Z and/or M coordinates, validate that the
+    // coord3d side-channel has exactly as many values as the geometry has
+    // coordinates *before* writing anything, so a mismatch fails loudly
+    // with a clear error instead of silently truncating to 2D partway
+    // through serialization.
+    let coord3d = &geometry.coord3d;
+    if coord3d.has_z() || coord3d.has_m() {
+        let coord_count = geometry.geom.coords_count();
+        coord3d
+            .validate(coord_count)
+            .map_err(GeoSparqlError::SerializationError)?;
+    }
+
+    // Add Z/M and SRID flags
+    let mut geom_type = base_type | zm_flags(coord3d);
     let srid_opt = geometry.crs.epsg_code();
     let has_srid = srid_opt.is_some();
     if has_srid {
@@ -296,18 +467,24 @@ fn write_ewkb_geometry(
         write_u32(buffer, srid, byte_order)?;
     }
 
-    // Write geometry data
+    // Write geometry data. `idx` tracks the flat coordinate position (in
+    // `coords_iter()` order) so Z/M values can be looked up from `coord3d`.
+    let mut idx = 0usize;
     match &geometry.geom {
-        GeoGeometry::Point(p) => write_point(buffer, p, byte_order)?,
+        GeoGeometry::Point(p) => write_point(buffer, p, byte_order, coord3d, &mut idx)?,
         GeoGeometry::Line(l) => {
             let ls = LineString::from(vec![l.start, l.end]);
-            write_linestring(buffer, &ls, byte_order)?;
+            write_linestring(buffer, &ls, byte_order, coord3d, &mut idx)?;
         }
-        GeoGeometry::LineString(ls) => write_linestring(buffer, ls, byte_order)?,
-        GeoGeometry::Polygon(poly) => write_polygon(buffer, poly, byte_order)?,
-        GeoGeometry::MultiPoint(mp) => write_multipoint(buffer, mp, byte_order)?,
-        GeoGeometry::MultiLineString(mls) => write_multilinestring(buffer, mls, byte_order)?,
-        GeoGeometry::MultiPolygon(mpoly) => write_multipolygon(buffer, mpoly, byte_order)?,
+        GeoGeometry::LineString(ls) => write_linestring(buffer, ls, byte_order, coord3d, &mut idx)?,
+        GeoGeometry::Polygon(poly) => write_polygon(buffer, poly, byte_order, coord3d, &mut idx)?,
+        GeoGeometry::MultiPoint(mp) => write_multipoint(buffer, mp, byte_order, coord3d, &mut idx)?,
+        GeoGeometry::MultiLineString(mls) => {
+            write_multilinestring(buffer, mls, byte_order, coord3d, &mut idx)?
+        }
+        GeoGeometry::MultiPolygon(mpoly) => {
+            write_multipolygon(buffer, mpoly, byte_order, coord3d, &mut idx)?
+        }
         _ => {
             return Err(GeoSparqlError::UnsupportedOperation(
                 "Geometry type not supported in EWKB".to_string(),
@@ -318,9 +495,17 @@ fn write_ewkb_geometry(
     Ok(())
 }
 
-fn write_point(buffer: &mut Vec<u8>, point: &Point<f64>, byte_order: ByteOrder) -> Result<()> {
+fn write_point(
+    buffer: &mut Vec<u8>,
+    point: &Point<f64>,
+    byte_order: ByteOrder,
+    coord3d: &Coord3D,
+    idx: &mut usize,
+) -> Result<()> {
     write_f64(buffer, point.x(), byte_order)?;
     write_f64(buffer, point.y(), byte_order)?;
+    write_zm(buffer, coord3d, *idx, byte_order)?;
+    *idx += 1;
     Ok(())
 }
 
@@ -328,11 +513,15 @@ fn write_linestring(
     buffer: &mut Vec<u8>,
     linestring: &LineString<f64>,
     byte_order: ByteOrder,
+    coord3d: &Coord3D,
+    idx: &mut usize,
 ) -> Result<()> {
     write_u32(buffer, linestring.0.len() as u32, byte_order)?;
     for coord in &linestring.0 {
         write_f64(buffer, coord.x, byte_order)?;
         write_f64(buffer, coord.y, byte_order)?;
+        write_zm(buffer, coord3d, *idx, byte_order)?;
+        *idx += 1;
     }
     Ok(())
 }
@@ -341,16 +530,18 @@ fn write_polygon(
     buffer: &mut Vec<u8>,
     polygon: &Polygon<f64>,
     byte_order: ByteOrder,
+    coord3d: &Coord3D,
+    idx: &mut usize,
 ) -> Result<()> {
     let num_rings = 1 + polygon.interiors().len();
     write_u32(buffer, num_rings as u32, byte_order)?;
 
     // Write exterior ring
-    write_linestring(buffer, polygon.exterior(), byte_order)?;
+    write_linestring(buffer, polygon.exterior(), byte_order, coord3d, idx)?;
 
     // Write interior rings
     for interior in polygon.interiors() {
-        write_linestring(buffer, interior, byte_order)?;
+        write_linestring(buffer, interior, byte_order, coord3d, idx)?;
     }
 
     Ok(())
@@ -360,14 +551,17 @@ fn write_multipoint(
     buffer: &mut Vec<u8>,
     multipoint: &MultiPoint<f64>,
     byte_order: ByteOrder,
+    coord3d: &Coord3D,
+    idx: &mut usize,
 ) -> Result<()> {
     write_u32(buffer, multipoint.0.len() as u32, byte_order)?;
+    let sub_type = type_codes::POINT | zm_flags(coord3d);
     for point in &multipoint.0 {
         buffer.write_all(&[byte_order.to_byte()]).map_err(|e| {
             GeoSparqlError::SerializationError(format!("Failed to write byte order: {}", e))
         })?;
-        write_u32(buffer, type_codes::POINT, byte_order)?;
-        write_point(buffer, point, byte_order)?;
+        write_u32(buffer, sub_type, byte_order)?;
+        write_point(buffer, point, byte_order, coord3d, idx)?;
     }
     Ok(())
 }
@@ -376,14 +570,17 @@ fn write_multilinestring(
     buffer: &mut Vec<u8>,
     multilinestring: &MultiLineString<f64>,
     byte_order: ByteOrder,
+    coord3d: &Coord3D,
+    idx: &mut usize,
 ) -> Result<()> {
     write_u32(buffer, multilinestring.0.len() as u32, byte_order)?;
+    let sub_type = type_codes::LINESTRING | zm_flags(coord3d);
     for linestring in &multilinestring.0 {
         buffer.write_all(&[byte_order.to_byte()]).map_err(|e| {
             GeoSparqlError::SerializationError(format!("Failed to write byte order: {}", e))
         })?;
-        write_u32(buffer, type_codes::LINESTRING, byte_order)?;
-        write_linestring(buffer, linestring, byte_order)?;
+        write_u32(buffer, sub_type, byte_order)?;
+        write_linestring(buffer, linestring, byte_order, coord3d, idx)?;
     }
     Ok(())
 }
@@ -392,14 +589,17 @@ fn write_multipolygon(
     buffer: &mut Vec<u8>,
     multipolygon: &MultiPolygon<f64>,
     byte_order: ByteOrder,
+    coord3d: &Coord3D,
+    idx: &mut usize,
 ) -> Result<()> {
     write_u32(buffer, multipolygon.0.len() as u32, byte_order)?;
+    let sub_type = type_codes::POLYGON | zm_flags(coord3d);
     for polygon in &multipolygon.0 {
         buffer.write_all(&[byte_order.to_byte()]).map_err(|e| {
             GeoSparqlError::SerializationError(format!("Failed to write byte order: {}", e))
         })?;
-        write_u32(buffer, type_codes::POLYGON, byte_order)?;
-        write_polygon(buffer, polygon, byte_order)?;
+        write_u32(buffer, sub_type, byte_order)?;
+        write_polygon(buffer, polygon, byte_order, coord3d, idx)?;
     }
     Ok(())
 }
@@ -554,5 +754,102 @@ mod tests {
             ByteOrder::LittleEndian
         );
         assert!(ByteOrder::from_byte(0x02).is_err());
+    }
+
+    // ========================================================================
+    // Regression tests: Z/M coordinates must round-trip through EWKB instead
+    // of being silently dropped (see geometry/ewkb_parser.rs Z/M finding).
+    // ========================================================================
+
+    #[test]
+    fn regression_ewkb_point_z_round_trip() {
+        let geom = Geometry::from_wkt("POINT Z(1 2 3)").expect("parse POINT Z");
+        let ewkb = geometry_to_ewkb(&geom).expect("should serialize 3D point");
+        let parsed = parse_ewkb(&ewkb).expect("should parse 3D point");
+
+        match &parsed.geom {
+            GeoGeometry::Point(p) => {
+                assert_eq!(p.x(), 1.0);
+                assert_eq!(p.y(), 2.0);
+            }
+            _ => panic!("Expected Point geometry"),
+        }
+        assert!(parsed.coord3d.has_z());
+        assert_eq!(parsed.coord3d.z_at(0), Some(3.0));
+    }
+
+    #[test]
+    fn regression_ewkb_point_zm_round_trip() {
+        let geom = Geometry::from_wkt("POINT ZM(1 2 3 4)").expect("parse POINT ZM");
+        let ewkb = geometry_to_ewkb(&geom).expect("should serialize ZM point");
+        let parsed = parse_ewkb(&ewkb).expect("should parse ZM point");
+
+        assert!(parsed.coord3d.has_z());
+        assert!(parsed.coord3d.has_m());
+        assert_eq!(parsed.coord3d.z_at(0), Some(3.0));
+        assert_eq!(parsed.coord3d.m_at(0), Some(4.0));
+    }
+
+    #[test]
+    fn regression_ewkb_linestring_z_round_trip() {
+        let geom =
+            Geometry::from_wkt("LINESTRING Z(0 0 10, 1 1 20, 2 0 30)").expect("parse LINESTRING Z");
+        let ewkb = geometry_to_ewkb(&geom).expect("should serialize 3D linestring");
+        let parsed = parse_ewkb(&ewkb).expect("should parse 3D linestring");
+
+        match &parsed.geom {
+            GeoGeometry::LineString(ls) => assert_eq!(ls.0.len(), 3),
+            _ => panic!("Expected LineString geometry"),
+        }
+        assert_eq!(parsed.coord3d.z_at(0), Some(10.0));
+        assert_eq!(parsed.coord3d.z_at(1), Some(20.0));
+        assert_eq!(parsed.coord3d.z_at(2), Some(30.0));
+    }
+
+    #[test]
+    fn regression_ewkb_polygon_z_round_trip() {
+        let geom = Geometry::from_wkt("POLYGON Z((0 0 1, 4 0 2, 4 4 3, 0 4 4, 0 0 1))")
+            .expect("parse POLYGON Z");
+        let ewkb = geometry_to_ewkb(&geom).expect("should serialize 3D polygon");
+        let parsed = parse_ewkb(&ewkb).expect("should parse 3D polygon");
+
+        match &parsed.geom {
+            GeoGeometry::Polygon(poly) => assert_eq!(poly.exterior().0.len(), 5),
+            _ => panic!("Expected Polygon geometry"),
+        }
+        assert!(parsed.coord3d.has_z());
+        assert_eq!(parsed.coord3d.z_at(0), Some(1.0));
+        assert_eq!(parsed.coord3d.z_at(2), Some(3.0));
+    }
+
+    #[test]
+    fn regression_ewkb_2d_geometry_carries_no_zm_flags() {
+        // A plain 2D point must not set the Z/M flag bits in the type word
+        // (verifies we don't regress the existing 2D path).
+        let geom = Geometry::new(GeoGeometry::Point(point! { x: 1.0, y: 2.0 }));
+        let ewkb = geometry_to_ewkb(&geom).expect("should succeed");
+
+        // byte[0] = byte order, byte[1..5] = little-endian type word
+        let type_word = u32::from_le_bytes([ewkb[1], ewkb[2], ewkb[3], ewkb[4]]);
+        assert_eq!(type_word & type_codes::Z_FLAG, 0);
+        assert_eq!(type_word & type_codes::M_FLAG, 0);
+    }
+
+    #[test]
+    fn regression_ewkb_z_value_count_mismatch_errors() {
+        // A Geometry whose coord3d claims Z coordinates but doesn't actually
+        // supply enough of them must fail loudly rather than silently
+        // writing a truncated/garbled EWKB blob.
+        let geom = Geometry::with_crs_and_coord3d(
+            GeoGeometry::LineString(LineString::from(vec![
+                Coord { x: 0.0, y: 0.0 },
+                Coord { x: 1.0, y: 1.0 },
+            ])),
+            Crs::default(),
+            Coord3D::xyz(vec![1.0]), // only 1 Z value for 2 coordinates
+        );
+
+        let result = geometry_to_ewkb(&geom);
+        assert!(result.is_err(), "mismatched Z count must be an error");
     }
 }

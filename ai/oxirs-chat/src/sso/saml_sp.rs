@@ -19,12 +19,27 @@
 //!   ([`SamlSpHelper::new`] / [`SamlSpHelper::with_certificate`]) rejects
 //!   unsigned responses.
 //!
+//! ### Reference / DigestValue binding (XSW protection)
+//! Verifying the `<ds:SignedInfo>` signature alone is **not** sufficient: an
+//! attacker holding any legitimately IdP-signed response can wrap an extra,
+//! forged `<saml:Assertion>` into the document (XML Signature Wrapping). To
+//! defeat this, [`SamlSpHelper::parse_response`] additionally:
+//! * parses every `<ds:Reference URI="#id">` / `<ds:DigestValue>` out of the
+//!   signed `<ds:SignedInfo>`,
+//! * reconstructs the referenced id-bearing element (with the enveloped
+//!   `<ds:Signature>` subtree removed) and recomputes its SHA-256 digest,
+//!   rejecting the response unless it matches the signed `<ds:DigestValue>`,
+//! * rejects documents that reuse an `ID`/`Id` value, and
+//! * extracts the identity (`NameID`, attributes) **only** from the
+//!   digest-validated, signed element — never from unsigned document content.
+//!
 //! ### NOTE — simplified XMLDSig
 //! Like the Fuseki SAML SP, this verifies `RSASSA-PKCS1-v1_5(SHA256(signed_info))`
-//! over the `<ds:SignedInfo>` bytes as reconstructed from the parse stream. It
-//! does **not** implement full W3C Exclusive C14N / transform resolution, so an
-//! IdP applying complex transforms may fail verification. This is a deliberate,
-//! documented limitation shared with the server-side SAML implementation.
+//! and the reference digests over bytes **reconstructed from the parse stream**
+//! (a deterministic, simplified canonicalization) rather than full W3C Exclusive
+//! C14N / arbitrary transform resolution, so an IdP applying complex transforms
+//! may fail verification. This is a deliberate, documented limitation shared with
+//! the server-side SAML implementation.
 //!
 //! # Example
 //!
@@ -57,6 +72,27 @@ use uuid::Uuid;
 
 use super::oidc::{SsoConfig, SsoError, SsoUserInfo};
 
+/// A `<ds:Reference>` entry parsed out of `<ds:SignedInfo>`.
+#[derive(Debug, Clone)]
+struct SamlReference {
+    /// Fragment id the reference points at (the leading `#` is stripped).
+    uri: String,
+    /// Base64 `<ds:DigestValue>` the signer committed to.
+    digest_value: String,
+    /// `<ds:DigestMethod Algorithm="…">` (only SHA-256 is supported).
+    digest_method: Option<String>,
+}
+
+/// A signed (id-bearing) element reconstructed from the parse stream, with the
+/// enveloped `<ds:Signature>` subtree stripped (per the enveloped-signature
+/// transform). The reconstruction is deterministic so the same bytes are
+/// produced at sign time and verify time.
+#[derive(Debug, Clone)]
+struct SignedElement {
+    /// Reconstructed canonical bytes of the element (used for digesting).
+    raw: String,
+}
+
 /// Signature material collected while parsing a `SAMLResponse`.
 #[derive(Debug, Default)]
 struct SignatureMaterial {
@@ -64,6 +100,13 @@ struct SignatureMaterial {
     signed_info_raw: Option<String>,
     /// Base64-encoded `<ds:SignatureValue>` content.
     signature_value: Option<String>,
+    /// `<ds:Reference>` entries extracted from `<ds:SignedInfo>`.
+    references: Vec<SamlReference>,
+    /// Every id-bearing element in the document, keyed by its `ID`/`Id` value.
+    signed_elements: std::collections::HashMap<String, SignedElement>,
+    /// True if the document contained two elements sharing the same id — a
+    /// classic XML-Signature-Wrapping vector; such documents are rejected.
+    duplicate_ids: bool,
 }
 
 impl SignatureMaterial {
@@ -199,17 +242,34 @@ impl SamlSpHelper {
             SsoError::MalformedToken(format!("SAMLResponse is not valid UTF-8: {}", e))
         })?;
 
-        let (user_info, sig) = parse_saml_xml(xml_str)?;
+        let sig = parse_saml_xml(xml_str)?;
 
-        // Enforce signature policy BEFORE trusting the extracted identity.
-        self.enforce_signature_policy(&sig)?;
-
-        Ok(user_info)
+        // Enforce signature policy BEFORE trusting any identity. On success in
+        // the signed path this returns the reconstructed bytes of the specific
+        // digest-validated, signed element, so identity is extracted only from
+        // signed content (XSW-safe).
+        match self.enforce_signature_policy(&sig)? {
+            Some(signed_element_raw) => extract_identity(&signed_element_raw),
+            // Unsigned but explicitly allowed (dev/test): whole document.
+            None => extract_identity(xml_str),
+        }
     }
 
     /// Enforce the configured signature policy against the collected material.
-    fn enforce_signature_policy(&self, sig: &SignatureMaterial) -> Result<(), SsoError> {
+    ///
+    /// Returns `Ok(Some(raw))` with the reconstructed bytes of the signed,
+    /// digest-validated element that carries the identity (signed path),
+    /// `Ok(None)` for an explicitly-allowed unsigned response, or an error.
+    fn enforce_signature_policy(
+        &self,
+        sig: &SignatureMaterial,
+    ) -> Result<Option<String>, SsoError> {
         if sig.is_signed() {
+            // Reject duplicate ids outright — a canonical XSW vector.
+            if sig.duplicate_ids {
+                return Err(SsoError::SignatureInvalid);
+            }
+
             // A signature is present: it MUST verify against a configured cert.
             let cert = self
                 .idp_certificate
@@ -223,19 +283,82 @@ impl SamlSpHelper {
                 .signature_value
                 .as_deref()
                 .ok_or(SsoError::SignatureInvalid)?;
-            verify_saml_signature(cert, signed_info, signature_value)
+
+            // Step 1: the SignedInfo RSA signature must verify.
+            verify_saml_signature(cert, signed_info, signature_value)?;
+
+            // Step 2: every reference's DigestValue must match the referenced,
+            // reconstructed element — this binds the signature to real content.
+            if sig.references.is_empty() {
+                return Err(SsoError::SignatureInvalid);
+            }
+
+            let mut signed_identity_raw: Option<String> = None;
+            let mut signed_subject: Option<String> = None;
+
+            for reference in &sig.references {
+                // Only SHA-256 digests / fragment references are supported.
+                if let Some(method) = reference.digest_method.as_deref() {
+                    if !method.to_ascii_lowercase().contains("sha256") {
+                        return Err(SsoError::SignatureInvalid);
+                    }
+                }
+                if reference.uri.is_empty() {
+                    // Empty URI (whole-document reference) is not supported here
+                    // and would reopen the XSW hole — fail closed.
+                    return Err(SsoError::SignatureInvalid);
+                }
+
+                let element = sig
+                    .signed_elements
+                    .get(&reference.uri)
+                    .ok_or(SsoError::SignatureInvalid)?;
+
+                let computed = sha256_base64(element.raw.as_bytes());
+                let expected = reference.digest_value.replace([' ', '\n', '\r', '\t'], "");
+                if computed != expected {
+                    return Err(SsoError::SignatureInvalid);
+                }
+
+                // Extract identity from this validated element; require that all
+                // subjects across validated references agree.
+                if let Ok(info) = extract_identity(&element.raw) {
+                    match &signed_subject {
+                        Some(existing) if existing != &info.subject => {
+                            return Err(SsoError::SignatureInvalid);
+                        }
+                        _ => {
+                            signed_subject = Some(info.subject.clone());
+                            signed_identity_raw = Some(element.raw.clone());
+                        }
+                    }
+                }
+            }
+
+            // A signed element carrying a NameID must exist.
+            signed_identity_raw
+                .map(Some)
+                .ok_or(SsoError::UnsignedAssertionRejected)
         } else if self.allow_unsigned {
             // Explicitly opted into accepting unsigned responses (dev/test).
             tracing::warn!(
                 "SAML response has no ds:Signature; accepting because allow_unsigned is set \
                  (INSECURE — do not use in production)"
             );
-            Ok(())
+            Ok(None)
         } else {
             // Fail closed: an unsigned response is not trusted.
             Err(SsoError::UnsignedAssertionRejected)
         }
     }
+}
+
+/// Compute the base64 SHA-256 digest of `data`.
+fn sha256_base64(data: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    base64::engine::general_purpose::STANDARD.encode(hasher.finalize())
 }
 
 /// Verify an enveloped RSA-SHA256 XML signature.
@@ -373,12 +496,252 @@ fn extract_spki_from_x509_der(der: &[u8]) -> Result<Vec<u8>, SsoError> {
 
 // ── XML parsing ────────────────────────────────────────────────────────────
 
-/// Parse a SAML response XML document, extracting user identity information and
-/// the `<ds:SignedInfo>` / `<ds:SignatureValue>` signature material.
+/// An in-progress reconstruction of an id-bearing element subtree.
+struct CaptureFrame {
+    id: String,
+    open_depth: usize,
+    raw: String,
+}
+
+/// Parse a SAML response XML document, collecting the signature material needed
+/// for full XMLDSig-with-reference verification:
+/// * the reconstructed `<ds:SignedInfo>` and its `<ds:SignatureValue>`,
+/// * every `<ds:Reference>`'s URI / DigestValue / DigestMethod,
+/// * the reconstructed bytes of every id-bearing element (enveloped
+///   `<ds:Signature>` stripped), keyed by id, for digest validation.
 ///
-/// The raw SignedInfo is reconstructed from the parse stream (mirroring the
-/// server-side SAML SP) so it can be verified against the IdP certificate.
-fn parse_saml_xml(xml: &str) -> Result<(SsoUserInfo, SignatureMaterial), SsoError> {
+/// Reconstruction is deterministic (a simplified canonicalization) so the same
+/// bytes are produced at sign time and at verify time. Identity is **not**
+/// extracted here — see [`extract_identity`], which runs only over the specific
+/// signed, digest-validated element.
+fn parse_saml_xml(xml: &str) -> Result<SignatureMaterial, SsoError> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+
+    let mut sig = SignatureMaterial::default();
+
+    // SignedInfo capture.
+    let mut in_signed_info = false;
+    let mut signed_info_buf = String::new();
+    let mut in_signature_value = false;
+
+    // Reference capture (inside SignedInfo).
+    let mut in_reference = false;
+    let mut current_ref_uri: Option<String> = None;
+    let mut current_ref_digest_method: Option<String> = None;
+    let mut in_digest_value = false;
+    let mut current_digest = String::new();
+
+    // Id-bearing element reconstruction + enveloped-signature stripping.
+    let mut depth: usize = 0;
+    let mut frames: Vec<CaptureFrame> = Vec::new();
+    let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut sig_skip_depth: Option<usize> = None;
+
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                depth += 1;
+                let local = local_name(e.name().as_ref());
+
+                // Enter the enveloped-signature skip region (its own start tag
+                // is excluded from every enclosing frame).
+                if local == "Signature" && sig_skip_depth.is_none() {
+                    sig_skip_depth = Some(depth);
+                }
+
+                // SignedInfo reconstruction (must run before the semantic match).
+                if local == "SignedInfo" {
+                    in_signed_info = true;
+                    signed_info_buf.clear();
+                    append_start_to_raw(e, &mut signed_info_buf);
+                } else if in_signed_info {
+                    append_start_to_raw(e, &mut signed_info_buf);
+                }
+
+                // Reference / digest bookkeeping inside SignedInfo.
+                if in_signed_info {
+                    match local.as_str() {
+                        "Reference" => {
+                            in_reference = true;
+                            current_ref_uri = read_named_attr(e, "URI");
+                            current_ref_digest_method = None;
+                            current_digest.clear();
+                        }
+                        "DigestMethod" if in_reference => {
+                            current_ref_digest_method = read_named_attr(e, "Algorithm");
+                        }
+                        "DigestValue" if in_reference => {
+                            in_digest_value = true;
+                            current_digest.clear();
+                        }
+                        _ => {}
+                    }
+                }
+
+                if local == "SignatureValue" {
+                    in_signature_value = true;
+                }
+
+                // Append this start tag to all active frames (unless skipping a
+                // signature subtree), then open a new frame if it carries an id.
+                let start_tag = start_tag_string(e);
+                if sig_skip_depth.is_none() {
+                    for frame in frames.iter_mut() {
+                        frame.raw.push_str(&start_tag);
+                    }
+                    if let Some(id) = read_id_attr(e) {
+                        if !seen_ids.insert(id.clone()) {
+                            sig.duplicate_ids = true;
+                        }
+                        frames.push(CaptureFrame {
+                            id,
+                            open_depth: depth,
+                            raw: start_tag,
+                        });
+                    }
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                depth += 1;
+                let local = local_name(e.name().as_ref());
+
+                if in_signed_info {
+                    append_empty_to_raw(e, &mut signed_info_buf);
+                    if in_reference && local == "DigestMethod" {
+                        current_ref_digest_method = read_named_attr(e, "Algorithm");
+                    }
+                }
+
+                if sig_skip_depth.is_none() {
+                    let empty_tag = empty_tag_string(e);
+                    for frame in frames.iter_mut() {
+                        frame.raw.push_str(&empty_tag);
+                    }
+                }
+                depth -= 1;
+            }
+            Ok(Event::End(ref e)) => {
+                let local = local_name(e.name().as_ref());
+                let closing_signature = local == "Signature" && sig_skip_depth == Some(depth);
+
+                // SignedInfo reconstruction for closing tags.
+                if in_signed_info && local != "SignedInfo" {
+                    signed_info_buf.push_str("</");
+                    signed_info_buf.push_str(&local);
+                    signed_info_buf.push('>');
+                }
+
+                // Append end tag to active frames (unless inside a signature).
+                if sig_skip_depth.is_none() {
+                    let qname = e.name();
+                    let name = String::from_utf8_lossy(qname.as_ref());
+                    for frame in frames.iter_mut() {
+                        frame.raw.push_str("</");
+                        frame.raw.push_str(&name);
+                        frame.raw.push('>');
+                    }
+                    // Finalize any frame that this end tag closes.
+                    if frames.last().map(|f| f.open_depth) == Some(depth) {
+                        if let Some(frame) = frames.pop() {
+                            if sig
+                                .signed_elements
+                                .insert(frame.id, SignedElement { raw: frame.raw })
+                                .is_some()
+                            {
+                                sig.duplicate_ids = true;
+                            }
+                        }
+                    }
+                }
+
+                match local.as_str() {
+                    "Reference" if in_reference => {
+                        if let Some(uri) = current_ref_uri.take() {
+                            let uri = uri.strip_prefix('#').unwrap_or(&uri).to_string();
+                            sig.references.push(SamlReference {
+                                uri,
+                                digest_value: current_digest.trim().to_string(),
+                                digest_method: current_ref_digest_method.take(),
+                            });
+                        }
+                        in_reference = false;
+                    }
+                    "DigestValue" => {
+                        in_digest_value = false;
+                    }
+                    "SignatureValue" => {
+                        in_signature_value = false;
+                    }
+                    "SignedInfo" => {
+                        signed_info_buf.push_str("</SignedInfo>");
+                        sig.signed_info_raw = Some(signed_info_buf.clone());
+                        signed_info_buf.clear();
+                        in_signed_info = false;
+                    }
+                    _ => {}
+                }
+
+                if closing_signature {
+                    sig_skip_depth = None;
+                }
+                depth = depth.saturating_sub(1);
+            }
+            Ok(Event::Text(ref e)) => {
+                let raw = std::str::from_utf8(e)
+                    .map_err(|err| SsoError::MalformedToken(format!("XML UTF-8 error: {}", err)))?;
+                let text = unescape(raw)
+                    .map_err(|err| {
+                        SsoError::MalformedToken(format!("XML unescape error: {}", err))
+                    })?
+                    .trim()
+                    .to_string();
+                if text.is_empty() {
+                    buf.clear();
+                    continue;
+                }
+                if in_signed_info {
+                    signed_info_buf.push_str(&text);
+                }
+                if in_digest_value {
+                    current_digest.push_str(&text);
+                }
+                if in_signature_value {
+                    // Concatenate (base64 may be wrapped across lines).
+                    match sig.signature_value {
+                        Some(ref mut v) => v.push_str(&text),
+                        None => sig.signature_value = Some(text.clone()),
+                    }
+                }
+                if sig_skip_depth.is_none() {
+                    // Re-escape text minimally so the reconstructed subtree stays
+                    // well-formed for the digest and for re-parsing.
+                    let escaped = escape_text(&text);
+                    for frame in frames.iter_mut() {
+                        frame.raw.push_str(&escaped);
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => {
+                return Err(SsoError::MalformedToken(format!("XML parse error: {}", e)));
+            }
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    Ok(sig)
+}
+
+/// Extract user identity (`NameID` + SAML attributes) from a SAML XML fragment.
+///
+/// This is deliberately signature-unaware: in the signed path it is invoked
+/// **only** on the reconstructed bytes of the digest-validated, signed element,
+/// so no unsigned document content can influence the returned identity.
+fn extract_identity(xml: &str) -> Result<SsoUserInfo, SsoError> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
 
@@ -389,17 +752,10 @@ fn parse_saml_xml(xml: &str) -> Result<(SsoUserInfo, SignatureMaterial), SsoErro
     let mut raw_claims: std::collections::HashMap<String, serde_json::Value> =
         std::collections::HashMap::new();
 
-    // State machine for attribute value collection
     let mut current_attr_name: Option<String> = None;
     let mut in_name_id = false;
     let mut in_attr_value = false;
     let mut attr_values: Vec<String> = Vec::new();
-
-    // Signature-capture state.
-    let mut sig = SignatureMaterial::default();
-    let mut in_signed_info = false;
-    let mut signed_info_buf = String::new();
-    let mut in_signature_value = false;
 
     let mut buf = Vec::new();
 
@@ -407,18 +763,8 @@ fn parse_saml_xml(xml: &str) -> Result<(SsoUserInfo, SignatureMaterial), SsoErro
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let local = local_name(e.name().as_ref());
-                // SignedInfo reconstruction (must run before the semantic match).
-                if local == "SignedInfo" {
-                    in_signed_info = true;
-                    signed_info_buf.clear();
-                    append_start_to_raw(e, &mut signed_info_buf);
-                } else if in_signed_info {
-                    append_start_to_raw(e, &mut signed_info_buf);
-                }
                 match local.as_str() {
-                    "NameID" => {
-                        in_name_id = true;
-                    }
+                    "NameID" => in_name_id = true,
                     "Attribute" => {
                         flush_attr(
                             &mut current_attr_name,
@@ -431,20 +777,12 @@ fn parse_saml_xml(xml: &str) -> Result<(SsoUserInfo, SignatureMaterial), SsoErro
                         current_attr_name = read_attr_name(e);
                         attr_values.clear();
                     }
-                    "AttributeValue" => {
-                        in_attr_value = true;
-                    }
-                    "SignatureValue" => {
-                        in_signature_value = true;
-                    }
+                    "AttributeValue" => in_attr_value = true,
                     _ => {}
                 }
             }
             Ok(Event::Empty(ref e)) => {
                 let local = local_name(e.name().as_ref());
-                if in_signed_info {
-                    append_empty_to_raw(e, &mut signed_info_buf);
-                }
                 if local == "Attribute" {
                     flush_attr(
                         &mut current_attr_name,
@@ -460,19 +798,9 @@ fn parse_saml_xml(xml: &str) -> Result<(SsoUserInfo, SignatureMaterial), SsoErro
             }
             Ok(Event::End(ref e)) => {
                 let local = local_name(e.name().as_ref());
-                // SignedInfo reconstruction for closing tags.
-                if in_signed_info && local != "SignedInfo" {
-                    signed_info_buf.push_str("</");
-                    signed_info_buf.push_str(&local);
-                    signed_info_buf.push('>');
-                }
                 match local.as_str() {
-                    "NameID" => {
-                        in_name_id = false;
-                    }
-                    "AttributeValue" => {
-                        in_attr_value = false;
-                    }
+                    "NameID" => in_name_id = false,
+                    "AttributeValue" => in_attr_value = false,
                     "Attribute" => {
                         flush_attr(
                             &mut current_attr_name,
@@ -482,15 +810,6 @@ fn parse_saml_xml(xml: &str) -> Result<(SsoUserInfo, SignatureMaterial), SsoErro
                             &mut groups,
                             &mut raw_claims,
                         );
-                    }
-                    "SignatureValue" => {
-                        in_signature_value = false;
-                    }
-                    "SignedInfo" => {
-                        signed_info_buf.push_str("</SignedInfo>");
-                        sig.signed_info_raw = Some(signed_info_buf.clone());
-                        signed_info_buf.clear();
-                        in_signed_info = false;
                     }
                     _ => {}
                 }
@@ -504,16 +823,7 @@ fn parse_saml_xml(xml: &str) -> Result<(SsoUserInfo, SignatureMaterial), SsoErro
                     })?
                     .trim()
                     .to_string();
-                if in_signed_info && !text.is_empty() {
-                    signed_info_buf.push_str(&text);
-                }
-                if in_signature_value && !text.is_empty() {
-                    // Concatenate (base64 may be wrapped across lines).
-                    match sig.signature_value {
-                        Some(ref mut v) => v.push_str(&text),
-                        None => sig.signature_value = Some(text.clone()),
-                    }
-                } else if in_name_id && !text.is_empty() {
+                if in_name_id && !text.is_empty() {
                     name_id = Some(text);
                 } else if in_attr_value && !text.is_empty() {
                     attr_values.push(text);
@@ -528,7 +838,6 @@ fn parse_saml_xml(xml: &str) -> Result<(SsoUserInfo, SignatureMaterial), SsoErro
         buf.clear();
     }
 
-    // Final flush
     flush_attr(
         &mut current_attr_name,
         &mut attr_values,
@@ -542,16 +851,78 @@ fn parse_saml_xml(xml: &str) -> Result<(SsoUserInfo, SignatureMaterial), SsoErro
         SsoError::MalformedToken("SAMLResponse does not contain a NameID element".to_string())
     })?;
 
-    Ok((
-        SsoUserInfo {
-            subject,
-            email,
-            name: display_name,
-            groups,
-            raw_claims,
-        },
-        sig,
-    ))
+    Ok(SsoUserInfo {
+        subject,
+        email,
+        name: display_name,
+        groups,
+        raw_claims,
+    })
+}
+
+/// Read a named attribute (matched by local name) from an element.
+fn read_named_attr(e: &BytesStart<'_>, name: &str) -> Option<String> {
+    e.attributes()
+        .filter_map(|a| a.ok())
+        .find(|a| local_name(a.key.as_ref()) == name)
+        .and_then(|a| {
+            std::str::from_utf8(a.value.as_ref())
+                .map(|s| s.to_string())
+                .ok()
+        })
+}
+
+/// Read the SAML `ID` (or WS-Security `Id`) attribute from an element.
+fn read_id_attr(e: &BytesStart<'_>) -> Option<String> {
+    e.attributes().filter_map(|a| a.ok()).find_map(|a| {
+        let key = local_name(a.key.as_ref());
+        if key == "ID" || key == "Id" {
+            std::str::from_utf8(a.value.as_ref())
+                .map(|s| s.to_string())
+                .ok()
+        } else {
+            None
+        }
+    })
+}
+
+/// Build the reconstructed start-tag string for an element.
+fn start_tag_string(e: &BytesStart<'_>) -> String {
+    let mut s = String::new();
+    s.push('<');
+    s.push_str(&String::from_utf8_lossy(e.name().as_ref()));
+    for attr in e.attributes().filter_map(|a| a.ok()) {
+        s.push(' ');
+        s.push_str(&String::from_utf8_lossy(attr.key.as_ref()));
+        s.push_str("=\"");
+        s.push_str(&String::from_utf8_lossy(attr.value.as_ref()));
+        s.push('"');
+    }
+    s.push('>');
+    s
+}
+
+/// Build the reconstructed self-closing tag string for an empty element.
+fn empty_tag_string(e: &BytesStart<'_>) -> String {
+    let mut s = String::new();
+    s.push('<');
+    s.push_str(&String::from_utf8_lossy(e.name().as_ref()));
+    for attr in e.attributes().filter_map(|a| a.ok()) {
+        s.push(' ');
+        s.push_str(&String::from_utf8_lossy(attr.key.as_ref()));
+        s.push_str("=\"");
+        s.push_str(&String::from_utf8_lossy(attr.value.as_ref()));
+        s.push('"');
+    }
+    s.push_str("/>");
+    s
+}
+
+/// Minimal XML text escaping for reconstruction (keeps subtree well-formed).
+fn escape_text(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Read the `Name` attribute (local name) from an element.
@@ -803,8 +1174,8 @@ mod tests {
         base64::engine::general_purpose::STANDARD.encode(sig.to_bytes())
     }
 
-    /// Build a signed SAMLResponse with the given SignatureValue.
-    fn signed_response_xml(signature_value: &str) -> String {
+    /// Build a signed SAMLResponse with the given DigestValue + SignatureValue.
+    fn signed_response_xml(digest_value: &str, signature_value: &str) -> String {
         format!(
             r##"<?xml version="1.0" encoding="UTF-8"?>
 <samlp:Response
@@ -817,7 +1188,7 @@ mod tests {
       <ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>
       <ds:Reference URI="#assertion-1">
         <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-        <ds:DigestValue>PLACEHOLDER_DIGEST</ds:DigestValue>
+        <ds:DigestValue>{digest_value}</ds:DigestValue>
       </ds:Reference>
     </ds:SignedInfo>
     <ds:SignatureValue>{signature_value}</ds:SignatureValue>
@@ -836,15 +1207,34 @@ mod tests {
         )
     }
 
-    /// Build a correctly-signed SAMLResponse (base64) whose signature verifies
-    /// against [`TEST_IDP_CERT_PEM`].
-    fn correctly_signed_b64() -> String {
-        let placeholder = signed_response_xml("PENDING");
-        let (_, sig) = parse_saml_xml(&placeholder).expect("parse placeholder");
+    /// Compute the (base64 SHA-256) digest the IdP would commit to for the
+    /// `#assertion-1` element, using the SP's own deterministic reconstruction.
+    fn assertion_digest() -> String {
+        let doc = signed_response_xml("PENDING_DIGEST", "PENDING_SIG");
+        let sig = parse_saml_xml(&doc).expect("parse placeholder");
+        let element = sig
+            .signed_elements
+            .get("assertion-1")
+            .expect("assertion-1 reconstructed");
+        sha256_base64(element.raw.as_bytes())
+    }
+
+    /// Build a correctly-signed SAMLResponse (XML) whose SignedInfo signature
+    /// verifies against [`TEST_IDP_CERT_PEM`] and whose Reference DigestValue
+    /// matches the signed assertion.
+    fn correctly_signed_xml() -> String {
+        let digest = assertion_digest();
+        // Sign the SignedInfo that embeds the real digest.
+        let pending = signed_response_xml(&digest, "PENDING_SIG");
+        let sig = parse_saml_xml(&pending).expect("parse pending");
         let signed_info = sig.signed_info_raw.expect("signed_info captured");
         let sigval = sign_signed_info(&signed_info);
-        let signed_xml = signed_response_xml(&sigval);
-        base64::engine::general_purpose::STANDARD.encode(signed_xml.as_bytes())
+        signed_response_xml(&digest, &sigval)
+    }
+
+    /// Base64 of [`correctly_signed_xml`].
+    fn correctly_signed_b64() -> String {
+        base64::engine::general_purpose::STANDARD.encode(correctly_signed_xml().as_bytes())
     }
 
     /// An unsigned response is REJECTED by default (fail closed).
@@ -884,16 +1274,18 @@ mod tests {
         assert_eq!(user_info.email.as_deref(), Some("alice@example.com"));
     }
 
-    /// Adversarial: tampering with the signed content after signing is detected.
+    /// Adversarial: tampering the DigestValue after signing breaks the SignedInfo
+    /// signature and is detected.
     #[test]
     fn test_saml_tampered_signed_info_rejected() {
-        let placeholder = signed_response_xml("PENDING");
-        let (_, sig) = parse_saml_xml(&placeholder).expect("parse");
+        let digest = assertion_digest();
+        let pending = signed_response_xml(&digest, "PENDING_SIG");
+        let sig = parse_saml_xml(&pending).expect("parse");
         let signed_info = sig.signed_info_raw.expect("signed_info");
         let sigval = sign_signed_info(&signed_info);
-        // Tamper the DigestValue AFTER signing -> reconstruction changes.
+        // Tamper the DigestValue AFTER signing -> SignedInfo bytes change.
         let tampered_xml =
-            signed_response_xml(&sigval).replace("PLACEHOLDER_DIGEST", "EVIL_DIGEST_VALUE");
+            signed_response_xml(&digest, &sigval).replace(&digest, "EVIL_DIGEST_VALUE=");
         let b64 = base64::engine::general_purpose::STANDARD.encode(tampered_xml.as_bytes());
         let helper = SamlSpHelper::with_certificate(make_saml_config(), TEST_IDP_CERT_PEM);
         let err = helper
@@ -905,11 +1297,72 @@ mod tests {
         );
     }
 
+    /// Regression (XSW): tampering the signed assertion's content after signing
+    /// (SignedInfo untouched, but the digest no longer matches) is detected.
+    #[test]
+    fn regression_saml_content_tamper_breaks_digest() {
+        let tampered = correctly_signed_xml().replace("alice@example.com", "attacker@example.com");
+        let b64 = base64::engine::general_purpose::STANDARD.encode(tampered.as_bytes());
+        let helper = SamlSpHelper::with_certificate(make_saml_config(), TEST_IDP_CERT_PEM);
+        let err = helper
+            .parse_response(&b64)
+            .expect_err("content tamper must be rejected via digest mismatch");
+        assert!(
+            matches!(err, SsoError::SignatureInvalid),
+            "expected SignatureInvalid, got: {err}"
+        );
+    }
+
+    /// Regression (XSW): injecting an extra forged, unsigned assertion with a
+    /// different id and a victim NameID must NOT change the trusted identity —
+    /// identity comes only from the digest-validated signed assertion.
+    #[test]
+    fn regression_saml_xsw_injected_assertion_ignored() {
+        let forged = r#"  <saml:Assertion ID="assertion-evil">
+    <saml:Subject>
+      <saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">attacker@example.com</saml:NameID>
+    </saml:Subject>
+  </saml:Assertion>
+</samlp:Response>"#;
+        let injected = correctly_signed_xml().replace("</samlp:Response>", forged);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(injected.as_bytes());
+        let helper = SamlSpHelper::with_certificate(make_saml_config(), TEST_IDP_CERT_PEM);
+        let user_info = helper
+            .parse_response(&b64)
+            .expect("valid signed assertion still accepted");
+        assert_eq!(
+            user_info.subject, "alice@example.com",
+            "identity must come from the signed assertion, not the injected one"
+        );
+    }
+
+    /// Regression (XSW): reusing the signed assertion's id for a forged assertion
+    /// (duplicate ID) is rejected outright.
+    #[test]
+    fn regression_saml_duplicate_id_rejected() {
+        let forged = r#"  <saml:Assertion ID="assertion-1">
+    <saml:Subject>
+      <saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">attacker@example.com</saml:NameID>
+    </saml:Subject>
+  </saml:Assertion>
+</samlp:Response>"#;
+        let injected = correctly_signed_xml().replace("</samlp:Response>", forged);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(injected.as_bytes());
+        let helper = SamlSpHelper::with_certificate(make_saml_config(), TEST_IDP_CERT_PEM);
+        let err = helper
+            .parse_response(&b64)
+            .expect_err("duplicate id must be rejected");
+        assert!(
+            matches!(err, SsoError::SignatureInvalid),
+            "expected SignatureInvalid, got: {err}"
+        );
+    }
+
     /// Adversarial: a garbage/forged SignatureValue is rejected.
     #[test]
     fn test_saml_forged_signature_value_rejected() {
         let forged = base64::engine::general_purpose::STANDARD.encode([0u8; 256]);
-        let xml = signed_response_xml(&forged);
+        let xml = signed_response_xml(&assertion_digest(), &forged);
         let b64 = base64::engine::general_purpose::STANDARD.encode(xml.as_bytes());
         let helper = SamlSpHelper::with_certificate(make_saml_config(), TEST_IDP_CERT_PEM);
         let err = helper

@@ -20,11 +20,10 @@ use url::Url;
 use oxirs_core::ConcreteStore;
 
 use crate::{
-    validation::ValidationViolation, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
-    ValidationConfig, ValidationEngine, ValidationReport,
+    PropertyPath, ShaclError, Shape, ValidationConfig, ValidationEngine, ValidationReport,
 };
 
-use oxirs_core::model::{NamedNode, Term};
+use oxirs_core::model::Term;
 
 /// W3C SHACL test suite runner and compliance checker
 #[derive(Debug)]
@@ -577,8 +576,12 @@ impl W3cTestSuiteRunner {
 
     /// Load RDF store from location (URL or file path).
     ///
-    /// File paths are read and parsed using the oxirs-core parser.
-    /// Remote URLs are not yet fetched; an empty store is returned as a stub.
+    /// File paths are read and parsed using the oxirs-core parser. A missing
+    /// file, an unreadable file, a parse failure, or an unsupported remote URL
+    /// is surfaced as a hard error rather than a silently-empty store. This is
+    /// the fail-loud contract: a compliance test must never conform trivially
+    /// because its data/shapes graph could not be loaded (that would fabricate
+    /// a passing result against non-existent data).
     async fn load_rdf_store(&self, location: &str) -> Result<ConcreteStore> {
         let store = ConcreteStore::new()?;
 
@@ -596,25 +599,23 @@ impl W3cTestSuiteRunner {
 
             let raw = std::fs::read(path)?;
             let parser = Parser::new(format);
-            match parser.parse_bytes_to_quads(&raw) {
-                Ok(quads) => {
-                    for quad in quads {
-                        store.insert_quad(quad)?;
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to parse RDF file {}: {}", location, e);
-                }
+            let quads = parser.parse_bytes_to_quads(&raw).map_err(|e| {
+                ShaclError::ShapeParsing(format!("Failed to parse RDF file '{location}': {e}"))
+            })?;
+            for quad in quads {
+                store.insert_quad(quad)?;
             }
             return Ok(store);
         }
 
-        // Remote URL loading is not yet implemented; return empty store as stub
-        tracing::debug!(
-            "Remote RDF loading not yet implemented, returning empty store for: {}",
-            location
-        );
-        Ok(store)
+        // Neither an existing local file nor a supported remote fetch: fail loud
+        // instead of returning an empty store that would trivially "conform".
+        Err(ShaclError::Configuration(format!(
+            "Cannot load RDF graph '{location}': file does not exist and remote \
+             fetching of W3C test data is not implemented. Provide the test suite \
+             data/shapes files on disk to run real compliance validation."
+        ))
+        .into())
     }
 
     /// Parse SHACL shapes from an RDF store using the shape parser.
@@ -1039,49 +1040,18 @@ impl W3cTestSuiteRunner {
         }
     }
 
-    /// Execute a validation test against the provided store
+    /// Execute a validation test by running the real SHACL engine.
+    ///
+    /// This loads the test's data and shapes graphs, parses the shapes, and runs
+    /// the actual [`ValidationEngine`] — it does NOT synthesise a report from the
+    /// expected result. The `store` parameter is unused because each graph is
+    /// loaded into its own dedicated store below (matching `execute_test_internal`).
     async fn execute_validation_test(
         &self,
         _store: &ConcreteStore,
         test_entry: &TestEntry,
     ) -> Result<ValidationReport> {
-        // This is a placeholder implementation that creates realistic test results
-        // In a real implementation, this would:
-        // 1. Load the data graph into the store
-        // 2. Parse the shapes graph
-        // 3. Create a ValidationEngine
-        // 4. Execute validation and return the report
-
-        let mut report = ValidationReport::new();
-
-        // Simulate test execution based on expected results
-        report.conforms = test_entry.expected_result.conforms;
-
-        // Add violations if expected
-        if let Some(expected_count) = test_entry.expected_result.violation_count {
-            for i in 0..expected_count {
-                // Create placeholder violations for testing
-                let focus_node_iri = NamedNode::new(format!("http://example.org/test#{i}"))
-                    .map_err(|e| anyhow::anyhow!("Invalid IRI: {}", e))?;
-                let property_iri = NamedNode::new("http://example.org/property")
-                    .map_err(|e| anyhow::anyhow!("Invalid IRI: {}", e))?;
-
-                let violation = ValidationViolation {
-                    focus_node: Term::NamedNode(focus_node_iri),
-                    result_path: Some(PropertyPath::predicate(property_iri)),
-                    value: None,
-                    source_shape: ShapeId::from(format!("Test shape {}", test_entry.id)),
-                    source_constraint_component: ConstraintComponentId::from("test-constraint"),
-                    result_severity: Severity::Violation,
-                    result_message: Some(format!("Test violation {i}")),
-                    details: HashMap::new(),
-                    nested_results: Vec::new(),
-                };
-                report.add_violation(violation);
-            }
-        }
-
-        Ok(report)
+        self.execute_test_internal(test_entry).await
     }
 
     /// Enhanced compliance assessment with detailed analysis
@@ -1311,5 +1281,43 @@ mod tests {
         let result = runner.load_manifests().await;
         assert!(result.is_ok());
         assert!(!runner.manifests.is_empty());
+    }
+
+    #[tokio::test]
+    async fn regression_load_rdf_store_missing_file_fails_loud() {
+        let config = W3cTestConfig::default();
+        let runner = W3cTestSuiteRunner::new(config).expect("construction should succeed");
+        // A non-existent path must error, not return a silently-empty store.
+        let result = runner
+            .load_rdf_store("this/path/definitely/does/not/exist-xyz.ttl")
+            .await;
+        assert!(
+            result.is_err(),
+            "missing RDF file must fail loud, got Ok(empty store)"
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_compliance_not_fabricated_when_data_missing() {
+        // The example manifests reference data/shapes .ttl files that do not
+        // exist on disk. Before the fix, load_rdf_store silently returned empty
+        // stores and every test "conformed", fabricating ~100% compliance.
+        // Now those tests must be reported as errors, so compliance is NOT 100%.
+        let config = W3cTestConfig::default();
+        let mut runner = W3cTestSuiteRunner::new(config).expect("construction should succeed");
+        runner
+            .load_example_manifests()
+            .expect("example manifests load");
+        let stats = runner.execute_all_tests().await.expect("run tests");
+        assert!(stats.total_tests > 0, "should have executed some tests");
+        assert!(
+            stats.tests_error > 0,
+            "tests with missing data files must be errors, not fabricated passes"
+        );
+        assert!(
+            stats.compliance_percentage < 100.0,
+            "compliance must not be a fabricated 100% (was {})",
+            stats.compliance_percentage
+        );
     }
 }

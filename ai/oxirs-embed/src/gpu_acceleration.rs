@@ -277,13 +277,13 @@ impl TensorCache {
         }
     }
 
-    /// Cache entity tensor
+    /// Cache entity tensor.
+    ///
+    /// Locks are always acquired in the canonical order
+    /// `cache_stats -> entity_tensors -> attention_weights ->
+    /// intermediate_activations` to keep eviction and lookups deadlock-free.
     pub fn cache_entity_tensor(&self, entity: &str, tensor: Array2<f32>, device_id: usize) {
-        let mut cache = self.entity_tensors.lock().expect("lock poisoned");
-        let mut stats = self.cache_stats.lock().expect("lock poisoned");
-
         let size_bytes = tensor.len() * std::mem::size_of::<f32>();
-
         let cached_tensor = CachedTensor {
             data: tensor,
             device_id,
@@ -292,10 +292,25 @@ impl TensorCache {
             size_bytes,
         };
 
-        // Check if we need to evict old entries
-        self.evict_if_needed(&mut stats);
+        let mut stats = self.cache_stats.lock().expect("lock poisoned");
+        let mut entity_tensors = self.entity_tensors.lock().expect("lock poisoned");
+        let mut attention = self.attention_weights.lock().expect("lock poisoned");
+        let mut intermediate = self.intermediate_activations.lock().expect("lock poisoned");
 
-        cache.insert(entity.to_string(), cached_tensor);
+        // Actually free memory (evict real entries) before inserting.
+        Self::make_room(
+            self.config.cache_size_mb * 1024 * 1024,
+            &mut stats,
+            &mut entity_tensors,
+            &mut attention,
+            &mut intermediate,
+            size_bytes,
+        );
+
+        // Replacing an existing entry: reclaim its bytes from the accounting.
+        if let Some(old) = entity_tensors.insert(entity.to_string(), cached_tensor) {
+            stats.total_memory_usage = stats.total_memory_usage.saturating_sub(old.size_bytes);
+        }
         stats.total_memory_usage += size_bytes;
 
         debug!("Cached entity tensor for {}", entity);
@@ -303,8 +318,8 @@ impl TensorCache {
 
     /// Get cached entity tensor
     pub fn get_entity_tensor(&self, entity: &str) -> Option<Array2<f32>> {
-        let mut cache = self.entity_tensors.lock().expect("lock poisoned");
         let mut stats = self.cache_stats.lock().expect("lock poisoned");
+        let mut cache = self.entity_tensors.lock().expect("lock poisoned");
 
         if let Some(cached) = cache.get_mut(entity) {
             cached.last_accessed = Instant::now();
@@ -322,11 +337,7 @@ impl TensorCache {
 
     /// Cache attention weights
     pub fn cache_attention_weights(&self, key: &str, weights: Array2<f32>, device_id: usize) {
-        let mut cache = self.attention_weights.lock().expect("lock poisoned");
-        let mut stats = self.cache_stats.lock().expect("lock poisoned");
-
         let size_bytes = weights.len() * std::mem::size_of::<f32>();
-
         let cached_tensor = CachedTensor {
             data: weights,
             device_id,
@@ -335,9 +346,23 @@ impl TensorCache {
             size_bytes,
         };
 
-        self.evict_if_needed(&mut stats);
+        let mut stats = self.cache_stats.lock().expect("lock poisoned");
+        let mut entity_tensors = self.entity_tensors.lock().expect("lock poisoned");
+        let mut attention = self.attention_weights.lock().expect("lock poisoned");
+        let mut intermediate = self.intermediate_activations.lock().expect("lock poisoned");
 
-        cache.insert(key.to_string(), cached_tensor);
+        Self::make_room(
+            self.config.cache_size_mb * 1024 * 1024,
+            &mut stats,
+            &mut entity_tensors,
+            &mut attention,
+            &mut intermediate,
+            size_bytes,
+        );
+
+        if let Some(old) = attention.insert(key.to_string(), cached_tensor) {
+            stats.total_memory_usage = stats.total_memory_usage.saturating_sub(old.size_bytes);
+        }
         stats.total_memory_usage += size_bytes;
 
         debug!("Cached attention weights for key {}", key);
@@ -345,8 +370,8 @@ impl TensorCache {
 
     /// Get cached attention weights
     pub fn get_attention_weights(&self, key: &str) -> Option<Array2<f32>> {
-        let mut cache = self.attention_weights.lock().expect("lock poisoned");
         let mut stats = self.cache_stats.lock().expect("lock poisoned");
+        let mut cache = self.attention_weights.lock().expect("lock poisoned");
 
         if let Some(cached) = cache.get_mut(key) {
             cached.last_accessed = Instant::now();
@@ -362,16 +387,80 @@ impl TensorCache {
         }
     }
 
-    /// Evict old entries if cache is too large
-    fn evict_if_needed(&self, stats: &mut CacheStats) {
-        let max_memory = self.config.cache_size_mb * 1024 * 1024; // Convert MB to bytes
+    /// Evict genuinely-least-recently-used entries across all three caches until
+    /// the projected memory usage (current + `incoming_bytes`) fits within
+    /// `max_memory`, actually removing the backing tensors rather than merely
+    /// adjusting a statistic. Stops early if every cache is empty (e.g. a single
+    /// tensor larger than the whole budget), leaving the cache momentarily over
+    /// budget for that one oversized item instead of looping forever.
+    fn make_room(
+        max_memory: usize,
+        stats: &mut CacheStats,
+        entity_tensors: &mut HashMap<String, CachedTensor>,
+        attention: &mut HashMap<String, CachedTensor>,
+        intermediate: &mut HashMap<String, CachedTensor>,
+        incoming_bytes: usize,
+    ) {
+        while stats.total_memory_usage + incoming_bytes > max_memory {
+            // Least-recently-used candidate within each cache.
+            let e_lru = entity_tensors
+                .iter()
+                .min_by_key(|(_, v)| v.last_accessed)
+                .map(|(k, v)| (k.clone(), v.last_accessed, v.size_bytes));
+            let a_lru = attention
+                .iter()
+                .min_by_key(|(_, v)| v.last_accessed)
+                .map(|(k, v)| (k.clone(), v.last_accessed, v.size_bytes));
+            let i_lru = intermediate
+                .iter()
+                .min_by_key(|(_, v)| v.last_accessed)
+                .map(|(k, v)| (k.clone(), v.last_accessed, v.size_bytes));
 
-        if stats.total_memory_usage > max_memory {
-            // Simple LRU eviction (would be more sophisticated in real implementation)
+            // Pick the globally oldest entry across the three caches.
+            enum Which {
+                Entity,
+                Attention,
+                Intermediate,
+            }
+            let mut choice: Option<(Which, String, usize, Instant)> = None;
+            for (which, cand) in [
+                (Which::Entity, e_lru),
+                (Which::Attention, a_lru),
+                (Which::Intermediate, i_lru),
+            ] {
+                if let Some((k, ts, sz)) = cand {
+                    let is_older = match &choice {
+                        Some((_, _, _, best_ts)) => ts < *best_ts,
+                        None => true,
+                    };
+                    if is_older {
+                        choice = Some((which, k, sz, ts));
+                    }
+                }
+            }
+
+            let Some((which, key, size_bytes, _)) = choice else {
+                // Nothing left to evict.
+                break;
+            };
+
+            match which {
+                Which::Entity => {
+                    entity_tensors.remove(&key);
+                }
+                Which::Attention => {
+                    attention.remove(&key);
+                }
+                Which::Intermediate => {
+                    intermediate.remove(&key);
+                }
+            }
+            stats.total_memory_usage = stats.total_memory_usage.saturating_sub(size_bytes);
             stats.evictions += 1;
-            stats.total_memory_usage = max_memory / 2; // Simplified
-
-            warn!("Tensor cache eviction triggered, freed memory");
+            debug!(
+                "Evicted LRU tensor '{}' ({} bytes) from cache",
+                key, size_bytes
+            );
         }
     }
 
@@ -380,8 +469,12 @@ impl TensorCache {
         (*self.cache_stats.lock().expect("lock poisoned")).clone()
     }
 
-    /// Clear all caches
+    /// Clear all caches.
+    ///
+    /// Locks are taken in the canonical order (`cache_stats` first) to stay
+    /// consistent with the eviction and lookup paths.
     pub fn clear_all(&self) {
+        let mut stats = self.cache_stats.lock().expect("lock poisoned");
         self.entity_tensors.lock().expect("lock poisoned").clear();
         self.attention_weights
             .lock()
@@ -392,7 +485,6 @@ impl TensorCache {
             .expect("lock poisoned")
             .clear();
 
-        let mut stats = self.cache_stats.lock().expect("lock poisoned");
         stats.total_memory_usage = 0;
 
         info!("Cleared all tensor caches");
@@ -1173,6 +1265,65 @@ pub struct BatchSizeOptimizerStats {
 mod tests {
     use super::*;
 
+    /// Regression: `TensorCache` eviction previously only adjusted a statistic
+    /// and never removed backing tensors, so real memory grew without bound. It
+    /// must now genuinely drop entries and keep the map size bounded.
+    #[test]
+    fn regression_tensor_cache_evicts_real_entries() {
+        // Tiny 1 MB budget so a handful of tensors forces eviction.
+        let config = GpuAccelerationConfig {
+            cache_size_mb: 1,
+            ..GpuAccelerationConfig::default()
+        };
+        let cache = TensorCache::new(config);
+
+        // Each tensor is 256 * 256 * 4 bytes = 256 KiB; inserting 40 of them
+        // (~10 MiB) vastly exceeds the 1 MiB budget.
+        for i in 0..40 {
+            let tensor = Array2::<f32>::zeros((256, 256));
+            cache.cache_entity_tensor(&format!("entity_{i}"), tensor, 0);
+        }
+
+        let stats = cache.get_stats();
+        let max_bytes = 1024 * 1024;
+        // Real memory must be bounded and evictions must have occurred.
+        assert!(
+            stats.total_memory_usage <= max_bytes,
+            "cache exceeded budget: {} > {}",
+            stats.total_memory_usage,
+            max_bytes
+        );
+        assert!(stats.evictions > 0, "expected real evictions to occur");
+
+        // The most recently inserted entry must still be present; an old one
+        // must have been dropped (bounded backing store).
+        assert!(cache.get_entity_tensor("entity_39").is_some());
+        assert!(cache.get_entity_tensor("entity_0").is_none());
+    }
+
+    /// Regression: the mixed-precision path used to be a no-op branch identical
+    /// to full precision. `round_f32_to_bf16` must genuinely reduce mantissa
+    /// precision so the flag produces different numerics.
+    #[test]
+    fn regression_bf16_rounding_reduces_precision() {
+        // A value whose low mantissa bits are dropped by bf16 rounding.
+        let x = 1.000_012_3_f32;
+        let rounded = round_f32_to_bf16(x);
+        assert_ne!(
+            rounded, x,
+            "bf16 rounding must change a high-precision value"
+        );
+        // But it must stay close (same magnitude / exponent).
+        assert!((rounded - x).abs() < 0.01);
+
+        // Exactly-representable bf16 values are unchanged.
+        assert_eq!(round_f32_to_bf16(1.0), 1.0);
+        assert_eq!(round_f32_to_bf16(0.0), 0.0);
+        assert_eq!(round_f32_to_bf16(2.0), 2.0);
+        // NaN stays NaN.
+        assert!(round_f32_to_bf16(f32::NAN).is_nan());
+    }
+
     #[test]
     fn test_gpu_acceleration_config_default() {
         let config = GpuAccelerationConfig::default();
@@ -1283,17 +1434,44 @@ mod tests {
     }
 }
 
-/// Advanced GPU accelerator using SciRS2's full GPU capabilities
+/// GPU-gated accelerator built on SciRS2's GPU device abstractions.
 ///
-/// This accelerator leverages SciRS2's GPU abstractions for maximum performance:
-/// - CUDA/Metal backend support
-/// - Tensor core operations for mixed precision
-/// - GPU kernel compilation and caching
-/// - Memory-efficient buffer management
+/// IMPORTANT — current execution model: constructing this type validates that
+/// at least one GPU device/context is available (see [`SciRS2GpuAccelerator::new`],
+/// which returns an error when no device can be initialized), but the numeric
+/// kernels below (`tensor_core_gemm`, `batch_embed`, `simd_similarity`) currently
+/// execute on the **CPU**. Device-side kernel dispatch through the held
+/// [`GpuContext`]s is not yet wired. These methods are therefore honest CPU
+/// implementations rather than GPU/tensor-core execution:
+/// - `tensor_core_gemm` performs an f32 matmul; with mixed precision enabled it
+///   genuinely rounds operands to bfloat16 precision before multiplying and
+///   accumulates in f32, mirroring tensor-core numerics on the CPU.
+/// - `batch_embed` / `simd_similarity` perform standard CPU linear algebra.
+///
+/// The retained `contexts` field records the validated devices and gates
+/// construction; it is the anchor point for future real GPU dispatch.
 pub struct SciRS2GpuAccelerator {
     config: GpuAccelerationConfig,
     contexts: Vec<GpuContext>,
     operations: Arc<AtomicUsize>,
+}
+
+/// Round an `f32` to bfloat16 precision (round-to-nearest-even) and back to
+/// `f32`. bfloat16 keeps the f32 exponent but truncates the mantissa from 23 to
+/// 7 bits; this is a pure-Rust emulation of the reduced-precision operands used
+/// by hardware tensor cores, so the mixed-precision code path produces genuinely
+/// different (lower-precision) numerics rather than being a no-op branch.
+#[inline]
+fn round_f32_to_bf16(x: f32) -> f32 {
+    let bits = x.to_bits();
+    // NaN: keep as-is (avoid turning a NaN into infinity via rounding).
+    if x.is_nan() {
+        return x;
+    }
+    // Round-to-nearest-even on the 16-bit boundary.
+    let rounding_bias = 0x0000_7fff + ((bits >> 16) & 1);
+    let rounded = bits.wrapping_add(rounding_bias) & 0xffff_0000;
+    f32::from_bits(rounded)
 }
 
 impl SciRS2GpuAccelerator {
@@ -1331,41 +1509,47 @@ impl SciRS2GpuAccelerator {
         self.contexts.len()
     }
 
-    /// Execute tensor core matrix multiplication with mixed precision
+    /// Matrix multiplication, optionally in emulated mixed precision.
     ///
-    /// This uses SciRS2's tensor core abstractions for maximum throughput:
-    /// - Automatic FP16/BF16 conversion
-    /// - Hardware tensor core utilization
-    /// - Optimal memory access patterns
+    /// CPU implementation (see the type-level note). When `use_mixed_precision`
+    /// is requested and enabled in the config, both operands are rounded to
+    /// bfloat16 precision before the product and the result is accumulated in
+    /// f32 — a faithful CPU emulation of tensor-core mixed-precision numerics,
+    /// not a no-op branch. The inner dimensions must be compatible; a mismatch
+    /// is reported as an error rather than panicking.
     pub fn tensor_core_gemm(
         &self,
         a: &Array2<f32>,
         b: &Array2<f32>,
         use_mixed_precision: bool,
     ) -> Result<Array2<f32>> {
-        // Note: Actual GPU operations would be performed here
-        // For now, we perform CPU computation with optimizations
+        if a.ncols() != b.nrows() {
+            return Err(anyhow!(
+                "tensor_core_gemm: incompatible shapes {:?} x {:?}",
+                a.dim(),
+                b.dim()
+            ));
+        }
+
         let result = if use_mixed_precision && self.config.mixed_precision {
-            // Simulate mixed precision computation
-            // In production, this would use actual GPU tensor cores
-            a.dot(b)
+            // Genuine reduced-precision operands (bf16), f32 accumulation.
+            let a_bf16 = a.mapv(round_f32_to_bf16);
+            let b_bf16 = b.mapv(round_f32_to_bf16);
+            a_bf16.dot(&b_bf16)
         } else {
-            // Standard FP32 matrix multiplication
             a.dot(b)
         };
 
-        // Update statistics
         self.operations.fetch_add(1, Ordering::Relaxed);
 
         Ok(result)
     }
 
-    /// Batch embedding computation with GPU acceleration
+    /// Batch embedding lookup: `embedding_matrix · input` for each input.
     ///
-    /// Processes multiple embeddings in parallel using:
-    /// - Multi-stream execution
-    /// - Kernel fusion
-    /// - Optimal memory transfers
+    /// CPU implementation (see the type-level note). Each input's dimension must
+    /// match the embedding matrix's column count; a mismatch is reported as an
+    /// error rather than panicking on the request path.
     pub fn batch_embed(
         &self,
         inputs: &[Array1<f32>],
@@ -1374,51 +1558,48 @@ impl SciRS2GpuAccelerator {
         let batch_size = inputs.len();
         let mut results = Vec::with_capacity(batch_size);
 
-        // Process in batches using multi-stream execution simulation
-        let stream_batch_size = if self.config.multi_stream {
-            (batch_size + self.config.num_streams - 1) / self.config.num_streams
-        } else {
-            batch_size
-        };
-
-        // Parallel batch processing using SciRS2
-        for chunk in inputs.chunks(stream_batch_size) {
-            for input in chunk {
-                // Matrix-vector multiplication for embedding lookup
-                // In production, this would use GPU kernels
-                let embedding = embedding_matrix.dot(input);
-                results.push(embedding);
+        let cols = embedding_matrix.ncols();
+        for (idx, input) in inputs.iter().enumerate() {
+            if input.len() != cols {
+                return Err(anyhow!(
+                    "batch_embed: input {} has length {} but embedding matrix expects {}",
+                    idx,
+                    input.len(),
+                    cols
+                ));
             }
+            results.push(embedding_matrix.dot(input));
         }
 
-        // Update statistics
         self.operations.fetch_add(batch_size, Ordering::Relaxed);
 
         Ok(results)
     }
 
-    /// SIMD-accelerated similarity computation
+    /// Dot-product similarity of `query` against each candidate.
     ///
-    /// Uses SciRS2's SIMD operations for:
-    /// - Vectorized dot products
-    /// - Parallel distance calculations
-    /// - Cache-friendly memory access
+    /// CPU implementation (see the type-level note). All candidates must share
+    /// the query's dimension; a mismatch is reported as an error rather than
+    /// panicking.
     pub fn simd_similarity(
         &self,
         query: &Array1<f32>,
         candidates: &[Array1<f32>],
     ) -> Result<Vec<f32>> {
-        // Parallel similarity computation using SIMD operations
-        let similarities: Vec<f32> = candidates
-            .iter()
-            .map(|candidate| {
-                // Dot product for cosine similarity
-                // In production, this would use SIMD instructions
-                query.dot(candidate)
-            })
-            .collect();
+        let dim = query.len();
+        let mut similarities = Vec::with_capacity(candidates.len());
+        for (idx, candidate) in candidates.iter().enumerate() {
+            if candidate.len() != dim {
+                return Err(anyhow!(
+                    "simd_similarity: candidate {} has length {} but query has {}",
+                    idx,
+                    candidate.len(),
+                    dim
+                ));
+            }
+            similarities.push(query.dot(candidate));
+        }
 
-        // Update statistics
         self.operations
             .fetch_add(candidates.len(), Ordering::Relaxed);
 

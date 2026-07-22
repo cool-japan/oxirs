@@ -72,6 +72,7 @@ mod tests {
             registry: Arc::new(ModelRegistry::new(storage_path)),
             cache_manager: Arc::new(CacheManager::new(Default::default())),
             models: Arc::new(RwLock::new(HashMap::new())),
+            metrics: Arc::new(crate::api::config::ApiMetrics::new()),
             config: ApiConfig::default(),
         };
 

@@ -478,6 +478,12 @@ impl InnerJsonLdWriter {
             ObjectRef::BlankNode(b) => TermRef::BlankNode(b.as_str()),
             ObjectRef::Literal(l) => TermRef::from_literal(l),
             ObjectRef::Variable(v) => TermRef::Variable(v.as_str()),
+            ObjectRef::QuotedTriple(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "JSON-LD does not support RDF-star quoted triples as objects",
+                ));
+            }
         };
         self.serialize_term(object_ref, output)
     }

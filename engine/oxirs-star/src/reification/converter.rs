@@ -11,6 +11,11 @@ use super::types::{
 };
 use super::vocab;
 
+/// Partially-discovered `rdf:subject`/`rdf:predicate`/`rdf:object` components
+/// for a candidate statement identifier during dereification, in
+/// (subject, predicate, object) order.
+type PartialStatementComponents = (Option<StarTerm>, Option<StarTerm>, Option<StarTerm>);
+
 /// RDF-star to standard RDF reification converter
 pub struct Reificator {
     pub context: ReificationContext,
@@ -113,7 +118,7 @@ impl Reificator {
 
             triples.push(StarTriple::new(
                 property_term,
-                StarTerm::iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#singletonPropertyOf")?,
+                StarTerm::iri(vocab::RDF_SINGLETON_PROPERTY_OF)?,
                 triple.predicate.clone(),
             ));
 
@@ -177,52 +182,117 @@ impl Reificator {
         Ok(triples)
     }
 
+    /// Dereify a standard-RDF graph back into RDF-star, reversing whichever
+    /// [`ReificationStrategy`] was used to produce it.
+    ///
+    /// This is strategy-agnostic: it does not rely on the presence of the
+    /// optional `rdf:type rdf:Statement` marker triple, since `UniqueIris`
+    /// and `BlankNodes` never emit one, and `SingletonProperties` uses a
+    /// completely different shape (`s singletonProp o` + `singletonProp
+    /// rdf:singletonPropertyOf p`). Instead a statement identifier is
+    /// recognized structurally:
+    ///   * standard/unique-iri/blank-node reification: a term (NamedNode or
+    ///     BlankNode) that has a complete `rdf:subject`/`rdf:predicate`/
+    ///     `rdf:object` triple triple (the `rdf:type rdf:Statement` marker,
+    ///     if present, is treated as optional confirmation, not a
+    ///     requirement).
+    ///   * singleton properties: a NamedNode `p1` with a
+    ///     `p1 rdf:singletonPropertyOf p` triple and a matching `s p1 o`
+    ///     data triple.
+    ///
+    /// Once every statement identifier has been resolved to its
+    /// reconstructed `StarTriple`, every remaining (non-scaffolding) triple
+    /// has each of its subject/predicate/object positions substituted with
+    /// the reconstructed `<<s p o>>` quoted triple wherever that position
+    /// refers to a resolved statement identifier -- not just the subject
+    /// position.
     pub fn dereify_graph(&mut self, reified_graph: &StarGraph) -> StarResult<StarGraph> {
         let span = span!(Level::INFO, "dereify_graph");
         let _enter = span.enter();
 
         let mut star_graph = StarGraph::new();
-        let mut processed_statements = std::collections::HashSet::new();
-        let mut reconstructed_triples = std::collections::HashMap::new();
+
+        // --- Pass 1: discover statement identifiers -----------------------
+
+        // Partial rdf:subject/rdf:predicate/rdf:object accumulation, keyed
+        // by the candidate statement identifier term (NamedNode or
+        // BlankNode subject of those triples).
+        let mut partial: HashMap<StarTerm, PartialStatementComponents> = HashMap::new();
+        // Singleton-property identifier -> original predicate it stands in for.
+        let mut singleton_props: HashMap<StarTerm, StarTerm> = HashMap::new();
 
         for triple in reified_graph.triples() {
-            if let (StarTerm::NamedNode(predicate), StarTerm::NamedNode(object)) =
-                (&triple.predicate, &triple.object)
-            {
-                if predicate.iri == vocab::RDF_TYPE && object.iri == vocab::RDF_STATEMENT {
-                    if let StarTerm::NamedNode(stmt_node) = &triple.subject {
-                        if !processed_statements.contains(&stmt_node.iri) {
-                            if let Some(star_triple) =
-                                self.reconstruct_quoted_triple(reified_graph, &stmt_node.iri)?
-                            {
-                                reconstructed_triples.insert(stmt_node.iri.clone(), star_triple);
-                                processed_statements.insert(stmt_node.iri.clone());
-                            }
-                        }
+            if !matches!(
+                triple.subject,
+                StarTerm::NamedNode(_) | StarTerm::BlankNode(_)
+            ) {
+                continue;
+            }
+            if let StarTerm::NamedNode(pred_node) = &triple.predicate {
+                match pred_node.iri.as_str() {
+                    vocab::RDF_SUBJECT => {
+                        partial.entry(triple.subject.clone()).or_default().0 =
+                            Some(triple.object.clone());
                     }
+                    vocab::RDF_PREDICATE => {
+                        partial.entry(triple.subject.clone()).or_default().1 =
+                            Some(triple.object.clone());
+                    }
+                    vocab::RDF_OBJECT => {
+                        partial.entry(triple.subject.clone()).or_default().2 =
+                            Some(triple.object.clone());
+                    }
+                    vocab::RDF_SINGLETON_PROPERTY_OF => {
+                        singleton_props.insert(triple.subject.clone(), triple.object.clone());
+                    }
+                    _ => {}
                 }
             }
         }
 
+        // Resolve standard/unique-iri/blank-node style statement identifiers:
+        // only complete (subject+predicate+object all present) entries count.
+        let mut reconstructed: HashMap<StarTerm, StarTriple> = HashMap::new();
+        for (stmt_term, (subject, predicate, object)) in partial {
+            if let (Some(s), Some(p), Some(o)) = (subject, predicate, object) {
+                reconstructed.insert(stmt_term, StarTriple::new(s, p, o));
+            }
+        }
+
+        // Resolve singleton-property style statement identifiers: find the
+        // data triple `s property o` for each known `property`.
+        if !singleton_props.is_empty() {
+            for triple in reified_graph.triples() {
+                if reconstructed.contains_key(&triple.predicate) {
+                    // Already resolved by another pass or a duplicate data
+                    // triple for the same property; keep first match.
+                    continue;
+                }
+                if let Some(orig_predicate) = singleton_props.get(&triple.predicate) {
+                    reconstructed.insert(
+                        triple.predicate.clone(),
+                        StarTriple::new(
+                            triple.subject.clone(),
+                            orig_predicate.clone(),
+                            triple.object.clone(),
+                        ),
+                    );
+                }
+            }
+        }
+
+        // --- Pass 2: emit non-scaffolding triples with substitution -------
+
         for triple in reified_graph.triples() {
-            if self.is_reification_meta_triple(triple, &processed_statements) {
+            if self.is_reification_meta_triple(triple, &reconstructed, &singleton_props) {
                 continue;
             }
 
-            if let StarTerm::NamedNode(subject_node) = &triple.subject {
-                if let Some(quoted_triple) = reconstructed_triples.get(&subject_node.iri) {
-                    let new_triple = StarTriple::new(
-                        StarTerm::quoted_triple(quoted_triple.clone()),
-                        triple.predicate.clone(),
-                        triple.object.clone(),
-                    );
-                    star_graph.insert(new_triple)?;
-                } else {
-                    star_graph.insert(triple.clone())?;
-                }
-            } else {
-                star_graph.insert(triple.clone())?;
-            }
+            let subject = Self::substitute_statement_ref(&triple.subject, &reconstructed);
+            let predicate = Self::substitute_statement_ref(&triple.predicate, &reconstructed);
+            let object = Self::substitute_statement_ref(&triple.object, &reconstructed);
+
+            star_graph.insert(StarTriple::new(subject, predicate, object))?;
         }
 
         debug!(
@@ -233,57 +303,63 @@ impl Reificator {
         Ok(star_graph)
     }
 
-    fn reconstruct_quoted_triple(
-        &self,
-        graph: &StarGraph,
-        stmt_iri: &str,
-    ) -> StarResult<Option<StarTriple>> {
-        let mut subject = None;
-        let mut predicate = None;
-        let mut object = None;
-
-        let stmt_term = StarTerm::iri(stmt_iri)?;
-
-        for triple in graph.triples() {
-            if triple.subject == stmt_term {
-                if let StarTerm::NamedNode(pred_node) = &triple.predicate {
-                    match pred_node.iri.as_str() {
-                        vocab::RDF_SUBJECT => subject = Some(triple.object.clone()),
-                        vocab::RDF_PREDICATE => predicate = Some(triple.object.clone()),
-                        vocab::RDF_OBJECT => object = Some(triple.object.clone()),
-                        _ => {}
-                    }
-                }
-            }
-        }
-
-        if let (Some(s), Some(p), Some(o)) = (subject, predicate, object) {
-            Ok(Some(StarTriple::new(s, p, o)))
-        } else {
-            Ok(None)
+    /// Replace `term` with the reconstructed quoted triple if it refers to a
+    /// resolved statement identifier; otherwise return it unchanged. Used to
+    /// substitute references appearing in *any* of the subject, predicate,
+    /// or object positions.
+    fn substitute_statement_ref(
+        term: &StarTerm,
+        reconstructed: &HashMap<StarTerm, StarTriple>,
+    ) -> StarTerm {
+        match reconstructed.get(term) {
+            Some(quoted) => StarTerm::quoted_triple(quoted.clone()),
+            None => term.clone(),
         }
     }
 
+    /// Determine whether `triple` is scaffolding produced by
+    /// [`Self::create_reification_triples`] for one of the statement
+    /// identifiers in `reconstructed`, and therefore must not be re-emitted
+    /// verbatim into the dereified graph (it is fully represented by the
+    /// reconstructed quoted triple substituted elsewhere).
     fn is_reification_meta_triple(
         &self,
         triple: &StarTriple,
-        processed_statements: &std::collections::HashSet<String>,
+        reconstructed: &HashMap<StarTerm, StarTriple>,
+        singleton_props: &HashMap<StarTerm, StarTerm>,
     ) -> bool {
-        if let StarTerm::NamedNode(subj_node) = &triple.subject {
-            if processed_statements.contains(&subj_node.iri) {
-                if let StarTerm::NamedNode(pred_node) = &triple.predicate {
-                    match pred_node.iri.as_str() {
-                        vocab::RDF_TYPE
-                        | vocab::RDF_SUBJECT
-                        | vocab::RDF_PREDICATE
-                        | vocab::RDF_OBJECT => {
-                            return true;
-                        }
-                        _ => {}
-                    }
+        // rdf:type / rdf:subject / rdf:predicate / rdf:object scaffolding,
+        // keyed by a resolved statement identifier in subject position.
+        if reconstructed.contains_key(&triple.subject) {
+            if let StarTerm::NamedNode(pred_node) = &triple.predicate {
+                match pred_node.iri.as_str() {
+                    vocab::RDF_TYPE
+                    | vocab::RDF_SUBJECT
+                    | vocab::RDF_PREDICATE
+                    | vocab::RDF_OBJECT => return true,
+                    _ => {}
                 }
             }
         }
+
+        // Singleton-property scaffolding: `property rdf:singletonPropertyOf
+        // origPredicate`.
+        if singleton_props.contains_key(&triple.subject) {
+            if let StarTerm::NamedNode(pred_node) = &triple.predicate {
+                if pred_node.iri == vocab::RDF_SINGLETON_PROPERTY_OF {
+                    return true;
+                }
+            }
+        }
+
+        // Singleton-property scaffolding: the `s property o` data triple
+        // whose predicate *is* the resolved statement identifier.
+        if singleton_props.contains_key(&triple.predicate)
+            && reconstructed.contains_key(&triple.predicate)
+        {
+            return true;
+        }
+
         false
     }
 }

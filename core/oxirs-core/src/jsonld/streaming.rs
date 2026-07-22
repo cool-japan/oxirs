@@ -8,6 +8,9 @@ use crate::{
     model::{NamedNode, Object, Predicate, Quad, Subject, Triple},
     optimization::{SimdJsonProcessor, TermInterner, TermInternerExt, ZeroCopyBuffer},
 };
+
+use super::context::{JsonLdLoadDocumentOptions, JsonLdRemoteDocument};
+use super::profile::JsonLdProfileSet;
 // Removed unused async_trait::async_trait import
 use dashmap::DashMap;
 // Removed unused futures::{SinkExt, StreamExt} imports
@@ -29,6 +32,24 @@ use tokio::{
     time::{Duration, Instant},
 };
 
+/// Callback used to resolve remote JSON-LD `@context` documents referenced by
+/// IRI (e.g. `"@context": "https://schema.org/"`).
+///
+/// It mirrors the loader mechanism used by
+/// [`JsonLdContextProcessor`](super::context::JsonLdContextProcessor): given a
+/// context IRI and [`JsonLdLoadDocumentOptions`] it must return the fetched
+/// document bytes (or an error). The streaming parser never performs network
+/// I/O itself — a resolver must be supplied explicitly via
+/// [`UltraStreamingJsonLdParser::with_document_loader`]; otherwise any document
+/// that references a remote context fails loudly rather than silently dropping
+/// the import.
+pub type StreamingDocumentLoader = dyn Fn(
+        &str,
+        &JsonLdLoadDocumentOptions,
+    ) -> Result<JsonLdRemoteDocument, Box<dyn StdError + Send + Sync>>
+    + Send
+    + Sync;
+
 /// Ultra-high performance streaming JSON-LD parser with adaptive optimizations
 pub struct UltraStreamingJsonLdParser {
     config: StreamingConfig,
@@ -37,6 +58,7 @@ pub struct UltraStreamingJsonLdParser {
     performance_monitor: Arc<PerformanceMonitor>,
     simd_processor: SimdJsonProcessor,
     buffer_pool: Arc<BufferPool>,
+    document_loader: Option<Arc<StreamingDocumentLoader>>,
 }
 
 /// Advanced configuration for streaming JSON-LD processing
@@ -145,8 +167,19 @@ impl UltraStreamingJsonLdParser {
             performance_monitor: Arc::new(PerformanceMonitor::new()),
             simd_processor: SimdJsonProcessor::new(),
             buffer_pool: Arc::new(BufferPool::new(config.buffer_size, 100)),
+            document_loader: None,
             config,
         }
+    }
+
+    /// Attach a resolver for remote `@context` documents referenced by IRI.
+    ///
+    /// Without a loader, encountering a string `@context` (a remote context
+    /// reference) during streaming produces an explicit
+    /// [`JsonLdParseError`] instead of silently substituting an empty context.
+    pub fn with_document_loader(mut self, loader: Arc<StreamingDocumentLoader>) -> Self {
+        self.document_loader = Some(loader);
+        self
     }
 
     /// Stream parse JSON-LD with ultra-high performance optimizations
@@ -187,48 +220,83 @@ impl UltraStreamingJsonLdParser {
             let term_interner = Arc::clone(&self.term_interner);
             let performance_monitor = Arc::clone(&self.performance_monitor);
             let simd_processor = self.simd_processor.clone();
+            let document_loader = self.document_loader.clone();
             let triple_tx = triple_tx.clone();
 
             async move {
                 let mut batch_buffer = Vec::with_capacity(config.buffer_size);
+                // The raw byte stream is split into fixed-size transport chunks
+                // whose boundaries fall at arbitrary offsets (mid-object,
+                // mid-string, ...). We therefore reassemble the stream and only
+                // hand *complete* top-level JSON values to the JSON parser,
+                // maintaining tokenizer state across chunk boundaries.
+                let mut splitter = TopLevelJsonSplitter::new();
+                let mut eof = false;
 
-                while let Some(chunk) = rx.recv().await {
-                    let _permit = semaphore
-                        .acquire()
-                        .await
-                        .expect("semaphore should not be closed");
-
-                    // Process chunk with SIMD acceleration if available
-                    let processed_triples = if config.enable_simd {
-                        Self::process_chunk_simd(
-                            chunk,
-                            &context_cache,
-                            &term_interner,
-                            &simd_processor,
-                        )
-                        .await?
-                    } else {
-                        Self::process_chunk_standard(chunk, &context_cache, &term_interner).await?
-                    };
-
-                    performance_monitor.record_triples_parsed(processed_triples.len());
-
-                    batch_buffer.extend(processed_triples);
-
-                    // Adaptive batching based on performance metrics
-                    if batch_buffer.len() >= config.buffer_size
-                        || performance_monitor.should_flush_batch()
-                    {
-                        triple_tx
-                            .send(std::mem::take(&mut batch_buffer))
-                            .await
-                            .map_err(|_| {
+                while !eof {
+                    match rx.recv().await {
+                        Some(chunk) => {
+                            let _permit = semaphore.acquire().await.map_err(|_| {
                                 JsonLdParseError::ProcessingError(
-                                    "Triple channel send failed".to_string(),
+                                    "processing semaphore closed unexpectedly".to_string(),
                                 )
                             })?;
+                            splitter.push(&chunk.data);
+                        }
+                        None => {
+                            // Reader side finished: allow the splitter to emit a
+                            // final EOF-terminated primitive value if any.
+                            eof = true;
+                            splitter.mark_eof();
+                        }
+                    }
+
+                    while let Some(document) = splitter.next_complete_value()? {
+                        // Process a complete JSON-LD document/value with SIMD
+                        // acceleration if available.
+                        let processed_triples = if config.enable_simd {
+                            Self::process_chunk_simd(
+                                &document,
+                                &context_cache,
+                                &term_interner,
+                                &simd_processor,
+                                &document_loader,
+                            )
+                            .await?
+                        } else {
+                            Self::process_chunk_standard(
+                                &document,
+                                &context_cache,
+                                &term_interner,
+                                &document_loader,
+                            )
+                            .await?
+                        };
+
+                        performance_monitor.record_triples_parsed(processed_triples.len());
+
+                        batch_buffer.extend(processed_triples);
+
+                        // Adaptive batching based on performance metrics
+                        if batch_buffer.len() >= config.buffer_size
+                            || performance_monitor.should_flush_batch()
+                        {
+                            triple_tx
+                                .send(std::mem::take(&mut batch_buffer))
+                                .await
+                                .map_err(|_| {
+                                    JsonLdParseError::ProcessingError(
+                                        "Triple channel send failed".to_string(),
+                                    )
+                                })?;
+                        }
                     }
                 }
+
+                // The stream has ended: reject any trailing, truncated value
+                // (e.g. a document cut off mid-object) rather than silently
+                // discarding it.
+                splitter.finish()?;
 
                 // Flush remaining triples
                 if !batch_buffer.is_empty() {
@@ -287,22 +355,25 @@ impl UltraStreamingJsonLdParser {
         Ok(self.performance_monitor.get_statistics())
     }
 
-    /// Process chunk with SIMD acceleration
+    /// Process a complete JSON-LD document with SIMD acceleration
     async fn process_chunk_simd(
-        chunk: ProcessingChunk,
+        document: &[u8],
         context_cache: &DashMap<String, Arc<Value>>,
         term_interner: &TermInterner,
         simd_processor: &SimdJsonProcessor,
+        document_loader: &Option<Arc<StreamingDocumentLoader>>,
     ) -> Result<Vec<Triple>, JsonLdParseError> {
         let start = Instant::now();
 
-        // SIMD-accelerated JSON parsing
+        // SIMD-accelerated JSON parsing (document is guaranteed to be a
+        // complete, self-contained top-level JSON value by the splitter).
         let json_value = simd_processor
-            .parse_json(&chunk.data)
+            .parse_json(document)
             .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))?;
 
         // Zero-copy context resolution
-        let context = Self::resolve_context_zero_copy(&json_value, context_cache).await?;
+        let context =
+            Self::resolve_context_zero_copy(&json_value, context_cache, document_loader).await?;
 
         // Parallel triple extraction with work-stealing
         #[cfg(feature = "parallel")]
@@ -317,18 +388,20 @@ impl UltraStreamingJsonLdParser {
         Ok(triples)
     }
 
-    /// Process chunk with standard methods
+    /// Process a complete JSON-LD document with standard methods
     async fn process_chunk_standard(
-        chunk: ProcessingChunk,
+        document: &[u8],
         context_cache: &DashMap<String, Arc<Value>>,
         term_interner: &TermInterner,
+        document_loader: &Option<Arc<StreamingDocumentLoader>>,
     ) -> Result<Vec<Triple>, JsonLdParseError> {
-        // Standard JSON parsing
-        let json_value: Value = serde_json::from_slice(&chunk.data)
+        // Standard JSON parsing (document is a complete top-level JSON value).
+        let json_value: Value = serde_json::from_slice(document)
             .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))?;
 
         // Context resolution with caching
-        let context = Self::resolve_context_cached(&json_value, context_cache).await?;
+        let context =
+            Self::resolve_context_cached(&json_value, context_cache, document_loader).await?;
 
         // Triple extraction
         let triples = Self::extract_triples_standard(&json_value, &context, term_interner).await?;
@@ -340,6 +413,7 @@ impl UltraStreamingJsonLdParser {
     async fn resolve_context_zero_copy(
         json_value: &Value,
         context_cache: &DashMap<String, Arc<Value>>,
+        document_loader: &Option<Arc<StreamingDocumentLoader>>,
     ) -> Result<Arc<Value>, JsonLdParseError> {
         if let Some(context_ref) = json_value.get("@context") {
             if let Some(context_str) = context_ref.as_str() {
@@ -348,10 +422,17 @@ impl UltraStreamingJsonLdParser {
                 }
 
                 // Resolve and cache context
-                let resolved_context = Self::resolve_remote_context(context_str).await?;
+                let resolved_context =
+                    Self::resolve_remote_context(context_str, document_loader).await?;
                 let context_arc = Arc::new(resolved_context);
                 context_cache.insert(context_str.to_string(), Arc::clone(&context_arc));
                 return Ok(context_arc);
+            }
+
+            // Inline context object (or array of contexts): use it verbatim as
+            // the active context for term expansion.
+            if context_ref.is_object() || context_ref.is_array() {
+                return Ok(Arc::new(context_ref.clone()));
             }
         }
 
@@ -363,9 +444,10 @@ impl UltraStreamingJsonLdParser {
     async fn resolve_context_cached(
         json_value: &Value,
         context_cache: &DashMap<String, Arc<Value>>,
+        document_loader: &Option<Arc<StreamingDocumentLoader>>,
     ) -> Result<Arc<Value>, JsonLdParseError> {
         // Similar to zero-copy but with different optimization strategy
-        Self::resolve_context_zero_copy(json_value, context_cache).await
+        Self::resolve_context_zero_copy(json_value, context_cache, document_loader).await
     }
 
     /// Parallel triple extraction with work-stealing
@@ -394,7 +476,21 @@ impl UltraStreamingJsonLdParser {
         context: &Value,
         term_interner: &TermInterner,
     ) -> Result<Vec<Triple>, JsonLdParseError> {
-        Self::extract_triples_from_object(json_value, context, term_interner)
+        // A top-level JSON-LD document may be a single node object or an array
+        // of node objects; handle both.
+        if let Value::Array(objects) = json_value {
+            let mut triples = Vec::new();
+            for obj in objects {
+                triples.extend(Self::extract_triples_from_object(
+                    obj,
+                    context,
+                    term_interner,
+                )?);
+            }
+            Ok(triples)
+        } else {
+            Self::extract_triples_from_object(json_value, context, term_interner)
+        }
     }
 
     /// Extract triples from a single JSON-LD object
@@ -522,31 +618,161 @@ impl UltraStreamingJsonLdParser {
         )))
     }
 
-    /// Expand property using JSON-LD context
+    /// Expand a JSON-LD term (a property key) to an absolute IRI using the
+    /// active context.
+    ///
+    /// This applies the relevant parts of the JSON-LD 1.1 IRI expansion
+    /// algorithm for property keys:
+    ///
+    /// 1. an explicit term definition in the context (a string mapping, or an
+    ///    object with `@id`), recursively resolving compact-IRI mappings;
+    /// 2. a compact IRI `prefix:suffix` whose `prefix` is defined in the
+    ///    context;
+    /// 3. an already-absolute IRI (contains a `scheme:` / `://`);
+    /// 4. `@vocab`-based expansion for plain terms.
+    ///
+    /// Under strict processing (the streaming parser's only mode) a term that
+    /// matches none of these **fails loudly** with a [`JsonLdParseError`]
+    /// rather than being silently mapped to a fabricated placeholder namespace.
     fn expand_property(property: &str, context: &Value) -> Result<String, JsonLdParseError> {
-        // Simplified context expansion - in real implementation this would be more complex
-        if property.contains(':') {
-            Ok(property.to_string())
-        } else if let Value::Object(ctx) = context {
-            if let Some(expanded) = ctx.get(property) {
-                if let Some(iri) = expanded.as_str() {
-                    Ok(iri.to_string())
-                } else {
-                    Ok(format!("http://example.org/{property}"))
+        Self::expand_term(property, context, 0)
+    }
+
+    fn expand_term(term: &str, context: &Value, depth: usize) -> Result<String, JsonLdParseError> {
+        if depth > 16 {
+            return Err(JsonLdParseError::ProcessingError(format!(
+                "cyclic JSON-LD term definition while expanding '{term}'"
+            )));
+        }
+
+        // 1. Explicit term definition in the active context.
+        if let Some(def) = Self::context_lookup(context, term) {
+            if let Some(mapping) = Self::term_definition_iri(def) {
+                if mapping != term {
+                    // The mapping itself may be a compact IRI or another term.
+                    return Self::expand_iri(&mapping, context, depth + 1);
                 }
-            } else {
-                Ok(format!("http://example.org/{property}"))
             }
-        } else {
-            Ok(format!("http://example.org/{property}"))
+        }
+
+        Self::expand_iri(term, context, depth)
+    }
+
+    /// Expand an IRI-ish string: a compact IRI, an absolute IRI, or (for a bare
+    /// term) via `@vocab`.
+    fn expand_iri(value: &str, context: &Value, depth: usize) -> Result<String, JsonLdParseError> {
+        if depth > 16 {
+            return Err(JsonLdParseError::ProcessingError(format!(
+                "cyclic JSON-LD prefix/term definition while expanding '{value}'"
+            )));
+        }
+        if let Some((prefix, suffix)) = value.split_once(':') {
+            // Blank node identifiers and scheme-relative / absolute IRIs are
+            // used verbatim.
+            if prefix.is_empty() || prefix == "_" || suffix.starts_with("//") {
+                return Ok(value.to_string());
+            }
+
+            // Compact IRI whose prefix is defined in the context.
+            if let Some(def) = Self::context_lookup(context, prefix) {
+                if let Some(prefix_iri) = Self::term_definition_iri(def) {
+                    if prefix_iri != prefix {
+                        let base = Self::expand_iri(&prefix_iri, context, depth + 1)?;
+                        return Ok(format!("{base}{suffix}"));
+                    }
+                }
+            }
+
+            // A `scheme:...` form with an unknown prefix is treated as an
+            // already-absolute IRI.
+            return Ok(value.to_string());
+        }
+
+        // No colon: a bare term. Try `@vocab`.
+        if let Some(vocab) = Self::context_vocab(context) {
+            return Ok(format!("{vocab}{value}"));
+        }
+
+        Err(JsonLdParseError::ProcessingError(format!(
+            "cannot expand JSON-LD term '{value}' to an absolute IRI: no matching term \
+             definition, prefix, or @vocab in the active context"
+        )))
+    }
+
+    /// Look up a key in a JSON-LD context, which may be a single object or an
+    /// array of context objects (later entries take precedence).
+    fn context_lookup<'a>(context: &'a Value, key: &str) -> Option<&'a Value> {
+        match context {
+            Value::Object(ctx) => ctx.get(key),
+            Value::Array(contexts) => contexts
+                .iter()
+                .rev()
+                .find_map(|c| Self::context_lookup(c, key)),
+            _ => None,
         }
     }
 
-    /// Resolve remote context (simplified)
-    async fn resolve_remote_context(_context_iri: &str) -> Result<Value, JsonLdParseError> {
-        // In real implementation, this would fetch remote contexts
-        // For now, return empty context
-        Ok(Value::Object(Map::new()))
+    /// Extract the `@vocab` mapping from a context (object or array).
+    fn context_vocab(context: &Value) -> Option<String> {
+        Self::context_lookup(context, "@vocab")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    }
+
+    /// Resolve a term definition to its raw IRI mapping. A term definition is
+    /// either a string (the IRI) or an object carrying an `@id`.
+    fn term_definition_iri(def: &Value) -> Option<String> {
+        match def {
+            Value::String(s) => Some(s.clone()),
+            Value::Object(o) => o.get("@id").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            _ => None,
+        }
+    }
+
+    /// Resolve a remote `@context` referenced by IRI.
+    ///
+    /// The streaming parser performs no network I/O of its own. Resolution is
+    /// delegated to the configured [`StreamingDocumentLoader`]; if none is
+    /// configured, this **fails loudly** rather than silently substituting an
+    /// empty context (which would corrupt every term in the document).
+    async fn resolve_remote_context(
+        context_iri: &str,
+        document_loader: &Option<Arc<StreamingDocumentLoader>>,
+    ) -> Result<Value, JsonLdParseError> {
+        let loader = document_loader.as_ref().ok_or_else(|| {
+            JsonLdParseError::ProcessingError(format!(
+                "cannot resolve remote JSON-LD context '{context_iri}': no document loader \
+                 configured. Supply one via UltraStreamingJsonLdParser::with_document_loader"
+            ))
+        })?;
+
+        let options = JsonLdLoadDocumentOptions {
+            request_profile: JsonLdProfileSet::from(super::profile::JsonLdProfile::Context),
+        };
+
+        let remote = loader(context_iri, &options).map_err(|e| {
+            JsonLdParseError::ProcessingError(format!(
+                "failed to load remote JSON-LD context '{context_iri}': {e}"
+            ))
+        })?;
+
+        let parsed: Value = serde_json::from_slice(&remote.document).map_err(|e| {
+            JsonLdParseError::ProcessingError(format!(
+                "remote JSON-LD context '{context_iri}' is not valid JSON: {e}"
+            ))
+        })?;
+
+        // A context document is conventionally `{"@context": {...}}`; unwrap the
+        // inner context so it can be used directly for term expansion.
+        let context = match parsed {
+            Value::Object(mut obj) => match obj.remove("@context") {
+                Some(inner) => inner,
+                None => Value::Object(obj),
+            },
+            other => other,
+        };
+
+        Ok(context)
     }
 
     /// Check if chunk size should be adjusted
@@ -577,6 +803,224 @@ struct ProcessingChunk {
     timestamp: Instant,
     #[allow(dead_code)]
     sequence_id: usize,
+}
+
+/// Incremental scanning state for [`TopLevelJsonSplitter`].
+#[derive(Debug, Clone, Copy)]
+enum SplitState {
+    /// Between values, skipping insignificant whitespace.
+    Idle,
+    /// Inside a `{...}` / `[...]` container that began at `start`.
+    Container {
+        start: usize,
+        depth: usize,
+        in_string: bool,
+        escaped: bool,
+    },
+    /// Inside a `"..."` string scalar that began at `start`.
+    StringScalar { start: usize, escaped: bool },
+    /// Inside a bare primitive (number / `true` / `false` / `null`) that began
+    /// at `start`.
+    Primitive { start: usize },
+}
+
+/// Reassembles a byte stream that has been split into arbitrary-boundary chunks
+/// and yields **complete** top-level JSON values.
+///
+/// A "streaming" JSON-LD parser cannot simply hand each transport chunk to
+/// `serde_json`, because chunk boundaries fall at arbitrary offsets — in the
+/// middle of an object, string, escape sequence, etc. This splitter maintains a
+/// small tokenizer state (container depth, in-string / escape flags) across
+/// chunk boundaries and only emits a byte slice once it forms a whole,
+/// self-contained top-level JSON value. It supports a single large value
+/// spanning many chunks as well as several concatenated / newline-delimited
+/// values in one stream.
+#[derive(Debug)]
+struct TopLevelJsonSplitter {
+    buf: Vec<u8>,
+    /// Scan cursor into `buf`.
+    pos: usize,
+    /// Set once the underlying reader has reached EOF.
+    eof: bool,
+    state: SplitState,
+}
+
+impl TopLevelJsonSplitter {
+    fn new() -> Self {
+        Self {
+            buf: Vec::new(),
+            pos: 0,
+            eof: false,
+            state: SplitState::Idle,
+        }
+    }
+
+    #[inline]
+    fn is_ws(byte: u8) -> bool {
+        matches!(byte, b' ' | b'\t' | b'\n' | b'\r')
+    }
+
+    /// Append freshly read bytes to the reassembly buffer.
+    fn push(&mut self, data: &[u8]) {
+        self.buf.extend_from_slice(data);
+    }
+
+    /// Signal that no further bytes will arrive.
+    fn mark_eof(&mut self) {
+        self.eof = true;
+    }
+
+    /// Extract the next complete top-level JSON value, if one is fully
+    /// available. Returns `Ok(None)` when more input is required (or the stream
+    /// is exhausted with only whitespace remaining).
+    fn next_complete_value(&mut self) -> Result<Option<Vec<u8>>, JsonLdParseError> {
+        loop {
+            match self.state {
+                SplitState::Idle => {
+                    // Drop already-consumed bytes to keep memory bounded when a
+                    // stream carries many concatenated values.
+                    if self.pos > 0 {
+                        self.buf.drain(0..self.pos);
+                        self.pos = 0;
+                    }
+                    while self.pos < self.buf.len() && Self::is_ws(self.buf[self.pos]) {
+                        self.pos += 1;
+                    }
+                    if self.pos >= self.buf.len() {
+                        self.buf.drain(0..self.pos);
+                        self.pos = 0;
+                        return Ok(None);
+                    }
+                    let start = self.pos;
+                    match self.buf[self.pos] {
+                        b'{' | b'[' => {
+                            self.pos += 1;
+                            self.state = SplitState::Container {
+                                start,
+                                depth: 1,
+                                in_string: false,
+                                escaped: false,
+                            };
+                        }
+                        b'"' => {
+                            self.pos += 1;
+                            self.state = SplitState::StringScalar {
+                                start,
+                                escaped: false,
+                            };
+                        }
+                        _ => {
+                            self.state = SplitState::Primitive { start };
+                        }
+                    }
+                }
+                SplitState::Container {
+                    start,
+                    mut depth,
+                    mut in_string,
+                    mut escaped,
+                } => {
+                    while self.pos < self.buf.len() {
+                        let byte = self.buf[self.pos];
+                        self.pos += 1;
+                        if in_string {
+                            if escaped {
+                                escaped = false;
+                            } else if byte == b'\\' {
+                                escaped = true;
+                            } else if byte == b'"' {
+                                in_string = false;
+                            }
+                        } else {
+                            match byte {
+                                b'"' => in_string = true,
+                                b'{' | b'[' => depth += 1,
+                                b'}' | b']' => {
+                                    depth -= 1;
+                                    if depth == 0 {
+                                        let value = self.buf[start..self.pos].to_vec();
+                                        self.state = SplitState::Idle;
+                                        return Ok(Some(value));
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    // Buffer exhausted mid-container; preserve state for the
+                    // next chunk.
+                    self.state = SplitState::Container {
+                        start,
+                        depth,
+                        in_string,
+                        escaped,
+                    };
+                    return Ok(None);
+                }
+                SplitState::StringScalar { start, mut escaped } => {
+                    while self.pos < self.buf.len() {
+                        let byte = self.buf[self.pos];
+                        self.pos += 1;
+                        if escaped {
+                            escaped = false;
+                        } else if byte == b'\\' {
+                            escaped = true;
+                        } else if byte == b'"' {
+                            let value = self.buf[start..self.pos].to_vec();
+                            self.state = SplitState::Idle;
+                            return Ok(Some(value));
+                        }
+                    }
+                    self.state = SplitState::StringScalar { start, escaped };
+                    return Ok(None);
+                }
+                SplitState::Primitive { start } => {
+                    while self.pos < self.buf.len() {
+                        let byte = self.buf[self.pos];
+                        if Self::is_ws(byte) || matches!(byte, b',' | b']' | b'}') {
+                            let value = self.buf[start..self.pos].to_vec();
+                            self.state = SplitState::Idle;
+                            return Ok(Some(value));
+                        }
+                        self.pos += 1;
+                    }
+                    if self.eof {
+                        // EOF terminates a trailing primitive.
+                        let value = self.buf[start..self.pos].to_vec();
+                        self.state = SplitState::Idle;
+                        if value.is_empty() {
+                            return Ok(None);
+                        }
+                        return Ok(Some(value));
+                    }
+                    self.state = SplitState::Primitive { start };
+                    return Ok(None);
+                }
+            }
+        }
+    }
+
+    /// Validate that the stream ended on a value boundary. A residual
+    /// in-progress value (unclosed container / string) means the input was
+    /// truncated at a chunk boundary — a fail-loud error rather than silent
+    /// data loss.
+    fn finish(&self) -> Result<(), JsonLdParseError> {
+        match self.state {
+            SplitState::Idle => {
+                if self.buf[self.pos..].iter().any(|b| !Self::is_ws(*b)) {
+                    return Err(JsonLdParseError::ProcessingError(
+                        "trailing non-whitespace bytes after the final JSON-LD value".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+            _ => Err(JsonLdParseError::ProcessingError(
+                "incomplete JSON-LD document: input ended in the middle of a value \
+                 (truncated at a chunk boundary or malformed JSON)"
+                    .to_string(),
+            )),
+        }
+    }
 }
 
 /// Streaming processing statistics
@@ -822,39 +1266,288 @@ impl StreamingSink for MemoryStreamingSink {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::Predicate;
     use std::io::Cursor;
 
+    /// Collect (predicate_iri, object_string) pairs from parsed triples.
+    fn predicates(triples: &[Triple]) -> Vec<String> {
+        triples
+            .iter()
+            .map(|t| match t.predicate() {
+                Predicate::NamedNode(n) => n.as_str().to_string(),
+                Predicate::Variable(v) => v.as_str().to_string(),
+            })
+            .collect()
+    }
+
+    async fn run_parse(
+        config: StreamingConfig,
+        data: &str,
+    ) -> Result<Vec<Triple>, JsonLdParseError> {
+        let mut parser = UltraStreamingJsonLdParser::new(config);
+        let reader = Cursor::new(data.as_bytes().to_vec());
+        let sink = MemoryStreamingSink::new();
+        let triples_arc = Arc::clone(&sink.triples);
+        parser.stream_parse(reader, sink).await?;
+        let triples = triples_arc.read().await.clone();
+        Ok(triples)
+    }
+
+    async fn run_parse_with_loader(
+        config: StreamingConfig,
+        data: &str,
+        loader: Arc<StreamingDocumentLoader>,
+    ) -> Result<Vec<Triple>, JsonLdParseError> {
+        let mut parser = UltraStreamingJsonLdParser::new(config).with_document_loader(loader);
+        let reader = Cursor::new(data.as_bytes().to_vec());
+        let sink = MemoryStreamingSink::new();
+        let triples_arc = Arc::clone(&sink.triples);
+        parser.stream_parse(reader, sink).await?;
+        let triples = triples_arc.read().await.clone();
+        Ok(triples)
+    }
+
     #[tokio::test]
-    async fn test_ultra_streaming_parser() {
-        let json_ld_data = r#"[
-            {
-                "@id": "http://example.org/person/1",
-                "name": "Alice",
-                "age": 30
-            },
-            {
-                "@id": "http://example.org/person/2", 
-                "name": "Bob",
-                "age": 25
-            }
+    async fn regression_streaming_array_multiple_objects() {
+        // Array of node objects with absolute-IRI predicates (no context
+        // needed). Verifies both the array handling and correct IRIs.
+        let json = r#"[
+            {"@id": "http://example.org/person/1", "http://schema.org/name": "Alice"},
+            {"@id": "http://example.org/person/2", "http://schema.org/name": "Bob"}
         ]"#;
 
-        let config = StreamingConfig::default();
-        let mut parser = UltraStreamingJsonLdParser::new(config);
-        let reader = Cursor::new(json_ld_data.as_bytes());
-        let sink = MemoryStreamingSink::new();
-
-        // Clone the Arc so we can access the data after parsing
-        let _sink_data = Arc::clone(&sink.triples);
-
-        let stats = parser
-            .stream_parse(reader, sink)
+        let triples = run_parse(StreamingConfig::default(), json)
             .await
-            .expect("async operation should succeed");
+            .expect("array document should parse");
+        assert_eq!(triples.len(), 2, "expected one triple per object");
+        for p in predicates(&triples) {
+            assert_eq!(p, "http://schema.org/name");
+        }
+    }
 
-        assert!(stats.total_bytes_processed > 0);
-        // Note: We're not actually parsing triples correctly in the test data yet
-        // The JSON-LD processing needs more work to extract triples
-        // assert!(stats.total_triples_parsed > 0);
+    #[tokio::test]
+    async fn regression_large_object_split_across_chunks() {
+        // A single object with many properties, parsed with a tiny buffer so the
+        // byte stream is split at arbitrary offsets (mid-object / mid-string).
+        // Previously every chunk was parsed independently as a whole JSON
+        // document and this failed with a serde parse error.
+        let mut props = String::new();
+        for i in 0..60 {
+            props.push_str(&format!(
+                ",\n  \"prop{i}\": \"value number {i} with spaces\""
+            ));
+        }
+        let json = format!(
+            "{{\n  \"@context\": {{\"@vocab\": \"http://example.com/vocab#\"}},\n  \
+             \"@id\": \"http://example.org/subject\"{props}\n}}"
+        );
+
+        // Small read buffer forces the ~2.6 KB document to be split across many
+        // chunk boundaries (mid-object / mid-string). Kept above ~doc_len/100 so
+        // the fixed-capacity buffer pool is not exhausted.
+        let config = StreamingConfig {
+            buffer_size: 64,
+            enable_simd: false,
+            ..Default::default()
+        };
+
+        let triples = run_parse(config, &json)
+            .await
+            .expect("large document split across chunks should parse");
+        assert_eq!(triples.len(), 60, "all 60 properties should yield triples");
+        for p in predicates(&triples) {
+            assert!(
+                p.starts_with("http://example.com/vocab#prop"),
+                "predicate should be @vocab-expanded, got {p}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn regression_large_object_split_across_chunks_simd() {
+        // Same as above but exercising the SIMD processing path.
+        let mut props = String::new();
+        for i in 0..40 {
+            props.push_str(&format!(",\n  \"p{i}\": \"v{i}\""));
+        }
+        let json = format!(
+            "{{\"@context\": {{\"@vocab\": \"http://ex.com/v#\"}}, \
+             \"@id\": \"http://example.org/s\"{props}}}"
+        );
+
+        let config = StreamingConfig {
+            buffer_size: 8,
+            enable_simd: true,
+            ..Default::default()
+        };
+
+        let triples = run_parse(config, &json)
+            .await
+            .expect("SIMD path large document should parse");
+        assert_eq!(triples.len(), 40);
+    }
+
+    #[tokio::test]
+    async fn regression_expand_property_no_fabricated_namespace() {
+        // Unmapped terms must NOT silently become http://example.org/<term>.
+        // With @vocab they expand correctly; a term mapped in the context uses
+        // its mapping.
+        let json = r#"{
+            "@context": {
+                "@vocab": "http://example.com/vocab#",
+                "name": "http://schema.org/name"
+            },
+            "@id": "http://example.org/s",
+            "name": "Alice",
+            "age": "30"
+        }"#;
+
+        let triples = run_parse(StreamingConfig::default(), json)
+            .await
+            .expect("document with @vocab should parse");
+        let preds = predicates(&triples);
+        assert!(
+            preds.contains(&"http://schema.org/name".to_string()),
+            "explicit term mapping must win: {preds:?}"
+        );
+        assert!(
+            preds.contains(&"http://example.com/vocab#age".to_string()),
+            "unmapped term must use @vocab: {preds:?}"
+        );
+        assert!(
+            !preds.iter().any(|p| p.contains("http://example.org/age")),
+            "no fabricated example.org namespace allowed: {preds:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_unmapped_term_without_vocab_fails_loud() {
+        // No @vocab, no term definition, no colon -> cannot expand. Must be an
+        // explicit error, never a fabricated IRI and never a silent success.
+        let json = r#"{"@id": "http://example.org/s", "name": "Alice"}"#;
+        let result = run_parse(StreamingConfig::default(), json).await;
+        assert!(
+            result.is_err(),
+            "unmappable term must fail loudly, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_remote_context_without_loader_fails_loud() {
+        // String @context is a remote reference. Without a configured loader we
+        // must fail loudly instead of substituting an empty context.
+        let json = r#"{"@context": "https://schema.org/", "@id": "http://example.org/s", "name": "Alice"}"#;
+        let result = run_parse(StreamingConfig::default(), json).await;
+        assert!(
+            result.is_err(),
+            "remote @context without loader must fail loudly, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_remote_context_resolved_with_loader() {
+        // With a loader, the remote context is fetched and used to expand terms
+        // to their real IRIs (not http://example.org/...).
+        let json = r#"{"@context": "https://example.test/ctx", "@id": "http://example.org/s", "name": "Alice"}"#;
+        let loader: Arc<StreamingDocumentLoader> =
+            Arc::new(|iri: &str, _opts: &JsonLdLoadDocumentOptions| {
+                assert_eq!(iri, "https://example.test/ctx");
+                Ok(JsonLdRemoteDocument {
+                    document: br#"{"@context": {"name": "https://schema.org/name"}}"#.to_vec(),
+                    document_url: iri.to_string(),
+                })
+            });
+
+        let triples = run_parse_with_loader(StreamingConfig::default(), json, loader)
+            .await
+            .expect("remote context should resolve via loader");
+        let preds = predicates(&triples);
+        assert_eq!(preds, vec!["https://schema.org/name".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn regression_remote_context_loader_failure_propagates() {
+        // A loader that errors must surface the error, not be swallowed.
+        let json = r#"{"@context": "https://broken.test/ctx", "@id": "http://example.org/s", "name": "Alice"}"#;
+        let loader: Arc<StreamingDocumentLoader> =
+            Arc::new(|_iri: &str, _opts: &JsonLdLoadDocumentOptions| {
+                Err::<JsonLdRemoteDocument, _>("network unreachable".into())
+            });
+
+        let result = run_parse_with_loader(StreamingConfig::default(), json, loader).await;
+        assert!(result.is_err(), "loader failure must propagate: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn regression_truncated_document_fails_loud() {
+        // Input truncated mid-object (never closed). Must error, not silently
+        // produce zero triples with success.
+        let json = r#"[{"@id": "http://example.org/1", "http://schema.org/name": "Alice"}"#; // missing ']'
+        let result = run_parse(StreamingConfig::default(), json).await;
+        assert!(
+            result.is_err(),
+            "truncated document must fail loudly, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn regression_splitter_reassembles_across_chunk_boundaries() {
+        // Feed a JSON object one byte at a time; the splitter must yield exactly
+        // one complete value with all bytes intact.
+        let doc = br#"{"a": "b\"c", "d": [1, 2, {"e": "}"}]}"#;
+        let mut splitter = TopLevelJsonSplitter::new();
+        let mut out = Vec::new();
+        for byte in doc.iter() {
+            splitter.push(&[*byte]);
+            while let Some(v) = splitter
+                .next_complete_value()
+                .expect("splitter should not error on valid input")
+            {
+                out.push(v);
+            }
+        }
+        splitter.mark_eof();
+        while let Some(v) = splitter
+            .next_complete_value()
+            .expect("splitter should not error at eof")
+        {
+            out.push(v);
+        }
+        splitter
+            .finish()
+            .expect("valid document should finish cleanly");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0], doc.to_vec());
+    }
+
+    #[test]
+    fn regression_splitter_yields_multiple_concatenated_values() {
+        // Newline-delimited JSON objects must be emitted individually.
+        let doc = b"{\"a\":1}\n{\"b\":2}\n[3,4]";
+        let mut splitter = TopLevelJsonSplitter::new();
+        splitter.push(doc);
+        splitter.mark_eof();
+        let mut out = Vec::new();
+        while let Some(v) = splitter.next_complete_value().expect("no error") {
+            out.push(String::from_utf8(v).expect("utf8"));
+        }
+        splitter.finish().expect("clean finish");
+        assert_eq!(out, vec!["{\"a\":1}", "{\"b\":2}", "[3,4]"]);
+    }
+
+    #[test]
+    fn regression_splitter_incomplete_container_errors_on_finish() {
+        let mut splitter = TopLevelJsonSplitter::new();
+        splitter.push(b"{\"a\": [1, 2");
+        splitter.mark_eof();
+        while splitter
+            .next_complete_value()
+            .expect("no error while draining")
+            .is_some()
+        {}
+        assert!(
+            splitter.finish().is_err(),
+            "unclosed container must be reported as truncated"
+        );
     }
 }

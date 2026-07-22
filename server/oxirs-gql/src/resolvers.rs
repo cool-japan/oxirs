@@ -410,8 +410,11 @@ impl RdfResolver {
                 Ok(Value::ListValue(graphql_subjects))
             }
             Err(err) => {
+                // Fail loud: a store error must surface as a GraphQL field error,
+                // never a fabricated empty list that a client cannot distinguish
+                // from "the store legitimately has zero subjects".
                 tracing::error!("Failed to get subjects: {}", err);
-                Ok(Value::ListValue(vec![]))
+                Err(anyhow::anyhow!("Failed to get subjects: {err}"))
             }
         }
     }
@@ -430,7 +433,7 @@ impl RdfResolver {
             }
             Err(err) => {
                 tracing::error!("Failed to get predicates: {}", err);
-                Ok(Value::ListValue(vec![]))
+                Err(anyhow::anyhow!("Failed to get predicates: {err}"))
             }
         }
     }
@@ -456,7 +459,7 @@ impl RdfResolver {
             }
             Err(err) => {
                 tracing::error!("Failed to get objects: {}", err);
-                Ok(Value::ListValue(vec![]))
+                Err(anyhow::anyhow!("Failed to get objects: {err}"))
             }
         }
     }

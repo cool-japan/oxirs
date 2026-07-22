@@ -5,6 +5,7 @@
 use super::super::helpers::get_production_model_version;
 use super::super::{
     ApiState, BatchEmbeddingRequest, BatchEmbeddingResponse, EmbeddingRequest, EmbeddingResponse,
+    FailedEmbedding,
 };
 #[cfg(feature = "api-server")]
 use axum::{extract::State, http::StatusCode, response::Json};
@@ -115,6 +116,7 @@ pub async fn embed_batch(
 
     let use_cache = request.use_cache.unwrap_or(true);
     let mut embeddings = Vec::new();
+    let mut failed: Vec<FailedEmbedding> = Vec::new();
     let mut cache_hits = 0;
     let mut cache_misses = 0;
 
@@ -137,7 +139,15 @@ pub async fn embed_batch(
                         cache_misses += 1;
                         (emb, false)
                     }
-                    Err(_) => continue, // Skip failed embeddings
+                    Err(e) => {
+                        // Record the failure instead of silently dropping it, so
+                        // the client can tell which entities were not embedded.
+                        failed.push(FailedEmbedding {
+                            entity: entity.clone(),
+                            error: e.to_string(),
+                        });
+                        continue;
+                    }
                 }
             }
         } else {
@@ -146,7 +156,13 @@ pub async fn embed_batch(
                     cache_misses += 1;
                     (emb, false)
                 }
-                Err(_) => continue,
+                Err(e) => {
+                    failed.push(FailedEmbedding {
+                        entity: entity.clone(),
+                        error: e.to_string(),
+                    });
+                    continue;
+                }
             }
         };
 
@@ -169,6 +185,7 @@ pub async fn embed_batch(
 
     let response = BatchEmbeddingResponse {
         embeddings,
+        failed,
         total_time_ms: total_time,
         cache_hits,
         cache_misses,

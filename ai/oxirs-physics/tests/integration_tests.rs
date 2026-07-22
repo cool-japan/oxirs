@@ -178,6 +178,7 @@ async fn test_simulation_with_custom_parameters() {
         time_steps: 25,
         material_properties,
         constraints: Vec::new(),
+        defaulted_fields: Vec::new(),
     };
 
     // Validate parameters
@@ -306,6 +307,7 @@ async fn test_error_handling() {
         time_steps: 10,
         material_properties: HashMap::new(),
         constraints: Vec::new(),
+        defaulted_fields: Vec::new(),
     };
 
     assert!(validator.validate_parameters(&params).is_err());

@@ -171,6 +171,17 @@ impl<'a> UpdateExecutor<'a> {
         self
     }
 
+    /// Whether this executor was created with transaction support requested
+    /// (via [`UpdateExecutor::with_transaction`]).
+    ///
+    /// Note that DELETE/INSERT-WHERE mutations are always applied with
+    /// compensating rollback on failure regardless of this flag, because the
+    /// underlying store exposes no native transaction handle; this getter simply
+    /// reports the requested mode.
+    pub fn is_transactional(&self) -> bool {
+        self.transaction_mode
+    }
+
     /// Get execution statistics
     pub fn statistics(&self) -> &UpdateStatistics {
         &self.stats
@@ -186,11 +197,11 @@ impl<'a> UpdateExecutor<'a> {
         let start_time = std::time::Instant::now();
         self.stats.total_operations += 1;
 
-        // Start transaction if in transaction mode
-        if self.transaction_mode {
-            // Note: Transaction support would be implemented here
-            // self.store.transaction_begin()?;
-        }
+        // The `oxirs_core::Store` trait exposes no native begin/commit/rollback,
+        // so atomicity is enforced per data-mutating operation via compensating
+        // rollback (see `rollback_delete_insert`): a mid-operation store failure
+        // undoes the already-applied mutations before the error is returned,
+        // rather than leaving the store partially mutated.
 
         let result = match operation {
             UpdateOperation::InsertData { data } => self.execute_insert_data_enhanced(data),
@@ -218,21 +229,9 @@ impl<'a> UpdateExecutor<'a> {
             } => self.execute_load(source, graph.as_ref(), *silent),
         };
 
-        // Handle transaction completion
-        match &result {
-            Ok(_) => {
-                if self.transaction_mode {
-                    // Note: Transaction commit would be implemented here
-                    // self.store.transaction_commit()?;
-                }
-            }
-            Err(_) => {
-                if self.transaction_mode {
-                    // Note: Transaction rollback would be implemented here
-                    // self.store.transaction_rollback()?;
-                }
-            }
-        }
+        // Per-operation atomicity is handled inside each executor (compensating
+        // rollback on failure); there is no separate request-level commit to run
+        // here because the underlying store has no transaction handle.
 
         // Update statistics
         let execution_time = start_time.elapsed();
@@ -507,15 +506,13 @@ impl<'a> UpdateExecutor<'a> {
         // Track quads to insert
         let mut quads_to_insert = Vec::new();
 
-        // For each binding, instantiate template
+        // For each binding, instantiate template. An unbound variable skips the
+        // triple (correct SPARQL semantics); a genuine instantiation error is
+        // propagated rather than swallowed (fail-loud contract on a write path).
         for binding in &bindings {
             for quad_pattern in template {
-                match self.instantiate_template(quad_pattern, binding) {
-                    Ok(quad) => quads_to_insert.push(quad),
-                    Err(e) => {
-                        // Log the error but continue with other insertions
-                        eprintln!("Warning: Failed to instantiate template: {e}");
-                    }
+                if let Some(quad) = self.instantiate_template(quad_pattern, binding)? {
+                    quads_to_insert.push(quad);
                 }
             }
         }
@@ -550,7 +547,7 @@ impl<'a> UpdateExecutor<'a> {
         delete_template: &[QuadPattern],
         insert_template: &[QuadPattern],
         pattern: &Algebra,
-        _using: &Option<Vec<GraphReference>>,
+        using: &Option<Vec<GraphReference>>,
     ) -> Result<UpdateResult, OxirsError> {
         let mut result = UpdateResult::default();
 
@@ -558,8 +555,9 @@ impl<'a> UpdateExecutor<'a> {
             return Ok(result); // Nothing to do
         }
 
-        // Evaluate pattern to get bindings
-        let bindings = self.evaluate_pattern(pattern)?;
+        // Evaluate pattern to get bindings, honoring any USING clause so the
+        // WHERE reads exactly the graphs the update author scoped it to.
+        let bindings = self.evaluate_pattern_with_using(pattern, using.as_deref())?;
 
         if bindings.is_empty() {
             return Ok(result); // No matches
@@ -570,11 +568,9 @@ impl<'a> UpdateExecutor<'a> {
         if !delete_template.is_empty() {
             for binding in &bindings {
                 for quad_pattern in delete_template {
-                    match self.instantiate_template(quad_pattern, binding) {
-                        Ok(quad) => quads_to_delete.push(quad),
-                        Err(e) => {
-                            eprintln!("Warning: Failed to instantiate delete template: {e}");
-                        }
+                    // Unbound variable -> skip triple; genuine error -> propagate.
+                    if let Some(quad) = self.instantiate_template(quad_pattern, binding)? {
+                        quads_to_delete.push(quad);
                     }
                 }
             }
@@ -589,11 +585,9 @@ impl<'a> UpdateExecutor<'a> {
         if !insert_template.is_empty() {
             for binding in &bindings {
                 for quad_pattern in insert_template {
-                    match self.instantiate_template(quad_pattern, binding) {
-                        Ok(quad) => quads_to_insert.push(quad),
-                        Err(e) => {
-                            eprintln!("Warning: Failed to instantiate insert template: {e}");
-                        }
+                    // Unbound variable -> skip triple; genuine error -> propagate.
+                    if let Some(quad) = self.instantiate_template(quad_pattern, binding)? {
+                        quads_to_insert.push(quad);
                     }
                 }
             }
@@ -603,45 +597,71 @@ impl<'a> UpdateExecutor<'a> {
             quads_to_insert.dedup();
         }
 
-        // Phase 3: Execute deletions first (important for atomicity)
-        if !quads_to_delete.is_empty() {
-            if quads_to_delete.len() > self.batch_size {
-                for chunk in quads_to_delete.chunks(self.batch_size) {
-                    for quad in chunk {
-                        if self.store.remove(quad)? {
-                            result.deleted += 1;
-                        }
-                    }
-                    self.stats.batch_count += 1;
+        // Phases 3 & 4 (delete then insert) are applied atomically: the store
+        // trait exposes no native transactions, so a mid-operation store failure
+        // is undone by compensating operations (re-insert removed quads, remove
+        // inserted quads) before the error is propagated. SPARQL 1.1 requires an
+        // update to be atomic; without this a failed insert would leave the store
+        // with the deletes already applied.
+        let mut applied_deletes: Vec<&Quad> = Vec::new();
+        let mut applied_inserts: Vec<&Quad> = Vec::new();
+
+        // Phase 3: Execute deletions first.
+        for quad in &quads_to_delete {
+            match self.store.remove(quad) {
+                Ok(true) => {
+                    applied_deletes.push(quad);
+                    result.deleted += 1;
                 }
-            } else {
-                for quad in quads_to_delete {
-                    if self.store.remove(&quad)? {
-                        result.deleted += 1;
-                    }
+                Ok(false) => {
+                    // Quad was not present; nothing to compensate for it.
+                }
+                Err(e) => {
+                    Self::rollback_delete_insert(self.store, &applied_deletes, &applied_inserts);
+                    return Err(e);
                 }
             }
         }
 
-        // Phase 4: Execute insertions
-        if !quads_to_insert.is_empty() {
-            if quads_to_insert.len() > self.batch_size {
-                for chunk in quads_to_insert.chunks(self.batch_size) {
-                    for quad in chunk {
-                        self.store.insert(quad)?;
-                        result.inserted += 1;
-                    }
-                    self.stats.batch_count += 1;
-                }
-            } else {
-                for quad in quads_to_insert {
-                    self.store.insert(&quad)?;
+        // Phase 4: Execute insertions.
+        for quad in &quads_to_insert {
+            match self.store.insert(quad) {
+                Ok(()) => {
+                    applied_inserts.push(quad);
                     result.inserted += 1;
                 }
+                Err(e) => {
+                    Self::rollback_delete_insert(self.store, &applied_deletes, &applied_inserts);
+                    return Err(e);
+                }
             }
+        }
+
+        if quads_to_delete.len() > self.batch_size || quads_to_insert.len() > self.batch_size {
+            self.stats.batch_count += 1;
         }
 
         Ok(result)
+    }
+
+    /// Best-effort compensating rollback for a partially-applied DELETE/INSERT.
+    ///
+    /// Re-inserts every quad that was removed and removes every quad that was
+    /// inserted, restoring the store to its pre-operation state. Compensation is
+    /// applied in reverse and any secondary failure is deliberately ignored (the
+    /// primary error is already being propagated); the store has no native
+    /// transaction to fall back on.
+    fn rollback_delete_insert(
+        store: &mut dyn Store,
+        applied_deletes: &[&Quad],
+        applied_inserts: &[&Quad],
+    ) {
+        for quad in applied_inserts.iter().rev() {
+            let _ = store.remove(quad);
+        }
+        for quad in applied_deletes.iter().rev() {
+            let _ = store.insert(quad);
+        }
     }
 
     /// Execute CLEAR
@@ -964,18 +984,65 @@ impl<'a> UpdateExecutor<'a> {
         &mut self,
         pattern: &Algebra,
     ) -> Result<Vec<HashMap<String, oxirs_core::model::Term>>, OxirsError> {
+        self.evaluate_pattern_with_using(pattern, None)
+    }
+
+    /// Evaluate a WHERE pattern, optionally scoping the active RDF dataset to a
+    /// SPARQL 1.1 `USING` clause (§3.1.3 / §4.3).
+    ///
+    /// When `using` is `Some(non-empty)`, the WHERE clause's active default
+    /// graph is the union of the `USING` graphs (implemented via
+    /// [`crate::executor::DatasetView`]) rather than the store's default graph,
+    /// so the pattern reads exactly the graphs the update author scoped it to.
+    /// A `USING` entry that is not a concrete IRI fails loud rather than being
+    /// silently ignored (never evaluate against the full store while advertising
+    /// `USING` support).
+    fn evaluate_pattern_with_using(
+        &mut self,
+        pattern: &Algebra,
+        using: Option<&[GraphReference]>,
+    ) -> Result<Vec<HashMap<String, oxirs_core::model::Term>>, OxirsError> {
+        use crate::executor::dataset::DatasetView;
         use crate::executor::{QueryExecutor, StoreRefDataset};
+
+        // Resolve the USING graph references into concrete named graphs up front
+        // so an unsupported reference fails loud before any evaluation.
+        let using_graphs: Vec<NamedNode> = match using {
+            Some(refs) if !refs.is_empty() => refs
+                .iter()
+                .map(|graph_ref| match graph_ref {
+                    GraphReference::Iri(iri) => NamedNode::new(iri).map_err(|e| {
+                        OxirsError::Query(format!("Invalid USING graph IRI `{iri}`: {e}"))
+                    }),
+                    GraphReference::Default => Err(OxirsError::Query(
+                        "USING requires a graph IRI; the default graph cannot be a USING target"
+                            .to_string(),
+                    )),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            _ => Vec::new(),
+        };
 
         // Run the pattern against the real store. Scope the immutable reborrow
         // of `self.store` so the store is free for mutation afterwards.
         let solution = {
             let store_ref: &dyn Store = &*self.store;
-            let dataset = StoreRefDataset::new(store_ref);
+            let base = StoreRefDataset::new(store_ref);
             let mut executor = QueryExecutor::new();
-            let (solution, _stats) = executor
-                .execute(pattern, &dataset)
-                .map_err(|e| OxirsError::Query(e.to_string()))?;
-            solution
+            if using_graphs.is_empty() {
+                let (solution, _stats) = executor
+                    .execute(pattern, &base)
+                    .map_err(|e| OxirsError::Query(e.to_string()))?;
+                solution
+            } else {
+                // USING <g...> redefines the default graph as the union of the
+                // named USING graphs (FROM semantics).
+                let dataset = DatasetView::new(&base, using_graphs, Vec::new());
+                let (solution, _stats) = executor
+                    .execute(pattern, &dataset)
+                    .map_err(|e| OxirsError::Query(e.to_string()))?;
+                solution
+            }
         };
 
         // Convert results to the expected format.
@@ -1002,10 +1069,13 @@ impl<'a> UpdateExecutor<'a> {
     ) -> Result<Vec<Quad>, OxirsError> {
         let mut quads = Vec::new();
 
-        // Extract triple patterns from the algebra
-        let triple_patterns = self.extract_triple_patterns(pattern);
+        // Extract triple patterns paired with their enclosing GRAPH (if any), so
+        // a `WITH <g> DELETE WHERE { … }` (whose pattern is wrapped in
+        // `GRAPH <g> { … }`) deletes from `<g>` rather than the default graph.
+        let mut triple_patterns: Vec<(TriplePattern, Option<NamedNode>)> = Vec::new();
+        self.extract_triple_patterns_with_graph(pattern, None, &mut triple_patterns)?;
 
-        for triple_pattern in triple_patterns {
+        for (triple_pattern, graph) in triple_patterns {
             // Instantiate each term with the binding
             let subject_term = self.instantiate_algebra_term(&triple_pattern.subject, binding)?;
             let predicate_term =
@@ -1017,8 +1087,11 @@ impl<'a> UpdateExecutor<'a> {
             let predicate = self.core_term_to_predicate(predicate_term)?;
             let object = self.core_term_to_object(object_term)?;
 
-            // Default graph unless specified otherwise
-            let graph_name = GraphName::DefaultGraph;
+            // Use the enclosing GRAPH's name when present, else the default graph.
+            let graph_name = match graph {
+                Some(node) => GraphName::NamedNode(node),
+                None => GraphName::DefaultGraph,
+            };
 
             // Create the quad
             let quad = Quad::new(subject, predicate, object, graph_name);
@@ -1028,15 +1101,25 @@ impl<'a> UpdateExecutor<'a> {
         Ok(quads)
     }
 
-    /// Instantiate a template with bindings
+    /// Instantiate a template with bindings.
+    ///
+    /// Returns `Ok(None)` when a variable in the template is unbound for this
+    /// binding (the triple is skipped, per SPARQL semantics); returns `Err` for
+    /// any genuine instantiation failure (e.g. an invalid IRI produced by a
+    /// binding), which must abort the update rather than be silently dropped.
     fn instantiate_template(
         &self,
         template: &QuadPattern,
         binding: &HashMap<String, oxirs_core::model::Term>,
-    ) -> Result<Quad, OxirsError> {
-        let subject = self.instantiate_term(&template.subject, binding)?;
-        let predicate = self.instantiate_term(&template.predicate, binding)?;
-        let object = self.instantiate_term(&template.object, binding)?;
+    ) -> Result<Option<Quad>, OxirsError> {
+        let (Some(subject), Some(predicate), Some(object)) = (
+            self.instantiate_term(&template.subject, binding)?,
+            self.instantiate_term(&template.predicate, binding)?,
+            self.instantiate_term(&template.object, binding)?,
+        ) else {
+            // At least one variable is unbound for this binding: skip the triple.
+            return Ok(None);
+        };
 
         let subject = self.term_to_subject(&subject)?;
         let predicate = self.term_to_predicate(&predicate)?;
@@ -1050,40 +1133,63 @@ impl<'a> UpdateExecutor<'a> {
             .map(GraphName::NamedNode)
             .unwrap_or(GraphName::DefaultGraph);
 
-        Ok(Quad::new(subject, predicate, object, graph_name))
+        Ok(Some(Quad::new(subject, predicate, object, graph_name)))
     }
 
-    /// Instantiate a term with bindings
+    /// Instantiate a term with bindings.
+    ///
+    /// Returns `Ok(Some(term))` for a concrete term, `Ok(None)` when `term` is a
+    /// variable that is unbound in `binding` (correct SPARQL semantics: the
+    /// enclosing template triple is skipped, silently), and `Err` for a genuine
+    /// conversion failure that must abort the update (fail-loud contract).
     fn instantiate_term(
         &self,
         term: &Term,
         binding: &HashMap<String, oxirs_core::model::Term>,
-    ) -> Result<Term, OxirsError> {
+    ) -> Result<Option<Term>, OxirsError> {
         match term {
-            Term::Variable(var) => binding
-                .get(var.as_str())
-                .map(|t| self.core_term_to_arq_term(t))
-                .ok_or_else(|| OxirsError::Query(format!("Unbound variable: {var}"))),
-            _ => Ok(term.clone()),
+            Term::Variable(var) => match binding.get(var.as_str()) {
+                Some(t) => self.core_term_to_arq_term(t).map(Some),
+                None => Ok(None),
+            },
+            _ => Ok(Some(term.clone())),
         }
     }
 
-    /// Convert core term to ARQ term
-    fn core_term_to_arq_term(&self, term: &oxirs_core::model::Term) -> Term {
+    /// Convert core term to ARQ (algebra) term.
+    ///
+    /// RDF-1.2 quoted triples are converted recursively into an algebra
+    /// `QuotedTriple`. A bare `Variable` term cannot appear in stored RDF data
+    /// used to instantiate an update template, so it fails loud rather than
+    /// panicking (no-panic-on-user-input policy).
+    fn core_term_to_arq_term(&self, term: &oxirs_core::model::Term) -> Result<Term, OxirsError> {
+        use oxirs_core::model::Term as CoreTerm;
         match term {
-            oxirs_core::model::Term::NamedNode(n) => Term::Iri(n.clone()),
-            oxirs_core::model::Term::BlankNode(b) => Term::BlankNode(b.as_str().to_string()),
-            oxirs_core::model::Term::Literal(l) => {
+            CoreTerm::NamedNode(n) => Ok(Term::Iri(n.clone())),
+            CoreTerm::BlankNode(b) => Ok(Term::BlankNode(b.as_str().to_string())),
+            CoreTerm::Literal(l) => {
                 let lit = crate::algebra::Literal {
                     value: l.value().to_string(),
                     language: l.language().map(|s| s.to_string()),
                     datatype: Some(l.datatype().into()),
                 };
-                Term::Literal(lit)
+                Ok(Term::Literal(lit))
             }
-            oxirs_core::model::Term::Variable(_) | oxirs_core::model::Term::QuotedTriple(_) => {
-                panic!("Variables and quoted triples not supported in update operations")
+            CoreTerm::QuotedTriple(qt) => {
+                let subject =
+                    self.core_term_to_arq_term(&CoreTerm::from_subject(qt.subject()))?;
+                let predicate =
+                    self.core_term_to_arq_term(&CoreTerm::from_predicate(qt.predicate()))?;
+                let object = self.core_term_to_arq_term(&CoreTerm::from_object(qt.object()))?;
+                Ok(Term::QuotedTriple(Box::new(crate::algebra::TriplePattern {
+                    subject,
+                    predicate,
+                    object,
+                })))
             }
+            CoreTerm::Variable(v) => Err(OxirsError::Query(format!(
+                "Variable term `{v}` is not valid in stored RDF data for update template instantiation"
+            ))),
         }
     }
 
@@ -1134,43 +1240,50 @@ impl<'a> UpdateExecutor<'a> {
 
     /// Extract triple patterns from algebra expression
     #[allow(clippy::only_used_in_recursion)]
-    fn extract_triple_patterns(&self, algebra: &Algebra) -> Vec<TriplePattern> {
-        let mut patterns = Vec::new();
-
+    /// Collect the triple patterns of an algebra tree, pairing each with the
+    /// name of the enclosing `GRAPH` (concrete IRI) or `None` for the default
+    /// graph. A `GRAPH ?var { … }` (variable graph) resolves per binding at a
+    /// higher level and is left as `None` here; a nested named graph overrides
+    /// the outer one, matching SPARQL scoping.
+    #[allow(clippy::only_used_in_recursion)]
+    fn extract_triple_patterns_with_graph(
+        &self,
+        algebra: &Algebra,
+        current_graph: Option<&NamedNode>,
+        out: &mut Vec<(TriplePattern, Option<NamedNode>)>,
+    ) -> Result<(), OxirsError> {
         match algebra {
             Algebra::Bgp(bgp_patterns) => {
-                patterns.extend(bgp_patterns.iter().cloned());
+                for p in bgp_patterns {
+                    out.push((p.clone(), current_graph.cloned()));
+                }
             }
-            Algebra::Join { left, right } => {
-                patterns.extend(self.extract_triple_patterns(left));
-                patterns.extend(self.extract_triple_patterns(right));
+            Algebra::Graph { graph, pattern } => match graph {
+                Term::Iri(node) => {
+                    self.extract_triple_patterns_with_graph(pattern, Some(node), out)?;
+                }
+                _ => {
+                    self.extract_triple_patterns_with_graph(pattern, current_graph, out)?;
+                }
+            },
+            Algebra::Join { left, right }
+            | Algebra::Union { left, right }
+            | Algebra::Minus { left, right } => {
+                self.extract_triple_patterns_with_graph(left, current_graph, out)?;
+                self.extract_triple_patterns_with_graph(right, current_graph, out)?;
             }
             Algebra::LeftJoin { left, right, .. } => {
-                patterns.extend(self.extract_triple_patterns(left));
-                patterns.extend(self.extract_triple_patterns(right));
+                self.extract_triple_patterns_with_graph(left, current_graph, out)?;
+                self.extract_triple_patterns_with_graph(right, current_graph, out)?;
             }
-            Algebra::Union { left, right } => {
-                patterns.extend(self.extract_triple_patterns(left));
-                patterns.extend(self.extract_triple_patterns(right));
+            Algebra::Filter { pattern, .. }
+            | Algebra::Extend { pattern, .. }
+            | Algebra::Service { pattern, .. } => {
+                self.extract_triple_patterns_with_graph(pattern, current_graph, out)?;
             }
-            Algebra::Filter { pattern, .. } => {
-                patterns.extend(self.extract_triple_patterns(pattern));
-            }
-            Algebra::Extend { pattern, .. } => {
-                patterns.extend(self.extract_triple_patterns(pattern));
-            }
-            Algebra::Minus { left, right } => {
-                patterns.extend(self.extract_triple_patterns(left));
-                patterns.extend(self.extract_triple_patterns(right));
-            }
-            Algebra::Service { pattern, .. } => {
-                patterns.extend(self.extract_triple_patterns(pattern));
-            }
-            // For other algebra types, we don't extract patterns
             _ => {}
         }
-
-        patterns
+        Ok(())
     }
 
     /// Instantiate an algebra term with variable bindings
@@ -1462,5 +1575,100 @@ mod tests {
 
         // Just verify the test structure compiles
         assert!(validation_result.is_ok());
+    }
+
+    #[test]
+    fn regression_core_term_to_arq_term_quoted_triple_no_panic() {
+        use oxirs_core::model::star::QuotedTriple;
+        use oxirs_core::model::{Literal as CoreLiteral, NamedNode as CoreNamedNode, Triple};
+        use oxirs_core::rdf_store::ConcreteStore;
+
+        let mut store = ConcreteStore::new().expect("create store");
+        let executor = UpdateExecutor::new(&mut store);
+
+        // << :s :p "o" >> as a stored object term must convert, not panic.
+        let inner = Triple::new(
+            CoreNamedNode::new("http://ex/s").expect("s"),
+            CoreNamedNode::new("http://ex/p").expect("p"),
+            CoreLiteral::new("o"),
+        );
+        let quoted = oxirs_core::model::Term::QuotedTriple(Box::new(QuotedTriple::new(inner)));
+        let converted = executor
+            .core_term_to_arq_term(&quoted)
+            .expect("quoted triple must convert without panicking");
+        assert!(matches!(converted, Term::QuotedTriple(_)));
+
+        // A bare Variable stored term fails loud rather than panicking.
+        let var_term =
+            oxirs_core::model::Term::Variable(oxirs_core::model::Variable::new("x").expect("var"));
+        assert!(executor.core_term_to_arq_term(&var_term).is_err());
+    }
+
+    #[test]
+    fn regression_delete_insert_where_honors_using_clause() {
+        use oxirs_core::model::{Literal as CoreLiteral, NamedNode, Quad};
+        use oxirs_core::rdf_store::{ConcreteStore, Store};
+
+        let mut store = ConcreteStore::new().expect("create store");
+
+        let s1 = NamedNode::new("http://ex/s1").expect("iri");
+        let s2 = NamedNode::new("http://ex/s2").expect("iri");
+        let p = NamedNode::new("http://ex/p").expect("iri");
+        let g1 = NamedNode::new("http://ex/g1").expect("iri");
+        let g2 = NamedNode::new("http://ex/g2").expect("iri");
+
+        store
+            .insert(&Quad::new(
+                s1.clone(),
+                p.clone(),
+                CoreLiteral::new("v1"),
+                GraphName::NamedNode(g1.clone()),
+            ))
+            .expect("insert g1");
+        store
+            .insert(&Quad::new(
+                s2.clone(),
+                p.clone(),
+                CoreLiteral::new("v2"),
+                GraphName::NamedNode(g2.clone()),
+            ))
+            .expect("insert g2");
+
+        let pattern = Algebra::Bgp(vec![TriplePattern {
+            subject: Term::Variable(Variable::new("s").expect("var")),
+            predicate: Term::Iri(p.clone()),
+            object: Term::Variable(Variable::new("o").expect("var")),
+        }]);
+
+        let mut executor = UpdateExecutor::new(&mut store);
+
+        // USING <g1>: WHERE reads only g1 -> exactly one binding (s1).
+        let using_g1 = [GraphReference::Iri("http://ex/g1".to_string())];
+        let bindings = executor
+            .evaluate_pattern_with_using(&pattern, Some(&using_g1))
+            .expect("using g1");
+        assert_eq!(bindings.len(), 1, "USING <g1> must scope WHERE to g1 only");
+
+        // USING <g2>: exactly one binding (s2).
+        let using_g2 = [GraphReference::Iri("http://ex/g2".to_string())];
+        let bindings = executor
+            .evaluate_pattern_with_using(&pattern, Some(&using_g2))
+            .expect("using g2");
+        assert_eq!(bindings.len(), 1, "USING <g2> must scope WHERE to g2 only");
+
+        // No USING: default graph is empty (all data is in named graphs).
+        let bindings = executor
+            .evaluate_pattern_with_using(&pattern, None)
+            .expect("no using");
+        assert!(
+            bindings.is_empty(),
+            "without USING the default graph is empty here"
+        );
+
+        // USING with the default-graph target is invalid -> fail loud.
+        let using_default = [GraphReference::Default];
+        assert!(executor
+            .evaluate_pattern_with_using(&pattern, Some(&using_default))
+            .is_err());
     }
 }

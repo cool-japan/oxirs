@@ -37,7 +37,26 @@ pub struct GraphQLServerConfig {
     pub cors_enabled: bool,
     /// Allowed CORS origins (None means all origins allowed)
     pub cors_origins: Option<Vec<String>>,
+    /// Maximum number of concurrently-served TCP connections. Excess
+    /// connections back-pressure (wait for a slot) rather than being accepted
+    /// unbounded, protecting against FD/memory exhaustion.
+    pub max_connections: usize,
+    /// Maximum accepted request body size in bytes. A `POST /graphql` whose
+    /// `Content-Length` exceeds this is rejected with `413 Payload Too Large`
+    /// before the body is read, so a large upload cannot OOM the process.
+    pub max_body_size: usize,
+    /// Hard upper bound on how long a single connection may live. Bounds
+    /// slow-client (Slowloris) attacks that would otherwise pin a connection
+    /// indefinitely.
+    pub connection_timeout: std::time::Duration,
 }
+
+/// Default maximum number of concurrent connections.
+const DEFAULT_MAX_CONNECTIONS: usize = 1024;
+/// Default maximum request body size (2 MiB).
+const DEFAULT_MAX_BODY_SIZE: usize = 2 * 1024 * 1024;
+/// Default per-connection lifetime bound.
+const DEFAULT_CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 impl Default for GraphQLServerConfig {
     fn default() -> Self {
@@ -49,6 +68,9 @@ impl Default for GraphQLServerConfig {
             max_query_complexity: Some(1000),
             cors_enabled: true,
             cors_origins: None, // Allow all origins by default
+            max_connections: DEFAULT_MAX_CONNECTIONS,
+            max_body_size: DEFAULT_MAX_BODY_SIZE,
+            connection_timeout: DEFAULT_CONNECTION_TIMEOUT,
         }
     }
 }
@@ -101,13 +123,40 @@ impl JuniperGraphQLServer {
         info!("GraphQL server running on http://{}", addr);
         info!("GraphQL endpoint: http://{}/graphql", addr);
 
-        // Accept connections in a loop
+        // Bound the number of concurrently-served connections.
+        let connection_semaphore = Arc::new(tokio::sync::Semaphore::new(config.max_connections));
+        let connection_timeout = config.connection_timeout;
+
+        // Graceful shutdown on Ctrl-C / SIGINT.
+        let shutdown = async {
+            if let Err(e) = tokio::signal::ctrl_c().await {
+                error!("Failed to install shutdown signal handler: {}", e);
+            }
+        };
+        tokio::pin!(shutdown);
+
+        // Accept connections until a shutdown signal arrives.
         loop {
-            let (stream, _) = match listener.accept().await {
-                Ok(result) => result,
-                Err(e) => {
-                    error!("Failed to accept connection: {}", e);
-                    continue;
+            let (stream, _peer) = tokio::select! {
+                accepted = listener.accept() => match accepted {
+                    Ok(result) => result,
+                    Err(e) => {
+                        error!("Failed to accept connection: {}", e);
+                        continue;
+                    }
+                },
+                _ = &mut shutdown => {
+                    info!("Shutdown signal received; stopping accept loop");
+                    break;
+                }
+            };
+
+            // Acquire a connection slot (back-pressure instead of unbounded growth).
+            let permit = match Arc::clone(&connection_semaphore).acquire_owned().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    // Semaphore closed — server is shutting down.
+                    break;
                 }
             };
 
@@ -115,8 +164,12 @@ impl JuniperGraphQLServer {
             let context_clone = context.clone();
             let config_clone = config.clone();
 
-            // Handle each connection in a separate task
+            // Handle each connection in a separate task.
             tokio::spawn(async move {
+                // Hold the permit for the lifetime of the connection; it is
+                // released (slot freed) when this task ends.
+                let _permit = permit;
+
                 let io = TokioIo::new(stream);
                 let builder = Builder::new(TokioExecutor::new());
 
@@ -129,11 +182,38 @@ impl JuniperGraphQLServer {
                     )
                 });
 
-                if let Err(e) = builder.serve_connection(io, service).await {
-                    error!("Connection error: {}", e);
+                // Bound total connection lifetime to mitigate slow-client attacks.
+                match tokio::time::timeout(
+                    connection_timeout,
+                    builder.serve_connection(io, service),
+                )
+                .await
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => error!("Connection error: {}", e),
+                    Err(_) => warn!(
+                        "Connection timed out after {:?}; closing",
+                        connection_timeout
+                    ),
                 }
             });
         }
+
+        // Drain in-flight connections: acquiring all permits proves every
+        // outstanding connection task has released its slot.
+        info!("Draining in-flight connections before shutdown");
+        connection_semaphore.close();
+        // Best-effort bounded drain.
+        let drain_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+        while connection_semaphore.available_permits() < config.max_connections {
+            if tokio::time::Instant::now() >= drain_deadline {
+                warn!("Drain timeout reached; forcing shutdown");
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        info!("GraphQL server shut down cleanly");
+        Ok(())
     }
 
     /// Handle individual HTTP requests
@@ -196,6 +276,29 @@ impl JuniperGraphQLServer {
             // Main GraphQL endpoint
             (&Method::GET, "/graphql") | (&Method::POST, "/graphql") => {
                 debug!("Processing GraphQL request");
+
+                // Reject oversized request bodies before reading them (guards
+                // against a large POST OOM-ing the process).
+                if let Some(len) = req
+                    .headers()
+                    .get(hyper::header::CONTENT_LENGTH)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<usize>().ok())
+                {
+                    if len > config.max_body_size {
+                        warn!(
+                            "Rejecting request: body {} bytes exceeds limit {}",
+                            len, config.max_body_size
+                        );
+                        return Ok(response_builder
+                            .status(StatusCode::PAYLOAD_TOO_LARGE)
+                            .header("content-type", "application/json")
+                            .body(
+                                r#"{"errors":[{"message":"Request body too large"}]}"#.to_string(),
+                            )?);
+                    }
+                }
+
                 let mut response = graphql(schema, Arc::new(context), req).await;
 
                 // Add CORS headers to GraphQL response
@@ -657,5 +760,65 @@ mod tests {
         // 2. Make HTTP requests to test endpoints
         // 3. Verify responses
         // This requires more complex test infrastructure
+    }
+
+    #[test]
+    fn regression_hardening_defaults_present() {
+        let config = GraphQLServerConfig::default();
+        assert_eq!(config.max_connections, DEFAULT_MAX_CONNECTIONS);
+        assert_eq!(config.max_body_size, DEFAULT_MAX_BODY_SIZE);
+        assert_eq!(config.connection_timeout, DEFAULT_CONNECTION_TIMEOUT);
+        assert!(config.max_connections > 0, "must cap connections");
+        assert!(config.max_body_size > 0, "must cap body size");
+    }
+
+    #[tokio::test]
+    async fn regression_oversized_body_rejected_with_413() {
+        // Find a free port, then hand it to the server.
+        let probe = std::net::TcpListener::bind("127.0.0.1:0").expect("bind probe");
+        let addr = probe.local_addr().expect("addr");
+        drop(probe);
+
+        let store = Arc::new(RdfStore::new().expect("store"));
+        let config = GraphQLServerConfig {
+            max_body_size: 16,
+            connection_timeout: std::time::Duration::from_secs(5),
+            ..Default::default()
+        };
+        let server = JuniperGraphQLServer::with_config(store, config);
+
+        let server_task = tokio::spawn(async move {
+            let _ = server.start(addr).await;
+        });
+
+        // Wait until the server is accepting connections.
+        let client = reqwest::Client::new();
+        let url = format!("http://{addr}/graphql");
+        let mut connected = false;
+        for _ in 0..50 {
+            if tokio::net::TcpStream::connect(addr).await.is_ok() {
+                connected = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert!(connected, "server did not start listening");
+
+        // Body far larger than the 16-byte cap must be rejected with 413.
+        let big_body = "x".repeat(4096);
+        let resp = client
+            .post(&url)
+            .header("content-type", "application/json")
+            .body(big_body)
+            .send()
+            .await
+            .expect("request sent");
+        assert_eq!(
+            resp.status().as_u16(),
+            413,
+            "oversized body must be rejected with 413"
+        );
+
+        server_task.abort();
     }
 }

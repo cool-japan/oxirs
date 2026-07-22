@@ -240,6 +240,11 @@ impl MemoryMappedVectorIndex {
 
         if uri_offset > 0 {
             if let Some(ref mmap) = *self.data_mmap.read() {
+                // Guard against a stale/oversized offset (e.g. a truncated or
+                // externally-corrupted file): never index past the mapping.
+                if uri_offset >= mmap.len() {
+                    return Ok(());
+                }
                 // Parse URI mappings from memory-mapped region
                 let uri_data = &mmap[uri_offset..];
                 let mut offset = 0;
@@ -342,6 +347,28 @@ impl MemoryMappedVectorIndex {
             uri_store.push(uri);
         }
         header.vector_count += vectors_to_write as u64;
+
+        // If a URI table had previously been persisted (e.g. via an explicit
+        // `save_uri_mappings()` checkpoint), it lived immediately after the old
+        // vector data — exactly the region we just overwrote with the newly
+        // appended vectors. Leaving `header.uri_offset` pointing there would make
+        // `load()` parse raw vector bytes as URIs (byte-for-byte corruption), so
+        // re-persist the table at the new tail and update the offset. When no
+        // table was ever saved (`uri_offset == 0`) we leave it untouched; it is
+        // written once on `Drop`/`save_uri_mappings()`.
+        if header.uri_offset != 0 {
+            let vector_data_end =
+                header.data_offset + (header.vector_count * header.vector_size as u64);
+            let mut uri_table = Vec::new();
+            for uri in uri_store.iter() {
+                uri_table.extend_from_slice(&(uri.len() as u32).to_le_bytes());
+                uri_table.extend_from_slice(uri.as_bytes());
+            }
+            file.set_len(vector_data_end + uri_table.len() as u64)?;
+            file.seek(SeekFrom::Start(vector_data_end))?;
+            file.write_all(&uri_table)?;
+            header.uri_offset = vector_data_end;
+        }
 
         // Update header with optimized single write
         header.compute_checksum();
@@ -738,8 +765,15 @@ impl VectorIndex for MemoryMappedVectorIndex {
             self.flush_buffer()?;
         }
 
+        // `search_mmap` returns results ordered by ascending distance. Convert
+        // to the trait's similarity contract (similarity = 1 / (1 + distance),
+        // larger = closer); ascending distance == descending similarity, so the
+        // best-match-first ordering is preserved.
         let results = self.search_mmap(query, k)?;
-        Ok(results.into_iter().map(|r| (r.uri, r.distance)).collect())
+        Ok(results
+            .into_iter()
+            .map(|r| (r.uri, 1.0 / (1.0 + r.distance)))
+            .collect())
     }
 
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
@@ -756,17 +790,21 @@ impl VectorIndex for MemoryMappedVectorIndex {
         for id in 0..header.vector_count {
             if let Some(vector) = self.get_vector_by_id(id)? {
                 let distance = distance_metric.distance_vectors(query, &vector);
-                if distance <= threshold {
+                // Trait contract: similarity >= threshold, where
+                // similarity = 1 / (1 + distance).
+                let similarity = 1.0 / (1.0 + distance);
+                if similarity >= threshold {
                     let uri = uri_store
                         .get(id as usize)
                         .cloned()
                         .unwrap_or_else(|| format!("vector_{id}"));
-                    results.push((uri, distance));
+                    results.push((uri, similarity));
                 }
             }
         }
 
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        // Sort by descending similarity (best match first).
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(results)
     }
 
@@ -868,6 +906,64 @@ mod tests {
 
             assert_eq!(results.len(), 3);
             assert_eq!(results[0].0, "vec5");
+        }
+
+        Ok(())
+    }
+
+    /// Regression: an explicit `save_uri_mappings()` checkpoint followed by more
+    /// inserts+flush must not leave `header.uri_offset` pointing at overwritten
+    /// vector bytes. Previously `flush_buffer` appended vectors over the
+    /// persisted URI table, corrupting it and causing garbage URIs on reload.
+    #[test]
+    fn regression_flush_after_save_uri_mappings_no_corruption() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("regression_uri_table.idx");
+
+        {
+            let config = IndexConfig::default();
+            let mut index = MemoryMappedVectorIndex::new(&path, config)?;
+
+            // First batch, then persist the URI table (checkpoint).
+            for i in 0..5 {
+                let vec = Vector::new(vec![i as f32, (i + 1) as f32, (i + 2) as f32]);
+                index.insert(format!("first{i}"), vec)?;
+            }
+            index.flush_buffer()?;
+            index.save_uri_mappings()?; // writes the URI table right after vectors
+
+            // Second batch: the flush appends vectors exactly where the URI table
+            // was; the fix must re-persist the table at the new tail.
+            for i in 0..5 {
+                let vec = Vector::new(vec![(i + 100) as f32, (i + 101) as f32, (i + 102) as f32]);
+                index.insert(format!("second{i}"), vec)?;
+            }
+            index.flush_buffer()?;
+            index.save_uri_mappings()?;
+            // `index` intentionally not relying on Drop for this assertion.
+            drop(index);
+        }
+
+        // Reload and verify every URI round-trips (no corruption / no fallback
+        // "vector_N" names) and both batches are searchable by their real URI.
+        {
+            let config = IndexConfig::default();
+            let index = MemoryMappedVectorIndex::load(&path, config)?;
+            assert_eq!(index.stats().vector_count, 10);
+
+            let q_first = Vector::new(vec![0.0, 1.0, 2.0]);
+            let r_first = index.search_knn(&q_first, 1)?;
+            assert_eq!(
+                r_first[0].0, "first0",
+                "first-batch URI corrupted on reload"
+            );
+
+            let q_second = Vector::new(vec![100.0, 101.0, 102.0]);
+            let r_second = index.search_knn(&q_second, 1)?;
+            assert_eq!(
+                r_second[0].0, "second0",
+                "second-batch URI corrupted on reload"
+            );
         }
 
         Ok(())

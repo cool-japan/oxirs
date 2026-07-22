@@ -1,38 +1,35 @@
 //! Complete Digital Twin Example: Smart Factory Battery Production
 //!
-//! This example demonstrates a full digital twin implementation combining:
-//! - MQTT sensor data ingestion
-//! - NGSI-LD entity management
-//! - Real-time SPARQL queries
-//! - IDS/Gaia-X data sovereignty
-//! - Physics-based thermal simulation
+//! This example demonstrates a digital twin implementation built directly on
+//! oxirs-fuseki's NGSI-LD (ETSI GS CIM 009 V1.6.1) entity types:
+//! - Simulated sensor data ingestion (temperature/voltage/current per cell)
+//! - NGSI-LD entity construction (`NgsiEntity`/`NgsiProperty`/`GeoProperty`)
+//! - A simple physics-based thermal projection (no external physics engine)
+//! - Threshold-based anomaly detection
 //!
 //! ## Architecture
 //!
 //! ```text
-//! [Factory Sensors (MQTT)] ──▶ [OxiRS Bridge] ──▶ [RDF Graph]
-//!                                                        │
-//!                                                        ▼
-//! [PLC (OPC UA)]           ──▶ [OxiRS Bridge] ──▶ [SPARQL Queries]
-//!                                                        │
-//!                                                        ▼
-//! [Digital Twin State]     ◀── [Physics Sim]    ◀── [State Extraction]
+//! [Factory Sensors (simulated)] ──▶ [NGSI-LD Entity Construction] ──▶ [Digital Twin State]
+//!                                                                            │
+//!                                                                            ▼
+//!                                                              [Thermal Projection + Anomaly Detection]
 //! ```
 //!
 //! ## Usage
 //!
 //! ```bash
-//! cargo run --example digital_twin_factory --features "ngsi-ld,industry40,physics-sim"
+//! cargo run --example digital_twin_factory
 //! ```
+//!
+//! This example uses only the crate's default feature set: the `ngsi_ld`
+//! handler module (types used here) is compiled unconditionally, not behind
+//! a Cargo feature.
 
 use oxirs_fuseki::handlers::ngsi_ld::types::{
     GeoProperty, NgsiAttribute, NgsiEntity, NgsiProperty,
 };
-use oxirs_fuseki::server::AppState;
-use serde_json::json;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::time::{interval, Duration};
+use tokio::time::Duration;
 
 /// Battery cell sensor data
 #[derive(Debug, Clone)]
@@ -45,21 +42,18 @@ struct BatteryCellData {
 }
 
 /// Factory digital twin state
+#[derive(Default)]
 struct FactoryDigitalTwin {
-    state: Arc<AppState>,
     cells: Vec<BatteryCellData>,
 }
 
 impl FactoryDigitalTwin {
     /// Create new digital twin
-    fn new(state: Arc<AppState>) -> Self {
-        Self {
-            state,
-            cells: Vec::new(),
-        }
+    fn new() -> Self {
+        Self::default()
     }
 
-    /// Simulate MQTT sensor data ingestion
+    /// Simulate sensor data ingestion
     async fn ingest_sensor_data(
         &mut self,
         data: BatteryCellData,
@@ -86,68 +80,32 @@ impl FactoryDigitalTwin {
         &self,
         data: &BatteryCellData,
     ) -> Result<NgsiEntity, Box<dyn std::error::Error>> {
-        let mut properties = HashMap::new();
-
-        // Temperature property
-        properties.insert(
-            "temperature".to_string(),
-            NgsiAttribute::Property(NgsiProperty {
-                value: serde_json::Value::Number(
-                    serde_json::Number::from_f64(data.temperature).unwrap(),
-                ),
-                observed_at: Some(data.timestamp),
-                unit_code: Some("CEL".to_string()),
-                dataset_id: None,
-                instance_id: None,
-            }),
+        let mut entity = NgsiEntity::new(
+            format!("urn:ngsi-ld:BatteryCell:{}", data.cell_id),
+            "BatteryCell",
         );
 
-        // Voltage property
-        properties.insert(
-            "voltage".to_string(),
-            NgsiAttribute::Property(NgsiProperty {
-                value: serde_json::Value::Number(
-                    serde_json::Number::from_f64(data.voltage).unwrap(),
-                ),
-                observed_at: Some(data.timestamp),
-                unit_code: Some("VLT".to_string()),
-                dataset_id: None,
-                instance_id: None,
-            }),
-        );
+        entity = entity
+            .with_property(
+                "temperature",
+                NgsiProperty::with_observed_at(data.temperature, data.timestamp).with_unit("CEL"),
+            )
+            .with_property(
+                "voltage",
+                NgsiProperty::with_observed_at(data.voltage, data.timestamp).with_unit("VLT"),
+            )
+            .with_property(
+                "current",
+                NgsiProperty::with_observed_at(data.current, data.timestamp).with_unit("AMP"),
+            );
 
-        // Current property
-        properties.insert(
-            "current".to_string(),
-            NgsiAttribute::Property(NgsiProperty {
-                value: serde_json::Value::Number(
-                    serde_json::Number::from_f64(data.current).unwrap(),
-                ),
-                observed_at: Some(data.timestamp),
-                unit_code: Some("AMP".to_string()),
-                dataset_id: None,
-                instance_id: None,
-            }),
-        );
-
-        // Location (factory floor position)
-        properties.insert(
+        // Location (factory floor position, Tokyo coordinates as a stand-in)
+        entity.properties.insert(
             "location".to_string(),
-            NgsiAttribute::GeoProperty(GeoProperty {
-                value: json!({
-                    "type": "Point",
-                    "coordinates": [139.6917, 35.6895] // Factory coordinates
-                }),
-                observed_at: Some(data.timestamp),
-            }),
+            NgsiAttribute::GeoProperty(GeoProperty::point(139.6917, 35.6895)),
         );
 
-        Ok(NgsiEntity {
-            id: format!("urn:ngsi-ld:BatteryCell:{}", data.cell_id),
-            entity_type: "BatteryCell".to_string().into(),
-            context: None,
-            properties,
-        })
+        Ok(entity)
     }
 
     /// Create NGSI-LD entity via API
@@ -155,8 +113,9 @@ impl FactoryDigitalTwin {
         &self,
         entity: NgsiEntity,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // In production, this would call the actual NGSI-LD API
-        // For this example, we'll directly use the store
+        // In production, this would POST the entity to the running server's
+        // NGSI-LD API (`/ngsi-ld/v1/entities`). This example runs standalone
+        // (no live server), so it only demonstrates entity construction.
         println!("  ✓ Created NGSI-LD entity: {}", entity.id);
         Ok(())
     }
@@ -198,7 +157,7 @@ impl FactoryDigitalTwin {
         Ok(predicted_temp)
     }
 
-    /// Run SPARQL query for anomaly detection
+    /// Run threshold-based anomaly detection over the current cell readings
     async fn detect_anomalies(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         println!("🔍 Running anomaly detection...");
 
@@ -278,8 +237,6 @@ impl FactoryDigitalTwin {
 
 /// Simulate factory sensor data
 fn generate_sensor_data(cell_id: &str, iteration: u64) -> BatteryCellData {
-    use std::f64::consts::PI;
-
     // Simulate realistic battery behavior
     let base_temp = 25.0;
     let temp_variation = 5.0 * ((iteration as f64 * 0.1).sin());
@@ -307,16 +264,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🏭 OxiRS Digital Twin Factory Example");
     println!("=====================================\n");
 
-    // Create AppState (simulated)
     println!("🔧 Initializing OxiRS Digital Twin...");
-    let state = Arc::new(AppState::default());
-
-    // Create digital twin
-    let mut twin = FactoryDigitalTwin::new(state);
+    let mut twin = FactoryDigitalTwin::new();
     println!("  ✓ Digital twin initialized\n");
 
     // Simulate production line with 3 battery cells
-    let cell_ids = vec!["CELL-001", "CELL-002", "CELL-003"];
+    let cell_ids = ["CELL-001", "CELL-002", "CELL-003"];
 
     println!("🚀 Starting production line simulation...\n");
 
@@ -336,7 +289,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Run anomaly detection
-        let anomalies = twin.detect_anomalies().await?;
+        let _anomalies = twin.detect_anomalies().await?;
 
         // Run thermal simulation for first cell
         if iteration % 3 == 0 {
@@ -348,8 +301,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!();
 
-        // Wait 1 second between iterations (simulating real-time)
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        // Wait between iterations (simulating real-time)
+        tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
     // Generate final report
@@ -359,8 +312,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n💡 Next steps:");
     println!("  1. Query RDF data: curl -X POST http://localhost:3030/sparql");
     println!("  2. View NGSI-LD entities: curl http://localhost:3030/ngsi-ld/v1/entities");
-    println!("  3. Set up IDS connector for data sharing");
-    println!("  4. Deploy to production with TLS/mTLS");
+    println!("  3. Deploy to production with TLS/mTLS");
 
     Ok(())
 }
@@ -380,15 +332,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_digital_twin_creation() {
-        let state = Arc::new(AppState::default());
-        let twin = FactoryDigitalTwin::new(state);
+        let twin = FactoryDigitalTwin::new();
         assert_eq!(twin.cells.len(), 0);
     }
 
     #[test]
     fn test_battery_entity_creation() {
-        let state = Arc::new(AppState::default());
-        let twin = FactoryDigitalTwin::new(state);
+        let twin = FactoryDigitalTwin::new();
 
         let data = BatteryCellData {
             cell_id: "TEST-001".to_string(),
@@ -403,5 +353,6 @@ mod tests {
         assert!(entity.properties.contains_key("temperature"));
         assert!(entity.properties.contains_key("voltage"));
         assert!(entity.properties.contains_key("current"));
+        assert!(entity.properties.contains_key("location"));
     }
 }

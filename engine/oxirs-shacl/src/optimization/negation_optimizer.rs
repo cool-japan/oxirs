@@ -270,41 +270,31 @@ impl NegationOptimizer {
         })
     }
 
-    /// Predictive evaluation using pattern recognition
+    /// Predictive evaluation using pattern recognition.
+    ///
+    /// `ConformancePredictor` is a lightweight, non-ML heuristic (see its
+    /// doc comment): it has no real basis for asserting that unexamined
+    /// values are safe to skip. Using an unreliable prediction to *narrow*
+    /// which values get evaluated would let real `sh:not` violations slip
+    /// through undetected whenever the prediction is wrong (silently
+    /// dropping unexamined values). To keep this optimization strategy
+    /// conservative and correct, it always evaluates the COMPLETE value set
+    /// — exactly like [`Self::cached_evaluation`] — and only uses the
+    /// predictor's output as an informational hint that does not affect the
+    /// result, honestly reporting `predictions_used: 0` since no prediction
+    /// influenced the evaluated set.
     fn predictive_evaluation(
         &self,
         constraint: &NotConstraint,
         context: &ConstraintContext,
         store: &dyn Store,
     ) -> Result<NegationOptimizationResult> {
-        // Use the conformance predictor to pre-filter likely non-conforming values
-        let predicted_non_conforming = self
-            .conformance_predictor
-            .predict_non_conforming_values(&constraint.shape, &context.values);
-
-        if !predicted_non_conforming.is_empty() {
-            let predictions_used = predicted_non_conforming.len();
-
-            // Create a modified context with only predicted non-conforming values
-            let filtered_context = ConstraintContext {
-                values: predicted_non_conforming,
-                ..context.clone()
-            };
-
-            let result = constraint.evaluate_optimized(&filtered_context, store)?;
-
-            return Ok(NegationOptimizationResult {
-                constraint_result: result,
-                strategy_used: OptimizationStrategy::PredictiveEvaluation,
-                cache_hits: 0,
-                cache_misses: filtered_context.values.len(),
-                predictions_used,
-                parallel_tasks: 0,
-            });
-        }
-
-        // Fall back to cached evaluation if prediction doesn't help
-        self.cached_evaluation(constraint, context, store)
+        // Always evaluate the full, unfiltered value set. See doc comment above
+        // for why a predicted subset must never replace the complete evaluation.
+        let mut result = self.cached_evaluation(constraint, context, store)?;
+        result.strategy_used = OptimizationStrategy::PredictiveEvaluation;
+        result.predictions_used = 0;
+        Ok(result)
     }
 
     /// Batch optimization for large value sets
@@ -985,5 +975,80 @@ mod tests {
 
         // Batch optimization should be more efficient than individual evaluation
         assert_eq!(context.values.len(), 10);
+    }
+
+    #[test]
+    fn regression_predictive_evaluation_never_skips_unexamined_values() {
+        // Build a real "FriendShape": sh:class ex:Friend (a node conforms iff it
+        // has rdf:type ex:Friend).
+        let friend_shape_id = ShapeId::new("http://example.org/FriendShape");
+        let friend_class = NamedNode::new("http://example.org/Friend").expect("valid class IRI");
+        let mut friend_shape = crate::Shape::node_shape(friend_shape_id.clone());
+        friend_shape.add_constraint(
+            crate::ConstraintComponentId::new("sh:ClassConstraintComponent"),
+            crate::Constraint::Class(crate::constraints::value_constraints::ClassConstraint {
+                class_iri: friend_class.clone(),
+            }),
+        );
+
+        let mut registry = indexmap::IndexMap::new();
+        registry.insert(friend_shape_id.clone(), friend_shape);
+        let registry = std::sync::Arc::new(registry);
+
+        // 10 candidate values. Only the LAST one (index 9 — squarely inside the
+        // "second half" that the old fake predictor silently dropped) actually
+        // has rdf:type ex:Friend, i.e. it is the single real sh:not violation.
+        let store = oxirs_core::ConcreteStore::new().expect("store creation should succeed");
+        let values: Vec<Term> = (0..10)
+            .map(|i| {
+                Term::NamedNode(
+                    NamedNode::new(format!("http://example.org/person{i}"))
+                        .expect("construction should succeed"),
+                )
+            })
+            .collect();
+
+        if let Term::NamedNode(violating_node) = &values[9] {
+            let rdf_type = oxirs_core::model::NamedNode::new(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+            )
+            .expect("valid IRI");
+            let subject: oxirs_core::Subject = violating_node.clone().into();
+            let predicate: oxirs_core::Predicate = rdf_type.into();
+            let object: oxirs_core::Object = friend_class.into();
+            store
+                .insert_quad(oxirs_core::model::Quad::new(
+                    subject,
+                    predicate,
+                    object,
+                    oxirs_core::model::GraphName::DefaultGraph,
+                ))
+                .expect("insert should succeed");
+        }
+
+        let focus_node =
+            Term::NamedNode(NamedNode::new("http://example.org/focus").expect("valid IRI"));
+        let owner_shape_id = ShapeId::new("http://example.org/OwnerShape");
+        let context = ConstraintContext::new(focus_node, owner_shape_id)
+            .with_values(values)
+            .with_shapes_registry(registry);
+
+        let not_constraint = NotConstraint::new(friend_shape_id);
+        let optimizer = NegationOptimizer::new();
+
+        let result = optimizer
+            .predictive_evaluation(&not_constraint, &context, &store)
+            .expect("predictive evaluation should succeed");
+
+        assert!(
+            result.constraint_result.is_violated(),
+            "predictive_evaluation must detect the real violation among ALL values \
+             instead of silently dropping unexamined ones (old bug: an arbitrary fake \
+             predictor evaluated only the first half of the value set)"
+        );
+        assert_eq!(
+            result.predictions_used, 0,
+            "no unreliable prediction may be reported as having influenced the result"
+        );
     }
 }

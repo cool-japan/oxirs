@@ -95,8 +95,14 @@ pub enum LogRecord {
     /// store replays it on open by re-applying the operation to the
     /// reconstructed catalog. Unlike [`LogRecord::Update`] (full-page *physical*
     /// redo, used by the lower-level [`crate::recovery::RecoveryManager`]), this
-    /// is a compact operation-level redo record, so the WAL stays small and
-    /// bounded even under high write volume.
+    /// is a compact operation-level redo record, so each record stays small
+    /// (~100 bytes). Note this bounds per-record *size* only: the *number* of
+    /// records between checkpoints is bounded by periodic
+    /// [`sync`](crate::store::TdbStore::sync) — either an explicit one or the
+    /// automatic checkpoint driven by
+    /// [`TdbConfig::wal_checkpoint_op_threshold`](crate::store::TdbConfig).
+    /// Without any checkpoint the record count (and the in-memory log buffer)
+    /// still grows unbounded.
     DataOp {
         /// Transaction ID this operation belongs to. Only replayed if a matching
         /// [`LogRecord::Commit`] for this `txn_id` is present (torn/uncommitted
@@ -115,6 +121,17 @@ pub struct LogEntry {
     /// Log record
     pub record: LogRecord,
 }
+
+/// Upper bound on the on-disk size of a single serialized WAL record body.
+///
+/// A record body is a serialized [`LogEntry`]; the largest legitimate variant is
+/// a full-page [`LogRecord::Update`] carrying a before- and after-image (a few
+/// KiB each) plus framing, so 64 MiB is generously above any real record while
+/// still bounding the allocation performed for a length prefix read back from
+/// disk. A prefix claiming more than this is treated as a torn/garbage tail
+/// (see [`WriteAheadLog::recover`]) rather than triggering a multi-gigabyte
+/// allocation.
+const MAX_WAL_RECORD_LEN: usize = 64 * 1024 * 1024;
 
 /// Write-Ahead Log (WAL) implementation
 pub struct WriteAheadLog {
@@ -170,14 +187,21 @@ impl WriteAheadLog {
         let mut log_buffer = self.log_buffer.write().expect("lock poisoned");
         log_buffer.insert(lsn, entry.clone());
 
-        // Write to disk (WAL protocol: log before data)
+        // Write to disk (WAL protocol: log before data).
+        //
+        // On-disk record framing is: `[len: u32-le][crc32: u32-le][body: len bytes]`.
+        // The CRC covers the serialized body so [`WriteAheadLog::recover`] can
+        // distinguish a fully-written record from a torn or bit-flipped tail left
+        // by a crash mid-append (append is not atomic; fsync happens in `flush`).
         let serialized = oxicode::serde::encode_to_vec(&entry, oxicode::config::standard())
             .map_err(|e| TdbError::Serialization(e.to_string()))?;
 
         let len = (serialized.len() as u32).to_le_bytes();
+        let crc = crc32fast::hash(&serialized).to_le_bytes();
 
         let mut wal_file = self.wal_file.write().expect("lock poisoned");
         wal_file.write_all(&len).map_err(TdbError::Io)?;
+        wal_file.write_all(&crc).map_err(TdbError::Io)?;
         wal_file.write_all(&serialized).map_err(TdbError::Io)?;
 
         Ok(lsn)
@@ -228,8 +252,10 @@ impl WriteAheadLog {
             let serialized = oxicode::serde::encode_to_vec(&entry, oxicode::config::standard())
                 .map_err(|e| TdbError::Serialization(e.to_string()))?;
             let len = (serialized.len() as u32).to_le_bytes();
+            let crc = crc32fast::hash(&serialized).to_le_bytes();
 
             wal_file.write_all(&len).map_err(TdbError::Io)?;
+            wal_file.write_all(&crc).map_err(TdbError::Io)?;
             wal_file.write_all(&serialized).map_err(TdbError::Io)?;
         }
 
@@ -239,35 +265,81 @@ impl WriteAheadLog {
         Ok(())
     }
 
-    /// Recover from WAL (replay logs)
+    /// Recover from WAL (replay logs).
+    ///
+    /// A crash while [`WriteAheadLog::append`] was writing the last record is the
+    /// normal case (append writes `len`, `crc`, then `body` and only `flush`
+    /// fsyncs), so the physical tail of the file may be a *torn* record: a
+    /// truncated body, a length prefix with no body, a garbage length, or a
+    /// bit-flipped body. Recovery treats the log as ending at the last complete,
+    /// CRC-verified record — it stops at the first record it cannot fully read
+    /// and verify, and physically truncates the file to that point so the torn
+    /// tail is dropped rather than propagating an `UnexpectedEof`/decode error
+    /// out of `open()` (which would refuse to open the store after an ordinary
+    /// crash). This upholds the crash-recovery contract that committed writes
+    /// (records that made it to disk whole) survive a reopen.
     pub fn recover(&self) -> Result<Vec<LogEntry>> {
         let mut wal_file = self.wal_file.write().expect("lock poisoned");
+        let file_len = wal_file.metadata().map_err(TdbError::Io)?.len();
         wal_file.seek(SeekFrom::Start(0)).map_err(TdbError::Io)?;
 
         let mut entries = Vec::new();
         let mut next_lsn = Lsn::ZERO;
+        // Byte offset just past the last complete, verified record. Everything
+        // after this is a torn tail to be discarded.
+        let mut good_offset: u64 = 0;
 
         loop {
-            // Read length prefix
+            // --- length prefix ---
             let mut len_buf = [0u8; 4];
             match wal_file.read_exact(&mut len_buf) {
                 Ok(_) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                    break; // End of file
-                }
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(TdbError::Io(e)),
+            }
+            let len = u32::from_le_bytes(len_buf) as usize;
+
+            // Full record occupies 4 (len) + 4 (crc) + len (body) bytes. Reject a
+            // zero/implausible/garbage length or a record that would run past the
+            // physical end of file: that means the tail is torn. Bounding `len`
+            // here also prevents allocating an arbitrarily large buffer from a
+            // corrupt prefix.
+            let record_end = good_offset.saturating_add(8).saturating_add(len as u64);
+            if len == 0 || len > MAX_WAL_RECORD_LEN || record_end > file_len {
+                break;
+            }
+
+            // --- crc prefix ---
+            let mut crc_buf = [0u8; 4];
+            match wal_file.read_exact(&mut crc_buf) {
+                Ok(_) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(TdbError::Io(e)),
+            }
+            let stored_crc = u32::from_le_bytes(crc_buf);
+
+            // --- body ---
+            let mut entry_buf = vec![0u8; len];
+            match wal_file.read_exact(&mut entry_buf) {
+                Ok(_) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
                 Err(e) => return Err(TdbError::Io(e)),
             }
 
-            let len = u32::from_le_bytes(len_buf) as usize;
+            // A CRC mismatch means a torn/bit-flipped tail: stop here.
+            if crc32fast::hash(&entry_buf) != stored_crc {
+                break;
+            }
 
-            // Read entry
-            let mut entry_buf = vec![0u8; len];
-            wal_file.read_exact(&mut entry_buf).map_err(TdbError::Io)?;
-
+            // A body that survives the CRC but still fails to decode is likewise
+            // treated as end-of-log rather than a hard error.
             let entry: LogEntry =
-                oxicode::serde::decode_from_slice(&entry_buf, oxicode::config::standard())
-                    .map_err(|e| TdbError::Serialization(e.to_string()))?
-                    .0;
+                match oxicode::serde::decode_from_slice(&entry_buf, oxicode::config::standard()) {
+                    Ok((entry, _)) => entry,
+                    Err(_) => break,
+                };
+
+            good_offset = record_end;
 
             if entry.lsn.as_u64() >= next_lsn.as_u64() {
                 next_lsn = entry.lsn.next();
@@ -278,6 +350,14 @@ impl WriteAheadLog {
             // Add to buffer
             let mut log_buffer = self.log_buffer.write().expect("lock poisoned");
             log_buffer.insert(entry.lsn, entry);
+        }
+
+        // Physically drop any torn tail so a subsequent append starts from a
+        // clean, fully-valid log and the file does not accumulate garbage.
+        if good_offset < file_len {
+            wal_file.set_len(good_offset).map_err(TdbError::Io)?;
+            wal_file.flush().map_err(TdbError::Io)?;
+            wal_file.sync_all().map_err(TdbError::Io)?;
         }
 
         // Update next LSN
@@ -447,6 +527,120 @@ mod tests {
             }
             _ => panic!("Wrong record type"),
         }
+    }
+
+    #[test]
+    fn regression_wal_torn_tail_truncated_body_recovers_prior_records() {
+        // A crash mid-append leaves a length prefix (and maybe crc) but a short
+        // body. recover() must recover every complete record before it and drop
+        // the torn tail, rather than erroring out of open().
+        let temp_dir = env::temp_dir().join("oxirs_wal_torn_body");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let wal_path = temp_dir.join("wal.log");
+
+        {
+            let wal = WriteAheadLog::new(&temp_dir).unwrap();
+            wal.append(LogRecord::Begin {
+                txn_id: TxnId::new(1),
+            })
+            .unwrap();
+            wal.append(LogRecord::Commit {
+                txn_id: TxnId::new(1),
+            })
+            .unwrap();
+            wal.flush().unwrap();
+        }
+
+        // Simulate a torn tail: a plausible length prefix + crc, but a body far
+        // shorter than the prefix claims.
+        {
+            let mut f = OpenOptions::new().append(true).open(&wal_path).unwrap();
+            f.write_all(&50u32.to_le_bytes()).unwrap();
+            f.write_all(&0u32.to_le_bytes()).unwrap();
+            f.write_all(&[7u8; 10]).unwrap();
+            f.flush().unwrap();
+        }
+
+        let wal = WriteAheadLog::open(&temp_dir).unwrap();
+        let entries = wal.all_entries();
+        assert_eq!(entries.len(), 2, "torn tail dropped, prior records kept");
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn regression_wal_garbage_length_prefix_is_not_allocated() {
+        // A garbage/huge length prefix must be treated as end-of-log (torn tail),
+        // never allocated (a naive `vec![0u8; len]` would try to grab 4 GiB).
+        let temp_dir = env::temp_dir().join("oxirs_wal_garbage_len");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let wal_path = temp_dir.join("wal.log");
+
+        {
+            let wal = WriteAheadLog::new(&temp_dir).unwrap();
+            wal.append(LogRecord::Begin {
+                txn_id: TxnId::new(1),
+            })
+            .unwrap();
+            wal.flush().unwrap();
+        }
+
+        {
+            let mut f = OpenOptions::new().append(true).open(&wal_path).unwrap();
+            f.write_all(&u32::MAX.to_le_bytes()).unwrap(); // absurd length
+            f.write_all(&[0u8; 4]).unwrap();
+            f.flush().unwrap();
+        }
+
+        let wal = WriteAheadLog::open(&temp_dir).unwrap();
+        assert_eq!(wal.all_entries().len(), 1);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn regression_wal_crc_detects_bitflip_in_tail() {
+        // Flipping a byte in the last record's body must be detected by the CRC
+        // and that record dropped, leaving the earlier records intact.
+        use std::io::Read as _;
+
+        let temp_dir = env::temp_dir().join("oxirs_wal_bitflip");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let wal_path = temp_dir.join("wal.log");
+
+        {
+            let wal = WriteAheadLog::new(&temp_dir).unwrap();
+            wal.append(LogRecord::Begin {
+                txn_id: TxnId::new(1),
+            })
+            .unwrap();
+            wal.append(LogRecord::Commit {
+                txn_id: TxnId::new(1),
+            })
+            .unwrap();
+            wal.flush().unwrap();
+        }
+
+        // Flip the final byte of the file (inside the last record's body).
+        {
+            let mut buf = Vec::new();
+            std::fs::File::open(&wal_path)
+                .unwrap()
+                .read_to_end(&mut buf)
+                .unwrap();
+            let last = buf.len() - 1;
+            buf[last] ^= 0xFF;
+            std::fs::write(&wal_path, &buf).unwrap();
+        }
+
+        let wal = WriteAheadLog::open(&temp_dir).unwrap();
+        assert_eq!(
+            wal.all_entries().len(),
+            1,
+            "bit-flipped tail record dropped, prior record kept"
+        );
+
+        std::fs::remove_dir_all(&temp_dir).ok();
     }
 
     #[test]

@@ -76,6 +76,54 @@ impl ModbusTcpClient {
         self.timeout = timeout;
     }
 
+    /// Read a complete Modbus TCP response ADU from the stream.
+    ///
+    /// Reads the fixed 7-byte MBAP header first, then parses the `length`
+    /// field (bytes 4..6) to determine exactly how many more bytes belong
+    /// to this response's PDU (function code + data). This covers both
+    /// normal responses and exception responses uniformly, since both
+    /// share the same MBAP framing and the `length` field always reflects
+    /// the true remaining byte count on the wire.
+    ///
+    /// Blindly reading a fixed 9-byte header and then interpreting the
+    /// 9th byte as a "byte count" (as older code in this module did) is
+    /// wrong for exception responses, where that byte is actually the
+    /// exception code: it either causes the client to block waiting for
+    /// bytes that will never arrive (masking a fast `ModbusException` as
+    /// a slow `Timeout`), or, on a connection with more inbound data
+    /// pending, silently consumes bytes belonging to the *next* response
+    /// and permanently desyncs the TCP byte stream.
+    async fn read_response(&mut self) -> ModbusResult<ModbusTcpFrame> {
+        // Read MBAP header (7 bytes: transaction_id(2) + protocol_id(2) + length(2) + unit_id(1))
+        let mut header = [0u8; 7];
+        timeout(self.timeout, self.stream.read_exact(&mut header))
+            .await
+            .map_err(|_| ModbusError::Timeout(self.timeout))??;
+
+        // MBAP length field = unit_id(1) + function_code(1) + data.
+        // The 7-byte header already consumed unit_id, so the remaining
+        // bytes on the wire (function code + data) = length - 1.
+        let mbap_length = u16::from_be_bytes([header[4], header[5]]) as usize;
+        if mbap_length < 2 {
+            return Err(ModbusError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "MBAP length field too small (must be >= 2 for unit_id + function code)",
+            )));
+        }
+        let remaining = mbap_length - 1;
+
+        let mut pdu = vec![0u8; remaining];
+        timeout(self.timeout, self.stream.read_exact(&mut pdu))
+            .await
+            .map_err(|_| ModbusError::Timeout(self.timeout))??;
+
+        let mut response_bytes = Vec::with_capacity(7 + remaining);
+        response_bytes.extend_from_slice(&header);
+        response_bytes.extend_from_slice(&pdu);
+
+        ModbusTcpFrame::from_bytes(&response_bytes)
+    }
+
     /// Read holding registers (function code 0x03)
     ///
     /// # Arguments
@@ -120,26 +168,10 @@ impl ModbusTcpClient {
             .await
             .map_err(|_| ModbusError::Timeout(self.timeout))??;
 
-        // Read response header (MBAP header = 7 bytes + function code = 8 bytes + byte count = 9 bytes minimum)
-        let mut header = vec![0u8; 9];
-        timeout(self.timeout, self.stream.read_exact(&mut header))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
-
-        // Parse byte count from response
-        let byte_count = header[8] as usize;
-
-        // Read remaining data
-        let mut data = vec![0u8; byte_count];
-        timeout(self.timeout, self.stream.read_exact(&mut data))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
-
-        // Combine header + data and parse
-        let mut response_bytes = header;
-        response_bytes.extend_from_slice(&data);
-
-        let response = ModbusTcpFrame::from_bytes(&response_bytes)?;
+        // Read response ADU (handles both normal and exception responses
+        // correctly by parsing the MBAP length field instead of assuming
+        // a fixed header size).
+        let response = self.read_response().await?;
 
         // Verify transaction ID matches
         if response.transaction_id != tid {
@@ -190,21 +222,7 @@ impl ModbusTcpClient {
             .await
             .map_err(|_| ModbusError::Timeout(self.timeout))??;
 
-        let mut header = vec![0u8; 9];
-        timeout(self.timeout, self.stream.read_exact(&mut header))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
-
-        let byte_count = header[8] as usize;
-        let mut data_bytes = vec![0u8; byte_count];
-        timeout(self.timeout, self.stream.read_exact(&mut data_bytes))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
-
-        let mut response_bytes = header;
-        response_bytes.extend_from_slice(&data_bytes);
-
-        let response = ModbusTcpFrame::from_bytes(&response_bytes)?;
+        let response = self.read_response().await?;
         response.extract_registers()
     }
 
@@ -228,13 +246,9 @@ impl ModbusTcpClient {
             .await
             .map_err(|_| ModbusError::Timeout(self.timeout))??;
 
-        // Read response (echoes back address and value)
-        let mut response_bytes = vec![0u8; 12];
-        timeout(self.timeout, self.stream.read_exact(&mut response_bytes))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
-
-        let response = ModbusTcpFrame::from_bytes(&response_bytes)?;
+        // Read response (echoes back address and value on success; a
+        // shorter exception ADU on failure).
+        let response = self.read_response().await?;
 
         // Verify write was successful (response echoes request)
         if response.data.len() >= 4 {
@@ -287,16 +301,15 @@ impl ModbusTcpClient {
             .await
             .map_err(|_| ModbusError::Timeout(self.timeout))??;
 
-        let mut header = vec![0u8; 9];
-        timeout(self.timeout, self.stream.read_exact(&mut header))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
+        let response = self.read_response().await?;
 
-        let byte_count = header[8] as usize;
-        let mut data_bytes = vec![0u8; byte_count];
-        timeout(self.timeout, self.stream.read_exact(&mut data_bytes))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
+        // Response PDU data: byte_count(1) + packed coil bytes
+        let data_bytes = response.data.get(1..).ok_or_else(|| {
+            ModbusError::Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Incomplete coil data",
+            ))
+        })?;
 
         // Extract coil values from packed bytes
         let mut coils = Vec::with_capacity(count as usize);
@@ -352,16 +365,15 @@ impl ModbusTcpClient {
             .await
             .map_err(|_| ModbusError::Timeout(self.timeout))??;
 
-        let mut header = vec![0u8; 9];
-        timeout(self.timeout, self.stream.read_exact(&mut header))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
+        let response = self.read_response().await?;
 
-        let byte_count = header[8] as usize;
-        let mut data_bytes = vec![0u8; byte_count];
-        timeout(self.timeout, self.stream.read_exact(&mut data_bytes))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
+        // Response PDU data: byte_count(1) + packed input bytes
+        let data_bytes = response.data.get(1..).ok_or_else(|| {
+            ModbusError::Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Incomplete discrete input data",
+            ))
+        })?;
 
         // Extract input values from packed bytes
         let mut inputs = Vec::with_capacity(count as usize);
@@ -441,16 +453,10 @@ impl ModbusTcpClient {
             .await
             .map_err(|_| ModbusError::Timeout(self.timeout))??;
 
-        // Read response (12 bytes: MBAP header 7 + unit 1 + FC 1 + addr 2 + count 2 = 13? Check frame)
-        // Response: MBAP (7) + unit (1) + FC (1) + start_addr (2) + quantity (2) = 13 bytes
-        // But MBAP includes length (6 for unit+FC+addr+quantity)
-        // So: transaction (2) + protocol (2) + length (2) + unit (1) + FC (1) + addr (2) + qty (2) = 12
-        let mut response_bytes = vec![0u8; 12];
-        timeout(self.timeout, self.stream.read_exact(&mut response_bytes))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
-
-        let response = ModbusTcpFrame::from_bytes(&response_bytes)?;
+        // Read response: normal reply echoes start_addr(2) + quantity(2);
+        // an exception reply is shorter. `read_response` sizes the read
+        // from the MBAP length field so both cases are handled correctly.
+        let response = self.read_response().await?;
 
         // Verify response
         if response.data.len() >= 4 {
@@ -526,13 +532,10 @@ impl ModbusTcpClient {
             .await
             .map_err(|_| ModbusError::Timeout(self.timeout))??;
 
-        // Read response (12 bytes)
-        let mut response_bytes = vec![0u8; 12];
-        timeout(self.timeout, self.stream.read_exact(&mut response_bytes))
-            .await
-            .map_err(|_| ModbusError::Timeout(self.timeout))??;
-
-        let response = ModbusTcpFrame::from_bytes(&response_bytes)?;
+        // Read response: normal reply echoes start_addr(2) + quantity(2);
+        // an exception reply is shorter. `read_response` sizes the read
+        // from the MBAP length field so both cases are handled correctly.
+        let response = self.read_response().await?;
 
         // Verify response
         if response.data.len() >= 4 {
@@ -568,6 +571,8 @@ impl ModbusTcpClient {
 mod tests {
     #[allow(unused_imports)]
     use super::ModbusTcpClient;
+    use crate::error::ModbusError;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_connection_parameters() {
@@ -592,5 +597,160 @@ mod tests {
         // Can't create client without async, so we'll test this when we have mock server
         use std::time::Duration;
         let _ = Duration::from_secs(5); // Placeholder
+    }
+
+    // ------------------------------------------------------------------
+    // Regression tests for exception-response desync bug (P0)
+    //
+    // Prior to the fix, the client read a fixed 9-byte header and then
+    // treated header[8] as a "byte count" even for exception responses
+    // (where that byte is actually the exception code). This caused a
+    // second, wrongly-sized `read_exact` that either hung until timeout
+    // or consumed bytes belonging to the *next* response, permanently
+    // desyncing the TCP stream.
+    // ------------------------------------------------------------------
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    use tokio::net::TcpListener;
+
+    /// Build a raw Modbus TCP exception response ADU.
+    fn build_exception_response(
+        tid: u16,
+        unit_id: u8,
+        function_code: u8,
+        exception_code: u8,
+    ) -> Vec<u8> {
+        let mut resp = Vec::with_capacity(9);
+        resp.extend_from_slice(&tid.to_be_bytes());
+        resp.extend_from_slice(&0u16.to_be_bytes()); // protocol id
+        resp.extend_from_slice(&3u16.to_be_bytes()); // length = unit_id + func + exception_code
+        resp.push(unit_id);
+        resp.push(function_code | 0x80);
+        resp.push(exception_code);
+        resp
+    }
+
+    /// Build a raw Modbus TCP normal "read holding registers" response ADU.
+    fn build_read_holding_registers_response(tid: u16, unit_id: u8, registers: &[u16]) -> Vec<u8> {
+        let byte_count = (registers.len() * 2) as u8;
+        let length = 1u16 + 1 + 1 + byte_count as u16; // unit_id + func + byte_count + data
+        let mut resp = Vec::new();
+        resp.extend_from_slice(&tid.to_be_bytes());
+        resp.extend_from_slice(&0u16.to_be_bytes());
+        resp.extend_from_slice(&length.to_be_bytes());
+        resp.push(unit_id);
+        resp.push(0x03); // ReadHoldingRegisters
+        resp.push(byte_count);
+        for &r in registers {
+            resp.extend_from_slice(&r.to_be_bytes());
+        }
+        resp
+    }
+
+    #[tokio::test]
+    async fn regression_exception_response_does_not_desync_stream() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock server");
+        let addr = listener.local_addr().expect("local addr");
+
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept");
+
+            // First request: read_holding_registers request is 12 bytes
+            // (MBAP 7 + FC 1 + start_addr 2 + count 2).
+            let mut req1 = vec![0u8; 12];
+            socket.read_exact(&mut req1).await.expect("read req1");
+            let tid1 = u16::from_be_bytes([req1[0], req1[1]]);
+
+            // Respond with an IllegalDataAddress exception (9 bytes total).
+            let exc = build_exception_response(tid1, 1, 0x03, 0x02);
+            socket.write_all(&exc).await.expect("write exception");
+
+            // Second request on the SAME connection: if the client desynced
+            // after the exception, this read (or the response it triggers)
+            // would be misaligned.
+            let mut req2 = vec![0u8; 12];
+            socket.read_exact(&mut req2).await.expect("read req2");
+            let tid2 = u16::from_be_bytes([req2[0], req2[1]]);
+
+            let ok = build_read_holding_registers_response(tid2, 1, &[100, 200]);
+            socket.write_all(&ok).await.expect("write ok response");
+        });
+
+        let mut client = ModbusTcpClient::connect(&addr.to_string(), 1)
+            .await
+            .expect("connect");
+        client.set_timeout(Duration::from_secs(2));
+
+        // First call must fail fast with a typed ModbusException, not a
+        // Timeout (which would indicate the client is blocked waiting for
+        // bytes that never arrive).
+        let first = client.read_holding_registers(0, 2).await;
+        match first {
+            Err(ModbusError::ModbusException { code, function }) => {
+                assert_eq!(code, 0x02);
+                assert_eq!(function, 0x03);
+            }
+            other => panic!("expected ModbusException, got: {:?}", other),
+        }
+
+        // Second call on the same connection must succeed and return the
+        // correct registers -- proving the byte stream was not desynced by
+        // the first (exception) response.
+        let second = client
+            .read_holding_registers(0, 2)
+            .await
+            .expect("second call should succeed");
+        assert_eq!(second, vec![100, 200]);
+
+        server.await.expect("server task");
+    }
+
+    #[tokio::test]
+    async fn regression_write_single_register_exception_is_fast_not_timeout() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock server");
+        let addr = listener.local_addr().expect("local addr");
+
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept");
+
+            // write_single_register request is 12 bytes (MBAP 7 + FC 1 + addr 2 + value 2).
+            let mut req = vec![0u8; 12];
+            socket.read_exact(&mut req).await.expect("read req");
+            let tid = u16::from_be_bytes([req[0], req[1]]);
+
+            // Exception response is only 9 bytes -- shorter than the 12
+            // bytes the old fixed-size read assumed.
+            let exc = build_exception_response(tid, 1, 0x06, 0x04);
+            socket.write_all(&exc).await.expect("write exception");
+        });
+
+        let mut client = ModbusTcpClient::connect(&addr.to_string(), 1)
+            .await
+            .expect("connect");
+        client.set_timeout(Duration::from_millis(500));
+
+        let start = std::time::Instant::now();
+        let result = client.write_single_register(10, 42).await;
+        let elapsed = start.elapsed();
+
+        match result {
+            Err(ModbusError::ModbusException { code, function }) => {
+                assert_eq!(code, 0x04);
+                assert_eq!(function, 0x06);
+            }
+            other => panic!("expected ModbusException, got: {:?}", other),
+        }
+        // Must resolve well within the configured timeout, proving the
+        // response was parsed rather than blocking on missing bytes.
+        assert!(
+            elapsed < Duration::from_millis(400),
+            "exception response took too long ({:?}), suggests desync/blocking read",
+            elapsed
+        );
+
+        server.await.expect("server task");
     }
 }

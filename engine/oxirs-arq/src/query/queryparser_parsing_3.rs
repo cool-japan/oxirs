@@ -114,19 +114,32 @@ impl QueryParser {
         // whichever keyword comes next, in either order, until neither appears.
         loop {
             if self.match_token(&Token::Limit) {
-                if let Some(Token::NumericLiteral(num)) = self.peek() {
-                    query.limit = num.parse().ok();
-                    self.advance();
-                }
+                query.limit = Some(self.parse_limit_offset_value("LIMIT")?);
             } else if self.match_token(&Token::Offset) {
-                if let Some(Token::NumericLiteral(num)) = self.peek() {
-                    query.offset = num.parse().ok();
-                    self.advance();
-                }
+                query.offset = Some(self.parse_limit_offset_value("OFFSET")?);
             } else {
                 break;
             }
         }
         Ok(())
+    }
+    /// Read the mandatory non-negative integer argument of a `LIMIT` / `OFFSET`
+    /// clause. A missing, non-numeric, non-integer or out-of-range value is a
+    /// parse error (surfaced as a 4xx) rather than being silently dropped —
+    /// which would otherwise return every row instead of the intended cap.
+    fn parse_limit_offset_value(&mut self, keyword: &str) -> Result<usize> {
+        match self.peek() {
+            Some(Token::NumericLiteral(num)) => {
+                let num = num.clone();
+                let value = num.parse::<usize>().map_err(|_| {
+                    anyhow::anyhow!("{keyword} requires a non-negative integer, got `{num}`")
+                })?;
+                self.advance();
+                Ok(value)
+            }
+            other => Err(anyhow::anyhow!(
+                "{keyword} requires an integer argument, got {other:?}"
+            )),
+        }
     }
 }

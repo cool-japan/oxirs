@@ -3,7 +3,7 @@
 use crate::{EmbeddingModel, TrainingStats};
 use anyhow::Result;
 use scirs2_core::ndarray_ext::Array2;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::{broadcast, RwLock};
@@ -606,7 +606,18 @@ impl DistributedTrainer {
         self
     }
 
-    /// Start distributed training across multiple devices/nodes
+    /// Run the multi-worker training loop over a shared model.
+    ///
+    /// Execution model (read before relying on this for scaling): every worker
+    /// operates on the *same* `Arc<RwLock<dyn EmbeddingModel>>` and replicates
+    /// the training loop, while the coordinator performs a **real synchronous
+    /// all-reduce** (sum-then-average across `world_size` ranks) of the per-rank
+    /// loss statistics exchanged each sync round and broadcasts the averaged
+    /// result back. Because the model is shared rather than sharded, this is a
+    /// training-loop-replication + loss-all-reduce harness, not full
+    /// parameter-level data-parallel SGD (no per-rank parameter gradients are
+    /// exchanged — there is a single shared parameter set). The all-reduce path
+    /// itself is genuinely executed, not simulated.
     pub async fn train_distributed(
         &mut self,
         model: Arc<RwLock<dyn EmbeddingModel + Send + Sync>>,
@@ -705,13 +716,14 @@ impl DistributedTrainer {
                     metrics_guard.record_epoch(epoch, epoch_loss, current_lr, epoch_time);
                 }
 
-                // Simulate gradient synchronization
+                // Synchronize per-rank loss statistics via the coordinator's
+                // real all-reduce.
                 if epoch % distributed_config.sync_frequency == 0 {
-                    // Send gradients for synchronization
+                    // Contribute this rank's loss statistic to the all-reduce.
                     let _ = sync_tx.send(SyncMessage::GradientUpdate {
                         epoch,
                         rank: distributed_config.rank,
-                        gradients: vec![epoch_loss], // Simplified
+                        gradients: vec![epoch_loss],
                     });
 
                     // Wait for parameter updates
@@ -788,6 +800,10 @@ impl DistributedTrainer {
         let handle = tokio::spawn(async move {
             info!("Coordinator starting for {} workers", world_size);
 
+            // Per-epoch all-reduce buffers: element-wise running sum of each
+            // rank's contribution plus the number of ranks that have reported.
+            let mut pending: HashMap<usize, (Vec<f64>, usize)> = HashMap::new();
+
             while let Ok(msg) = sync_rx.recv().await {
                 match msg {
                     SyncMessage::GradientUpdate {
@@ -796,31 +812,58 @@ impl DistributedTrainer {
                         gradients,
                     } => {
                         debug!(
-                            "Received gradients from worker {} for epoch {}",
+                            "Received contribution from worker {} for epoch {}",
                             rank, epoch
                         );
 
-                        // Simulate gradient accumulation and all-reduce
-                        {
-                            let _accumulator = gradient_accumulator
-                                .lock()
-                                .expect("lock should not be poisoned");
-                            // In a real implementation, this would accumulate actual gradients
-                            // For now, we just simulate the process
+                        // Real all-reduce (sum stage): element-wise accumulate
+                        // this rank's vector into the epoch's running sum.
+                        let entry = pending
+                            .entry(epoch)
+                            .or_insert_with(|| (vec![0.0; gradients.len()], 0));
+                        if entry.0.len() < gradients.len() {
+                            entry.0.resize(gradients.len(), 0.0);
                         }
+                        for (acc, g) in entry.0.iter_mut().zip(gradients.iter()) {
+                            *acc += *g;
+                        }
+                        entry.1 += 1;
 
-                        // Broadcast parameter updates
-                        let _ = sync_tx.send(SyncMessage::ParameterSync {
-                            epoch,
-                            parameters: gradients, // Simplified
-                        });
+                        // Once every rank has reported, complete the all-reduce
+                        // (average stage) and broadcast the reduced result. The
+                        // shared GradientAccumulator is updated too so its state
+                        // reflects the real reduction round rather than a no-op.
+                        if entry.1 >= world_size {
+                            let (sum, count) = pending.remove(&epoch).unwrap_or((Vec::new(), 1));
+                            let divisor = count.max(1) as f64;
+                            let averaged: Vec<f64> = sum.iter().map(|v| v / divisor).collect();
+
+                            {
+                                let mut accumulator = gradient_accumulator
+                                    .lock()
+                                    .expect("lock should not be poisoned");
+                                let reduced_grad =
+                                    Array2::from_shape_vec((1, averaged.len()), averaged.clone())
+                                        .unwrap_or_else(|_| Array2::zeros((1, 0)));
+                                accumulator.accumulate(vec![reduced_grad]);
+                                if accumulator.is_ready() {
+                                    let _ = accumulator.get_averaged_gradients();
+                                }
+                            }
+
+                            let _ = sync_tx.send(SyncMessage::ParameterSync {
+                                epoch,
+                                parameters: averaged,
+                            });
+                        }
                     }
                     SyncMessage::EarlyStop { epoch, loss } => {
                         info!(
                             "Early stop signal received at epoch {} with loss {:.6}",
                             epoch, loss
                         );
-                        // In a real implementation, would coordinate early stopping across all workers
+                        // Flush any partial reduction state for this epoch.
+                        pending.remove(&epoch);
                     }
                     _ => {}
                 }

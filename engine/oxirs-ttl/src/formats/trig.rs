@@ -215,6 +215,92 @@ impl TriGParser {
         }
     }
 
+    /// Strip an inline `#` comment from a physical line while honoring
+    /// IRIREF (`<...>`) and string-literal (`"..."`, `'...'`, `"""..."""`,
+    /// `'''...'''`) context, so a `#` that is part of an IRI fragment or a
+    /// literal's lexical form is never mistaken for the start of a comment.
+    ///
+    /// `multiline_quote` tracks whether the scan starts already inside an
+    /// unterminated triple-quoted string carried over from a previous
+    /// physical line of the same statement (`Some('"')` / `Some('\'')`), and
+    /// is updated in place to reflect the state at the end of this line, so
+    /// callers can thread it across the lines of a multi-line statement.
+    fn strip_inline_comment_tracked(line: &str, multiline_quote: &mut Option<char>) -> String {
+        let indices: Vec<(usize, char)> = line.char_indices().collect();
+        let n = indices.len();
+        let mut i = 0usize;
+        let mut in_iri = false;
+        let mut short_quote: Option<char> = None;
+        let mut escaped = false;
+
+        while i < n {
+            let (byte_pos, ch) = indices[i];
+
+            if let Some(q) = *multiline_quote {
+                // Inside a triple-quoted string literal; only an unescaped
+                // closing `"""`/`'''` ends it. Everything else, including
+                // `#`, is literal content.
+                if escaped {
+                    escaped = false;
+                } else if ch == '\\' {
+                    escaped = true;
+                } else if ch == q && i + 2 < n && indices[i + 1].1 == q && indices[i + 2].1 == q {
+                    *multiline_quote = None;
+                    i += 3;
+                    continue;
+                }
+                i += 1;
+                continue;
+            }
+
+            if let Some(q) = short_quote {
+                // Inside a single-line string literal; only an unescaped
+                // matching quote ends it.
+                if escaped {
+                    escaped = false;
+                } else if ch == '\\' {
+                    escaped = true;
+                } else if ch == q {
+                    short_quote = None;
+                }
+                i += 1;
+                continue;
+            }
+
+            if in_iri {
+                if ch == '>' {
+                    in_iri = false;
+                }
+                i += 1;
+                continue;
+            }
+
+            match ch {
+                '<' => {
+                    in_iri = true;
+                    i += 1;
+                }
+                '"' | '\'' => {
+                    if i + 2 < n && indices[i + 1].1 == ch && indices[i + 2].1 == ch {
+                        *multiline_quote = Some(ch);
+                        i += 3;
+                    } else {
+                        short_quote = Some(ch);
+                        i += 1;
+                    }
+                }
+                '#' => {
+                    return line[..byte_pos].trim_end().to_string();
+                }
+                _ => {
+                    i += 1;
+                }
+            }
+        }
+
+        line.to_string()
+    }
+
     /// Parse TriG content into quads
     fn parse_trig_content<R: BufRead>(&self, reader: R) -> TurtleResult<Vec<Quad>> {
         let mut quads = Vec::new();
@@ -359,14 +445,14 @@ impl TriGParser {
                 && !line.contains('{')
                 && line.trim() != "}"
             {
-                // Strip inline comments from the line
-                let line_without_comment = if let Some(comment_pos) = line.find('#') {
-                    line[..comment_pos].trim_end()
-                } else {
-                    line
-                };
+                // Strip inline comments from the line, tracking IRIREF and
+                // string-literal context so a '#' inside an IRI fragment or a
+                // literal's lexical form is never mistaken for a comment.
+                let mut multiline_quote: Option<char> = None;
+                let line_without_comment =
+                    Self::strip_inline_comment_tracked(line, &mut multiline_quote);
 
-                let mut statement = line_without_comment.to_string();
+                let mut statement = line_without_comment;
 
                 // Track if we're inside a multiline string literal
                 let count_triple_quotes =
@@ -381,24 +467,25 @@ impl TriGParser {
                     }
                     i += 1;
                     let next_line = lines[i].trim();
-                    // Stop if we hit a graph closing brace
-                    if next_line == "}" {
+                    // Stop if we hit a graph closing brace (unless we are
+                    // still inside an open multi-line string literal, in
+                    // which case '}' is literal content, not structure).
+                    if next_line == "}" && multiline_quote.is_none() {
                         i -= 1; // Back up so the main loop processes the '}'
                         break;
                     }
-                    if !next_line.is_empty() && !next_line.starts_with('#') {
-                        // Strip inline comments from the next line as well
+                    if !next_line.is_empty() {
+                        // Strip inline comments from the next line as well,
+                        // continuing to honor any multi-line string state
+                        // carried over from the previous line.
+                        let was_in_multiline = multiline_quote.is_some();
                         let next_line_without_comment =
-                            if let Some(comment_pos) = next_line.find('#') {
-                                next_line[..comment_pos].trim_end()
-                            } else {
-                                next_line
-                            };
+                            Self::strip_inline_comment_tracked(next_line, &mut multiline_quote);
 
-                        if !next_line_without_comment.is_empty() {
+                        if !next_line_without_comment.is_empty() || was_in_multiline {
                             // Preserve newlines for multiline string literals
                             statement.push('\n');
-                            statement.push_str(next_line_without_comment);
+                            statement.push_str(&next_line_without_comment);
                         }
                     }
                 }
@@ -1105,7 +1192,7 @@ impl Serializer<Quad> for TriGSerializer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxirs_core::model::Object;
+    use oxirs_core::model::{Object, Predicate};
     use std::io::Cursor;
 
     #[test]
@@ -1341,5 +1428,90 @@ ex:graph1 {
             .parse(Cursor::new(input))
             .expect("trig parsing should succeed");
         assert!(quads.len() >= 3, "single graph with 3 triples");
+    }
+
+    // ─── Comment-stripping regression tests ─────────────────────────────────
+
+    #[test]
+    fn regression_hash_fragment_iri_not_truncated_as_comment() {
+        // The '#' in the rdf:type IRI fragment must not be treated as the
+        // start of a comment.
+        let parser = TriGParser::new();
+        let input = "<http://example.org/s> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/o> .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("IRI with '#' fragment should parse successfully");
+        assert_eq!(quads.len(), 1);
+        match quads[0].predicate() {
+            Predicate::NamedNode(nn) => {
+                assert_eq!(
+                    nn.as_str(),
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                );
+            }
+            other => panic!("expected a NamedNode predicate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn regression_literal_containing_hash_not_truncated() {
+        // A literal value containing a literal '#' (e.g. a hashtag) must be
+        // preserved in full, not truncated at the '#'.
+        let parser = TriGParser::new();
+        let input = r#"@prefix ex: <http://example.org/> .
+ex:alice ex:tag "section #3 is great" .
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("literal containing '#' should parse successfully");
+        assert_eq!(quads.len(), 1);
+        match quads[0].object() {
+            Object::Literal(lit) => {
+                assert_eq!(lit.value(), "section #3 is great");
+            }
+            other => panic!("expected a literal object, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn regression_hash_fragment_iri_inside_named_graph() {
+        let parser = TriGParser::new();
+        let input = r#"@prefix ex: <http://example.org/> .
+ex:g1 {
+    ex:alice <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ex:Person .
+}
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig with '#' IRI fragment inside a named graph should parse");
+        assert_eq!(quads.len(), 1);
+        match quads[0].predicate() {
+            Predicate::NamedNode(nn) => {
+                assert_eq!(
+                    nn.as_str(),
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                );
+            }
+            other => panic!("expected a NamedNode predicate, got {other:?}"),
+        }
+        assert!(!quads[0].graph_name().is_default_graph());
+    }
+
+    #[test]
+    fn regression_actual_trailing_comment_still_stripped() {
+        // A genuine trailing '#' comment (outside any IRI/string) must
+        // still be stripped as before.
+        let parser = TriGParser::new();
+        let input = r#"@prefix ex: <http://example.org/> .
+ex:alice ex:name "Alice" . # this is a real comment
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trailing comment should still be stripped");
+        assert_eq!(quads.len(), 1);
+        match quads[0].object() {
+            Object::Literal(lit) => assert_eq!(lit.value(), "Alice"),
+            other => panic!("expected a literal object, got {other:?}"),
+        }
     }
 }

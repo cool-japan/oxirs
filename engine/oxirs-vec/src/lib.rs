@@ -204,6 +204,8 @@ pub mod result_fusion;
 pub mod rta_aggregators;
 pub mod rta_engine;
 pub mod rta_tests;
+#[cfg(test)]
+mod score_contract_tests;
 pub mod similarity;
 pub mod sparql_integration;
 pub mod sparql_service_endpoint;

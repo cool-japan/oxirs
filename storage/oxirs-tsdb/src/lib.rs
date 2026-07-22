@@ -18,7 +18,13 @@
 //! - Columnar storage - Disk-backed binary format
 //! - Series indexing - Efficient chunk lookups
 //! - Raft replication - Distributed consensus with quorum commits
-//! - Arrow/Parquet export - Analytics interoperability
+//! - Arrow/Parquet export - Genuine Analytics interoperability with real
+//!   Arrow/Parquet tooling (`ArrowExporter`/`ParquetExporter`, gated behind
+//!   the `arrow-export` feature, backed by the real `arrow`/`parquet` crates)
+//! - OxiRS-native IPC export (`OxirsIpcWriter`/`OxirsIpcReader`,
+//!   `analytics::parquet_export`) - a lightweight always-available binary
+//!   format for OxiRS-to-OxiRS interchange; **not** Apache Arrow/Parquet
+//!   wire-compatible and not intended for external analytics tooling
 //!
 //! # Architecture
 //!
@@ -172,13 +178,16 @@ pub use analytics::{
     sum_column, GpuAggError,
 };
 
-// Arrow IPC re-exports
+// OxiRS-native IPC re-exports (NOT Apache Arrow-compatible; see
+// `analytics::arrow_ipc` module docs — use `ArrowExporter`/`ParquetExporter`
+// below for genuine Arrow/Parquet interoperability).
 pub use analytics::{
-    ArrowColumn, ArrowDataType, ArrowField, ArrowIpcReader, ArrowIpcWriter, ArrowRecordBatch,
-    ArrowSchema, TaggedDataPoint, TimeUnit,
+    OxirsIpcColumn, OxirsIpcDataType, OxirsIpcField, OxirsIpcReader, OxirsIpcRecordBatch,
+    OxirsIpcSchema, OxirsIpcTimeUnit, OxirsIpcWriter, TaggedDataPoint,
 };
 
-// Parquet export re-exports
+// OxiRS-native Parquet-inspired export re-exports (NOT real Parquet-file
+// compatible; see `analytics::parquet_export` module docs).
 pub use analytics::{
     ParquetColumn, ParquetIpcCompression, ParquetReader, ParquetValues, ParquetWriter,
 };

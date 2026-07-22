@@ -380,18 +380,32 @@ impl SubscriptionManager {
         self.connections.insert(connection_id.clone(), conn_info);
 
         // Spawn sender task
-        let sender_task = tokio::spawn(Self::message_sender(sender, rx));
+        let mut sender_task = tokio::spawn(Self::message_sender(sender, rx));
 
         // Spawn receiver task
-        let receiver_task = tokio::spawn(
+        let mut receiver_task = tokio::spawn(
             self.clone()
                 .message_receiver(receiver, connection_id.clone()),
         );
 
-        // Wait for tasks to complete
-        let _ = tokio::try_join!(sender_task, receiver_task);
+        // Wait for EITHER task to finish, not both. When the client closes the
+        // socket, `receiver_task` ends but `sender_task` is still parked on
+        // `rx.recv().await`; that channel only closes once every `tx` clone is
+        // dropped, and one clone lives in the `connections` map entry that is not
+        // removed until after cleanup. Waiting on both (`try_join!`) would
+        // therefore deadlock and leak the task, the socket sink, and the map
+        // entries. `select!` lets us proceed as soon as either side ends, then we
+        // abort the sibling so a spawned-but-unpolled task cannot keep running.
+        tokio::select! {
+            _ = &mut sender_task => {
+                receiver_task.abort();
+            }
+            _ = &mut receiver_task => {
+                sender_task.abort();
+            }
+        }
 
-        // Cleanup connection
+        // Cleanup connection (drops the surviving `tx` clone from the map).
         self.cleanup_connection(&connection_id).await;
 
         info!("WebSocket connection closed: {}", connection_id);
@@ -1161,42 +1175,46 @@ impl QueryExecutor {
         })
     }
 
-    /// Execute SPARQL query
+    /// Execute a subscription's SPARQL query against the live store.
+    ///
+    /// This runs the client's query through the same real oxirs-arq engine used
+    /// by the HTTP `/sparql` handler (via
+    /// [`crate::handlers::sparql::arq_exec::execute_query`]) and projects the
+    /// typed result into the flat binding rows the subscription protocol carries.
+    /// The engine runs synchronously, so it is moved to the blocking pool to
+    /// avoid pinning an async worker. A parse or execution failure surfaces as a
+    /// typed error rather than a silent empty result.
     async fn execute_sparql_query(
         &self,
         query: &str,
         _parameters: &QueryParameters,
     ) -> FusekiResult<Vec<HashMap<String, serde_json::Value>>> {
-        // Placeholder implementation
-        // In real implementation, this would:
-        // 1. Parse the SPARQL query
-        // 2. Execute against the store with specified graphs
-        // 3. Format results according to requested format
+        let store = Arc::clone(&self.store);
+        let query_owned = query.to_string();
+        let result = tokio::task::spawn_blocking(move || {
+            crate::handlers::sparql::arq_exec::execute_query(&query_owned, &store)
+        })
+        .await
+        .map_err(|e| FusekiError::internal(format!("subscription query task failed: {e}")))??;
 
-        // For now, return mock data
-        let mut bindings = Vec::new();
-
-        if query.to_lowercase().contains("select") {
-            // Mock SELECT results
-            for i in 0..3 {
-                let mut binding = HashMap::new();
-                binding.insert(
-                    "subject".to_string(),
-                    serde_json::json!(format!("http://example.org/resource{}", i)),
-                );
-                binding.insert(
-                    "predicate".to_string(),
-                    serde_json::json!("http://example.org/property"),
-                );
-                binding.insert(
-                    "object".to_string(),
-                    serde_json::json!(format!("Value {}", i)),
-                );
-                bindings.push(binding);
-            }
+        // Project the typed SPARQL result into flat rows. SELECT carries its
+        // solution bindings verbatim; ASK carries a single `boolean` row;
+        // CONSTRUCT/DESCRIBE carry their serialized graph in a single `graph`
+        // row so subscribers observe the real, current answer on every change.
+        if let Some(bindings) = result.bindings {
+            return Ok(bindings);
         }
-
-        Ok(bindings)
+        if let Some(boolean) = result.boolean {
+            let mut row = HashMap::new();
+            row.insert("boolean".to_string(), serde_json::json!(boolean));
+            return Ok(vec![row]);
+        }
+        if let Some(graph) = result.construct_graph.or(result.describe_graph) {
+            let mut row = HashMap::new();
+            row.insert("graph".to_string(), serde_json::json!(graph));
+            return Ok(vec![row]);
+        }
+        Ok(Vec::new())
     }
 }
 

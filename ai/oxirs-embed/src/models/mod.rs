@@ -34,6 +34,7 @@ pub mod advanced_models;
 pub mod base;
 pub mod common;
 pub mod scirs_neural;
+pub mod serialization;
 
 // Re-export all models
 pub use complex::ComplEx;

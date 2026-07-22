@@ -607,15 +607,39 @@ impl ParallelQueryExecutor {
         let result: Solution = left_solution
             .par_iter()
             .filter(|left_binding| {
-                // Keep left binding only if it doesn't have a compatible binding in right
+                // SPARQL 1.1 §18.5 MINUS: a left row is removed only when there
+                // is a right row that (a) shares at least one variable with it
+                // AND (b) agrees on every shared variable. When the domains are
+                // disjoint (no shared variable) the row is NOT removed. Using
+                // `are_bindings_compatible` alone is wrong because it returns
+                // `true` for disjoint domains, which would delete every left row.
                 !right_solution
                     .iter()
-                    .any(|right_binding| self.are_bindings_compatible(left_binding, right_binding))
+                    .any(|right_binding| self.bindings_minus_match(left_binding, right_binding))
             })
             .cloned()
             .collect();
 
         Ok(result)
+    }
+
+    /// MINUS elimination predicate: true iff `left` and `right` share at least
+    /// one variable and agree on the value of every shared variable.
+    ///
+    /// Unlike [`Self::are_bindings_compatible`], this returns `false` for
+    /// variable-disjoint bindings, matching SPARQL 1.1 §18.5 (a MINUS whose
+    /// right operand shares no variable with the left removes nothing).
+    fn bindings_minus_match(&self, left: &Binding, right: &Binding) -> bool {
+        let mut shares_variable = false;
+        for (var, left_value) in left {
+            if let Some(right_value) = right.get(var) {
+                if left_value != right_value {
+                    return false;
+                }
+                shares_variable = true;
+            }
+        }
+        shares_variable
     }
 
     /// Check if two bindings are compatible (share same values for common variables)
@@ -633,5 +657,59 @@ impl ParallelQueryExecutor {
     /// Check if a term represents a truthy value
     fn is_truthy_value(&self, term: &Term) -> bool {
         term.effective_boolean_value().unwrap_or(false)
+    }
+}
+
+#[cfg(test)]
+mod parallel_minus_tests {
+    use super::*;
+    use crate::executor::config::ParallelConfig;
+    use oxirs_core::model::NamedNode;
+
+    fn iri_term(iri: &str) -> AlgebraTerm {
+        AlgebraTerm::Iri(NamedNode::new_unchecked(iri))
+    }
+
+    fn binding(pairs: &[(&str, AlgebraTerm)]) -> Binding {
+        let mut b = Binding::new();
+        for (name, term) in pairs {
+            b.insert(Variable::new_unchecked(*name), term.clone());
+        }
+        b
+    }
+
+    fn executor() -> ParallelQueryExecutor {
+        ParallelQueryExecutor::new(ParallelConfig::default()).expect("executor")
+    }
+
+    #[test]
+    fn regression_parallel_minus_disjoint_domains_keep_all_rows() {
+        // MINUS whose right operand shares NO variable with the left must remove
+        // nothing (SPARQL 1.1 §18.5). The old code deleted every left row.
+        let exec = executor();
+        let left = vec![
+            binding(&[("s", iri_term("http://ex/a"))]),
+            binding(&[("s", iri_term("http://ex/b"))]),
+        ];
+        let right = vec![binding(&[("x", iri_term("http://ex/z"))])];
+        let out = exec.perform_parallel_minus(left, right).expect("minus ok");
+        assert_eq!(out.len(), 2, "disjoint-domain MINUS must remove nothing");
+    }
+
+    #[test]
+    fn regression_parallel_minus_removes_matching_shared_var() {
+        let exec = executor();
+        let left = vec![
+            binding(&[("s", iri_term("http://ex/a"))]),
+            binding(&[("s", iri_term("http://ex/b"))]),
+        ];
+        // Right shares ?s and matches only http://ex/a.
+        let right = vec![binding(&[("s", iri_term("http://ex/a"))])];
+        let out = exec.perform_parallel_minus(left, right).expect("minus ok");
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            out[0].get(&Variable::new_unchecked("s")),
+            Some(&iri_term("http://ex/b"))
+        );
     }
 }

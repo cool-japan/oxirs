@@ -161,7 +161,7 @@ impl QueryParser {
                         let mut lookahead = chars.clone();
                         let mut iri = String::new();
                         let mut closed = false;
-                        while let Some(ch) = lookahead.next() {
+                        for ch in lookahead.by_ref() {
                             if ch == '>' {
                                 closed = true;
                                 break;
@@ -405,15 +405,71 @@ impl QueryParser {
             DatatypeRef::Prefixed(self.parse_identifier(chars))
         }
     }
+    /// Scan a single SPARQL numeric literal, consuming ONLY the characters that
+    /// form a valid number so terminators and operators are left in the stream:
+    ///
+    /// * a trailing `.` with no following digit is a statement terminator, not a
+    ///   decimal point (`:s :p 30. ?x …` → number `30`, then `.`), so it is not
+    ///   consumed;
+    /// * `+`/`-` are only accepted immediately after an exponent marker
+    ///   (`1e-3`), never as a leading sign or an infix operator — so `5-3` /
+    ///   `5+2` tokenise as subtraction/addition, not a single malformed number;
+    /// * at most one decimal point and one exponent are accepted.
+    ///
+    /// A leading sign, when present, is handled by the caller before this is
+    /// invoked; here the first character is always a digit or `.`.
     pub(super) fn parse_number(&self, chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
         let mut number = String::new();
+        // Integer part (digits).
         while let Some(&ch) = chars.peek() {
-            if ch.is_ascii_digit() || ch == '.' || ch == 'e' || ch == 'E' || ch == '+' || ch == '-'
-            {
+            if ch.is_ascii_digit() {
                 number.push(ch);
                 chars.next();
             } else {
                 break;
+            }
+        }
+        // Optional fractional part: a '.' is only part of the number when it is
+        // followed by a digit; otherwise it is a statement terminator.
+        if chars.peek() == Some(&'.') {
+            let mut lookahead = chars.clone();
+            lookahead.next(); // skip the '.'
+            if matches!(lookahead.peek(), Some(c) if c.is_ascii_digit()) {
+                number.push('.');
+                chars.next();
+                while let Some(&ch) = chars.peek() {
+                    if ch.is_ascii_digit() {
+                        number.push(ch);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        // Optional exponent: 'e'/'E', an optional sign, then required digits.
+        if matches!(chars.peek(), Some(&'e') | Some(&'E')) {
+            let mut lookahead = chars.clone();
+            lookahead.next(); // skip the exponent marker
+            if matches!(lookahead.peek(), Some(&'+') | Some(&'-')) {
+                lookahead.next();
+            }
+            if matches!(lookahead.peek(), Some(c) if c.is_ascii_digit()) {
+                // Commit: copy the exponent marker, optional sign and digits.
+                number.push(chars.next().unwrap_or('e'));
+                if matches!(chars.peek(), Some(&'+') | Some(&'-')) {
+                    if let Some(sign) = chars.next() {
+                        number.push(sign);
+                    }
+                }
+                while let Some(&ch) = chars.peek() {
+                    if ch.is_ascii_digit() {
+                        number.push(ch);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
             }
         }
         number
@@ -459,6 +515,13 @@ impl QueryParser {
                 self.parse_describe_query(&mut query)?;
             }
             _ => bail!("Expected query type (SELECT, CONSTRUCT, ASK, DESCRIBE)"),
+        }
+        // The whole token stream must be consumed: trailing tokens after a
+        // complete query (e.g. `SELECT * { ?s ?p ?o } garbage`) are a syntax
+        // error, not silently-dropped input.
+        self.skip_whitespace_and_newlines();
+        if !self.is_at_end() {
+            bail!("Unexpected trailing tokens after query: {:?}", self.peek());
         }
         Ok(query)
     }
@@ -550,6 +613,7 @@ impl QueryParser {
             }
         }
         self.parse_dataset_clause(&mut query.dataset)?;
+        self.skip_whitespace_and_newlines();
         // The `WHERE` keyword is optional in a SPARQL 1.1 SELECT
         // (`SELECT ?s { … }` and `SELECT * { … }` are both valid); only the
         // group-graph-pattern braces are required. Mirror the ASK handling
@@ -557,6 +621,10 @@ impl QueryParser {
         // above already stops on `{` (`Token::LeftBrace` hits its `_ => break`),
         // so the brace that opens the pattern is still available here.
         self.match_token(&Token::Where);
+        // A newline may separate the (optional) `WHERE` keyword from the
+        // group's opening `{`, e.g. `SELECT ?s WHERE\n{ … }` — skip it before
+        // the brace lookahead, same as the other query heads.
+        self.skip_whitespace_and_newlines();
         self.expect_token(Token::LeftBrace)?;
         query.where_clause = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
@@ -608,11 +676,21 @@ impl QueryParser {
                 bail!("DESCRIBE requires at least one IRI or variable target, or '*'");
             }
         }
+        // Skip any newline(s) between the target list (or `*`) and the
+        // dataset clause — mirrors the CONSTRUCT/SELECT/ASK hardening so
+        // `DESCRIBE ?x\nWHERE { … }` (targets on one line, dataset/WHERE on
+        // the next) does not fail with a spurious "Expected X, found
+        // Newline". `parse_dataset_clause` already skips at each of its own
+        // lookaheads, but the skip here also covers a newline directly after
+        // the target list when there is no dataset clause at all.
+        self.skip_whitespace_and_newlines();
         self.parse_dataset_clause(&mut query.dataset)?;
+        self.skip_whitespace_and_newlines();
         // `WhereClause ::= 'WHERE'? GroupGraphPattern` — the WHERE keyword is
         // optional, so accept `DESCRIBE ?x { … }` as well as
         // `DESCRIBE ?x WHERE { … }`.
         if self.match_token(&Token::Where) {
+            self.skip_whitespace_and_newlines();
             self.expect_token(Token::LeftBrace)?;
             query.where_clause = self.parse_group_graph_pattern()?;
             self.expect_token(Token::RightBrace)?;

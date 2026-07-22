@@ -42,33 +42,32 @@ impl HnswIndex {
         let query_f32 = query.as_f32();
         let query_array = Array1::from_vec(query_f32.clone());
 
-        // Use SIMD operations for distance calculations
+        // Use SIMD operations for distance calculations. Only the cosine metric
+        // has a SIMD fast path here; every other metric falls back to the scalar
+        // batch path so that SIMD-on and SIMD-off produce *identical* distances
+        // (this is critical: the graph is built with the scalar metric, so a
+        // search-time SIMD distance that disagreed would degrade recall).
         match self.config().metric {
-            SimilarityMetric::Cosine | SimilarityMetric::DotProduct => {
-                // Use scirs2-core's SIMD dot product for cosine similarity
+            SimilarityMetric::Cosine => {
+                let query_mag = (query_array.iter().map(|x| x * x).sum::<f32>()).sqrt();
                 for &candidate_id in candidates {
                     if let Some(node) = self.nodes().get(candidate_id) {
                         let candidate_f32 = node.vector.as_f32();
                         let candidate_array = Array1::from_vec(candidate_f32);
 
-                        // Use SIMD-accelerated dot product
+                        // SIMD-accelerated dot product, then cosine normalization.
                         let dot_prod = simd_dot_f32(&query_array.view(), &candidate_array.view());
+                        let candidate_mag =
+                            (candidate_array.iter().map(|x| x * x).sum::<f32>()).sqrt();
 
-                        if self.config().metric == SimilarityMetric::Cosine {
-                            // For cosine similarity, normalize
-                            let query_mag = (query_array.iter().map(|x| x * x).sum::<f32>()).sqrt();
-                            let candidate_mag =
-                                (candidate_array.iter().map(|x| x * x).sum::<f32>()).sqrt();
-
-                            if query_mag > 0.0 && candidate_mag > 0.0 {
-                                let similarity = dot_prod / (query_mag * candidate_mag);
-                                distances.push(1.0 - similarity); // Convert to distance
-                            } else {
-                                distances.push(f32::INFINITY);
-                            }
+                        if query_mag > 0.0 && candidate_mag > 0.0 {
+                            // Match `SimilarityMetric::distance` exactly: clamp the
+                            // similarity to [0, 1] before converting to distance.
+                            let similarity =
+                                (dot_prod / (query_mag * candidate_mag)).clamp(0.0, 1.0);
+                            distances.push((1.0 - similarity).max(0.0));
                         } else {
-                            // For dot product, use directly as distance
-                            distances.push(-dot_prod); // Negate for distance semantics
+                            distances.push(f32::INFINITY);
                         }
                     } else {
                         distances.push(f32::INFINITY);
@@ -76,7 +75,7 @@ impl HnswIndex {
                 }
             }
             _ => {
-                // For other metrics, use standard calculation
+                // For other metrics, use the scalar calculation (exact parity).
                 return self.cpu_batch_distance_calculation(query, candidates);
             }
         }
@@ -85,37 +84,77 @@ impl HnswIndex {
         Ok(distances)
     }
 
-    /// Prefetch memory for improved cache performance
+    /// Prefetch the vector data of the given nodes into CPU cache ahead of the
+    /// distance computations that will read them.
+    ///
+    /// On x86/x86_64 this issues real `PREFETCHT0` instructions against each
+    /// node's vector storage; on other architectures it performs a cheap
+    /// best-effort touch of the first cache line. Governed by `enable_prefetch`
+    /// and `prefetch_distance` so those config knobs have a real effect on the
+    /// search hot path.
     pub fn prefetch_nodes(&self, node_ids: &[usize]) {
-        if !self.config().enable_prefetch {
+        if !self.config().enable_prefetch || node_ids.is_empty() {
             return;
         }
 
-        // Placeholder for memory prefetching
-        // Real implementation would use:
-        // - CPU cache prefetch instructions
-        // - Strategic memory access patterns
-        // - Prefetch lookahead based on search patterns
-
-        for &node_id in node_ids.iter().take(self.config().prefetch_distance) {
-            if node_id < self.nodes().len() {
-                // Prefetch would happen here
-                // std::arch::x86_64::_mm_prefetch(...) on x86_64
+        let nodes = self.nodes();
+        let mut issued = 0u64;
+        for &node_id in node_ids.iter().take(self.config().prefetch_distance.max(1)) {
+            if let Some(node) = nodes.get(node_id) {
+                let data = node.vector.as_f32();
+                if let Some(first) = data.first() {
+                    let ptr = first as *const f32;
+                    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+                    {
+                        #[cfg(target_arch = "x86")]
+                        use std::arch::x86::{_mm_prefetch, _MM_HINT_T0};
+                        #[cfg(target_arch = "x86_64")]
+                        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+                        // SAFETY: `ptr` points at live, aligned f32 data owned by
+                        // `node` for the duration of this borrow; `_mm_prefetch`
+                        // only hints the cache and never dereferences unsafely.
+                        unsafe {
+                            _mm_prefetch::<_MM_HINT_T0>(ptr as *const i8);
+                        }
+                    }
+                    #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+                    {
+                        // Portable best-effort: a volatile read of the first
+                        // element pulls its cache line in without being optimized
+                        // away. SAFETY: `ptr` is valid for reads of one f32.
+                        unsafe {
+                            std::ptr::read_volatile(ptr);
+                        }
+                    }
+                    issued += 1;
+                }
             }
         }
+        self.update_prefetch_stats(issued);
     }
 
-    /// Optimize memory layout for cache-friendly access
+    /// Optimize the in-memory graph layout for cache-friendly traversal.
+    ///
+    /// Shrinks every node's per-layer adjacency-set allocations (and the outer
+    /// connections vector) to fit, removing the slack that `HashSet`/`Vec`
+    /// growth leaves behind. This packs the graph metadata more densely so more
+    /// of it fits per cache line during traversal. The complementary win — visiting
+    /// neighbors in ascending-id order to make `nodes()[neighbor_id]` accesses
+    /// (and [`Self::prefetch_nodes`] hints) sequential — is applied on the search
+    /// hot path in `search_layer` when `cache_friendly_layout` is enabled. This
+    /// is a pure layout change: neighbor *sets* are unchanged, so results are
+    /// identical. Governed by `cache_friendly_layout`.
     pub fn optimize_memory_layout(&mut self) -> Result<()> {
         if !self.config().cache_friendly_layout {
             return Ok(());
         }
 
-        // Placeholder for memory layout optimization
-        // Real implementation would:
-        // - Reorder nodes based on access patterns
-        // - Pack frequently accessed data together
-        // - Align data structures to cache line boundaries
+        for node in self.nodes_mut().iter_mut() {
+            for level_set in node.connections.iter_mut() {
+                level_set.shrink_to_fit();
+            }
+            node.connections.shrink_to_fit();
+        }
 
         Ok(())
     }

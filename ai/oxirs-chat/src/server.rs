@@ -34,6 +34,8 @@ pub struct AppState {
     pub websocket_sessions: Arc<RwLock<HashMap<String, WebSocketSessionInfo>>>,
     pub broadcast_tx: broadcast::Sender<ServerMessage>,
     pub config: ServerConfig,
+    /// Process/server start instant, used to report real uptime in `/api/stats`.
+    pub started_at: std::time::Instant,
 }
 
 /// Server configuration
@@ -184,6 +186,7 @@ impl ChatServer {
             websocket_sessions: Arc::new(RwLock::new(HashMap::new())),
             broadcast_tx,
             config,
+            started_at: std::time::Instant::now(),
         };
 
         Self { state }
@@ -328,11 +331,24 @@ async fn send_message(
     State(state): State<AppState>,
     Json(request): Json<SendMessageRequest>,
 ) -> Result<Json<MessageResponse>, StatusCode> {
+    // Fail-loud input screening (size limit + injection detection) before the
+    // content reaches RAG/LLM. Reject invalid input with 400 rather than 500.
+    if let Err(e) = state.chat.validate_input(&request.content) {
+        warn!("Rejected message input for session {}: {}", session_id, e);
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
     match state.chat.get_session(&session_id).await {
         Some(_session_arc) => {
             match state
                 .chat
-                .process_message(&session_id, request.content)
+                .process_message_with_options(
+                    &session_id,
+                    request.content,
+                    request.thread_id,
+                    request.parent_message_id,
+                    request.metadata,
+                )
                 .await
             {
                 Ok(message) => {
@@ -421,9 +437,33 @@ async fn get_threads(
 ) -> Result<Json<Vec<ThreadInfo>>, StatusCode> {
     match state.chat.get_session(&session_id).await {
         Some(session_arc) => {
-            let _session = session_arc.lock().await;
-            // Thread functionality not yet implemented
-            let threads: Vec<ThreadInfo> = Vec::new();
+            let session = session_arc.lock().await;
+
+            // Aggregate distinct thread_id values from the session's messages.
+            let mut threads: HashMap<String, ThreadInfo> = HashMap::new();
+            for msg in &session.messages {
+                if let Some(thread_id) = &msg.thread_id {
+                    let entry = threads
+                        .entry(thread_id.clone())
+                        .or_insert_with(|| ThreadInfo {
+                            thread_id: thread_id.clone(),
+                            title: None,
+                            message_count: 0,
+                            created_at: msg.timestamp,
+                            last_activity: msg.timestamp,
+                        });
+                    entry.message_count += 1;
+                    if msg.timestamp < entry.created_at {
+                        entry.created_at = msg.timestamp;
+                    }
+                    if msg.timestamp > entry.last_activity {
+                        entry.last_activity = msg.timestamp;
+                    }
+                }
+            }
+
+            let mut threads: Vec<ThreadInfo> = threads.into_values().collect();
+            threads.sort_by_key(|t| std::cmp::Reverse(t.last_activity));
             Ok(Json(threads))
         }
         _ => Err(StatusCode::NOT_FOUND),
@@ -550,23 +590,10 @@ async fn add_reaction(
 }
 
 async fn get_stats(State(state): State<AppState>) -> Result<Json<crate::SessionStats>, StatusCode> {
-    // Calculate basic stats from available methods
-    let total_sessions = state.chat.session_count().await;
-    let _session_list = state.chat.list_sessions().await;
-
-    // Create basic stats (detailed stats would require iterating over all sessions)
-    let stats = crate::SessionStats {
-        total_sessions,
-        active_sessions: total_sessions, // Simplified - assume all are active
-        idle_sessions: 0,
-        expired_sessions: 0,
-        suspended_sessions: 0,
-        total_messages: 0, // Would need to aggregate from all sessions
-        total_tokens: 0,
-        avg_response_time_ms: 0.0,
-        uptime_seconds: 0,
-    };
-
+    // Aggregate real per-session metrics (messages, tokens, activity/expiry
+    // state, response time) and report genuine process uptime.
+    let uptime_seconds = state.started_at.elapsed().as_secs();
+    let stats = state.chat.compute_session_stats(uptime_seconds).await;
     Ok(Json(stats))
 }
 
@@ -595,7 +622,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
     let session_id_clone = session_id.clone();
     let _ws_session_id_clone = ws_session_id.clone();
     let ws_session_id_cleanup = ws_session_id.clone();
-    let send_task = tokio::spawn(async move {
+    let mut send_task = tokio::spawn(async move {
         loop {
             tokio::select! {
                 // Handle broadcast messages
@@ -632,7 +659,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
     });
 
     let state_clone = state.clone();
-    let recv_task = tokio::spawn(async move {
+    let mut recv_task = tokio::spawn(async move {
         let tx = tx_clone;
         let ws_session_id = ws_session_id.clone();
         let state = state_clone;
@@ -644,11 +671,32 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                             match ws_msg {
                                 WebSocketMessage::SendMessage {
                                     content,
-                                    thread_id: _,
-                                    parent_message_id: _,
+                                    thread_id,
+                                    parent_message_id,
                                 } => {
-                                    // Process message using OxiRSChat
-                                    match state.chat.process_message(&session_id, content).await {
+                                    // Fail-loud input screening before processing.
+                                    if let Err(e) = state.chat.validate_input(&content) {
+                                        let error_response = WebSocketResponse::Error {
+                                            code: "INVALID_INPUT".to_string(),
+                                            message: format!("Input rejected: {e}"),
+                                        };
+                                        if let Ok(json) = serde_json::to_string(&error_response) {
+                                            let _ = tx.send(json).await;
+                                        }
+                                        continue;
+                                    }
+                                    // Process message using OxiRSChat, preserving thread context
+                                    match state
+                                        .chat
+                                        .process_message_with_options(
+                                            &session_id,
+                                            content,
+                                            thread_id,
+                                            parent_message_id,
+                                            None,
+                                        )
+                                        .await
+                                    {
                                         Ok(response_msg) => {
                                             let response = WebSocketResponse::Message {
                                                 message_id: response_msg.id,
@@ -798,9 +846,17 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
         }
     });
 
+    // When either side finishes (typically the client disconnecting, which ends
+    // `recv_task`), abort the other task so it cannot leak — otherwise the
+    // surviving `send_task` keeps its split WS sink and broadcast subscription
+    // alive indefinitely on a `broadcast_rx.recv()` arm.
     tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
+        _ = &mut send_task => {
+            recv_task.abort();
+        },
+        _ = &mut recv_task => {
+            send_task.abort();
+        },
     }
 
     {
@@ -985,6 +1041,7 @@ mod tests {
             websocket_sessions: Arc::new(RwLock::new(HashMap::new())),
             broadcast_tx,
             config: ServerConfig::default(),
+            started_at: std::time::Instant::now(),
         };
 
         // Must not panic: constructing the router forces axum to parse

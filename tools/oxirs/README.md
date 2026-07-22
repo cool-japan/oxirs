@@ -51,7 +51,7 @@ cd oxirs/tools/oxirs
 cargo install --path .
 
 # Or with all optional features (full-text search, geo, PDF export)
-cargo install --path . --features all-features
+cargo install --path . --features full-cli
 ```
 
 To just produce a binary without installing it onto your `PATH`:

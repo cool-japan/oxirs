@@ -88,7 +88,12 @@ pub struct LsmConfig {
 impl Default for LsmConfig {
     fn default() -> Self {
         Self {
-            data_dir: std::env::temp_dir().join("oxirs_lsm"),
+            // Instance-unique, not a fixed shared path: see
+            // `tiered_storage::unique_tier_dir` for why a process-global
+            // default directory here would leak on-disk state between
+            // concurrently-running store instances (e.g. nextest's
+            // process-per-test execution).
+            data_dir: crate::tiered_storage::unique_tier_dir("oxirs_lsm"),
             memtable_size_threshold: 16 * 1024 * 1024, // 16 MB
             level_size_multiplier: 10,
             max_levels: 7,

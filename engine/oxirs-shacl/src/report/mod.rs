@@ -308,4 +308,104 @@ mod report_turtle_tests {
             "Unknown format should return error"
         );
     }
+
+    // ---- sh:resultPath / sh:value / sh:sourceConstraintComponent regressions ----
+
+    fn violated_report_with_path_and_value() -> ValidationReport {
+        let mut r = ValidationReport::new();
+        let v = ValidationViolation {
+            focus_node: make_focus_node("http://example.org/node1"),
+            source_shape: ShapeId::new("http://example.org/MyShape"),
+            source_constraint_component: ConstraintComponentId(
+                "sh:MinLengthConstraintComponent".to_string(),
+            ),
+            result_path: Some(crate::PropertyPath::Predicate(
+                NamedNode::new("http://example.org/name").expect("valid IRI"),
+            )),
+            value: Some(Term::Literal(oxirs_core::model::Literal::new("ab"))),
+            result_message: Some("Too short".to_string()),
+            result_severity: Severity::Violation,
+            details: HashMap::new(),
+            nested_results: vec![],
+        };
+        r.add_violation(v);
+        r
+    }
+
+    #[test]
+    fn regression_to_turtle_includes_result_path_and_value() {
+        let report = violated_report_with_path_and_value();
+        let turtle = report.to_turtle().expect("serialize");
+        assert!(
+            turtle.contains("sh:resultPath"),
+            "Turtle export must include sh:resultPath, got:\n{turtle}"
+        );
+        assert!(
+            turtle.contains("http://example.org/name"),
+            "Turtle export must render the actual path IRI, got:\n{turtle}"
+        );
+        assert!(
+            turtle.contains("sh:value"),
+            "Turtle export must include sh:value, got:\n{turtle}"
+        );
+        assert!(
+            turtle.contains("\"ab\""),
+            "Turtle export must render the actual violating value, got:\n{turtle}"
+        );
+    }
+
+    #[test]
+    fn regression_to_rdf_turtle_includes_source_constraint_component_and_path_value() {
+        let report = violated_report_with_path_and_value();
+        let rdf = report.to_rdf("turtle").expect("to_rdf");
+        assert!(
+            rdf.contains("sh:sourceConstraintComponent"),
+            "to_rdf(turtle) must include sh:sourceConstraintComponent, got:\n{rdf}"
+        );
+        assert!(
+            rdf.contains("sh:resultPath"),
+            "to_rdf(turtle) must include sh:resultPath, got:\n{rdf}"
+        );
+        assert!(
+            rdf.contains("sh:value"),
+            "to_rdf(turtle) must include sh:value, got:\n{rdf}"
+        );
+    }
+
+    #[test]
+    fn regression_to_rdf_ntriples_emits_violations_not_just_conforms() {
+        let report = violated_report_with_path_and_value();
+        let rdf = report.to_rdf("nt").expect("to_rdf nt");
+
+        assert!(
+            rdf.contains("ValidationResult"),
+            "N-Triples export must emit sh:ValidationResult for each violation, got:\n{rdf}"
+        );
+        assert!(
+            rdf.contains("http://example.org/node1"),
+            "N-Triples export must emit the focus node, got:\n{rdf}"
+        );
+        assert!(
+            rdf.contains("resultPath") && rdf.contains("http://example.org/name"),
+            "N-Triples export must emit sh:resultPath with the real path IRI, got:\n{rdf}"
+        );
+        assert!(
+            rdf.contains("value") && rdf.contains("\"ab\""),
+            "N-Triples export must emit sh:value with the real violating value, got:\n{rdf}"
+        );
+        assert!(
+            rdf.contains("Too short"),
+            "N-Triples export must emit the result message, got:\n{rdf}"
+        );
+    }
+
+    #[test]
+    fn regression_to_rdf_ntriples_empty_report_has_no_results() {
+        let report = simple_report();
+        let rdf = report.to_rdf("nt").expect("to_rdf nt");
+        assert!(
+            !rdf.contains("ValidationResult"),
+            "an empty (conforming) report must not emit any sh:ValidationResult triples"
+        );
+    }
 }

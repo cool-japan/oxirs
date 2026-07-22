@@ -17,8 +17,21 @@ use geo::algorithm::*;
 ///
 /// Returns true if the two geometries are spatially equal,
 /// meaning they have the same set of points in space.
+///
+/// Combinations without a cheap special-case (e.g. Polygon/Polygon,
+/// MultiPolygon/MultiPolygon, GeometryCollection combos) are resolved via
+/// the DE-9IM `relate()` machinery (`IntersectionMatrix::is_equal_topo`),
+/// which is the topologically-correct test for spatial equality.
 pub fn sf_equals(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     geom1.validate_crs_compatibility(geom2)?;
+
+    // Fast path: geometries with bit-identical coordinates are trivially
+    // spatially equal. This also guarantees reflexivity (sf_equals(g, g) is
+    // always true) even for self-intersecting/topologically invalid inputs
+    // that DE-9IM `relate()` cannot reliably evaluate.
+    if geom1.geom == geom2.geom {
+        return Ok(true);
+    }
 
     let result = match (&geom1.geom, &geom2.geom) {
         (geo_types::Geometry::Point(p1), geo_types::Geometry::Point(p2)) => {
@@ -28,12 +41,7 @@ pub fn sf_equals(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
         (geo_types::Geometry::LineString(ls1), geo_types::Geometry::LineString(ls2)) => {
             ls1.0 == ls2.0
         }
-        (geo_types::Geometry::Polygon(p1), geo_types::Geometry::Polygon(p2)) => {
-            // Check if polygons have the same area and centroid
-            (p1.unsigned_area() - p2.unsigned_area()).abs() < 1e-10
-                && p1.centroid() == p2.centroid()
-        }
-        _ => false,
+        _ => geom1.geom.relate(&geom2.geom).is_equal_topo(),
     };
 
     Ok(result)
@@ -159,7 +167,9 @@ pub fn sf_crosses(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
         return Ok(false);
     }
 
-    // Crosses is typically only defined for line/line or line/polygon
+    // Crosses is typically only defined for line/line or line/polygon; other
+    // combinations are resolved via the DE-9IM `relate()` machinery
+    // (`IntersectionMatrix::is_crosses`) rather than a blanket `false`.
     let result = match (&geom1.geom, &geom2.geom) {
         (geo_types::Geometry::LineString(ls1), geo_types::Geometry::LineString(ls2)) => {
             ls1.intersects(ls2)
@@ -168,7 +178,7 @@ pub fn sf_crosses(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
         | (geo_types::Geometry::Polygon(poly), geo_types::Geometry::LineString(ls)) => {
             ls.intersects(poly)
         }
-        _ => false,
+        _ => geom1.geom.relate(&geom2.geom).is_crosses(),
     };
 
     Ok(result)
@@ -204,10 +214,15 @@ pub fn sf_within(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
             })
         }
         (geo_types::Geometry::Polygon(p1), geo_types::Geometry::Polygon(p2)) => {
-            // Check if p1 is within p2
-            p1.centroid().map(|c| p2.contains(&c)).unwrap_or(false)
+            // True polygon-in-polygon containment (not a centroid heuristic):
+            // p1 is within p2 iff p2 contains p1.
+            p2.contains(p1)
         }
-        _ => false,
+        // All other combinations (MultiPolygon/MultiPolygon, LineString/LineString,
+        // Point/Point, Polygon/MultiPolygon, GeometryCollection, etc.) are resolved
+        // via the DE-9IM `relate()` machinery (`IntersectionMatrix::is_within`)
+        // rather than a blanket `false`.
+        _ => geom1.geom.relate(&geom2.geom).is_within(),
     };
 
     Ok(result)
@@ -420,7 +435,7 @@ fn get_z_range(geom: &Geometry) -> Result<(f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geo_types::{Coord, Geometry as GeoGeometry, LineString, Point, Polygon};
+    use geo_types::{Coord, Geometry as GeoGeometry, LineString, MultiPolygon, Point, Polygon};
 
     #[test]
     fn test_sf_equals_points() {
@@ -782,5 +797,201 @@ mod tests {
         assert!(sf_contains_3d(&p1, &p2).is_err());
         assert!(sf_touches_3d(&p1, &p2).is_err());
         assert!(sf_overlaps_3d(&p1, &p2).is_err());
+    }
+
+    // ========================================================================
+    // Regression tests: sfWithin/sfEquals/sfCrosses correctness fixes
+    // ========================================================================
+
+    #[test]
+    fn regression_sf_equals_reflexive_for_self_intersecting_polygon() {
+        // A self-intersecting ("bowtie") polygon. DE-9IM `relate()` (used
+        // for the Polygon/Polygon `is_equal_topo` fallback) cannot reliably
+        // evaluate topologically invalid geometries, but sf_equals(g, g)
+        // must still hold by definition -- this is guarded by the
+        // bit-identical-coordinates fast path in `sf_equals`.
+        let geom = Geometry::from_wkt(
+            "POLYGON((0.0 0.0,-122.34703030725247 0.0,0.0 83.6315311606761,\
+             -170.63824875286238 -51.211870378264635,0.0 0.0))",
+        )
+        .expect("should parse");
+
+        assert!(
+            sf_equals(&geom, &geom).expect("should succeed"),
+            "sf_equals must be reflexive even for self-intersecting polygons"
+        );
+    }
+
+    #[test]
+    fn regression_sf_within_polygon_uses_real_containment_not_centroid() {
+        // p2 is a 10x10 square [0,10]x[0,10].
+        let p2 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
+            LineString::new(vec![
+                Coord { x: 0.0, y: 0.0 },
+                Coord { x: 10.0, y: 0.0 },
+                Coord { x: 10.0, y: 10.0 },
+                Coord { x: 0.0, y: 10.0 },
+                Coord { x: 0.0, y: 0.0 },
+            ]),
+            vec![],
+        )));
+
+        // p1 is a long thin rectangle whose centroid (5, 5) falls inside p2,
+        // but which extends well outside p2's boundary on the x axis
+        // ([-5, 15] range). The old centroid-in-polygon heuristic reported
+        // this as "within"; real polygon-in-polygon containment must not.
+        let p1 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
+            LineString::new(vec![
+                Coord { x: -5.0, y: 4.0 },
+                Coord { x: 15.0, y: 4.0 },
+                Coord { x: 15.0, y: 6.0 },
+                Coord { x: -5.0, y: 6.0 },
+                Coord { x: -5.0, y: 4.0 },
+            ]),
+            vec![],
+        )));
+
+        assert!(
+            !sf_within(&p1, &p2).expect("should succeed"),
+            "a polygon extending outside p2 must not be reported as within p2, \
+             even if its centroid falls inside p2"
+        );
+
+        // Sanity check: a polygon that genuinely is within p2 must still
+        // report true.
+        let p3 = Geometry::new(GeoGeometry::Polygon(Polygon::new(
+            LineString::new(vec![
+                Coord { x: 2.0, y: 2.0 },
+                Coord { x: 8.0, y: 2.0 },
+                Coord { x: 8.0, y: 8.0 },
+                Coord { x: 2.0, y: 8.0 },
+                Coord { x: 2.0, y: 2.0 },
+            ]),
+            vec![],
+        )));
+        assert!(sf_within(&p3, &p2).expect("should succeed"));
+    }
+
+    #[test]
+    fn regression_sf_equals_polygon_uses_topology_not_area_centroid() {
+        // Rectangle A: 4 wide x 1 tall, centered at origin. Area = 4, centroid (0,0).
+        let rect_a = Geometry::new(GeoGeometry::Polygon(Polygon::new(
+            LineString::new(vec![
+                Coord { x: -2.0, y: -0.5 },
+                Coord { x: 2.0, y: -0.5 },
+                Coord { x: 2.0, y: 0.5 },
+                Coord { x: -2.0, y: 0.5 },
+                Coord { x: -2.0, y: -0.5 },
+            ]),
+            vec![],
+        )));
+
+        // Rectangle B: 1 wide x 4 tall, centered at origin. Same area (4) and
+        // same centroid (0,0) as A, but a completely different footprint.
+        let rect_b = Geometry::new(GeoGeometry::Polygon(Polygon::new(
+            LineString::new(vec![
+                Coord { x: -0.5, y: -2.0 },
+                Coord { x: 0.5, y: -2.0 },
+                Coord { x: 0.5, y: 2.0 },
+                Coord { x: -0.5, y: 2.0 },
+                Coord { x: -0.5, y: -2.0 },
+            ]),
+            vec![],
+        )));
+
+        assert!(
+            !sf_equals(&rect_a, &rect_b).expect("should succeed"),
+            "two polygons with equal area and centroid but different shapes \
+             must not be reported as spatially equal"
+        );
+
+        // A polygon must still be equal to an exact (re-ordered ring is not
+        // tested here, just identity) copy of itself.
+        assert!(sf_equals(&rect_a, &rect_a.clone()).expect("should succeed"));
+    }
+
+    #[test]
+    fn regression_sf_equals_multipolygon_routes_through_relate_not_false() {
+        let square = Polygon::new(
+            LineString::new(vec![
+                Coord { x: 0.0, y: 0.0 },
+                Coord { x: 4.0, y: 0.0 },
+                Coord { x: 4.0, y: 4.0 },
+                Coord { x: 0.0, y: 4.0 },
+                Coord { x: 0.0, y: 0.0 },
+            ]),
+            vec![],
+        );
+        let mp1 = Geometry::new(GeoGeometry::MultiPolygon(MultiPolygon(
+            vec![square.clone()],
+        )));
+        let mp2 = Geometry::new(GeoGeometry::MultiPolygon(MultiPolygon(vec![square])));
+
+        assert!(
+            sf_equals(&mp1, &mp2).expect("should succeed"),
+            "identical MultiPolygons must be reported as spatially equal, \
+             not silently false via an unhandled-combination catch-all"
+        );
+    }
+
+    #[test]
+    fn regression_sf_within_multipolygon_routes_through_relate_not_false() {
+        let outer = Polygon::new(
+            LineString::new(vec![
+                Coord { x: 0.0, y: 0.0 },
+                Coord { x: 10.0, y: 0.0 },
+                Coord { x: 10.0, y: 10.0 },
+                Coord { x: 0.0, y: 10.0 },
+                Coord { x: 0.0, y: 0.0 },
+            ]),
+            vec![],
+        );
+        let inner = Polygon::new(
+            LineString::new(vec![
+                Coord { x: 2.0, y: 2.0 },
+                Coord { x: 4.0, y: 2.0 },
+                Coord { x: 4.0, y: 4.0 },
+                Coord { x: 2.0, y: 4.0 },
+                Coord { x: 2.0, y: 2.0 },
+            ]),
+            vec![],
+        );
+
+        let mp_inner = Geometry::new(GeoGeometry::MultiPolygon(MultiPolygon(vec![inner])));
+        let mp_outer = Geometry::new(GeoGeometry::MultiPolygon(MultiPolygon(vec![outer])));
+
+        assert!(
+            sf_within(&mp_inner, &mp_outer).expect("should succeed"),
+            "a MultiPolygon fully inside another MultiPolygon must be reported \
+             as within, not silently false via an unhandled-combination catch-all"
+        );
+    }
+
+    #[test]
+    fn regression_sf_crosses_multipolygon_routes_through_relate_not_false() {
+        // A line that enters and exits a square multipolygon crosses it:
+        // some but not all of the line lies in the polygon's interior.
+        let square = Polygon::new(
+            LineString::new(vec![
+                Coord { x: 0.0, y: 0.0 },
+                Coord { x: 4.0, y: 0.0 },
+                Coord { x: 4.0, y: 4.0 },
+                Coord { x: 0.0, y: 4.0 },
+                Coord { x: 0.0, y: 0.0 },
+            ]),
+            vec![],
+        );
+        let multi_square = Geometry::new(GeoGeometry::MultiPolygon(MultiPolygon(vec![square])));
+
+        let crossing_line = Geometry::new(GeoGeometry::LineString(LineString::new(vec![
+            Coord { x: -1.0, y: 2.0 },
+            Coord { x: 5.0, y: 2.0 },
+        ])));
+
+        assert!(
+            sf_crosses(&crossing_line, &multi_square).expect("should succeed"),
+            "a line crossing partially through a MultiPolygon must be reported \
+             as crossing, not silently false via an unhandled-combination catch-all"
+        );
     }
 }

@@ -25,6 +25,19 @@ use benchmarks::{
 use datasets::DatasetManager;
 use scenarios::{ScenarioResult, ScenarioRunner};
 
+/// Average the real, measured per-suite scores (each 0-100), skipping any
+/// suite that did not produce a score (e.g. it failed to run or was
+/// disabled) rather than substituting a fixed "typical performance"
+/// placeholder value for it.
+fn average_measured_scores(scores: &[Option<f64>]) -> f64 {
+    let measured: Vec<f64> = scores.iter().filter_map(|s| *s).collect();
+    if measured.is_empty() {
+        0.0
+    } else {
+        measured.iter().sum::<f64>() / measured.len() as f64
+    }
+}
+
 /// Performance validation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationConfig {
@@ -117,6 +130,15 @@ impl ValidationRunner {
         let mut all_findings = Vec::new();
         let mut all_recommendations = Vec::new();
 
+        // Real, measured per-suite scores (0-100) collected as each benchmark
+        // suite actually runs. `None` means the suite did not run / failed,
+        // and is excluded from the headline average rather than papered over
+        // with a fixed "typical performance" constant.
+        let mut gpu_score: Option<f64> = None;
+        let mut simd_score: Option<f64> = None;
+        let mut federation_score: Option<f64> = None;
+        let mut ai_ml_score: Option<f64> = None;
+
         // Run individual benchmarks if enabled
         if self.config.run_all_benchmarks {
             info!("🎮 Running GPU acceleration benchmarks...");
@@ -127,6 +149,16 @@ impl ValidationRunner {
                 );
                 gpu_acceleration::report::save_gpu_benchmark_report(&gpu_suite, &report_path)?;
                 benchmark_results.gpu_acceleration = Some(format!("Saved to {}", report_path));
+
+                // Real pass-rate score derived from the suite's own measured
+                // test outcomes (0-100), not a fixed "typical" constant.
+                let total_gpu_tests =
+                    gpu_suite.summary.tests_passed + gpu_suite.summary.tests_failed;
+                gpu_score = Some(if total_gpu_tests > 0 {
+                    (gpu_suite.summary.tests_passed as f64 / total_gpu_tests as f64) * 100.0
+                } else {
+                    0.0
+                });
 
                 if gpu_suite.summary.performance_target_met {
                     all_findings.push("GPU acceleration targets achieved".to_string());
@@ -144,6 +176,16 @@ impl ValidationRunner {
                 );
                 simd_operations::report::save_simd_benchmark_report(&simd_suite, &report_path)?;
                 benchmark_results.simd_operations = Some(format!("Saved to {}", report_path));
+
+                // Real pass-rate score: fraction of operations that met the
+                // configured SIMD performance threshold.
+                simd_score = Some(if simd_suite.summary.total_operations_tested > 0 {
+                    (simd_suite.summary.operations_meeting_target as f64
+                        / simd_suite.summary.total_operations_tested as f64)
+                        * 100.0
+                } else {
+                    0.0
+                });
 
                 all_findings.push(format!(
                     "SIMD average speedup: {:.2}x",
@@ -167,6 +209,16 @@ impl ValidationRunner {
                 )?;
                 benchmark_results.federation = Some(format!("Saved to {}", report_path));
 
+                // Real pass-rate score: fraction of federation tests that met
+                // their target improvement.
+                federation_score = Some(if federation_suite.summary.total_tests > 0 {
+                    (federation_suite.summary.tests_meeting_target as f64
+                        / federation_suite.summary.total_tests as f64)
+                        * 100.0
+                } else {
+                    0.0
+                });
+
                 all_findings.push(format!(
                     "Federation average improvement: {:.1}%",
                     federation_suite.summary.average_improvement_percent
@@ -185,6 +237,9 @@ impl ValidationRunner {
                 );
                 ai_ml::report::save_ai_ml_benchmark_report(&ai_ml_suite, &report_path)?;
                 benchmark_results.ai_ml = Some(format!("Saved to {}", report_path));
+
+                // AI/ML suite already reports a real 0-100 performance score.
+                ai_ml_score = Some(ai_ml_suite.summary.overall_performance_score);
 
                 all_findings.push(format!(
                     "AI/ML performance score: {:.1}/100",
@@ -230,19 +285,23 @@ impl ValidationRunner {
             .filter(|r| r.objectives_met.overall_objectives_met)
             .count();
 
-        // Calculate overall performance score
-        let gpu_score = 85.0; // Simulated based on typical performance
-        let simd_score = 80.0;
-        let federation_score = 75.0;
-        let ai_ml_score = 82.0;
+        // Calculate overall performance score from the real, measured suite
+        // scores collected above plus the real scenario pass rate. Suites
+        // that did not run are excluded from the average rather than
+        // substituted with a fixed "typical performance" constant.
         let scenario_score = if total_scenarios > 0 {
-            (scenarios_passed as f64 / total_scenarios as f64) * 100.0
+            Some((scenarios_passed as f64 / total_scenarios as f64) * 100.0)
         } else {
-            0.0
+            None
         };
 
-        let overall_performance_score =
-            (gpu_score + simd_score + federation_score + ai_ml_score + scenario_score) / 5.0;
+        let overall_performance_score = average_measured_scores(&[
+            gpu_score,
+            simd_score,
+            federation_score,
+            ai_ml_score,
+            scenario_score,
+        ]);
 
         let summary = ValidationSummary {
             total_scenarios_run: total_scenarios,
@@ -275,7 +334,7 @@ impl ValidationRunner {
         let cpu_cores = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1);
-        let memory_gb = 16.0; // Simulated
+        let memory_gb = self.detect_total_memory_gb();
         let gpu_available = self.detect_gpu_availability();
         let simd_support = self.detect_simd_features();
 
@@ -373,6 +432,16 @@ impl ValidationRunner {
         };
 
         ai_ml::run_ai_ml_benchmark(config).await
+    }
+
+    /// Query the actual host's total physical memory, in GB, instead of
+    /// reporting a fixed value that would be wrong on any machine that
+    /// doesn't happen to have exactly 16GB of RAM.
+    fn detect_total_memory_gb(&self) -> f64 {
+        let mut system = sysinfo::System::new_all();
+        system.refresh_memory();
+        // total_memory() is reported in bytes; convert to GB (base-1024).
+        system.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0
     }
 
     #[allow(unreachable_code)]
@@ -568,4 +637,56 @@ async fn main() -> Result<()> {
     println!("\n✅ Performance validation completed successfully!");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// regression: overall_performance_score must average only the suites
+    /// that actually produced a real measurement, never fall back to fixed
+    /// "typical performance" constants for suites that didn't run.
+    #[test]
+    fn regression_average_measured_scores_skips_missing_suites() {
+        // Two suites ran (real scores 100.0 and 0.0), two never ran (None).
+        let scores = [Some(100.0), None, Some(0.0), None, None];
+        let average = average_measured_scores(&scores);
+        // Average of only the two real measurements: (100.0 + 0.0) / 2 = 50.0
+        // NOT (100.0 + 0.0 + 85.0 + 80.0 + 75.0) / 5 style fabricated padding.
+        assert_eq!(average, 50.0);
+    }
+
+    #[test]
+    fn regression_average_measured_scores_all_present() {
+        let scores = [Some(80.0), Some(90.0), Some(70.0), Some(60.0), Some(100.0)];
+        let average = average_measured_scores(&scores);
+        assert!((average - 80.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn regression_average_measured_scores_none_present_is_zero_not_fabricated() {
+        let scores: [Option<f64>; 5] = [None, None, None, None, None];
+        assert_eq!(average_measured_scores(&scores), 0.0);
+    }
+
+    /// regression: total system memory must be queried from the real host
+    /// instead of the previous hardcoded `16.0`.
+    #[test]
+    fn regression_detect_total_memory_gb_uses_real_host_telemetry() {
+        let runner = ValidationRunner::new(ValidationConfig::default())
+            .expect("runner construction is infallible");
+        let reported_gb = runner.detect_total_memory_gb();
+
+        // Independently query the same telemetry source and compare, proving
+        // the value is derived from the live host rather than a literal.
+        let mut system = sysinfo::System::new_all();
+        system.refresh_memory();
+        let expected_gb = system.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+
+        assert!(reported_gb > 0.0, "host must report nonzero memory");
+        assert!(
+            (reported_gb - expected_gb).abs() < 0.01,
+            "reported {reported_gb} GB should match live sysinfo query {expected_gb} GB"
+        );
+    }
 }

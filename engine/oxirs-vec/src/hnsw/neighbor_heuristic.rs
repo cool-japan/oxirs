@@ -252,15 +252,19 @@ impl HnswIndex {
     }
 
     /// Distance between two nodes identified by their IDs (public visibility for test access).
+    ///
+    /// Uses the configured [`SimilarityMetric`](crate::similarity::SimilarityMetric)
+    /// (matching [`Self::calculate_distance_from_slice`] and query-time search)
+    /// rather than a hardcoded cosine distance, so Algorithm-4 neighbor selection
+    /// is consistent with the metric the graph is actually searched under.
     pub fn calculate_distance_between_nodes_pub(&self, a: usize, b: usize) -> Option<f32> {
         let nodes = self.nodes();
         let node_a = nodes.get(a)?;
         let node_b = nodes.get(b)?;
-        node_a
-            .vector
-            .cosine_similarity(&node_b.vector)
+        self.config()
+            .metric
+            .distance(&node_a.vector, &node_b.vector)
             .ok()
-            .map(|s| 1.0 - s)
     }
 }
 

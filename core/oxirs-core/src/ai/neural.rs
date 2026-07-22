@@ -217,18 +217,49 @@ impl NeuralLayer for DropoutLayer {
 }
 
 /// Batch normalization layer
-#[derive(Debug, Clone)]
+///
+/// `running_mean`/`running_var` are wrapped in a [`Mutex`] so that the `&self`
+/// [`NeuralLayer::forward`] can update them in-place during training (the trait
+/// requires `Send + Sync`, which rules out `RefCell`). During training the
+/// exponential moving average of the batch statistics is accumulated; during
+/// inference (`training = false`) those accumulated running statistics are used,
+/// giving correct batch-norm behavior in eval mode.
+#[derive(Debug)]
 pub struct BatchNormLayer {
     name: String,
     num_features: usize,
     gamma: Array1<f32>,
     beta: Array1<f32>,
-    running_mean: Array1<f32>,
-    running_var: Array1<f32>,
-    #[allow(dead_code)]
+    running_mean: std::sync::Mutex<Array1<f32>>,
+    running_var: std::sync::Mutex<Array1<f32>>,
     momentum: f32,
     eps: f32,
     training: bool,
+}
+
+impl Clone for BatchNormLayer {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            num_features: self.num_features,
+            gamma: self.gamma.clone(),
+            beta: self.beta.clone(),
+            running_mean: std::sync::Mutex::new(lock_recover(&self.running_mean).clone()),
+            running_var: std::sync::Mutex::new(lock_recover(&self.running_var).clone()),
+            momentum: self.momentum,
+            eps: self.eps,
+            training: self.training,
+        }
+    }
+}
+
+/// Lock a mutex, recovering the inner guard even if the mutex was poisoned.
+///
+/// A poisoned lock only means a previous holder panicked; the running
+/// statistics remain a valid (if possibly stale) array, so recovering is the
+/// correct behavior here and avoids propagating a panic.
+fn lock_recover<T>(m: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl BatchNormLayer {
@@ -238,8 +269,8 @@ impl BatchNormLayer {
             num_features,
             gamma: Array1::ones(num_features),
             beta: Array1::zeros(num_features),
-            running_mean: Array1::zeros(num_features),
-            running_var: Array1::ones(num_features),
+            running_mean: std::sync::Mutex::new(Array1::zeros(num_features)),
+            running_var: std::sync::Mutex::new(Array1::ones(num_features)),
             momentum: 0.1,
             eps: 1e-5,
             training: true,
@@ -249,25 +280,45 @@ impl BatchNormLayer {
     pub fn set_training(&mut self, training: bool) {
         self.training = training;
     }
+
+    /// Returns a snapshot of the current running mean (for inspection/testing).
+    pub fn running_mean(&self) -> Array1<f32> {
+        lock_recover(&self.running_mean).clone()
+    }
+
+    /// Returns a snapshot of the current running variance (for inspection/testing).
+    pub fn running_var(&self) -> Array1<f32> {
+        lock_recover(&self.running_var).clone()
+    }
 }
 
 impl NeuralLayer for BatchNormLayer {
     fn forward(&self, input: &Array2<f32>) -> Result<Array2<f32>> {
         let (mean, var) = if self.training {
-            // Compute batch statistics
-            let batch_mean = input
-                .mean_axis(Axis(0))
-                .expect("axis 0 should exist for 2D array");
+            // Compute batch statistics. `mean_axis` returns None for an empty
+            // batch (zero rows); that is invalid input, so fail loudly.
+            let batch_mean = input.mean_axis(Axis(0)).ok_or_else(|| {
+                anyhow::anyhow!("BatchNorm forward: empty batch has no mean along axis 0")
+            })?;
             let batch_var = input.var_axis(Axis(0), 0.0);
 
-            // Update running statistics (in a real implementation)
-            // self.running_mean = (1.0 - self.momentum) * self.running_mean + self.momentum * batch_mean
-            // self.running_var = (1.0 - self.momentum) * self.running_var + self.momentum * batch_var
+            // Update running statistics with the momentum-weighted moving average:
+            //   running = (1 - momentum) * running + momentum * batch
+            {
+                let mut running_mean = lock_recover(&self.running_mean);
+                let mut running_var = lock_recover(&self.running_var);
+                *running_mean =
+                    &*running_mean * (1.0 - self.momentum) + &batch_mean * self.momentum;
+                *running_var = &*running_var * (1.0 - self.momentum) + &batch_var * self.momentum;
+            }
 
             (batch_mean, batch_var)
         } else {
-            // Use running statistics
-            (self.running_mean.clone(), self.running_var.clone())
+            // Use accumulated running statistics for inference.
+            (
+                lock_recover(&self.running_mean).clone(),
+                lock_recover(&self.running_var).clone(),
+            )
         };
 
         // Normalize
@@ -575,6 +626,42 @@ mod tests {
 
         let sigmoid = apply_activation(&input, &ActivationFunction::Sigmoid);
         assert!(sigmoid[[0, 0]] > 0.0 && sigmoid[[0, 0]] < 1.0);
+    }
+
+    #[test]
+    fn regression_batchnorm_updates_running_stats() {
+        let mut layer = BatchNormLayer::new("bn".to_string(), 2);
+
+        // Initial running stats: mean = 0, var = 1.
+        assert_eq!(layer.running_mean(), Array1::<f32>::zeros(2));
+        assert_eq!(layer.running_var(), Array1::<f32>::ones(2));
+
+        // A training forward pass with a batch whose per-feature mean is (2, 4)
+        // must move the running mean away from zero (momentum update).
+        let input =
+            Array2::from_shape_vec((2, 2), vec![1.0, 3.0, 3.0, 5.0]).expect("valid array shape");
+        let _ = layer.forward(&input).expect("forward should succeed");
+
+        let rm = layer.running_mean();
+        // momentum default 0.1: running = 0.9*0 + 0.1*batch_mean = 0.1*(2,4)
+        assert!((rm[0] - 0.2).abs() < 1e-6, "running_mean[0] = {}", rm[0]);
+        assert!((rm[1] - 0.4).abs() < 1e-6, "running_mean[1] = {}", rm[1]);
+
+        // In eval mode, forward must use the (now non-trivial) running stats,
+        // not the initial zeros/ones.
+        layer.set_training(false);
+        let eval_out = layer.forward(&input).expect("eval forward should succeed");
+        assert_eq!(eval_out.shape(), &[2, 2]);
+        // With running mean ~0.2 and var ~ (0.1*batch_var + 0.9*1) != 1, the
+        // normalized output differs from the raw input minus zero.
+        assert!(eval_out.iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn regression_batchnorm_empty_batch_errors() {
+        let layer = BatchNormLayer::new("bn".to_string(), 2);
+        let empty = Array2::<f32>::zeros((0, 2));
+        assert!(layer.forward(&empty).is_err());
     }
 
     #[test]

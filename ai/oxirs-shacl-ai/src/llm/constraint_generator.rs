@@ -650,26 +650,52 @@ pub struct BatchItemResult {
 
 impl LlmConstraintGenerator {
     /// Generate multiple shapes concurrently (up to `concurrency` at a time).
+    ///
+    /// Requests are driven through a [`futures::stream::StreamExt::buffer_unordered`]
+    /// pipeline so that up to `concurrency` provider calls are in flight
+    /// simultaneously (a `concurrency` of 0 is treated as 1). Each future
+    /// borrows `&self` immutably; the shared generator state ([`Self::stats`])
+    /// is behind a mutex, so concurrent generation is sound without cloning the
+    /// generator. Results are returned in the original item order.
+    ///
+    /// When [`BatchGenerationRequest::continue_on_error`] is `false`, the
+    /// returned vector is truncated at (and includes) the first failed item in
+    /// index order, so callers can detect a stop-on-error condition.
     pub async fn generate_batch(
         &self,
         batch: BatchGenerationRequest,
         concurrency: usize,
     ) -> Vec<BatchItemResult> {
         use futures::stream::{self, StreamExt};
-        let _ = concurrency; // Will be used for semaphore when needed
 
-        // Sequential processing to avoid unsafe pointer sharing across async boundaries.
-        // For true concurrency, the generator should be wrapped in Arc.
-        let mut results = Vec::with_capacity(batch.items.len());
-        for (idx, vars) in batch.items.into_iter().enumerate() {
-            let template = batch.template.clone();
-            let res = self.generate(template, vars).await;
-            results.push(BatchItemResult {
-                index: idx,
-                result: res.map_err(|e| e.to_string()),
-            });
+        let concurrency = concurrency.max(1);
+        let template = batch.template;
+        let continue_on_error = batch.continue_on_error;
+
+        let mut results: Vec<BatchItemResult> = stream::iter(batch.items.into_iter().enumerate())
+            .map(|(idx, vars)| {
+                let template = template.clone();
+                async move {
+                    let res = self.generate(template, vars).await;
+                    BatchItemResult {
+                        index: idx,
+                        result: res.map_err(|e| e.to_string()),
+                    }
+                }
+            })
+            .buffer_unordered(concurrency)
+            .collect()
+            .await;
+
+        // buffer_unordered yields out of order; restore input ordering.
+        results.sort_by_key(|r| r.index);
+
+        if !continue_on_error {
+            if let Some(pos) = results.iter().position(|r| r.result.is_err()) {
+                results.truncate(pos + 1);
+            }
         }
-        let _ = stream::empty::<BatchItemResult>(); // keep the import used
+
         results
     }
 }
@@ -976,5 +1002,38 @@ ex:Bob a ex:Person ; ex:name "Bob" ; ex:age 25 .
         assert_eq!(stats.total_generated, 0);
         assert_eq!(stats.total_failed, 0);
         assert_eq!(stats.mean_confidence, 0.0);
+    }
+
+    /// Regression: `generate_batch` must honor `concurrency` via
+    /// `buffer_unordered` yet still return results in the original item order,
+    /// even though completion order is nondeterministic.
+    #[tokio::test]
+    async fn regression_generate_batch_preserves_order_with_concurrency() {
+        let gen = make_generator();
+        let items: Vec<HashMap<String, String>> = (0..8)
+            .map(|i| {
+                let mut m = HashMap::new();
+                m.insert("class".to_string(), format!("Class{i}"));
+                m.insert("description".to_string(), format!("Description {i}"));
+                m.insert("prefix".to_string(), "ex".to_string());
+                m
+            })
+            .collect();
+        let batch = BatchGenerationRequest {
+            template: PromptTemplate::NodeShapeFromDescription,
+            items,
+            continue_on_error: true,
+        };
+
+        // concurrency > 1 exercises the buffered pipeline.
+        let results = gen.generate_batch(batch, 4).await;
+        assert_eq!(results.len(), 8);
+        for (expected_idx, item) in results.iter().enumerate() {
+            assert_eq!(
+                item.index, expected_idx,
+                "results must be ordered by original index"
+            );
+            assert!(item.result.is_ok(), "item {expected_idx} failed");
+        }
     }
 }

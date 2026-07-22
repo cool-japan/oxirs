@@ -205,6 +205,16 @@ pub struct BftConsensus {
     /// network I/O and resolves the consensus<->network construction cycle via
     /// a post-construction setter.
     broadcaster: RwLock<Option<mpsc::UnboundedSender<BftMessage>>>,
+    /// Optional sync-callable sink for outbound client `Reply` messages.
+    /// [`BftConsensus::send_reply`] pushes each committed reply here; a task
+    /// spawned by the wrapping manager drains it and delivers the reply to the
+    /// requesting client over the authenticated BFT network transport. Mirrors
+    /// `broadcaster` and, like it, decouples the synchronous PBFT commit path
+    /// from async network I/O. When absent, only the in-process commit callback
+    /// carries the reply (e.g. an engine exercised in isolation, or a purely
+    /// local client) — real cross-node reply delivery happens once a manager
+    /// wires this sink.
+    reply_sink: RwLock<Option<mpsc::UnboundedSender<BftMessage>>>,
 }
 
 /// Message log for consensus tracking
@@ -343,7 +353,17 @@ impl BftConsensus {
             commit_callback: Arc::new(RwLock::new(None)),
             storage,
             broadcaster: RwLock::new(None),
+            reply_sink: RwLock::new(None),
         })
+    }
+
+    /// Register the sync-callable sink used by [`BftConsensus::send_reply`] to
+    /// hand committed client `Reply` messages to the authenticated network
+    /// delivery task. Mirrors [`BftConsensus::set_broadcaster`].
+    pub fn set_reply_sink(&self, sender: mpsc::UnboundedSender<BftMessage>) {
+        if let Ok(mut slot) = self.reply_sink.write() {
+            *slot = Some(sender);
+        }
     }
 
     /// Register the sync-callable sink used by [`BftConsensus::broadcast_message`]
@@ -1004,11 +1024,16 @@ impl BftConsensus {
     /// `Reply` message, letting a wrapper complete the caller's pending
     /// request instead of it timing out.
     ///
-    /// Actual client network delivery of the `Reply` remains a placeholder:
-    /// - Serialize the Reply message to bytes
-    /// - Send the reply back to the requesting client
-    /// - Use the client connection manager for delivery
-    /// - Handle client disconnections gracefully
+    /// Client network delivery of the `Reply` is performed here by handing the
+    /// serialized reply to the registered reply sink (see
+    /// [`BftConsensus::set_reply_sink`]), which a manager-spawned task drains
+    /// and sends to the requesting client over the authenticated BFT network
+    /// transport. If a sink is registered but its channel is closed, that is a
+    /// real delivery failure and is returned as an error rather than being
+    /// swallowed. When no sink is registered, the in-process commit callback is
+    /// the sole delivery path (a local client, or an engine exercised in
+    /// isolation), matching [`BftConsensus::broadcast_message`]'s no-sink
+    /// behavior.
     fn send_reply(&self, reply: BftMessage) -> Result<()> {
         if let BftMessage::Reply {
             client_id,
@@ -1024,10 +1049,19 @@ impl BftConsensus {
             }
         }
 
-        // Integration with network layer will be implemented when:
-        // 1. Client connection tracking is available
-        // 2. Reply routing mechanism is in place
-        // 3. Client session management is implemented
+        // Deliver the reply to the requesting client over the network via the
+        // reply sink. Every replica that reaches commit sends its reply, so the
+        // client can collect the f+1 matching replies PBFT requires.
+        if let Ok(guard) = self.reply_sink.read() {
+            if let Some(sender) = guard.as_ref() {
+                sender.send(reply).map_err(|_| {
+                    ClusterError::Network(
+                        "BFT reply channel closed; reply not delivered to client".to_string(),
+                    )
+                })?;
+            }
+        }
+
         Ok(())
     }
 

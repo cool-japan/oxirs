@@ -303,6 +303,20 @@ impl<'a> TripleRef<'a> {
     }
 
     /// Create from an owned triple
+    ///
+    /// # Quoted triples (RDF-star)
+    ///
+    /// `TermRef` is a zero-copy, `Copy` view (`&'a str` payloads only), so it
+    /// has no owned-string variant available to hold a freshly serialized
+    /// quoted-triple description; a quoted subject/object is therefore
+    /// mapped to the same non-identifying `"<<quoted-triple>>"` placeholder
+    /// documented on [`crate::model::RdfTerm::as_str`]. Do not use the
+    /// `TermRef` produced for a quoted-triple component as an identity or
+    /// lookup key -- distinct quoted triples are indistinguishable through
+    /// this path. Code that needs real quoted-triple identity (e.g.
+    /// [`OptimizedGraph`]'s own subject/object interning) serializes the
+    /// full `<< s p o >>` content instead; see `intern_subject`/
+    /// `intern_object`.
     pub fn from_triple(triple: &'a Triple) -> Self {
         TripleRef {
             subject: match triple.subject() {
@@ -646,8 +660,19 @@ impl OptimizedGraph {
             Subject::NamedNode(n) => InternedString::new_with_interner(n.as_str(), &self.interner),
             Subject::BlankNode(b) => InternedString::new_with_interner(b.as_str(), &self.interner),
             Subject::Variable(v) => InternedString::new_with_interner(v.as_str(), &self.interner),
-            Subject::QuotedTriple(_) => {
-                InternedString::new_with_interner("<<quoted-triple>>", &self.interner)
+            Subject::QuotedTriple(qt) => {
+                // `RdfTerm::as_str()` returns the fixed, non-identifying
+                // placeholder "<<quoted-triple>>" for every quoted triple
+                // (see its doc comment); interning that constant would
+                // collapse every distinct quoted-triple subject into a
+                // single dictionary entry, silently deduplicating unrelated
+                // RDF-star statements. Interning the full `<< s p o >>`
+                // serialization instead (via `QuotedTriple`'s `Display`)
+                // keeps distinct quoted triples distinguishable. This can
+                // never collide with a NamedNode/BlankNode/Variable string
+                // since those never start with "<<".
+                let serialized = format!("{qt}");
+                InternedString::new_with_interner(&serialized, &self.interner)
             }
         }
     }
@@ -673,8 +698,13 @@ impl OptimizedGraph {
                 InternedString::new_with_interner(&serialized, &self.interner)
             }
             Object::Variable(v) => InternedString::new_with_interner(v.as_str(), &self.interner),
-            Object::QuotedTriple(_) => {
-                InternedString::new_with_interner("<<quoted-triple>>", &self.interner)
+            Object::QuotedTriple(qt) => {
+                // See the matching comment in `intern_subject`: interning the
+                // full serialized content (rather than the fixed
+                // "<<quoted-triple>>" placeholder) keeps distinct quoted
+                // triples distinguishable in the index.
+                let serialized = format!("{qt}");
+                InternedString::new_with_interner(&serialized, &self.interner)
             }
         }
     }
@@ -1075,6 +1105,55 @@ mod tests {
 
         let stats = graph.stats();
         assert_eq!(stats.triple_count, 1);
+    }
+
+    /// Regression test: two *distinct* quoted-triple subjects must not
+    /// collapse into one `OptimizedGraph` index entry. Before the fix,
+    /// `intern_subject` interned every quoted triple as the same fixed
+    /// placeholder string, so a second triple whose subject was a
+    /// different quoted triple (but shared predicate/object with the
+    /// first) was wrongly treated as a duplicate of the first.
+    #[test]
+    fn regression_optimized_graph_distinguishes_quoted_triple_subjects() {
+        let graph = OptimizedGraph::new();
+
+        let inner1 = Triple::new(
+            NamedNode::new("http://example.org/a1").expect("valid IRI"),
+            NamedNode::new("http://example.org/rel").expect("valid IRI"),
+            NamedNode::new("http://example.org/b1").expect("valid IRI"),
+        );
+        let inner2 = Triple::new(
+            NamedNode::new("http://example.org/a2").expect("valid IRI"),
+            NamedNode::new("http://example.org/rel").expect("valid IRI"),
+            NamedNode::new("http://example.org/b2").expect("valid IRI"),
+        );
+        assert_ne!(inner1, inner2, "test fixture triples must differ");
+
+        let predicate = NamedNode::new("http://example.org/certainty").expect("valid IRI");
+        let object = Literal::new("high");
+
+        let triple1 = Triple::new(
+            Subject::QuotedTriple(Box::new(QuotedTriple::new(inner1))),
+            predicate.clone(),
+            object.clone(),
+        );
+        let triple2 = Triple::new(
+            Subject::QuotedTriple(Box::new(QuotedTriple::new(inner2))),
+            predicate,
+            object,
+        );
+
+        // Both inserts must be reported as genuinely new: the two quoted
+        // triples are different subjects even though the shared placeholder
+        // string used to make them indistinguishable.
+        assert!(graph.insert(&triple1));
+        assert!(
+            graph.insert(&triple2),
+            "a second, distinct quoted-triple subject must not be treated as a duplicate"
+        );
+
+        let stats = graph.stats();
+        assert_eq!(stats.triple_count, 2);
     }
 
     #[test]

@@ -42,7 +42,20 @@ pub async fn run(config: PathBuf, port: u16, host: String, graphql: bool) -> Com
     println!("   SPARQL Update: http://{}:{}/update", host, port);
 
     if graphql {
+        // Truthful advertisement: the fuseki server built above mounts the
+        // `/graphql` (POST) and `/graphql/playground` (GET) routes
+        // unconditionally in `Runtime::build_app` -- a real async-graphql
+        // endpoint backed by the *same* RDF store this server serves over
+        // SPARQL, on the *same* host/port. So this URL is a capability the
+        // process genuinely provides (verified by the `serve.rs` regression
+        // test `serve_advertised_graphql_endpoint_is_really_mounted`), not a
+        // fake-success message. Do not delete these lines under the mistaken
+        // belief that `/graphql` is unimplemented.
         println!("   GraphQL: http://{}:{}/graphql", host, port);
+        println!(
+            "   GraphQL Playground: http://{}:{}/graphql/playground",
+            host, port
+        );
         println!("   (GraphQL endpoint enabled)");
     }
 
@@ -178,5 +191,74 @@ mod tests {
     fn extract_primary_dataset_path_errors_when_empty() {
         let config = OxirsConfig::default();
         assert!(extract_primary_dataset_path(&config).is_err());
+    }
+
+    /// Fail-loud contract regression: `oxirs serve --graphql` advertises
+    /// `http://.../graphql`, so the fuseki server this command builds must
+    /// actually mount that route. This exercises the *same* production router
+    /// `oxirs_fuseki::Server::run()` serves -- via the `build_router` embedding
+    /// seam, so there is no socket bind and no background-service startup -- and
+    /// asserts `POST /graphql` is not a `404` and genuinely executes a GraphQL
+    /// query against the store. If a future change dropped the `/graphql` route,
+    /// the CLI's advertised URL would become a fake-success violation; this test
+    /// fails loudly the moment that happens.
+    ///
+    /// The dataset backing is irrelevant to route presence, so an in-memory
+    /// store (no `dataset_path`) is used -- no temp files required.
+    #[tokio::test]
+    async fn serve_advertised_graphql_endpoint_is_really_mounted() {
+        use axum::body::{to_bytes, Body};
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        let server = oxirs_fuseki::Server::builder()
+            .host("127.0.0.1")
+            .port(0)
+            .build()
+            .await
+            .expect("fuseki server must build");
+
+        let router = server
+            .build_router()
+            .await
+            .expect("production router must build");
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/graphql")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"query":"{ __typename }"}"#))
+            .expect("request builds");
+
+        let response = router
+            .oneshot(request)
+            .await
+            .expect("router handles the request");
+
+        let status = response.status();
+        assert_ne!(
+            status,
+            StatusCode::NOT_FOUND,
+            "`oxirs serve --graphql` advertises /graphql; the server must mount it"
+        );
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "the advertised GraphQL endpoint should answer 200, got {status}"
+        );
+
+        let body = to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .expect("response body is readable");
+        let json: serde_json::Value =
+            serde_json::from_slice(&body).expect("GraphQL response must be JSON");
+        // async-graphql names the root query type after the `QueryRoot` struct
+        // backing `/graphql` (see `oxirs_fuseki::graphql_integration`), so
+        // `__typename` on the query root resolves to "QueryRoot". A populated
+        // `data` field proves the query genuinely executed, not merely routed.
+        assert_eq!(
+            json["data"]["__typename"], "QueryRoot",
+            "GraphQL query must actually execute, not merely route: {json}"
+        );
     }
 }

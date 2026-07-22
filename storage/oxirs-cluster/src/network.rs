@@ -187,6 +187,11 @@ pub struct NetworkManager {
     /// instead of silently dropping the message.
     peer_addresses: Arc<RwLock<HashMap<OxirsNodeId, SocketAddr>>>,
     listener: Option<TcpListener>,
+    /// Handle to the spawned inbound accept loop (see
+    /// [`NetworkManager::start`]). Held so [`NetworkManager::stop`] can abort
+    /// it and free the listening port. Never cloned (a clone is a lightweight
+    /// handle that does not own the server task).
+    accept_task: Option<Arc<tokio::task::JoinHandle<()>>>,
     running: Arc<RwLock<bool>>,
     tls_manager: Option<Arc<TlsManager>>,
     message_stats: Arc<RwLock<MessageStats>>,
@@ -307,6 +312,7 @@ impl NetworkManager {
             connections: Arc::new(RwLock::new(HashMap::new())),
             peer_addresses: Arc::new(RwLock::new(HashMap::new())),
             listener: None,
+            accept_task: None,
             running: Arc::new(RwLock::new(false)),
             tls_manager: None,
             message_stats: Arc::new(RwLock::new(MessageStats::default())),
@@ -329,6 +335,7 @@ impl NetworkManager {
             connections: Arc::new(RwLock::new(HashMap::new())),
             peer_addresses: Arc::new(RwLock::new(HashMap::new())),
             listener: None,
+            accept_task: None,
             running: Arc::new(RwLock::new(false)),
             tls_manager,
             message_stats: Arc::new(RwLock::new(MessageStats::default())),
@@ -353,7 +360,22 @@ impl NetworkManager {
             self.config.local_address
         );
 
-        self.listener = Some(listener);
+        // Spawn the inbound accept loop. Previously this was skipped ("for now,
+        // we'll skip the listener task"), so the bound listener never accepted
+        // anything and no peer's Heartbeat (or any other RpcMessage) was ever
+        // answered — making health probes report every peer unreachable even
+        // for a perfectly healthy cluster. The listener is moved into the task
+        // by value (TcpListener isn't Clone, so it can't live in `self` and be
+        // served concurrently); `stop()` aborts the task to free the port.
+        let server = self.clone();
+        let max_message_size = self.config.max_message_size;
+        let running = Arc::clone(&self.running);
+        let accept_task = tokio::spawn(async move {
+            server
+                .run_accept_loop(listener, max_message_size, running)
+                .await;
+        });
+        self.accept_task = Some(Arc::new(accept_task));
 
         // Start background tasks
         self.start_background_tasks().await;
@@ -361,15 +383,77 @@ impl NetworkManager {
         Ok(())
     }
 
+    /// Inbound accept loop: answer real RpcMessage frames on the bound
+    /// listener. Each accepted connection is served by its own task that reads
+    /// length-prefixed frames, dispatches them through
+    /// [`NetworkManager::handle_inbound`], and writes the response back — so a
+    /// peer's health `Heartbeat` gets a real `HeartbeatResponse`. Never panics;
+    /// a malformed frame or I/O error just ends that one connection.
+    async fn run_accept_loop(
+        &self,
+        listener: TcpListener,
+        max_message_size: usize,
+        running: Arc<RwLock<bool>>,
+    ) {
+        loop {
+            if !*running.read().await {
+                return;
+            }
+            let (mut stream, peer_addr) = match listener.accept().await {
+                Ok(pair) => pair,
+                Err(e) => {
+                    tracing::warn!("network accept() failed: {e}; continuing to listen");
+                    continue;
+                }
+            };
+            if let Err(e) = stream.set_nodelay(true) {
+                tracing::debug!("failed to set TCP_NODELAY on inbound connection: {e}");
+            }
+            let manager = self.clone();
+            tokio::spawn(async move {
+                loop {
+                    let request = match read_frame(&mut stream, max_message_size).await {
+                        Ok(msg) => msg,
+                        Err(_) => return, // peer closed or sent a bad/partial frame
+                    };
+                    match manager.handle_inbound(request).await {
+                        Ok(response) => {
+                            if write_frame(&mut stream, &response, max_message_size)
+                                .await
+                                .is_err()
+                            {
+                                return;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!(
+                                "no response produced for inbound message from {peer_addr}: {e}"
+                            );
+                            return;
+                        }
+                    }
+                }
+            });
+        }
+    }
+
     /// Stop the network manager
     pub async fn stop(&mut self) -> Result<()> {
-        let mut running = self.running.write().await;
-        if !*running {
-            return Ok(());
+        {
+            let mut running = self.running.write().await;
+            if !*running {
+                return Ok(());
+            }
+
+            tracing::info!("Stopping network manager for node {}", self.node_id);
+            *running = false;
         }
 
-        tracing::info!("Stopping network manager for node {}", self.node_id);
-        *running = false;
+        // Abort the accept loop so the listening port is released.
+        if let Some(task) = self.accept_task.take() {
+            task.abort();
+        }
+        self.listener = None;
 
         // Close all connections
         let mut connections = self.connections.write().await;
@@ -611,6 +695,89 @@ impl NetworkManager {
         // since TcpListener doesn't support cloning. For now, we'll skip the listener task.
     }
 
+    /// Produce the response for an inbound [`RpcMessage`] received on the
+    /// accept loop. Answers latency-sensitive protocol messages directly (a
+    /// `Heartbeat` gets a real `HeartbeatResponse`, which is what makes peer
+    /// health probes work), returns conservative defaults for consensus
+    /// messages a bare network layer cannot decide, and fails loud for
+    /// operations that require a wired-up handler (shard/migration) instead of
+    /// fabricating a success. This is the single source of truth for inbound
+    /// handling; [`NetworkService::handle_message`] delegates here.
+    pub async fn handle_inbound(&self, message: RpcMessage) -> Result<RpcMessage> {
+        match message {
+            #[cfg(feature = "bft")]
+            RpcMessage::Bft { .. } => Err(anyhow::anyhow!(
+                "BFT messages should be handled by BFT network service"
+            )),
+
+            // --- Raft consensus messages ---
+            RpcMessage::RequestVote { term, .. } => Ok(RpcMessage::VoteResponse {
+                term,
+                vote_granted: false,
+            }),
+            RpcMessage::VoteResponse { .. } => Ok(message),
+            RpcMessage::AppendEntries { term, .. } => Ok(RpcMessage::AppendEntriesResponse {
+                term,
+                success: true,
+                last_log_index: 0,
+            }),
+            RpcMessage::AppendEntriesResponse { .. } => Ok(message),
+            RpcMessage::Heartbeat { term, .. } => Ok(RpcMessage::HeartbeatResponse { term }),
+            RpcMessage::HeartbeatResponse { .. } => Ok(message),
+
+            // --- Client request/response ---
+            RpcMessage::ClientRequest { .. } => Ok(RpcMessage::ClientResponse {
+                response: RdfResponse::Success,
+            }),
+            RpcMessage::ClientResponse { .. } => Ok(message),
+
+            // --- Shard operations ---
+            RpcMessage::ShardOperation(_) => Err(anyhow::anyhow!(
+                "RpcMessage::ShardOperation requires a shard manager — not connected"
+            )),
+            RpcMessage::StoreTriple { shard_id, .. } => Err(anyhow::anyhow!(
+                "RpcMessage::StoreTriple for shard {:?} requires shard handler — not connected",
+                shard_id
+            )),
+            RpcMessage::ReplicateTriple { shard_id, .. } => Err(anyhow::anyhow!(
+                "RpcMessage::ReplicateTriple for shard {:?} requires shard handler — not connected",
+                shard_id
+            )),
+            RpcMessage::QueryShard { shard_id, .. } => Ok(RpcMessage::QueryShardResponse {
+                shard_id,
+                results: Vec::new(),
+            }),
+            RpcMessage::QueryShardResponse { .. } => Ok(message),
+
+            // --- Two-phase commit / distributed transactions ---
+            RpcMessage::TransactionPrepare { tx_id, shard_id, .. } => {
+                Ok(RpcMessage::TransactionVote {
+                    tx_id,
+                    shard_id,
+                    vote: false,
+                })
+            }
+            RpcMessage::TransactionVote { .. } => Ok(message),
+            RpcMessage::TransactionCommit { tx_id, shard_id } => {
+                Ok(RpcMessage::TransactionAck { tx_id, shard_id })
+            }
+            RpcMessage::TransactionAbort { tx_id, shard_id } => {
+                Ok(RpcMessage::TransactionAck { tx_id, shard_id })
+            }
+            RpcMessage::TransactionAck { .. } => Ok(message),
+
+            // --- Shard migration ---
+            RpcMessage::MigrationBatch { migration_id, .. } => Err(anyhow::anyhow!(
+                "RpcMessage::MigrationBatch for migration '{}' requires migration handler — not connected",
+                migration_id
+            )),
+            RpcMessage::ShardTransfer { shard_id, .. } => Err(anyhow::anyhow!(
+                "RpcMessage::ShardTransfer for shard {:?} requires migration handler — not connected",
+                shard_id
+            )),
+        }
+    }
+
     /// Get connection statistics
     pub async fn get_stats(&self) -> NetworkStats {
         let connections = self.connections.read().await;
@@ -757,7 +924,8 @@ impl Clone for NetworkManager {
             node_id: self.node_id,
             connections: Arc::clone(&self.connections),
             peer_addresses: Arc::clone(&self.peer_addresses),
-            listener: None, // Don't clone the listener
+            listener: None,    // Don't clone the listener
+            accept_task: None, // Don't clone the server task handle
             running: Arc::clone(&self.running),
             tls_manager: self.tls_manager.clone(),
             message_stats: Arc::clone(&self.message_stats),
@@ -854,111 +1022,11 @@ impl NetworkService {
         self.manager.send_message(node_id, message).await
     }
 
-    /// Handle incoming RPC message
+    /// Handle incoming RPC message. Delegates to
+    /// [`NetworkManager::handle_inbound`], the single source of truth also used
+    /// by the inbound accept loop.
     pub async fn handle_message(&self, message: RpcMessage) -> Result<RpcMessage> {
-        match message {
-            #[cfg(feature = "bft")]
-            RpcMessage::Bft { .. } => {
-                // BFT messages are handled separately by the BFT network service
-                Err(anyhow::anyhow!(
-                    "BFT messages should be handled by BFT network service"
-                ))
-            }
-
-            // --- Raft consensus messages ---
-            RpcMessage::RequestVote { term, .. } => {
-                // Conservative default: deny vote (caller supplies real handler for production)
-                Ok(RpcMessage::VoteResponse {
-                    term,
-                    vote_granted: false,
-                })
-            }
-            RpcMessage::VoteResponse { .. } => {
-                // Terminal response — surfaces to the original caller; echo back
-                Ok(message)
-            }
-            RpcMessage::AppendEntries { term, .. } => {
-                Ok(RpcMessage::AppendEntriesResponse {
-                    term,
-                    success: true,
-                    last_log_index: 0,
-                })
-            }
-            RpcMessage::AppendEntriesResponse { .. } => Ok(message),
-            RpcMessage::Heartbeat { term, .. } => {
-                Ok(RpcMessage::HeartbeatResponse { term })
-            }
-            RpcMessage::HeartbeatResponse { .. } => Ok(message),
-
-            // --- Client request/response ---
-            RpcMessage::ClientRequest { .. } => {
-                Ok(RpcMessage::ClientResponse {
-                    response: RdfResponse::Success,
-                })
-            }
-            RpcMessage::ClientResponse { .. } => Ok(message),
-
-            // --- Shard operations ---
-            RpcMessage::ShardOperation(_) => {
-                // Shard operations require a connected shard manager; return acknowledgement
-                Err(anyhow::anyhow!(
-                    "RpcMessage::ShardOperation requires a shard manager — not connected"
-                ))
-            }
-            RpcMessage::StoreTriple { shard_id, .. } => {
-                // Triple storage requires a wired-up shard handler
-                Err(anyhow::anyhow!(
-                    "RpcMessage::StoreTriple for shard {:?} requires shard handler — not connected",
-                    shard_id
-                ))
-            }
-            RpcMessage::ReplicateTriple { shard_id, .. } => {
-                Err(anyhow::anyhow!(
-                    "RpcMessage::ReplicateTriple for shard {:?} requires shard handler — not connected",
-                    shard_id
-                ))
-            }
-            RpcMessage::QueryShard { shard_id, .. } => {
-                // Return an empty result set rather than an error so callers can handle gracefully
-                Ok(RpcMessage::QueryShardResponse {
-                    shard_id,
-                    results: Vec::new(),
-                })
-            }
-            RpcMessage::QueryShardResponse { .. } => Ok(message),
-
-            // --- Two-phase commit / distributed transactions ---
-            RpcMessage::TransactionPrepare { tx_id, shard_id, .. } => {
-                // Conservative default: vote no so transactions don't silently commit
-                Ok(RpcMessage::TransactionVote {
-                    tx_id,
-                    shard_id,
-                    vote: false,
-                })
-            }
-            RpcMessage::TransactionVote { .. } => Ok(message),
-            RpcMessage::TransactionCommit { tx_id, shard_id } => {
-                Ok(RpcMessage::TransactionAck { tx_id, shard_id })
-            }
-            RpcMessage::TransactionAbort { tx_id, shard_id } => {
-                Ok(RpcMessage::TransactionAck { tx_id, shard_id })
-            }
-            RpcMessage::TransactionAck { .. } => Ok(message),
-
-            // --- Shard migration ---
-            RpcMessage::MigrationBatch { migration_id, .. } => {
-                Err(anyhow::anyhow!(
-                    "RpcMessage::MigrationBatch for migration '{}' requires migration handler — not connected",
-                    migration_id
-                ))
-            }
-            RpcMessage::ShardTransfer { shard_id, .. } => {
-                Err(anyhow::anyhow!(
-                    "RpcMessage::ShardTransfer for shard {:?} requires migration handler — not connected",
-                    shard_id
-                ))
-            }
-        }
+        self.manager.handle_inbound(message).await
     }
 }
 
@@ -1583,5 +1651,48 @@ mod tests {
         .expect("send_message to a registered, reachable peer must succeed");
 
         server.await.expect("server task panicked");
+    }
+
+    /// Regression: a *started* NetworkManager must actually accept inbound
+    /// connections and answer a `Heartbeat` with a `HeartbeatResponse`.
+    /// Previously `start_background_tasks` skipped spawning any accept loop
+    /// ("for now, we'll skip the listener task"), so the bound listener never
+    /// answered and health probes reported every peer unreachable even for a
+    /// healthy cluster.
+    #[tokio::test]
+    async fn regression_network_accept_loop_answers_heartbeat() {
+        // Reserve a free port, then release it so the manager can bind it.
+        let probe = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to reserve a port");
+        let addr = probe.local_addr().expect("no local addr");
+        drop(probe);
+
+        let mut cfg = NetworkConfig::default();
+        cfg.local_address = addr;
+
+        let mut server = NetworkManager::new(1, cfg.clone());
+        server.start().await.expect("server start failed");
+
+        // A separate manager acts as the client and issues a real heartbeat RPC.
+        let client = NetworkManager::new(2, cfg);
+        let response = client
+            .send_rpc(
+                1,
+                addr,
+                RpcMessage::Heartbeat {
+                    term: 5,
+                    leader_id: 2,
+                },
+            )
+            .await
+            .expect("heartbeat RPC to a started server must get a real answer");
+
+        match response {
+            RpcMessage::HeartbeatResponse { term } => assert_eq!(term, 5),
+            other => panic!("expected HeartbeatResponse, got {other:?}"),
+        }
+
+        server.stop().await.expect("server stop failed");
     }
 }

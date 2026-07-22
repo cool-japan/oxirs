@@ -659,18 +659,130 @@ impl CustomConstraintRegistry {
         }
     }
 
-    fn matches_datatype(&self, _value: &Term, _expected_datatype: &str) -> bool {
-        // Implementation similar to original
-        true // Simplified for now
+    /// Check whether a runtime term satisfies an expected datatype.
+    ///
+    /// `expected_datatype` may be a full IRI (`http://www.w3.org/2001/XMLSchema#string`)
+    /// or an `xsd:`-prefixed shorthand; comparison is by local name. Numeric and
+    /// boolean checks additionally accept a lexically-valid literal so that a
+    /// value supplied as a plain string is not spuriously rejected.
+    fn matches_datatype(&self, value: &Term, expected_datatype: &str) -> bool {
+        fn local_name(iri: &str) -> &str {
+            iri.rsplit(['#', '/', ':']).next().unwrap_or(iri)
+        }
+
+        let expected = local_name(expected_datatype);
+        match value {
+            Term::Literal(lit) => {
+                let actual = local_name(lit.datatype().as_str());
+                let lexical = lit.value();
+                let el = expected.to_ascii_lowercase();
+                match el.as_str() {
+                    "string" | "normalizedstring" | "token" | "anyuri" => {
+                        matches!(
+                            actual.to_ascii_lowercase().as_str(),
+                            "string" | "langstring" | "normalizedstring" | "token" | "anyuri"
+                        )
+                    }
+                    "integer" | "int" | "long" | "short" | "nonnegativeinteger"
+                    | "positiveinteger" => {
+                        lexical.trim().parse::<i64>().is_ok()
+                            || actual.to_ascii_lowercase().contains("integer")
+                    }
+                    "decimal" | "double" | "float" | "number" => {
+                        lexical.trim().parse::<f64>().is_ok()
+                    }
+                    "boolean" => {
+                        matches!(lexical, "true" | "false" | "0" | "1")
+                            || actual.eq_ignore_ascii_case("boolean")
+                    }
+                    _ => actual.eq_ignore_ascii_case(expected),
+                }
+            }
+            Term::NamedNode(_) => {
+                matches!(
+                    expected.to_ascii_lowercase().as_str(),
+                    "iri" | "anyuri" | "resource" | "namednode"
+                )
+            }
+            _ => false,
+        }
     }
 
+    /// Enforce a single [`ParameterConstraint`] against the actual runtime value.
+    ///
+    /// Returns [`ShaclError::Configuration`] on violation instead of silently
+    /// accepting the value (previously a no-op). A declared `CustomValidator`
+    /// that has no executable backing fails loud rather than passing blindly.
     fn validate_value_against_constraint(
         &self,
-        _value: &Term,
-        _constraint: &ParameterConstraint,
-        _param_name: &str,
+        value: &Term,
+        constraint: &ParameterConstraint,
+        param_name: &str,
     ) -> Result<()> {
-        // Implementation similar to original
+        let lexical = self.term_to_string(value);
+        match constraint {
+            ParameterConstraint::MinLength(len) => {
+                if lexical.chars().count() < *len as usize {
+                    return Err(ShaclError::Configuration(format!(
+                        "Parameter '{param_name}' value '{lexical}' is shorter than \
+                         minLength {len}"
+                    )));
+                }
+            }
+            ParameterConstraint::MaxLength(len) => {
+                if lexical.chars().count() > *len as usize {
+                    return Err(ShaclError::Configuration(format!(
+                        "Parameter '{param_name}' value '{lexical}' is longer than \
+                         maxLength {len}"
+                    )));
+                }
+            }
+            ParameterConstraint::Pattern(pattern) => {
+                let re = regex::Regex::new(pattern).map_err(|e| {
+                    ShaclError::Configuration(format!(
+                        "Parameter '{param_name}' has an invalid pattern '{pattern}': {e}"
+                    ))
+                })?;
+                if !re.is_match(&lexical) {
+                    return Err(ShaclError::Configuration(format!(
+                        "Parameter '{param_name}' value '{lexical}' does not match \
+                         pattern '{pattern}'"
+                    )));
+                }
+            }
+            ParameterConstraint::Range { min, max } => {
+                let numeric = lexical.trim().parse::<f64>().map_err(|_| {
+                    ShaclError::Configuration(format!(
+                        "Parameter '{param_name}' value '{lexical}' is not numeric but a \
+                         Range constraint was declared"
+                    ))
+                })?;
+                if let Some(min_val) = min {
+                    if numeric < *min_val {
+                        return Err(ShaclError::Configuration(format!(
+                            "Parameter '{param_name}' value {numeric} is below the minimum \
+                             {min_val}"
+                        )));
+                    }
+                }
+                if let Some(max_val) = max {
+                    if numeric > *max_val {
+                        return Err(ShaclError::Configuration(format!(
+                            "Parameter '{param_name}' value {numeric} is above the maximum \
+                             {max_val}"
+                        )));
+                    }
+                }
+            }
+            ParameterConstraint::CustomValidator(name) => {
+                return Err(ShaclError::UnsupportedOperation(format!(
+                    "Parameter '{param_name}' declares custom validator '{name}', but no \
+                     custom-validator runtime is available to enforce it; refusing to accept \
+                     the value unchecked"
+                )));
+            }
+        }
+
         Ok(())
     }
 
@@ -710,5 +822,87 @@ impl CustomConstraintRegistry {
                 self.collect_inherited_components(parent, inherited, visited);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod param_constraint_tests {
+    use super::*;
+    use oxirs_core::model::Literal;
+
+    fn lit(s: &str) -> Term {
+        Term::Literal(Literal::new(s))
+    }
+
+    #[test]
+    fn regression_minlength_constraint_enforced() {
+        let reg = CustomConstraintRegistry::new();
+        let c = ParameterConstraint::MinLength(5);
+        assert!(reg
+            .validate_value_against_constraint(&lit("abc"), &c, "p")
+            .is_err());
+        assert!(reg
+            .validate_value_against_constraint(&lit("abcdef"), &c, "p")
+            .is_ok());
+    }
+
+    #[test]
+    fn regression_pattern_constraint_enforced() {
+        let reg = CustomConstraintRegistry::new();
+        let c = ParameterConstraint::Pattern("^[0-9]+$".to_string());
+        assert!(reg
+            .validate_value_against_constraint(&lit("abc"), &c, "p")
+            .is_err());
+        assert!(reg
+            .validate_value_against_constraint(&lit("123"), &c, "p")
+            .is_ok());
+    }
+
+    #[test]
+    fn regression_range_constraint_enforced() {
+        let reg = CustomConstraintRegistry::new();
+        let c = ParameterConstraint::Range {
+            min: Some(1.0),
+            max: Some(10.0),
+        };
+        assert!(reg
+            .validate_value_against_constraint(&lit("0"), &c, "p")
+            .is_err());
+        assert!(reg
+            .validate_value_against_constraint(&lit("11"), &c, "p")
+            .is_err());
+        assert!(reg
+            .validate_value_against_constraint(&lit("5"), &c, "p")
+            .is_ok());
+        // Non-numeric value under a Range constraint must fail loud.
+        assert!(reg
+            .validate_value_against_constraint(&lit("notnum"), &c, "p")
+            .is_err());
+    }
+
+    #[test]
+    fn regression_custom_validator_fails_loud() {
+        let reg = CustomConstraintRegistry::new();
+        let c = ParameterConstraint::CustomValidator("myCheck".to_string());
+        assert!(matches!(
+            reg.validate_value_against_constraint(&lit("x"), &c, "p"),
+            Err(ShaclError::UnsupportedOperation(_))
+        ));
+    }
+
+    #[test]
+    fn regression_matches_datatype_rejects_mismatch() {
+        let reg = CustomConstraintRegistry::new();
+        // A plain string is not an integer.
+        assert!(!reg.matches_datatype(&lit("notanumber"), "xsd:integer"));
+        // But a numeric-looking literal is accepted as integer/decimal.
+        assert!(reg.matches_datatype(&lit("42"), "xsd:integer"));
+        assert!(reg.matches_datatype(&lit("3.14"), "xsd:decimal"));
+        // A NamedNode is an IRI, not a string.
+        let iri = Term::NamedNode(
+            oxirs_core::model::NamedNode::new("http://example.org/x").expect("iri"),
+        );
+        assert!(reg.matches_datatype(&iri, "iri"));
+        assert!(!reg.matches_datatype(&iri, "xsd:integer"));
     }
 }

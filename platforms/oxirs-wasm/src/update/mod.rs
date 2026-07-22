@@ -33,10 +33,24 @@ pub enum UpdateOperation {
         template: Vec<TemplateTriple>,
         where_patterns: Vec<RawPattern>,
     },
-    /// CLEAR – removes all triples
-    Clear,
-    /// DROP – alias for CLEAR in the embedded store
-    Drop,
+    /// CLEAR – removes triples from the target graph
+    Clear { target: GraphTarget, silent: bool },
+    /// DROP – removes a graph (and its triples) from the store
+    Drop { target: GraphTarget, silent: bool },
+}
+
+/// The graph a `CLEAR`/`DROP` operation targets, per the SPARQL 1.1 Update
+/// grammar: `( GRAPH IRIref | DEFAULT | NAMED | ALL )`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GraphTarget {
+    /// `DEFAULT` – the store's single default graph.
+    Default,
+    /// `GRAPH <iri>` – a specific named graph.
+    Named(String),
+    /// `NAMED` – all named graphs (excludes the default graph).
+    AllNamed,
+    /// `ALL` – the default graph plus all named graphs.
+    All,
 }
 
 /// A fully resolved triple (no variables)
@@ -136,9 +150,11 @@ impl UpdateParser {
                 where_patterns,
             })
         } else if upper.starts_with("CLEAR") {
-            Ok(UpdateOperation::Clear)
+            let (target, silent) = parse_graph_target(&s[5..])?;
+            Ok(UpdateOperation::Clear { target, silent })
         } else if upper.starts_with("DROP") {
-            Ok(UpdateOperation::Drop)
+            let (target, silent) = parse_graph_target(&s[4..])?;
+            Ok(UpdateOperation::Drop { target, silent })
         } else {
             Err(WasmError::QueryError(format!(
                 "Unknown or unsupported UPDATE operation: {}",
@@ -223,10 +239,58 @@ impl UpdateExecutor {
                 Ok(count)
             }
 
-            UpdateOperation::Clear | UpdateOperation::Drop => {
-                let before = store.size() as u32;
-                store.clear();
-                Ok(before)
+            UpdateOperation::Clear { target, silent }
+            | UpdateOperation::Drop { target, silent } => {
+                execute_clear_or_drop(target, *silent, store)
+            }
+        }
+    }
+}
+
+/// Execute a `CLEAR`/`DROP` against the given `target`.
+///
+/// This store maintains a single, unnamed default graph — it has no
+/// named-graph storage at all (see [`crate::named_graph`] for the separate,
+/// not-yet-integrated multi-graph store). So:
+///
+/// - `DEFAULT` and `ALL` clear the (only) graph this store has, matching the
+///   pre-existing bare `CLEAR`/`DROP` behaviour.
+/// - `GRAPH <iri>` and `NAMED` target graphs that, from this store's point of
+///   view, simply do not exist. Per SPARQL 1.1 Update semantics that is an
+///   error unless `SILENT` was specified, in which case it is a no-op — never
+///   a silent wipe of the default graph the caller did not ask to clear.
+fn execute_clear_or_drop(
+    target: &GraphTarget,
+    silent: bool,
+    store: &mut OxiRSStore,
+) -> WasmResult<u32> {
+    match target {
+        GraphTarget::Default | GraphTarget::All => {
+            let before = store.size() as u32;
+            store.clear();
+            Ok(before)
+        }
+        GraphTarget::Named(iri) => {
+            if silent {
+                Ok(0)
+            } else {
+                Err(WasmError::NotImplemented(format!(
+                    "CLEAR/DROP GRAPH <{iri}> is not supported: this store only maintains a \
+                     single default graph and has no named graph named '{iri}' to drop. Use \
+                     SILENT to treat a missing graph as a no-op instead of an error."
+                )))
+            }
+        }
+        GraphTarget::AllNamed => {
+            if silent {
+                Ok(0)
+            } else {
+                Err(WasmError::NotImplemented(
+                    "CLEAR/DROP NAMED is not supported: this store only maintains a single \
+                     default graph and has no named graphs. Use SILENT to treat this as a \
+                     no-op instead of an error."
+                        .to_string(),
+                ))
             }
         }
     }
@@ -399,6 +463,50 @@ fn split_template_where(sparql: &str, keyword: &str) -> WasmResult<(String, Stri
     let where_body: String = chars2[..pos2].iter().collect();
 
     Ok((template_body, where_body))
+}
+
+/// Parse the `( SILENT )? ( GRAPH IRIref | DEFAULT | NAMED | ALL )?` tail that
+/// follows the `CLEAR`/`DROP` keyword.
+///
+/// A missing target (bare `CLEAR`/`DROP`, the only form this parser accepted
+/// before graph-target parsing existed) is treated as `ALL`: this store has
+/// only ever had one graph, so "clear everything" is the correct reading of
+/// omitting a target entirely, and existing callers that relied on bare
+/// `CLEAR`/`DROP` keep working unchanged.
+fn parse_graph_target(rest: &str) -> WasmResult<(GraphTarget, bool)> {
+    let mut rest = rest.trim();
+    let mut silent = false;
+
+    if rest.to_uppercase().starts_with("SILENT") {
+        silent = true;
+        rest = rest[6..].trim_start();
+    }
+
+    if rest.is_empty() {
+        return Ok((GraphTarget::All, silent));
+    }
+
+    let upper = rest.to_uppercase();
+    if upper.starts_with("DEFAULT") {
+        Ok((GraphTarget::Default, silent))
+    } else if upper.starts_with("NAMED") {
+        Ok((GraphTarget::AllNamed, silent))
+    } else if upper.starts_with("ALL") {
+        Ok((GraphTarget::All, silent))
+    } else if upper.starts_with("GRAPH") {
+        let iri = iri_from_token(rest[5..].trim());
+        if iri.is_empty() {
+            return Err(WasmError::QueryError(
+                "GRAPH target is missing its <iri>".to_string(),
+            ));
+        }
+        Ok((GraphTarget::Named(iri), silent))
+    } else {
+        Err(WasmError::QueryError(format!(
+            "Unrecognized CLEAR/DROP target: '{}' (expected GRAPH <iri>, DEFAULT, NAMED, or ALL)",
+            &rest[..rest.len().min(40)]
+        )))
+    }
 }
 
 /// Parse a DATA block (no variables) into [`RawTriple`] values
@@ -669,6 +777,81 @@ mod tests {
         let n = execute_update("DROP", &mut store).expect("execute");
         assert_eq!(n, 1);
         assert_eq!(store.size(), 0);
+    }
+
+    #[test]
+    fn test_clear_default() {
+        let mut store = make_store();
+        store.insert("http://a", "http://b", "http://c");
+        let n = execute_update("CLEAR DEFAULT", &mut store).expect("execute");
+        assert_eq!(n, 1);
+        assert_eq!(store.size(), 0);
+    }
+
+    #[test]
+    fn test_clear_all() {
+        let mut store = make_store();
+        store.insert("http://a", "http://b", "http://c");
+        let n = execute_update("CLEAR ALL", &mut store).expect("execute");
+        assert_eq!(n, 1);
+        assert_eq!(store.size(), 0);
+    }
+
+    #[test]
+    fn regression_drop_graph_does_not_wipe_default_graph() {
+        // DROP GRAPH <iri> must NOT collapse into an unscoped store.clear() —
+        // this store has no named graphs, so the correct behaviour is a fail-loud
+        // error, not silent data loss of the (unrelated) default graph contents.
+        let mut store = make_store();
+        store.insert("http://a", "http://b", "http://c");
+        store.insert("http://x", "http://y", "http://z");
+
+        let result = execute_update("DROP GRAPH <http://example.org/g1>", &mut store);
+        assert!(result.is_err(), "expected an error, got {result:?}");
+        // Crucially, the default graph must be untouched.
+        assert_eq!(store.size(), 2);
+    }
+
+    #[test]
+    fn regression_clear_graph_does_not_wipe_default_graph() {
+        let mut store = make_store();
+        store.insert("http://a", "http://b", "http://c");
+        store.insert("http://x", "http://y", "http://z");
+
+        let result = execute_update("CLEAR GRAPH <http://example.org/g1>", &mut store);
+        assert!(result.is_err(), "expected an error, got {result:?}");
+        assert_eq!(store.size(), 2);
+    }
+
+    #[test]
+    fn regression_clear_named_errors_without_silent() {
+        let mut store = make_store();
+        store.insert("http://a", "http://b", "http://c");
+        let result = execute_update("CLEAR NAMED", &mut store);
+        assert!(result.is_err());
+        assert_eq!(store.size(), 1);
+    }
+
+    #[test]
+    fn regression_drop_graph_silent_is_a_noop_not_an_error() {
+        // SILENT means "don't error if the target doesn't exist" — since this
+        // store never has named graphs, SILENT + GRAPH is always a no-op.
+        let mut store = make_store();
+        store.insert("http://a", "http://b", "http://c");
+
+        let n = execute_update("DROP SILENT GRAPH <http://example.org/g1>", &mut store)
+            .expect("SILENT must not error");
+        assert_eq!(n, 0);
+        assert_eq!(store.size(), 1);
+    }
+
+    #[test]
+    fn regression_clear_silent_named_is_a_noop() {
+        let mut store = make_store();
+        store.insert("http://a", "http://b", "http://c");
+        let n = execute_update("CLEAR SILENT NAMED", &mut store).expect("SILENT must not error");
+        assert_eq!(n, 0);
+        assert_eq!(store.size(), 1);
     }
 
     #[test]

@@ -59,6 +59,10 @@ rsa.workspace = true
 # Multiformat encoding
 bs58.workspace = true
 
+# Compression (Pure Rust, COOLJAPAN OxiARC) — GZIP for the spec-mandated
+# StatusList2021 `encodedList` on-wire format (RFC 1952 gzip + base64url).
+oxiarc-deflate.workspace = true
+
 # Async runtime
 tokio.workspace = true
 async-trait.workspace = true

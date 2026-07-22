@@ -334,7 +334,13 @@ impl BackwardChainer {
         let first = &body[0];
         let rest = &body[1..];
 
-        if let Some(tree) = self.prove_internal(first, sub, depth) {
+        // SLD-resolution requires backtracking over *all* solutions of the first
+        // goal: an earlier binding may make `rest` unprovable while a later one
+        // succeeds (e.g. parent(a,Y) binds Y=b and Y=c, but only Y=c lets
+        // ancestor(Y,d) succeed). Committing to prove_internal's single
+        // first-found solution produced false negatives, so we enumerate every
+        // proof of `first` and short-circuit on the first that lets `rest` prove.
+        for tree in self.prove_all_internal(first, sub, depth) {
             let new_sub = sub.compose(&tree.substitution);
             if let Some((mut rest_trees, final_sub)) = self.prove_body(rest, &new_sub, depth) {
                 rest_trees.insert(0, tree);
@@ -730,5 +736,35 @@ mod tests {
         assert_eq!(g.predicate, "foo");
         assert_eq!(g.subject, "a");
         assert_eq!(g.object, "b");
+    }
+
+    /// Regression: prove()/can_prove() must backtrack across body goals.
+    ///
+    /// parent(a,b) and parent(a,c) both match `parent(a, Y)`, but only Y=c lets
+    /// `link(Y, d)` succeed. Without SLD backtracking, prove_body committed to
+    /// the first binding (Y=b), link(b,d) failed, and the provable goal was
+    /// reported unprovable.
+    #[test]
+    fn regression_prove_backtracks_across_body_goals() {
+        let mut bc = BackwardChainer::new(10);
+        bc.add_fact("parent", "a", "b");
+        bc.add_fact("parent", "a", "c");
+        bc.add_fact("link", "c", "d");
+        // reach(X, Z) :- parent(X, Y), link(Y, Z)
+        bc.add_clause(Clause {
+            head: Goal::new("reach", "?X", "?Z"),
+            body: vec![
+                Goal::new("parent", "?X", "?Y"),
+                Goal::new("link", "?Y", "?Z"),
+            ],
+        });
+
+        // Provable only via the second binding of the first body goal.
+        assert!(
+            bc.can_prove(&Goal::new("reach", "a", "d")),
+            "reach(a,d) is provable via parent(a,c), link(c,d) and must be found"
+        );
+        // A genuinely unprovable goal still fails.
+        assert!(!bc.can_prove(&Goal::new("reach", "a", "e")));
     }
 }

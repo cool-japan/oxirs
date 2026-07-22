@@ -740,6 +740,7 @@ impl SammAspectParser {
             time_steps: 100,
             material_properties: HashMap::new(),
             constraints: Vec::new(),
+            defaulted_fields: Vec::new(),
         })
     }
 

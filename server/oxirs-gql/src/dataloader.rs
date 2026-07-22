@@ -117,6 +117,10 @@ where
     cache: Arc<RwLock<HashMap<K, CachedEntry<V>>>>,
     pending_batch: Arc<Mutex<Option<PendingBatch<K, V>>>>,
     stats: Arc<RwLock<DataLoaderStats>>,
+    /// Handle to the background batch-dispatcher task. Retained so the task can
+    /// be aborted when the DataLoader is dropped (see the `Drop` impl),
+    /// preventing a leaked infinite loop per short-lived, per-request loader.
+    dispatcher_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 /// DataLoader performance statistics
@@ -160,17 +164,28 @@ where
 
     /// Create a new DataLoader with custom configuration
     pub fn with_config(batch_fn: Arc<dyn BatchLoadFn<K, V>>, config: DataLoaderConfig) -> Self {
-        let loader = Self {
+        let mut loader = Self {
             batch_fn,
             config,
             cache: Arc::new(RwLock::new(HashMap::new())),
             pending_batch: Arc::new(Mutex::new(None)),
             stats: Arc::new(RwLock::new(DataLoaderStats::default())),
+            dispatcher_handle: None,
         };
 
-        // Start the batch dispatcher
-        loader.start_batch_dispatcher();
+        // Start the batch dispatcher and retain its handle for shutdown.
+        loader.dispatcher_handle = Some(loader.start_batch_dispatcher());
         loader
+    }
+
+    /// Explicitly stop the background batch-dispatcher task.
+    ///
+    /// Called automatically on `Drop`, but exposed so callers can shut a loader
+    /// down deterministically.
+    pub fn shutdown(&self) {
+        if let Some(handle) = &self.dispatcher_handle {
+            handle.abort();
+        }
     }
 
     /// Load a single value by key
@@ -342,7 +357,7 @@ where
         }
     }
 
-    fn start_batch_dispatcher(&self) {
+    fn start_batch_dispatcher(&self) -> tokio::task::JoinHandle<()> {
         let pending_batch = Arc::clone(&self.pending_batch);
         let batch_fn = Arc::clone(&self.batch_fn);
         let config = self.config.clone();
@@ -370,7 +385,7 @@ where
                     Self::dispatch_batch(batch, &batch_fn, &config, &cache, &stats).await;
                 }
             }
-        });
+        })
     }
 
     async fn dispatch_batch(
@@ -446,6 +461,21 @@ where
         let mut stats = self.stats.write().await;
         stats.batches_dispatched += 1;
         stats.total_load_time += load_time;
+    }
+}
+
+impl<K, V> Drop for DataLoader<K, V>
+where
+    K: Send + Sync + Clone + Hash + Eq + 'static,
+    V: Send + Sync + Clone + 'static,
+{
+    fn drop(&mut self) {
+        // Abort the background dispatcher so a short-lived (e.g. per-request)
+        // DataLoader does not leak an infinite polling task for the lifetime of
+        // the process.
+        if let Some(handle) = &self.dispatcher_handle {
+            handle.abort();
+        }
     }
 }
 
@@ -639,5 +669,49 @@ mod tests {
         assert_eq!(results.get(&1), Some(&"value_1".to_string()));
         assert_eq!(results.get(&2), Some(&"value_2".to_string()));
         assert_eq!(results.get(&3), Some(&"value_3".to_string()));
+    }
+
+    #[tokio::test]
+    async fn regression_dispatcher_task_aborted_on_shutdown() {
+        let batch_fn = Arc::new(TestBatchLoader);
+        let loader = DataLoader::new(batch_fn);
+
+        // A dispatcher task must have been spawned and retained.
+        assert!(loader.dispatcher_handle.is_some());
+
+        loader.shutdown();
+        // Give the runtime a moment to process the abort.
+        for _ in 0..20 {
+            if loader
+                .dispatcher_handle
+                .as_ref()
+                .map(|h| h.is_finished())
+                .unwrap_or(false)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            loader
+                .dispatcher_handle
+                .as_ref()
+                .expect("handle")
+                .is_finished(),
+            "dispatcher task must be aborted after shutdown"
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_drop_runs_without_panic() {
+        // Constructing and dropping a per-request loader must not panic and must
+        // abort its background task (exercised via the Drop impl).
+        {
+            let loader = DataLoader::new(Arc::new(TestBatchLoader));
+            let _ = loader.load(1).await.expect("load ok");
+        }
+        // If Drop leaked/hung the task, subsequent scheduling would still work;
+        // reaching here without hang/panic is the assertion.
+        tokio::task::yield_now().await;
     }
 }

@@ -79,10 +79,16 @@ oxicrypto-mac.workspace = true
 oxicrypto-hash.workspace = true
 oxicrypto-rand.workspace = true
 ed25519-dalek = { workspace = true, features = ["pkcs8"] }
+# Pure-Rust X.509 certificate-chain signature verification (client-cert / mTLS
+# auth path). The `x509-parser` `verify` feature pulls in `ring` (C/assembly),
+# which the COOLJAPAN Pure Rust policy forbids, so signature verification is
+# implemented in-tree (`auth/cert_verify.rs`) on top of these RustCrypto crates.
+rsa = { workspace = true }
+p256 = { workspace = true }
 
-# SAML 2.0 pure-Rust XML parsing and signature verification (optional)
+# SAML 2.0 pure-Rust XML parsing (optional). SAML signature verification reuses
+# the base `rsa` dependency declared above (also used for X.509 cert verify).
 quick-xml = { workspace = true, optional = true }
-rsa = { workspace = true, optional = true }
 
 # Time and dates
 chrono.workspace = true
@@ -186,6 +192,9 @@ axum-test = "21"
 http = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 tempfile.workspace = true
+# X.509 test-certificate generation for auth/cert_verify.rs signature-verification
+# regression tests (dev-only; not shipped).
+rcgen = { workspace = true }
 
 [features]
 default = ["metrics", "auth"]
@@ -205,7 +214,7 @@ rate-limit = []
 tls = ["rustls-pemfile", "axum-server"]
 hot-reload = ["notify"]
 ldap = []
-saml = ["dep:quick-xml", "dep:rsa"]  # SAML authentication support via pure-Rust XML parsing
+saml = ["dep:quick-xml"]  # SAML authentication support via pure-Rust XML parsing (rsa is now a base dependency for X.509 cert verification)
 # Tantivy-backed full-text search (`TantivyTextIndex`). NOT in default: Tantivy
 # pulls C `zstd-sys`, violating the COOLJAPAN Pure Rust default policy. Without
 # this feature the server falls back to the pure-Rust `SimpleTextIndex`.

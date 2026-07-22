@@ -14,7 +14,7 @@ use super::lib_types_consumer::{ConsumerStats, StreamConsumer};
 use super::lib_types_producer::{ProducerStats, StreamProducer};
 
 /// RDF patch operations with full protocol support
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PatchOperation {
     /// Add a triple (A operation)
     Add {

@@ -2,6 +2,75 @@
 
 use super::{ReportConfig, ValidationReport};
 use crate::{PropertyPath, Result};
+use oxirs_core::model::Term;
+
+/// Render a SHACL property path as valid Turtle syntax for `sh:resultPath` /
+/// `sh:path`, per the SHACL specification's "Property Paths" grammar
+/// (§2.3.1): a simple predicate path is just its IRI; every other path shape
+/// (`sh:inversePath`, `sh:alternativePath`, `sh:zeroOrMorePath`, ...) is a
+/// blank-node structure, and sequence paths are RDF lists.
+pub(crate) fn format_shacl_path_turtle(path: &PropertyPath) -> String {
+    match path {
+        PropertyPath::Predicate(iri) => format!("<{}>", iri.as_str()),
+        PropertyPath::Inverse(inner) => {
+            format!("[ sh:inversePath {} ]", format_shacl_path_turtle(inner))
+        }
+        PropertyPath::Sequence(paths) => {
+            let items: Vec<String> = paths.iter().map(format_shacl_path_turtle).collect();
+            format!("( {} )", items.join(" "))
+        }
+        PropertyPath::Alternative(paths) => {
+            let items: Vec<String> = paths.iter().map(format_shacl_path_turtle).collect();
+            format!("[ sh:alternativePath ( {} ) ]", items.join(" "))
+        }
+        PropertyPath::ZeroOrMore(inner) => {
+            format!("[ sh:zeroOrMorePath {} ]", format_shacl_path_turtle(inner))
+        }
+        PropertyPath::OneOrMore(inner) => {
+            format!("[ sh:oneOrMorePath {} ]", format_shacl_path_turtle(inner))
+        }
+        PropertyPath::ZeroOrOne(inner) => {
+            format!("[ sh:zeroOrOnePath {} ]", format_shacl_path_turtle(inner))
+        }
+    }
+}
+
+/// Render an RDF term as Turtle syntax for use as the object of `sh:value`
+/// (or any other RDF-star-aware object position). Blank nodes and IRIs use
+/// their native Turtle syntax; literals include datatype/language tags when
+/// present; quoted triples are rendered recursively as `<< s p o >>`.
+pub(crate) fn format_term_turtle(term: &Term) -> String {
+    match term {
+        Term::NamedNode(node) => format!("<{}>", node.as_str()),
+        Term::BlankNode(node) => format!("_:{}", node.as_str()),
+        Term::Literal(literal) => {
+            let escaped = literal
+                .value()
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+                .replace('\r', "\\r");
+            let datatype = literal.datatype();
+            if let Some(language) = literal.language() {
+                format!("\"{escaped}\"@{language}")
+            } else if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
+                format!("\"{escaped}\"")
+            } else {
+                format!("\"{escaped}\"^^<{}>", datatype.as_str())
+            }
+        }
+        Term::Variable(var) => format!("?{}", var.as_str()),
+        Term::QuotedTriple(triple) => {
+            let inner = triple.inner();
+            format!(
+                "<< {} {} {} >>",
+                format_term_turtle(&Term::from_subject(inner.subject())),
+                format_term_turtle(&Term::from_predicate(inner.predicate())),
+                format_term_turtle(&Term::from_object(inner.object()))
+            )
+        }
+    }
+}
 
 /// HTML serializer for validation reports
 pub struct HtmlSerializer {
@@ -338,6 +407,20 @@ impl TurtleSerializer {
                     "        sh:sourceConstraintComponent sh:{} ;\n",
                     violation.source_constraint_component
                 ));
+
+                if let Some(path) = &violation.result_path {
+                    turtle.push_str(&format!(
+                        "        sh:resultPath {} ;\n",
+                        format_shacl_path_turtle(path)
+                    ));
+                }
+
+                if let Some(value) = &violation.value {
+                    turtle.push_str(&format!(
+                        "        sh:value {} ;\n",
+                        format_term_turtle(value)
+                    ));
+                }
 
                 if let Some(message) = &violation.result_message {
                     turtle.push_str(&format!(

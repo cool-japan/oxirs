@@ -18,6 +18,35 @@ use std::sync::{Arc, RwLock};
 use super::queryexecutor_type::QueryExecutor;
 use super::types::{ExecutionStrategy, FunctionRegistry, UnknownFunctionError};
 
+/// Whether an evaluated term is an `xsd:integer` (or a derived integer type),
+/// used by `SUM` to decide whether it can keep exact integer typing.
+fn algebra_term_is_integer(term: &crate::algebra::Term) -> bool {
+    let lit = match term {
+        crate::algebra::Term::Literal(lit) => lit,
+        _ => return false,
+    };
+    let datatype = match &lit.datatype {
+        Some(dt) => dt.as_str(),
+        None => return false,
+    };
+    matches!(
+        datatype,
+        "http://www.w3.org/2001/XMLSchema#integer"
+            | "http://www.w3.org/2001/XMLSchema#long"
+            | "http://www.w3.org/2001/XMLSchema#int"
+            | "http://www.w3.org/2001/XMLSchema#short"
+            | "http://www.w3.org/2001/XMLSchema#byte"
+            | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+            | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+            | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+            | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+            | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+            | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+            | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+    ) && lit.value.parse::<i64>().is_ok()
+}
+
 impl QueryExecutor {
     /// Create new query executor with default configuration
     pub fn new() -> Self {
@@ -577,19 +606,59 @@ impl QueryExecutor {
                 }
             }
             crate::algebra::Aggregate::Sum { distinct, expr } => {
-                let mut values = Vec::new();
+                // Collect each operand's (numeric value, integer-ness) so SUM
+                // over xsd:integer operands keeps xsd:integer typing and full
+                // i64 precision (SPARQL type promotion), only widening to
+                // xsd:decimal when a non-integer operand appears.
+                let mut values: Vec<(f64, bool, String)> = Vec::new();
                 for binding in bindings {
                     if let Ok(value) = self.evaluate_expression(expr, binding) {
                         if let Ok(num) = self.extract_numeric_value(&value) {
-                            values.push(num);
+                            let is_int = algebra_term_is_integer(&value);
+                            let lexical = match &value {
+                                crate::algebra::Term::Literal(lit) => lit.value.clone(),
+                                _ => num.to_string(),
+                            };
+                            values.push((num, is_int, lexical));
                         }
                     }
                 }
                 if *distinct {
-                    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                    values.dedup_by(|a, b| a == b);
+                    values
+                        .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+                    values.dedup_by(|a, b| a.0 == b.0);
                 }
-                let sum: f64 = values.iter().sum();
+                let all_integer = !values.is_empty() && values.iter().all(|(_, is_int, _)| *is_int);
+                if all_integer {
+                    // Exact integer accumulation with overflow fallback to f64.
+                    let mut acc: i64 = 0;
+                    let mut overflowed = false;
+                    for (_, _, lexical) in &values {
+                        match lexical.parse::<i64>() {
+                            Ok(i) => match acc.checked_add(i) {
+                                Some(v) => acc = v,
+                                None => {
+                                    overflowed = true;
+                                    break;
+                                }
+                            },
+                            Err(_) => {
+                                overflowed = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !overflowed {
+                        return Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                            value: acc.to_string(),
+                            language: None,
+                            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )),
+                        }));
+                    }
+                }
+                let sum: f64 = values.iter().map(|(n, _, _)| *n).sum();
                 Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
                     value: sum.to_string(),
                     language: None,
@@ -714,7 +783,7 @@ impl QueryExecutor {
         &self,
         left: Solution,
         right: Solution,
-        _conditions: &Option<crate::algebra::Expression>,
+        conditions: &Option<crate::algebra::Expression>,
     ) -> Result<Solution> {
         use std::collections::{HashMap, HashSet};
         // A no-op right side keeps every left row unbound.
@@ -784,8 +853,23 @@ impl QueryExecutor {
                         }
                     }
                     if is_compatible {
-                        result.push(merged);
-                        has_join = true;
+                        // SPARQL 1.1 §18.5 LeftJoin: the OPTIONAL FILTER (the
+                        // condition carried on the LeftJoin node) is evaluated
+                        // over the MERGED (left+right) binding. A merged row that
+                        // fails the filter does not count as a match — so a left
+                        // row whose only compatible right rows all fail the filter
+                        // is still emitted with its optional variables unbound.
+                        // This mirrors perform_parallel_left_join so the Serial
+                        // and Parallel strategies agree.
+                        if let Some(condition) = conditions {
+                            if self.left_join_filter_passes(condition, &merged)? {
+                                result.push(merged);
+                                has_join = true;
+                            }
+                        } else {
+                            result.push(merged);
+                            has_join = true;
+                        }
                     }
                 }
             }
@@ -794,6 +878,34 @@ impl QueryExecutor {
             }
         }
         Ok(result)
+    }
+
+    /// Evaluate a LeftJoin (OPTIONAL) FILTER condition over a merged binding.
+    ///
+    /// Truthiness rules mirror [`Self::apply_filter`]: a whole-query fault
+    /// (unknown function / runtime-budget breach) propagates as `Err`, while an
+    /// ordinary per-row evaluation error (unbound variable, type error) yields
+    /// `Ok(false)` so that merged row is simply not treated as a match.
+    fn left_join_filter_passes(
+        &self,
+        condition: &crate::algebra::Expression,
+        merged: &crate::algebra::Binding,
+    ) -> Result<bool> {
+        match self.evaluate_expression(condition, merged) {
+            Ok(crate::algebra::Term::Literal(lit)) => Ok(self.is_truthy(&lit)),
+            Ok(_) => Ok(true),
+            Err(err) => {
+                if err.downcast_ref::<UnknownFunctionError>().is_some()
+                    || err
+                        .downcast_ref::<crate::query_governor::BudgetExceeded>()
+                        .is_some()
+                {
+                    Err(err)
+                } else {
+                    Ok(false)
+                }
+            }
+        }
     }
     /// Hash join implementation
     pub(super) fn hash_join(&self, build_side: Solution, probe_side: Solution) -> Result<Solution> {
@@ -1645,5 +1757,64 @@ mod serial_executor_tests {
             result.is_err(),
             "triple-scan budget must be enforced during the BGP scan"
         );
+    }
+
+    fn binding(pairs: &[(&str, Term)]) -> crate::algebra::Binding {
+        let mut b = crate::algebra::Binding::new();
+        for (name, term) in pairs {
+            b.insert(Variable::new_unchecked(*name), term.clone());
+        }
+        b
+    }
+
+    #[test]
+    fn regression_apply_left_join_honors_optional_filter() {
+        // OPTIONAL { ?s :age ?age } FILTER(?age > 25): the LeftJoin FILTER must
+        // be evaluated over the merged binding by the Serial strategy (it was
+        // silently dropped before), matching perform_parallel_left_join.
+        let exec = QueryExecutor::new();
+        let left = vec![binding(&[
+            ("s", iri("http://ex/s1")),
+            ("name", iri("http://ex/alice")),
+        ])];
+        let right = vec![binding(&[
+            ("s", iri("http://ex/s1")),
+            ("age", int_term(30)),
+        ])];
+
+        // Passing filter (?age > 25): merged row with ?age bound is kept.
+        let cond_pass = Some(Expression::Binary {
+            op: BinaryOperator::Greater,
+            left: Box::new(ev("age")),
+            right: Box::new(int_expr(25)),
+        });
+        let sol = exec
+            .apply_left_join(left.clone(), right.clone(), &cond_pass)
+            .expect("left join ok");
+        assert_eq!(sol.len(), 1);
+        assert!(sol[0].contains_key(&Variable::new_unchecked("age")));
+
+        // Failing filter (?age > 40): the compatible right row does not count as
+        // a match, so the left row is emitted with ?age UNBOUND.
+        let cond_fail = Some(Expression::Binary {
+            op: BinaryOperator::Greater,
+            left: Box::new(ev("age")),
+            right: Box::new(int_expr(40)),
+        });
+        let sol = exec
+            .apply_left_join(left, right, &cond_fail)
+            .expect("left join ok");
+        assert_eq!(sol.len(), 1);
+        assert!(!sol[0].contains_key(&Variable::new_unchecked("age")));
+    }
+
+    fn int_term(n: i64) -> Term {
+        Term::Literal(Literal {
+            value: n.to_string(),
+            language: None,
+            datatype: Some(NamedNode::new_unchecked(
+                "http://www.w3.org/2001/XMLSchema#integer",
+            )),
+        })
     }
 }

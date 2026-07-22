@@ -1,14 +1,18 @@
 //! Prometheus Remote Write API integration.
 //!
 //! Provides types and utilities for converting TSDB series to Prometheus
-//! remote-write format and sending them to a Prometheus-compatible endpoint.
+//! remote-write format and sending them to a real Prometheus-compatible
+//! endpoint over HTTP.
 //!
-//! The Prometheus remote-write specification uses a snappy-compressed protobuf
-//! payload.  This implementation provides a clean, pure-Rust representation
-//! and a JSON-based wire format that is suitable for testing and environments
-//! where a full protobuf codec is not available.  The serialisation layer is
-//! designed to be swapped out for a real protobuf encoder without changing
-//! the public API.
+//! The Prometheus remote-write specification requires a Snappy-compressed
+//! protobuf (`prompb.WriteRequest`) payload; [`PrometheusRemoteWriter`]
+//! implements exactly that (see [`super::prometheus_wire`] for the
+//! hand-rolled, dependency-light protobuf encoder and the real HTTP
+//! transport, both pure Rust). [`RemoteWritePayload`]'s JSON encoding is a
+//! separate, crate-internal convenience representation used for logging,
+//! debugging, and local round-trip tests — it is **not** what is placed on
+//! the wire when talking to a real Prometheus/Cortex/Mimir/VictoriaMetrics
+//! receiver.
 
 use crate::error::{TsdbError, TsdbResult};
 use crate::series::DataPoint;
@@ -114,12 +118,13 @@ impl PrometheusTimeSeries {
     }
 }
 
-/// A batch payload suitable for transmission to a Prometheus remote-write
-/// endpoint.
+/// A JSON-serialisable snapshot of a write-request batch, used for local
+/// debugging, logging, and round-trip tests.
 ///
-/// In production this would be serialised as a snappy-compressed protobuf.
-/// Here we serialise to JSON so that the code is self-contained and testable
-/// without C or Fortran dependencies.
+/// This is **not** the wire format sent to a real Prometheus endpoint — the
+/// actual remote-write wire payload is the Snappy-compressed
+/// `prompb.WriteRequest` protobuf produced by [`super::prometheus_wire`]. Use
+/// [`PrometheusRemoteWriter`] to perform a real write.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteWritePayload {
     /// All time-series in this write request.
@@ -141,8 +146,9 @@ impl RemoteWritePayload {
         }
     }
 
-    /// Serialise to a JSON byte vector (production code would use protobuf +
-    /// snappy here).
+    /// Serialise to a JSON byte vector. This is a debugging/logging
+    /// convenience only — real remote writes use the protobuf encoder in
+    /// [`super::prometheus_wire`], not this JSON representation.
     pub fn encode(&self) -> TsdbResult<Vec<u8>> {
         serde_json::to_vec(self).map_err(|e| TsdbError::Integration(e.to_string()))
     }
@@ -310,10 +316,13 @@ pub struct WriteResult {
 
 /// Async Prometheus remote-write client.
 ///
-/// The current implementation is a **stub** that serialises the payload and
-/// records what would be sent rather than making real HTTP calls.  This design
-/// keeps the crate pure-Rust and dependency-free while providing a realistic
-/// API surface that can be backed by a real HTTP client in the future.
+/// Performs a real remote-write: series are protobuf-encoded to the
+/// `prompb.WriteRequest` wire schema, Snappy-compressed, and POSTed over
+/// HTTP to `config.endpoint` with `config.timeout_ms`, `config.auth_header`,
+/// and `config.max_retries` honored (see [`super::prometheus_wire`] for the
+/// encoder and transport). A non-2xx response or exhausted retries on a
+/// transport error surfaces as `Err` — this type never reports a series as
+/// written unless the receiver actually acknowledged it.
 pub struct PrometheusRemoteWriter {
     config: PrometheusRemoteWriteConfig,
 }
@@ -326,10 +335,15 @@ impl PrometheusRemoteWriter {
 
     /// Write a batch of time-series to the configured endpoint.
     ///
-    /// In the current stub implementation this method:
-    /// 1. Validates all labels and samples.
-    /// 2. Encodes the payload to JSON bytes.
-    /// 3. Returns a `WriteResult` without making any network calls.
+    /// 1. Validates all labels and samples; series missing the mandatory
+    ///    `__name__` label are dropped (with a warning) and never sent.
+    /// 2. Protobuf-encodes and Snappy-compresses the remaining series.
+    /// 3. Issues a real HTTP POST to `config.endpoint`, retrying transient
+    ///    failures up to `config.max_retries` times.
+    ///
+    /// Returns `Err` if the endpoint could not be reached or responded with
+    /// a non-2xx status after retries are exhausted — a `WriteResult` is
+    /// only ever returned for data the receiver actually accepted.
     pub async fn write_batch(&self, metrics: Vec<PrometheusTimeSeries>) -> TsdbResult<WriteResult> {
         if metrics.is_empty() {
             return Ok(WriteResult {
@@ -340,10 +354,9 @@ impl PrometheusRemoteWriter {
         }
 
         let mut warnings = Vec::new();
-        let mut series_written = 0usize;
-        let mut samples_written = 0usize;
+        let mut valid_series: Vec<PrometheusTimeSeries> = Vec::with_capacity(metrics.len());
 
-        for ts in &metrics {
+        for ts in metrics {
             // Validate that __name__ is present.
             if ts.metric_name().is_none() {
                 warnings.push(format!(
@@ -353,7 +366,9 @@ impl PrometheusRemoteWriter {
                 continue;
             }
 
-            // Check for unsorted samples.
+            // Check for unsorted samples (still sent — Prometheus receivers
+            // typically re-sort or reject out-of-order samples themselves —
+            // but the caller is warned so they can fix the source data).
             let sorted = ts
                 .samples
                 .windows(2)
@@ -365,19 +380,30 @@ impl PrometheusRemoteWriter {
                 ));
             }
 
-            series_written += 1;
-            samples_written += ts.samples.len();
+            valid_series.push(ts);
         }
 
-        // Encode the payload (validates JSON serialisability).
-        let payload = RemoteWritePayload::new(metrics);
-        let _encoded = payload.encode()?;
+        if valid_series.is_empty() {
+            return Ok(WriteResult {
+                series_written: 0,
+                samples_written: 0,
+                warnings,
+            });
+        }
+
+        let series_written = valid_series.len();
+        let samples_written: usize = valid_series.iter().map(|ts| ts.samples.len()).sum();
+
+        // Real network I/O: protobuf-encode, snappy-compress, HTTP POST,
+        // with retries. Propagates as Err on failure — never reports
+        // success without the receiver actually acknowledging the write.
+        super::prometheus_wire::send_remote_write(&self.config, &valid_series).await?;
 
         tracing::debug!(
             endpoint = %self.config.endpoint,
             series = series_written,
             samples = samples_written,
-            "Prometheus remote write (stub) – payload encoded, not sent"
+            "Prometheus remote write: payload sent and acknowledged"
         );
 
         Ok(WriteResult {
@@ -483,6 +509,8 @@ fn current_timestamp_ms() -> i64 {
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     // ── Label & metric name validation ────────────────────────────────────────
 
@@ -698,7 +726,21 @@ mod tests {
 
     #[tokio::test]
     async fn writer_counts_series_and_samples() {
-        let config = PrometheusRemoteWriteConfig::default();
+        // Real HTTP path: a mock Prometheus remote-write receiver must
+        // actually receive a POST with the correct headers before the
+        // writer reports success.
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/write"))
+            .and(header("content-encoding", "snappy"))
+            .and(header("content-type", "application/x-protobuf"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config =
+            PrometheusRemoteWriteConfig::new(format!("{}/api/v1/write", mock_server.uri()));
         let writer = PrometheusRemoteWriter::new(config);
 
         let mut ts = PrometheusTimeSeries::new(vec![
@@ -716,6 +758,89 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn regression_writer_fails_loudly_when_endpoint_rejects_write() {
+        // A 400 from the receiver must propagate as Err, never be silently
+        // swallowed into a fake "success" WriteResult.
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/write"))
+            .respond_with(ResponseTemplate::new(400).set_body_string("bad request"))
+            .mount(&mock_server)
+            .await;
+
+        let config = PrometheusRemoteWriteConfig {
+            max_retries: 2,
+            ..PrometheusRemoteWriteConfig::new(format!("{}/api/v1/write", mock_server.uri()))
+        };
+        let writer = PrometheusRemoteWriter::new(config);
+
+        let mut ts =
+            PrometheusTimeSeries::new(vec![PrometheusLabel::new_unchecked("__name__", "m")]);
+        ts.push_sample(PrometheusSample::new(1.0, 1000));
+
+        let result = writer.write_batch(vec![ts]).await;
+        assert!(
+            result.is_err(),
+            "a rejected write must surface as Err, not a fabricated success"
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_writer_retries_transient_server_error_then_succeeds() {
+        // A transient 503 followed by a 204 must ultimately report success
+        // — proving retries are real, not decorative.
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/write"))
+            .respond_with(ResponseTemplate::new(503))
+            .up_to_n_times(1)
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/write"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let config = PrometheusRemoteWriteConfig {
+            max_retries: 3,
+            ..PrometheusRemoteWriteConfig::new(format!("{}/api/v1/write", mock_server.uri()))
+        };
+        let writer = PrometheusRemoteWriter::new(config);
+
+        let mut ts =
+            PrometheusTimeSeries::new(vec![PrometheusLabel::new_unchecked("__name__", "m")]);
+        ts.push_sample(PrometheusSample::new(1.0, 1000));
+
+        let result = writer.write_batch(vec![ts]).await;
+        assert!(result.is_ok(), "should succeed after retrying past a 503");
+    }
+
+    #[tokio::test]
+    async fn regression_writer_honors_auth_header() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/write"))
+            .and(header("authorization", "Bearer secrettoken"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config =
+            PrometheusRemoteWriteConfig::new(format!("{}/api/v1/write", mock_server.uri()))
+                .with_auth("Bearer secrettoken");
+        let writer = PrometheusRemoteWriter::new(config);
+
+        let mut ts =
+            PrometheusTimeSeries::new(vec![PrometheusLabel::new_unchecked("__name__", "m")]);
+        ts.push_sample(PrometheusSample::new(1.0, 1000));
+
+        let result = writer.write_batch(vec![ts]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
     async fn writer_warns_on_missing_name_label() {
         let config = PrometheusRemoteWriteConfig::default();
         let writer = PrometheusRemoteWriter::new(config);
@@ -728,9 +853,16 @@ mod tests {
 
     #[tokio::test]
     async fn writer_write_all_batches() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/write"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
         let config = PrometheusRemoteWriteConfig {
             batch_size: 2,
-            ..Default::default()
+            ..PrometheusRemoteWriteConfig::new(format!("{}/api/v1/write", mock_server.uri()))
         };
         let writer = PrometheusRemoteWriter::new(config);
 
@@ -815,7 +947,15 @@ mod tests {
 
     #[tokio::test]
     async fn writer_warns_on_out_of_order_samples() {
-        let config = PrometheusRemoteWriteConfig::default();
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/write"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let config =
+            PrometheusRemoteWriteConfig::new(format!("{}/api/v1/write", mock_server.uri()));
         let writer = PrometheusRemoteWriter::new(config);
 
         let mut ts =

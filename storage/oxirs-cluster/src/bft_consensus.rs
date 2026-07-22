@@ -154,6 +154,32 @@ impl BftConsensusManager {
             });
         }
 
+        // Wire the client-reply bridge: committed `Reply` messages are drained
+        // and delivered to the requesting client over the authenticated BFT
+        // network transport. This is what lets a *remote* BFT client actually
+        // receive replies (previously the reply never left the node, so
+        // cross-node clients timed out). A reply addressed to this node's own
+        // id was already completed in-process by the commit callback above, so
+        // it is not re-sent over the network.
+        {
+            let (reply_tx, mut reply_rx) = tokio::sync::mpsc::unbounded_channel::<BftMessage>();
+            consensus.set_reply_sink(reply_tx);
+            let net = bft_network.clone();
+            let self_id = node_id.clone();
+            tokio::spawn(async move {
+                while let Some(message) = reply_rx.recv().await {
+                    if let BftMessage::Reply { client_id, .. } = &message {
+                        if client_id == &self_id {
+                            continue;
+                        }
+                        if let Err(e) = net.send_to(client_id, message.clone()).await {
+                            tracing::warn!("BFT reply delivery to client {client_id} failed: {e}");
+                        }
+                    }
+                }
+            });
+        }
+
         // Seed the request-identity counter from the current time (nanoseconds)
         // so identities are unlikely to collide across manager restarts.
         let seed = std::time::SystemTime::now()

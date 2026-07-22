@@ -93,6 +93,20 @@ pub mod offline_cache;
 // v0.3.0: SHACL validation subset
 pub mod shacl;
 
+// Fluent, programmatic SPARQL SELECT/ASK/COUNT query builder
+pub mod query_builder;
+
+// Structured WASM error codes and an error-history handler
+pub mod error_handler;
+
+// Multi-format (JSON/XML/CSV/TSV/Markdown/HTML) SPARQL result set formatter
+pub mod sparql_result_formatter;
+
+// A deterministic, in-memory *mock* SPARQL endpoint client — no network I/O.
+// Off by default; see the `mock-endpoint-client` feature doc in Cargo.toml.
+#[cfg(feature = "mock-endpoint-client")]
+pub mod endpoint_client;
+
 use wasm_bindgen::prelude::*;
 
 pub use api::WasmSparqlStore;

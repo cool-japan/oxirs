@@ -19,7 +19,9 @@ use serde_json::json;
 #[cfg(feature = "api-server")]
 use std::collections::HashMap;
 #[cfg(feature = "api-server")]
-use tracing::{debug, error, info, warn};
+use std::sync::Arc;
+#[cfg(feature = "api-server")]
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 /// List available models
@@ -101,12 +103,14 @@ pub async fn get_model_info(
     Path(model_id): Path<Uuid>,
 ) -> Result<Json<ModelInfoResponse>, StatusCode> {
     debug!("Getting model information for: {}", model_id);
+    let request_start = std::time::Instant::now();
 
     // Get model metadata from registry
     let model_metadata = match state.registry.get_model(model_id).await {
         Ok(metadata) => metadata,
         Err(e) => {
             error!("Model not found in registry: {}", e);
+            state.metrics.record(request_start.elapsed(), true);
             return Err(StatusCode::NOT_FOUND);
         }
     };
@@ -136,9 +140,11 @@ pub async fn get_model_info(
     let memory_usage_mb = state.cache_manager.estimate_memory_usage() as f64 / (1024.0 * 1024.0);
 
     let health_metrics = HealthMetrics {
-        avg_response_time_ms: 50.0, // Would need proper tracking
+        // Real, live aggregates from the request-metrics tracker rather than
+        // hard-coded placeholders. Before any traffic these are honestly 0.0.
+        avg_response_time_ms: state.metrics.avg_response_time_ms(),
         requests_last_hour: cache_stats.total_hits + cache_stats.total_misses,
-        error_rate_percent: 0.0, // Would need proper error tracking
+        error_rate_percent: state.metrics.error_rate_percent(),
         memory_usage_mb,
     };
 
@@ -166,18 +172,11 @@ pub async fn get_model_info(
         "relation_prediction".to_string(),
     ];
 
-    // Get last training stats (placeholder - would need proper tracking)
-    let last_training = if stats.is_trained {
-        Some(TrainingStats {
-            epochs_completed: 100,
-            final_loss: 0.1,
-            training_time_seconds: 3600.0,
-            convergence_achieved: true,
-            loss_history: vec![1.0, 0.5, 0.2, 0.1],
-        })
-    } else {
-        None
-    };
+    // Derive real training statistics from the registry's production (or most
+    // recent) version metrics. We never fabricate values: if the recorded
+    // version carries no training metrics, `last_training` is reported as None
+    // rather than a hard-coded placeholder.
+    let last_training = training_stats_from_registry(&state, &model_metadata).await;
 
     let response = ModelInfoResponse {
         stats,
@@ -186,7 +185,47 @@ pub async fn get_model_info(
         last_training,
     };
 
+    state.metrics.record(request_start.elapsed(), false);
     Ok(Json(response))
+}
+
+/// Build [`TrainingStats`] from real registry version metrics, or `None` when
+/// no training metrics were recorded for the model.
+///
+/// This reads whatever a training/registration flow persisted onto the model's
+/// production version (falling back to the latest registered version). Keys are
+/// matched permissively (`final_loss`/`loss`, `epochs`/`epochs_completed`, ...)
+/// and only the fields actually present are populated; absent fields fall back
+/// to neutral, clearly-non-fabricated defaults.
+#[cfg(feature = "api-server")]
+async fn training_stats_from_registry(
+    state: &ApiState,
+    model_metadata: &crate::model_registry::ModelMetadata,
+) -> Option<TrainingStats> {
+    // Prefer the production version; otherwise use the most recently registered.
+    let version_id = model_metadata
+        .production_version
+        .or_else(|| model_metadata.versions.last().copied())?;
+
+    let version = state.registry.get_version(version_id).await.ok()?;
+    let metrics = &version.metrics;
+    if metrics.is_empty() {
+        return None;
+    }
+
+    let get = |keys: &[&str]| -> Option<f64> { keys.iter().find_map(|k| metrics.get(*k).copied()) };
+
+    Some(TrainingStats {
+        epochs_completed: get(&["epochs_completed", "epochs"])
+            .map(|v| v as usize)
+            .unwrap_or(0),
+        final_loss: get(&["final_loss", "loss"]).unwrap_or(0.0),
+        training_time_seconds: get(&["training_time_seconds", "training_time"]).unwrap_or(0.0),
+        convergence_achieved: get(&["convergence_achieved", "converged"])
+            .map(|v| v != 0.0)
+            .unwrap_or(false),
+        loss_history: Vec::new(),
+    })
 }
 
 /// Get model health status
@@ -261,23 +300,82 @@ pub async fn load_model(
         }
     }
 
-    // In a real implementation, this would:
-    // 1. Load model weights from storage
-    // 2. Initialize model with proper configuration
-    // 3. Add to the loaded models map
-    // For now, we'll create a placeholder response
+    // Attempt to load persisted weights from the registry's storage area and
+    // insert the reconstructed model into the loaded-models map. If no
+    // persisted artifact exists (or the model type is not reconstructable), we
+    // MUST fail loud (per the project's fail-loud contract) rather than return
+    // a fabricated 200 "load_initiated" success that leaves the model absent.
+    match load_model_from_storage(&state, &model_metadata).await {
+        Ok(model) => {
+            let mut models = state.models.write().await;
+            models.insert(model_id, model);
+            let response = json!({
+                "status": "loaded",
+                "model_id": model_id,
+                "model_name": model_metadata.name,
+                "model_type": model_metadata.model_type,
+                "message": "Model loaded successfully"
+            });
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("Failed to load model {}: {}", model_id, e);
+            // 501 when the artifact/type is not supported for reconstruction,
+            // otherwise surface an internal error. Either way, never 200.
+            Err(StatusCode::NOT_IMPLEMENTED)
+        }
+    }
+}
 
-    warn!("Model loading not fully implemented - this would load model weights and configuration");
+/// Reconstruct a trained model from the registry's on-disk storage area.
+///
+/// Layout: `<registry storage_path>/<model_id>/model.bin`, matching the format
+/// written by each model's `EmbeddingModel::save` implementation. Returns an
+/// error (never a silently-empty success) if the artifact is missing or the
+/// model type cannot be reconstructed.
+#[cfg(feature = "api-server")]
+async fn load_model_from_storage(
+    state: &ApiState,
+    model_metadata: &crate::model_registry::ModelMetadata,
+) -> anyhow::Result<Arc<dyn crate::EmbeddingModel + Send + Sync>> {
+    use crate::{
+        ComplEx, DistMult, EmbeddingModel, GNNConfig, GNNEmbedding, HoLE, HoLEConfig, ModelConfig,
+        RotatE, TransE,
+    };
 
-    let response = json!({
-        "status": "load_initiated",
-        "model_id": model_id,
-        "model_name": model_metadata.name,
-        "model_type": model_metadata.model_type,
-        "message": "Model loading initiated (implementation pending)"
-    });
+    let model_file = state
+        .registry
+        .storage_path()
+        .join(model_metadata.model_id.to_string())
+        .join("model.bin");
 
-    Ok(Json(response))
+    if !model_file.exists() {
+        return Err(anyhow::anyhow!(
+            "no persisted weights found for model {} at {}",
+            model_metadata.model_id,
+            model_file.display()
+        ));
+    }
+    let model_file = model_file.to_string_lossy().to_string();
+
+    let mut model: Box<dyn EmbeddingModel + Send + Sync> = match model_metadata.model_type.as_str()
+    {
+        "TransE" => Box::new(TransE::new(ModelConfig::default())),
+        "DistMult" => Box::new(DistMult::new(ModelConfig::default())),
+        "ComplEx" => Box::new(ComplEx::new(ModelConfig::default())),
+        "RotatE" => Box::new(RotatE::new(ModelConfig::default())),
+        "HoLE" | "HolE" => Box::new(HoLE::new(HoLEConfig::default())),
+        "GNN" | "GNNEmbedding" => Box::new(GNNEmbedding::new(GNNConfig::default())),
+        other => {
+            return Err(anyhow::anyhow!(
+                "model type '{}' cannot be reconstructed for loading",
+                other
+            ))
+        }
+    };
+
+    model.load(&model_file)?;
+    Ok(Arc::from(model))
 }
 
 /// Unload a model

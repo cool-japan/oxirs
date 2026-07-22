@@ -146,7 +146,14 @@ simd = ["wide"]
 cuda = []
 opencl = []
 metal = []
-blas = []
+# BLAS-accelerated linear algebra for vector-similarity hot paths (see
+# `ai::vector_store_similarity`), backed by the pure-Rust OxiBLAS crates via
+# `scirs2-core`'s `linalg` feature (COOLJAPAN policy: never link openblas/BLAS
+# C libraries directly -- always go through OxiBLAS). Off by default: the
+# non-BLAS path already uses scirs2-core's SIMD-optimized `ndarray` ops, so
+# this is an opt-in for workloads where a dedicated BLAS Level-1/2/3 backend
+# measurably wins.
+blas = ["scirs2-core/linalg"]
 rdf-12 = []
 rdf-star = []
 sparql-12 = []

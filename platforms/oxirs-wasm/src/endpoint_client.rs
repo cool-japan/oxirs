@@ -1,8 +1,17 @@
-//! # SPARQL Endpoint Client
+//! # Mock SPARQL Endpoint Client
 //!
-//! A simulated SPARQL 1.1 endpoint client suitable for testing and WASM environments
-//! where real HTTP connections are unavailable.  The `execute` method builds a mock
-//! JSON/boolean response based on the query type and tracks request statistics.
+//! ⚠️ **This is a mock. It never performs any network I/O.** [`EndpointClient::execute`]
+//! *fabricates* a deterministic JSON/boolean response from the query text alone (e.g. a
+//! SELECT's row count is derived from `query.text.len()`, not from any real data) and
+//! tracks request statistics against that fabricated response. It is compiled only when
+//! the crate is built with the `mock-endpoint-client` feature (off by default) — see
+//! that feature's doc comment in `Cargo.toml` — specifically so a real, future
+//! `mod endpoint_client;` wiring can never be added by accident and start returning
+//! fabricated query results as if they were genuine data from a live SPARQL endpoint.
+//!
+//! There is currently no real HTTP-backed `EndpointClient` in this crate. If you need
+//! one, implement it against `web_sys::fetch`/`wasm_bindgen_futures::JsFuture` — do not
+//! repurpose this type for that.
 //!
 //! ## Example
 //!
@@ -134,7 +143,7 @@ impl std::error::Error for ClientError {}
 
 // ─── Endpoint client ──────────────────────────────────────────────────────────
 
-/// Simulated SPARQL endpoint client
+/// Mock SPARQL endpoint client. Performs no network I/O; see the module doc.
 pub struct EndpointClient {
     config: ClientConfig,
     stats: RequestStats,
@@ -153,9 +162,9 @@ impl EndpointClient {
 
     // ── Query execution ─────────────────────────────────────────────────
 
-    /// Execute a SPARQL query, returning a simulated [`QueryResponse`].
-    ///
-    /// The response is generated deterministically based on the query type:
+    /// Execute a SPARQL query, returning a **fabricated** [`QueryResponse`] —
+    /// no request is ever sent anywhere. The response is generated
+    /// deterministically based on the query type:
     ///
     /// | Type      | Result                                             |
     /// |-----------|---------------------------------------------------|
@@ -189,10 +198,7 @@ impl EndpointClient {
             }
             QueryType::Ask => {
                 let boolean = !query.text.to_lowercase().contains("false");
-                let json = format!(
-                    r#"{{"head":{{}}, "boolean":{}}}"#,
-                    boolean
-                );
+                let json = format!(r#"{{"head":{{}}, "boolean":{}}}"#, boolean);
                 (json, if boolean { 1 } else { 0 })
             }
             QueryType::Construct | QueryType::Describe => {
@@ -388,8 +394,16 @@ mod tests {
         let mut client = default_client();
         let q = select_query("SELECT ?name ?age WHERE { ?x ?name ?age }");
         let resp = client.execute(q).expect("execute failed");
-        assert!(resp.result_json.contains("name"), "json: {}", resp.result_json);
-        assert!(resp.result_json.contains("age"), "json: {}", resp.result_json);
+        assert!(
+            resp.result_json.contains("name"),
+            "json: {}",
+            resp.result_json
+        );
+        assert!(
+            resp.result_json.contains("age"),
+            "json: {}",
+            resp.result_json
+        );
     }
 
     #[test]
@@ -522,7 +536,9 @@ mod tests {
     #[test]
     fn test_stats_increment_on_success() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
+        client
+            .execute(select_query("SELECT ?s WHERE { ?s ?p ?o }"))
+            .expect("should succeed");
         assert_eq!(client.stats().total_requests, 1);
         assert_eq!(client.stats().successful, 1);
         assert_eq!(client.stats().failed, 0);
@@ -539,7 +555,9 @@ mod tests {
     #[test]
     fn test_stats_total_elapsed_grows() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?x WHERE { ?x ?p ?o }")).expect("should succeed");
+        client
+            .execute(select_query("SELECT ?x WHERE { ?x ?p ?o }"))
+            .expect("should succeed");
         assert!(client.stats().total_elapsed_ms > 0);
     }
 
@@ -547,7 +565,9 @@ mod tests {
     fn test_stats_multiple_queries() {
         let mut client = default_client();
         for _ in 0..5 {
-            client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
+            client
+                .execute(select_query("SELECT ?s WHERE { ?s ?p ?o }"))
+                .expect("should succeed");
         }
         assert_eq!(client.stats().total_requests, 5);
         assert_eq!(client.stats().successful, 5);
@@ -559,14 +579,18 @@ mod tests {
     fn test_history_grows_on_execute() {
         let mut client = default_client();
         assert_eq!(client.history().len(), 0);
-        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
+        client
+            .execute(select_query("SELECT ?s WHERE { ?s ?p ?o }"))
+            .expect("should succeed");
         assert_eq!(client.history().len(), 1);
     }
 
     #[test]
     fn test_clear_history() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
+        client
+            .execute(select_query("SELECT ?s WHERE { ?s ?p ?o }"))
+            .expect("should succeed");
         client.clear_history();
         assert_eq!(client.history().len(), 0);
     }
@@ -580,7 +604,9 @@ mod tests {
     #[test]
     fn test_last_query_after_execute() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?x WHERE { ?x ?p ?o }")).expect("should succeed");
+        client
+            .execute(select_query("SELECT ?x WHERE { ?x ?p ?o }"))
+            .expect("should succeed");
         let last = client.last_query().expect("last query");
         assert!(last.text.contains("?x"));
     }
@@ -605,7 +631,9 @@ mod tests {
     #[test]
     fn test_execute_update_increments_stats() {
         let mut client = default_client();
-        client.execute_update("DELETE DATA { <a> <b> <c> }").expect("should succeed");
+        client
+            .execute_update("DELETE DATA { <a> <b> <c> }")
+            .expect("should succeed");
         assert_eq!(client.stats().total_requests, 1);
         assert_eq!(client.stats().successful, 1);
     }
@@ -714,7 +742,9 @@ mod tests {
     fn test_clear_history_after_multiple() {
         let mut client = default_client();
         for _ in 0..3 {
-            client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
+            client
+                .execute(select_query("SELECT ?s WHERE { ?s ?p ?o }"))
+                .expect("should succeed");
         }
         assert_eq!(client.history().len(), 3);
         client.clear_history();
@@ -768,7 +798,9 @@ mod tests {
     #[test]
     fn test_request_stats_total_is_success_plus_failed() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
+        client
+            .execute(select_query("SELECT ?s WHERE { ?s ?p ?o }"))
+            .expect("should succeed");
         let _ = client.execute(select_query(""));
         let s = client.stats();
         assert_eq!(s.total_requests, s.successful + s.failed);

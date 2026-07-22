@@ -145,10 +145,20 @@ pub struct DbcMessage {
 
 impl DbcMessage {
     /// Create a new message
+    ///
+    /// `id` is the raw numeric ID as it appears in the DBC `BO_` line. Vector
+    /// CANdb++ / cantools-style DBC files encode a 29-bit extended CAN
+    /// arbitration ID by OR-ing the real ID with bit 31 (`0x8000_0000`); this
+    /// constructor detects that flag bit, strips it, and masks the remainder
+    /// down to the 29-bit extended range so that `id` always holds the real
+    /// on-wire arbitration ID (matching what shows up in captured CAN
+    /// frames). Standard 11-bit IDs (bit 31 clear) are stored unchanged.
     pub fn new(id: u32, name: &str, dlc: u8) -> Self {
+        let is_extended = (id & 0x8000_0000) != 0;
+        let id = if is_extended { id & 0x1FFF_FFFF } else { id };
         Self {
             id,
-            is_extended: id > 0x7FF, // Heuristic: ID > 11 bits is extended
+            is_extended,
             name: name.to_string(),
             dlc,
             transmitter: String::new(),
@@ -312,6 +322,22 @@ impl DbcDatabase {
 impl Default for DbcDatabase {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Normalize a raw numeric CAN ID as it appears in a DBC directive (e.g. the
+/// message ID reference in `CM_ BO_`, `BA_ ... BO_`, or `VAL_` lines) to the
+/// real on-wire arbitration ID stored on [`DbcMessage::id`].
+///
+/// Mirrors the extended-ID flag-bit convention applied in
+/// [`DbcMessage::new`]: if bit 31 (`0x8000_0000`) is set the ID is extended
+/// (29-bit) and the flag bit must be stripped before comparing against
+/// `DbcMessage::id`; otherwise the raw value is already the real ID.
+fn normalize_dbc_id(raw: u32) -> u32 {
+    if raw & 0x8000_0000 != 0 {
+        raw & 0x1FFF_FFFF
+    } else {
+        raw
     }
 }
 
@@ -625,6 +651,7 @@ impl DbcParser {
                     let parts: Vec<&str> = line[7..start].split_whitespace().collect();
                     if parts.len() >= 2 {
                         if let Ok(msg_id) = parts[0].parse::<u32>() {
+                            let msg_id = normalize_dbc_id(msg_id);
                             let sig_name = parts[1];
                             if let Some(msg) =
                                 self.database.messages.iter_mut().find(|m| m.id == msg_id)
@@ -642,6 +669,7 @@ impl DbcParser {
                     let parts: Vec<&str> = line[7..start].split_whitespace().collect();
                     if !parts.is_empty() {
                         if let Ok(msg_id) = parts[0].parse::<u32>() {
+                            let msg_id = normalize_dbc_id(msg_id);
                             if let Some(msg) =
                                 self.database.messages.iter_mut().find(|m| m.id == msg_id)
                             {
@@ -823,6 +851,7 @@ impl DbcParser {
             if parts.len() >= 2 && parts[0] == "BO_" {
                 // Message attribute
                 if let Ok(msg_id) = parts[1].parse::<u32>() {
+                    let msg_id = normalize_dbc_id(msg_id);
                     if let Some(value_str) = parts.get(2) {
                         let value = Self::parse_attribute_literal_static(
                             value_str.trim_end_matches(';'),
@@ -881,7 +910,7 @@ impl DbcParser {
         }
 
         let msg_id: u32 = match parts[1].parse() {
-            Ok(id) => id,
+            Ok(id) => normalize_dbc_id(id),
             Err(_) => return Ok(()),
         };
 
@@ -1159,5 +1188,78 @@ BO_ 100 TestMsg: 8 ECU
         let dbc = "VERSION \"\"";
         let db = parse_dbc(dbc).expect("DBC parsing should succeed");
         assert!(db.messages.is_empty());
+    }
+
+    // ---- Extended-ID (29-bit / J1939-style) regression tests ----
+
+    /// Vector CANdb++ / cantools-style DBC files encode a 29-bit extended CAN
+    /// ID by OR-ing the real arbitration ID with bit 31 (0x8000_0000). This
+    /// message's real on-wire J1939 ID is 0x18FEF200 (419361280); the DBC
+    /// file below encodes it as 0x98FEF200 (2566844928) per convention.
+    const EXTENDED_ID_DBC: &str = r#"
+VERSION ""
+
+BU_: Engine
+
+BO_ 2566844928 EngineTemp1: 8 Engine
+ SG_ EngineCoolantTemp : 0|8@1+ (1,-40) [-40|210] "degC" Vector__XXX
+
+CM_ BO_ 2566844928 "Engine temperature message";
+
+VAL_ 2566844928 EngineCoolantTemp 255 "NotAvailable";
+"#;
+
+    #[test]
+    fn regression_extended_id_flag_bit_is_stripped() {
+        let db = parse_dbc(EXTENDED_ID_DBC).expect("DBC parsing should succeed");
+
+        // The stored message.id must be the real 29-bit arbitration ID, NOT
+        // the raw decimal (which still has bit 31 baked in).
+        let msg = db
+            .get_message(0x18FE_F200)
+            .expect("message must be findable by its real on-wire CAN ID");
+        assert_eq!(msg.id, 0x18FE_F200);
+        assert!(msg.is_extended);
+
+        // Looking it up by the raw (flag-bit-included) value must NOT work,
+        // since that value never appears on the wire.
+        assert!(db.get_message(0x98FE_F200).is_none());
+    }
+
+    #[test]
+    fn regression_extended_id_signal_lookup_works() {
+        let db = parse_dbc(EXTENDED_ID_DBC).expect("DBC parsing should succeed");
+        let msg = db.get_message(0x18FE_F200).expect("message should exist");
+        let sig = msg
+            .get_signal("EngineCoolantTemp")
+            .expect("signal should exist");
+        assert_eq!(sig.offset, -40.0);
+    }
+
+    #[test]
+    fn regression_extended_id_comment_attaches_to_normalized_id() {
+        let db = parse_dbc(EXTENDED_ID_DBC).expect("DBC parsing should succeed");
+        let msg = db.get_message(0x18FE_F200).expect("message should exist");
+        assert_eq!(msg.comment.as_deref(), Some("Engine temperature message"));
+    }
+
+    #[test]
+    fn regression_extended_id_value_description_attaches_to_normalized_id() {
+        let db = parse_dbc(EXTENDED_ID_DBC).expect("DBC parsing should succeed");
+        let msg = db.get_message(0x18FE_F200).expect("message should exist");
+        let sig = msg
+            .get_signal("EngineCoolantTemp")
+            .expect("signal should exist");
+        assert_eq!(sig.get_value_description(255), Some("NotAvailable"));
+    }
+
+    #[test]
+    fn regression_standard_id_below_0x7ff_remains_standard() {
+        // Standard 11-bit IDs (bit 31 clear) must remain unaffected: the
+        // stored id is unchanged and is_extended is false.
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
+        let msg = db.get_message(2024).expect("message should exist");
+        assert_eq!(msg.id, 2024);
+        assert!(!msg.is_extended);
     }
 }

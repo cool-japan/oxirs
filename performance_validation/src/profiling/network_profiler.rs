@@ -4,8 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 /// Network profiler for monitoring I/O and performance
 #[derive(Debug)]
@@ -111,6 +111,12 @@ pub struct NetworkOperationSummary {
     pub performance_score: f32,
 }
 
+impl Default for NetworkProfiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkProfiler {
     /// Create a new network profiler
     pub fn new() -> Self {
@@ -130,8 +136,8 @@ impl NetworkProfiler {
         // For now, return simulated baseline measurements
         NetworkBaseline {
             baseline_latency: Duration::from_millis(50), // 50ms baseline latency
-            baseline_bandwidth_mbps: 100.0, // 100 Mbps baseline bandwidth
-            baseline_packet_loss: 0.01, // 1% baseline packet loss
+            baseline_bandwidth_mbps: 100.0,              // 100 Mbps baseline bandwidth
+            baseline_packet_loss: 0.01,                  // 1% baseline packet loss
         }
     }
 
@@ -152,21 +158,38 @@ impl NetworkProfiler {
             errors: 0,
         };
 
-        self.operation_metrics.insert(operation_name.to_string(), metrics);
+        self.operation_metrics
+            .insert(operation_name.to_string(), metrics);
     }
 
     /// Finish monitoring an operation
     pub fn finish_operation(&mut self, operation_name: &str) -> NetworkOperationMetrics {
         if let Some(metrics) = self.operation_metrics.remove(operation_name) {
             // Update global metrics
-            self.global_metrics.total_operations.fetch_add(1, Ordering::Relaxed);
-            self.global_metrics.total_bytes_sent.fetch_add(metrics.bytes_sent, Ordering::Relaxed);
-            self.global_metrics.total_bytes_received.fetch_add(metrics.bytes_received, Ordering::Relaxed);
-            self.global_metrics.total_requests.fetch_add(metrics.requests_sent as u64, Ordering::Relaxed);
-            self.global_metrics.total_responses.fetch_add(metrics.responses_received as u64, Ordering::Relaxed);
-            self.global_metrics.total_connections.fetch_add(metrics.connection_attempts as u64, Ordering::Relaxed);
-            self.global_metrics.total_timeouts.fetch_add(metrics.timeouts as u64, Ordering::Relaxed);
-            self.global_metrics.total_errors.fetch_add(metrics.errors as u64, Ordering::Relaxed);
+            self.global_metrics
+                .total_operations
+                .fetch_add(1, Ordering::Relaxed);
+            self.global_metrics
+                .total_bytes_sent
+                .fetch_add(metrics.bytes_sent, Ordering::Relaxed);
+            self.global_metrics
+                .total_bytes_received
+                .fetch_add(metrics.bytes_received, Ordering::Relaxed);
+            self.global_metrics
+                .total_requests
+                .fetch_add(metrics.requests_sent as u64, Ordering::Relaxed);
+            self.global_metrics
+                .total_responses
+                .fetch_add(metrics.responses_received as u64, Ordering::Relaxed);
+            self.global_metrics
+                .total_connections
+                .fetch_add(metrics.connection_attempts as u64, Ordering::Relaxed);
+            self.global_metrics
+                .total_timeouts
+                .fetch_add(metrics.timeouts as u64, Ordering::Relaxed);
+            self.global_metrics
+                .total_errors
+                .fetch_add(metrics.errors as u64, Ordering::Relaxed);
 
             // Note: In a real implementation, cumulative_latency would need atomic duration handling
             // self.global_metrics.cumulative_latency += metrics.total_latency;
@@ -251,12 +274,17 @@ impl NetworkProfiler {
         let runtime = self.start_time.elapsed();
         let total_operations = self.global_metrics.total_operations.load(Ordering::Relaxed);
         let total_bytes_sent = self.global_metrics.total_bytes_sent.load(Ordering::Relaxed);
-        let total_bytes_received = self.global_metrics.total_bytes_received.load(Ordering::Relaxed);
+        let total_bytes_received = self
+            .global_metrics
+            .total_bytes_received
+            .load(Ordering::Relaxed);
         let total_bytes_transferred = total_bytes_sent + total_bytes_received;
 
-        // Calculate bandwidth
-        let average_bandwidth_mbps = if runtime.as_secs() > 0 {
-            (total_bytes_transferred as f32 * 8.0) / (runtime.as_secs() as f32 * 1_000_000.0)
+        // Calculate bandwidth using fractional seconds so short-lived
+        // profiling runs (well under 1s) don't truncate to 0 Mbps.
+        let runtime_secs = runtime.as_secs_f32();
+        let average_bandwidth_mbps = if runtime_secs > 0.0 {
+            (total_bytes_transferred as f32 * 8.0) / (runtime_secs * 1_000_000.0)
         } else {
             0.0
         };
@@ -276,15 +304,19 @@ impl NetworkProfiler {
         // Calculate average latency
         let average_latency = if total_responses > 0 {
             // This is simplified - in reality we'd need to properly aggregate durations
-            Duration::from_millis(
-                self.operation_metrics.values()
-                    .map(|m| if m.responses_received > 0 {
+            let avg_millis = self
+                .operation_metrics
+                .values()
+                .map(|m| {
+                    if m.responses_received > 0 {
                         m.total_latency.as_millis() / m.responses_received as u128
                     } else {
                         0
-                    })
-                    .sum::<u128>() / self.operation_metrics.len().max(1) as u128
-            )
+                    }
+                })
+                .sum::<u128>()
+                / self.operation_metrics.len().max(1) as u128;
+            Duration::from_millis(u64::try_from(avg_millis).unwrap_or(u64::MAX))
         } else {
             Duration::ZERO
         };
@@ -293,8 +325,13 @@ impl NetworkProfiler {
         let latency_percentiles = self.calculate_latency_percentiles();
 
         // Calculate connection metrics
-        let total_connections = self.global_metrics.total_connections.load(Ordering::Relaxed);
-        let successful_connections = self.operation_metrics.values()
+        let total_connections = self
+            .global_metrics
+            .total_connections
+            .load(Ordering::Relaxed);
+        let successful_connections = self
+            .operation_metrics
+            .values()
             .map(|m| m.connection_successes as u64)
             .sum::<u64>();
 
@@ -331,12 +368,20 @@ impl NetworkProfiler {
         };
 
         // Generate operation summaries
-        let operation_breakdown: HashMap<String, NetworkOperationSummary> = self.operation_metrics.iter()
+        let operation_breakdown: HashMap<String, NetworkOperationSummary> = self
+            .operation_metrics
+            .iter()
             .map(|(name, metrics)| {
                 let bytes_transferred = metrics.bytes_sent + metrics.bytes_received;
                 let duration = metrics.start_time.elapsed();
-                let throughput_mbps = if duration.as_secs() > 0 {
-                    (bytes_transferred as f32 * 8.0) / (duration.as_secs() as f32 * 1_000_000.0)
+                // Use fractional seconds (not the integer-truncating
+                // `as_secs()`) so sub-second operations -- the overwhelming
+                // majority of real benchmark operations -- still produce a
+                // correct, non-zero throughput instead of always reporting
+                // 0 Mbps.
+                let duration_secs = duration.as_secs_f32();
+                let throughput_mbps = if duration_secs > 0.0 {
+                    (bytes_transferred as f32 * 8.0) / (duration_secs * 1_000_000.0)
                 } else {
                     0.0
                 };
@@ -348,12 +393,15 @@ impl NetworkProfiler {
                 };
 
                 let average_latency = if metrics.responses_received > 0 {
-                    Duration::from_millis(metrics.total_latency.as_millis() / metrics.responses_received as u128)
+                    let avg_millis =
+                        metrics.total_latency.as_millis() / metrics.responses_received as u128;
+                    Duration::from_millis(u64::try_from(avg_millis).unwrap_or(u64::MAX))
                 } else {
                     Duration::ZERO
                 };
 
-                let performance_score = Self::calculate_performance_score(metrics, &self.baseline_stats);
+                let performance_score =
+                    Self::calculate_performance_score(metrics, &self.baseline_stats);
 
                 let summary = NetworkOperationSummary {
                     bytes_transferred,
@@ -367,7 +415,11 @@ impl NetworkProfiler {
             })
             .collect();
 
-        let recommendations = self.generate_recommendations(&connection_metrics, &error_analysis, average_bandwidth_mbps);
+        let recommendations = self.generate_recommendations(
+            &connection_metrics,
+            &error_analysis,
+            average_bandwidth_mbps,
+        );
 
         NetworkReport {
             duration: runtime,
@@ -391,9 +443,10 @@ impl NetworkProfiler {
 
         for metrics in self.operation_metrics.values() {
             if metrics.responses_received > 0 {
-                let avg_latency = Duration::from_millis(
-                    metrics.total_latency.as_millis() / metrics.responses_received as u128
-                );
+                let avg_millis =
+                    metrics.total_latency.as_millis() / metrics.responses_received as u128;
+                let avg_latency =
+                    Duration::from_millis(u64::try_from(avg_millis).unwrap_or(u64::MAX));
                 all_latencies.push(avg_latency);
             }
         }
@@ -419,13 +472,18 @@ impl NetworkProfiler {
     }
 
     /// Calculate performance score for an operation
-    fn calculate_performance_score(metrics: &NetworkOperationMetrics, baseline: &NetworkBaseline) -> f32 {
+    fn calculate_performance_score(
+        metrics: &NetworkOperationMetrics,
+        baseline: &NetworkBaseline,
+    ) -> f32 {
         let mut score = 1.0;
 
         // Latency score
         if metrics.responses_received > 0 {
-            let avg_latency = Duration::from_millis(metrics.total_latency.as_millis() / metrics.responses_received as u128);
-            let latency_ratio = avg_latency.as_millis() as f32 / baseline.baseline_latency.as_millis() as f32;
+            let avg_millis = metrics.total_latency.as_millis() / metrics.responses_received as u128;
+            let avg_latency = Duration::from_millis(u64::try_from(avg_millis).unwrap_or(u64::MAX));
+            let latency_ratio =
+                avg_latency.as_millis() as f32 / baseline.baseline_latency.as_millis() as f32;
             score *= (2.0 - latency_ratio).max(0.1); // Better latency = higher score
         }
 
@@ -441,7 +499,7 @@ impl NetworkProfiler {
             score -= error_penalty;
         }
 
-        score.max(0.0).min(1.0)
+        score.clamp(0.0, 1.0)
     }
 
     /// Generate network optimization recommendations
@@ -455,12 +513,18 @@ impl NetworkProfiler {
 
         // Connection recommendations
         if connection_metrics.connection_success_rate < 95.0 {
-            recommendations.push("Low connection success rate detected. Check network stability and retry logic.".to_string());
+            recommendations.push(
+                "Low connection success rate detected. Check network stability and retry logic."
+                    .to_string(),
+            );
         }
 
         // Error rate recommendations
         if error_analysis.error_rate > 5.0 {
-            recommendations.push("High error rate detected. Review error handling and network resilience.".to_string());
+            recommendations.push(
+                "High error rate detected. Review error handling and network resilience."
+                    .to_string(),
+            );
         }
 
         // Timeout recommendations
@@ -474,10 +538,10 @@ impl NetworkProfiler {
         }
 
         // Latency recommendations
-        let has_high_latency = self.operation_metrics.values()
-            .any(|m| m.responses_received > 0 &&
-                 Duration::from_millis(m.total_latency.as_millis() / m.responses_received as u128) >
-                 Duration::from_millis(200));
+        let has_high_latency = self.operation_metrics.values().any(|m| {
+            m.responses_received > 0
+                && m.total_latency.as_millis() / m.responses_received as u128 > 200
+        });
 
         if has_high_latency {
             recommendations.push("High latency detected in some operations. Consider using connection pooling or CDN.".to_string());
@@ -496,11 +560,15 @@ impl NetworkProfiler {
     /// Get real-time network statistics
     pub fn get_realtime_stats(&self) -> RealtimeNetworkStats {
         let runtime = self.start_time.elapsed();
-        let total_bytes = self.global_metrics.total_bytes_sent.load(Ordering::Relaxed) +
-                         self.global_metrics.total_bytes_received.load(Ordering::Relaxed);
+        let total_bytes = self.global_metrics.total_bytes_sent.load(Ordering::Relaxed)
+            + self
+                .global_metrics
+                .total_bytes_received
+                .load(Ordering::Relaxed);
 
-        let current_bandwidth_mbps = if runtime.as_secs() > 0 {
-            (total_bytes as f32 * 8.0) / (runtime.as_secs() as f32 * 1_000_000.0)
+        let runtime_secs = runtime.as_secs_f32();
+        let current_bandwidth_mbps = if runtime_secs > 0.0 {
+            (total_bytes as f32 * 8.0) / (runtime_secs * 1_000_000.0)
         } else {
             0.0
         };
@@ -510,7 +578,9 @@ impl NetworkProfiler {
             total_operations: self.global_metrics.total_operations.load(Ordering::Relaxed),
             current_bandwidth_mbps,
             bytes_transferred: total_bytes,
-            active_connections: self.operation_metrics.values()
+            active_connections: self
+                .operation_metrics
+                .values()
                 .map(|m| m.connection_attempts - m.connection_successes)
                 .sum::<u32>() as u64,
         }
@@ -519,8 +589,9 @@ impl NetworkProfiler {
     /// Check if network is bottleneck
     pub fn is_network_bottleneck(&self) -> bool {
         let error_rate = if self.global_metrics.total_requests.load(Ordering::Relaxed) > 0 {
-            self.global_metrics.total_errors.load(Ordering::Relaxed) as f32 /
-            self.global_metrics.total_requests.load(Ordering::Relaxed) as f32 * 100.0
+            self.global_metrics.total_errors.load(Ordering::Relaxed) as f32
+                / self.global_metrics.total_requests.load(Ordering::Relaxed) as f32
+                * 100.0
         } else {
             0.0
         };
@@ -530,10 +601,10 @@ impl NetworkProfiler {
 
     /// Check if operations have high latency
     fn has_high_latency(&self) -> bool {
-        self.operation_metrics.values()
-            .any(|m| m.responses_received > 0 &&
-                 Duration::from_millis(m.total_latency.as_millis() / m.responses_received as u128) >
-                 Duration::from_millis(500))
+        self.operation_metrics.values().any(|m| {
+            m.responses_received > 0
+                && m.total_latency.as_millis() / m.responses_received as u128 > 500
+        })
     }
 }
 
@@ -621,6 +692,36 @@ mod tests {
         assert_eq!(report.success_rate, 100.0);
     }
 
+    /// regression: an operation that completes in well under 1 second must
+    /// still report a nonzero per-operation throughput, proportional to the
+    /// real bytes transferred, instead of truncating to 0 Mbps because
+    /// `Duration::as_secs()` rounds sub-second durations down to zero.
+    #[test]
+    fn regression_sub_second_operation_reports_nonzero_throughput() {
+        let mut profiler = NetworkProfiler::new();
+
+        // `generate_report()`'s per-operation breakdown is computed from
+        // still-in-flight entries in `operation_metrics` (finished
+        // operations are removed by `finish_operation`), so we exercise it
+        // directly on an active operation that transferred real bytes well
+        // within the same millisecond -- realistic for an in-memory
+        // benchmark operation.
+        profiler.start_operation("fast_op");
+        profiler.record_data_sent("fast_op", 1_048_576);
+
+        let report = profiler.generate_report();
+        let summary = report
+            .operation_breakdown
+            .get("fast_op")
+            .expect("in-flight operation should appear in the breakdown");
+
+        assert!(
+            summary.throughput_mbps > 0.0,
+            "sub-second operation with real bytes transferred must report nonzero throughput, got {}",
+            summary.throughput_mbps
+        );
+    }
+
     #[test]
     fn test_performance_score_calculation() {
         let metrics = NetworkOperationMetrics {
@@ -645,6 +746,6 @@ mod tests {
         };
 
         let score = NetworkProfiler::calculate_performance_score(&metrics, &baseline);
-        assert!(score >= 0.0 && score <= 1.0);
+        assert!((0.0..=1.0).contains(&score));
     }
 }

@@ -134,6 +134,9 @@ pub enum Token {
     With,
     Using,
     Silent,
+    /// The `UNDEF` keyword used in a `VALUES` data block to leave a variable
+    /// unbound for a given row (SPARQL 1.1 §10.2.1 InlineData).
+    Undef,
     All,
     Default,
     To,

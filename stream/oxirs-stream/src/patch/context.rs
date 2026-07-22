@@ -21,46 +21,111 @@ impl Default for PatchContext {
     }
 }
 
-/// Apply RDF Patch operations to a dataset
-pub fn apply_patch_with_context(patch: &RdfPatch, context: &PatchContext) -> Result<PatchResult> {
-    let mut result = PatchResult::new();
-
-    if context.dry_run {
-        debug!("Performing dry run of patch {}", patch.id);
+/// A destination that RDF Patch operations can be applied to.
+///
+/// This is the seam between the patch engine and a concrete RDF store. Callers
+/// that want a patch to actually mutate a dataset implement this trait (or use
+/// the real store integration in [`crate::store_integration`]) and pass it to
+/// [`apply_patch_to_sink`]. Implementations should return `Err` when an
+/// operation cannot be applied so that the error is surfaced rather than
+/// silently swallowed.
+pub trait PatchSink {
+    fn add_triple(&mut self, subject: &str, predicate: &str, object: &str) -> Result<()>;
+    fn remove_triple(&mut self, subject: &str, predicate: &str, object: &str) -> Result<()>;
+    fn add_graph(&mut self, graph: &str) -> Result<()>;
+    fn delete_graph(&mut self, graph: &str) -> Result<()>;
+    fn add_prefix(&mut self, prefix: &str, namespace: &str) -> Result<()>;
+    fn remove_prefix(&mut self, prefix: &str) -> Result<()>;
+    fn begin_transaction(&mut self, transaction_id: Option<&str>) -> Result<()>;
+    fn commit_transaction(&mut self) -> Result<()>;
+    fn abort_transaction(&mut self) -> Result<()>;
+    /// Handle a header operation. Headers are metadata and default to a no-op.
+    fn header(&mut self, _key: &str, _value: &str) -> Result<()> {
+        Ok(())
     }
+}
+
+/// Validate (and optionally dry-run) an RDF Patch **without** persisting it.
+///
+/// This function performs real work — it validates every operation — but it has
+/// no RDF store to mutate. To avoid the fail-loud contract violation of
+/// reporting a fabricated success while the dataset is untouched, it requires
+/// `context.dry_run` to be set. To actually apply a patch, use
+/// [`apply_patch_to_sink`] with a [`PatchSink`], or the store-backed
+/// integration in [`crate::store_integration`].
+pub fn apply_patch_with_context(patch: &RdfPatch, context: &PatchContext) -> Result<PatchResult> {
+    if !context.dry_run {
+        return Err(anyhow!(
+            "apply_patch_with_context cannot persist changes: no RDF store is wired. \
+             Use apply_patch_to_sink() with a PatchSink, or set context.dry_run \
+             for validation-only processing."
+        ));
+    }
+
+    debug!("Performing dry run / validation of patch {}", patch.id);
+
+    let mut result = PatchResult::new();
+    for operation in patch.operations.iter() {
+        if context.validate_operations {
+            validate_operation(operation)?;
+        }
+        result.operations_applied += 1; // Counted as validated for dry run.
+    }
+
+    result.patch_id = patch.id.clone();
+    result.total_operations = patch.operations.len();
+    Ok(result)
+}
+
+/// Validate an RDF Patch without applying it (convenience function).
+///
+/// Uses the default context which has `dry_run = false`, so this returns an
+/// error directing callers to a real sink. It exists to keep the historical
+/// signature; prefer [`apply_patch_to_sink`].
+pub fn apply_patch(patch: &RdfPatch) -> Result<PatchResult> {
+    apply_patch_with_context(patch, &PatchContext::default())
+}
+
+/// Apply RDF Patch operations to a concrete [`PatchSink`].
+///
+/// Every operation is validated (when configured) and then applied to `sink`.
+/// Errors from the sink are recorded in [`PatchResult::errors`]; in
+/// `strict_mode` the first failure aborts with an error. When `context.dry_run`
+/// is set the sink is never touched and operations are only validated.
+pub fn apply_patch_to_sink<S: PatchSink + ?Sized>(
+    patch: &RdfPatch,
+    context: &PatchContext,
+    sink: &mut S,
+) -> Result<PatchResult> {
+    let mut result = PatchResult::new();
 
     for (i, operation) in patch.operations.iter().enumerate() {
         if context.validate_operations {
             validate_operation(operation)?;
         }
 
-        if !context.dry_run {
-            match apply_operation(operation) {
-                Ok(_) => {
-                    result.operations_applied += 1;
-                    debug!("Applied operation {}: {:?}", i, operation);
-                }
-                Err(e) => {
-                    result.errors.push(format!("Operation {i}: {e}"));
-                    if context.strict_mode {
-                        return Err(anyhow!("Failed to apply operation {}: {}", i, e));
-                    }
+        if context.dry_run {
+            result.operations_applied += 1;
+            continue;
+        }
+
+        match apply_operation(operation, sink) {
+            Ok(_) => {
+                result.operations_applied += 1;
+                debug!("Applied operation {}: {:?}", i, operation);
+            }
+            Err(e) => {
+                result.errors.push(format!("Operation {i}: {e}"));
+                if context.strict_mode {
+                    return Err(anyhow!("Failed to apply operation {}: {}", i, e));
                 }
             }
-        } else {
-            result.operations_applied += 1; // Count for dry run
         }
     }
 
     result.patch_id = patch.id.clone();
     result.total_operations = patch.operations.len();
-
     Ok(result)
-}
-
-/// Apply RDF Patch operations (convenience function)
-pub fn apply_patch(patch: &RdfPatch) -> Result<PatchResult> {
-    apply_patch_with_context(patch, &PatchContext::default())
 }
 
 fn validate_operation(operation: &PatchOperation) -> Result<()> {
@@ -109,13 +174,12 @@ fn validate_operation(operation: &PatchOperation) -> Result<()> {
     Ok(())
 }
 
-/// Apply a patch operation to an RDF store
+/// Apply a single patch operation to a [`PatchSink`].
 ///
-/// In a production system, this would integrate with oxirs-core's RDF store.
-/// For now, this provides a realistic implementation that logs operations
-/// and performs validation checks.
-fn apply_operation(operation: &PatchOperation) -> Result<()> {
-    use tracing::{debug, info, warn};
+/// Each triple/graph component is validated before being handed to the sink,
+/// and any error returned by the sink is propagated to the caller.
+fn apply_operation<S: PatchSink + ?Sized>(operation: &PatchOperation, sink: &mut S) -> Result<()> {
+    use tracing::warn;
 
     match operation {
         PatchOperation::Add {
@@ -123,20 +187,10 @@ fn apply_operation(operation: &PatchOperation) -> Result<()> {
             predicate,
             object,
         } => {
-            info!(
-                "Applying ADD operation: <{}> <{}> {}",
-                subject, predicate, object
-            );
-
-            // Validate the triple components
             validate_rdf_term(subject, "subject")?;
             validate_rdf_term(predicate, "predicate")?;
             validate_rdf_term(object, "object")?;
-
-            // In a real implementation, this would call:
-            // store.add_triple(subject, predicate, object)?;
-
-            debug!("Successfully added triple to store");
+            sink.add_triple(subject, predicate, object)?;
         }
 
         PatchOperation::Delete {
@@ -144,54 +198,26 @@ fn apply_operation(operation: &PatchOperation) -> Result<()> {
             predicate,
             object,
         } => {
-            info!(
-                "Applying DELETE operation: <{}> <{}> {}",
-                subject, predicate, object
-            );
-
-            // Validate the triple components
             validate_rdf_term(subject, "subject")?;
             validate_rdf_term(predicate, "predicate")?;
             validate_rdf_term(object, "object")?;
-
-            // In a real implementation, this would call:
-            // store.remove_triple(subject, predicate, object)?;
-
-            debug!("Successfully removed triple from store");
+            sink.remove_triple(subject, predicate, object)?;
         }
 
         PatchOperation::AddGraph { graph } => {
-            info!("Applying ADD GRAPH operation: <{}>", graph);
-
             validate_rdf_term(graph, "graph")?;
-
-            // In a real implementation, this would call:
-            // store.create_graph(graph)?;
-
-            debug!("Successfully created graph");
+            sink.add_graph(graph)?;
         }
 
         PatchOperation::DeleteGraph { graph } => {
-            info!("Applying DELETE GRAPH operation: <{}>", graph);
-
             validate_rdf_term(graph, "graph")?;
-
-            // In a real implementation, this would call:
-            // store.drop_graph(graph)?;
-
-            debug!("Successfully dropped graph");
+            sink.delete_graph(graph)?;
         }
 
         PatchOperation::AddPrefix { prefix, namespace } => {
-            info!(
-                "Applying ADD PREFIX operation: {} -> <{}>",
-                prefix, namespace
-            );
-
             if prefix.is_empty() {
                 return Err(anyhow!("Prefix name cannot be empty"));
             }
-
             if !namespace.starts_with("http://")
                 && !namespace.starts_with("https://")
                 && !namespace.starts_with("urn:")
@@ -201,77 +227,33 @@ fn apply_operation(operation: &PatchOperation) -> Result<()> {
                     namespace
                 );
             }
-
-            // In a real implementation, this would call:
-            // store.add_prefix(prefix, namespace)?;
-
-            debug!("Successfully added prefix mapping");
+            sink.add_prefix(prefix, namespace)?;
         }
 
         PatchOperation::DeletePrefix { prefix } => {
-            info!("Applying DELETE PREFIX operation: {}", prefix);
-
             if prefix.is_empty() {
                 return Err(anyhow!("Prefix name cannot be empty"));
             }
-
-            // In a real implementation, this would call:
-            // store.remove_prefix(prefix)?;
-
-            debug!("Successfully removed prefix mapping");
+            sink.remove_prefix(prefix)?;
         }
 
         PatchOperation::TransactionBegin { transaction_id } => {
-            if let Some(tx_id) = transaction_id {
-                info!("Applying TRANSACTION BEGIN: {}", tx_id);
-            } else {
-                info!("Applying TRANSACTION BEGIN (auto-generated ID)");
-            }
-
-            // In a real implementation, this would call:
-            // store.begin_transaction(transaction_id.as_deref())?;
-
-            debug!("Successfully started transaction");
+            sink.begin_transaction(transaction_id.as_deref())?;
         }
 
         PatchOperation::TransactionCommit => {
-            info!("Applying TRANSACTION COMMIT");
-
-            // In a real implementation, this would call:
-            // store.commit_transaction()?;
-
-            debug!("Successfully committed transaction");
+            sink.commit_transaction()?;
         }
 
         PatchOperation::TransactionAbort => {
-            info!("Applying TRANSACTION ABORT");
-
-            // In a real implementation, this would call:
-            // store.abort_transaction()?;
-
-            debug!("Successfully aborted transaction");
+            sink.abort_transaction()?;
         }
 
         PatchOperation::Header { key, value } => {
-            debug!("Processing header: {} = {}", key, value);
-
-            // Headers are metadata and don't modify the store
-            // They might be used for patch provenance, timestamps, etc.
-
-            match key.as_str() {
-                "timestamp" => {
-                    // Validate timestamp format
-                    if chrono::DateTime::parse_from_rfc3339(value).is_err() {
-                        warn!("Invalid timestamp format in header: {}", value);
-                    }
-                }
-                "creator" | "description" => {
-                    // Informational headers - no validation needed
-                }
-                _ => {
-                    debug!("Unknown header type: {}", key);
-                }
+            if key == "timestamp" && chrono::DateTime::parse_from_rfc3339(value).is_err() {
+                warn!("Invalid timestamp format in header: {}", value);
             }
+            sink.header(key, value)?;
         }
     }
 
@@ -338,4 +320,110 @@ fn validate_rdf_term(term: &str, term_type: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// In-memory sink used to prove operations really reach the store.
+    #[derive(Default)]
+    struct CollectingSink {
+        triples: Vec<(String, String, String)>,
+        removed: Vec<(String, String, String)>,
+        transactions: Vec<String>,
+    }
+
+    impl PatchSink for CollectingSink {
+        fn add_triple(&mut self, subject: &str, predicate: &str, object: &str) -> Result<()> {
+            self.triples.push((
+                subject.to_string(),
+                predicate.to_string(),
+                object.to_string(),
+            ));
+            Ok(())
+        }
+        fn remove_triple(&mut self, subject: &str, predicate: &str, object: &str) -> Result<()> {
+            self.removed.push((
+                subject.to_string(),
+                predicate.to_string(),
+                object.to_string(),
+            ));
+            Ok(())
+        }
+        fn add_graph(&mut self, _graph: &str) -> Result<()> {
+            Ok(())
+        }
+        fn delete_graph(&mut self, _graph: &str) -> Result<()> {
+            Ok(())
+        }
+        fn add_prefix(&mut self, _prefix: &str, _namespace: &str) -> Result<()> {
+            Ok(())
+        }
+        fn remove_prefix(&mut self, _prefix: &str) -> Result<()> {
+            Ok(())
+        }
+        fn begin_transaction(&mut self, transaction_id: Option<&str>) -> Result<()> {
+            self.transactions
+                .push(format!("begin:{}", transaction_id.unwrap_or("auto")));
+            Ok(())
+        }
+        fn commit_transaction(&mut self) -> Result<()> {
+            self.transactions.push("commit".to_string());
+            Ok(())
+        }
+        fn abort_transaction(&mut self) -> Result<()> {
+            self.transactions.push("abort".to_string());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn regression_apply_patch_to_sink_actually_mutates() {
+        let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::Add {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        });
+        patch.add_operation(PatchOperation::Delete {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/old".to_string(),
+        });
+
+        let mut sink = CollectingSink::default();
+        let result = apply_patch_to_sink(&patch, &PatchContext::default(), &mut sink).unwrap();
+
+        assert_eq!(result.operations_applied, 2);
+        assert_eq!(sink.triples.len(), 1);
+        assert_eq!(sink.removed.len(), 1);
+        assert_eq!(sink.triples[0].0, "http://example.org/s");
+    }
+
+    #[test]
+    fn regression_storeless_apply_is_fail_loud() {
+        let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::Add {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        });
+
+        // Non-dry-run without a store must error rather than fabricate success.
+        let ctx = PatchContext {
+            strict_mode: false,
+            validate_operations: true,
+            dry_run: false,
+        };
+        assert!(apply_patch_with_context(&patch, &ctx).is_err());
+
+        // Dry run validates and reports success without a store.
+        let dry = PatchContext {
+            dry_run: true,
+            ..Default::default()
+        };
+        let result = apply_patch_with_context(&patch, &dry).unwrap();
+        assert_eq!(result.operations_applied, 1);
+    }
 }

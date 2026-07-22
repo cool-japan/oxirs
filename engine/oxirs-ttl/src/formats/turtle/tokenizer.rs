@@ -312,17 +312,25 @@ impl TurtleTokenizer {
 
     /// Reads an IRI reference (e.g., <http://example.org/>).
     pub(crate) fn read_iri_ref(&self, position: TextPosition) -> TurtleResult<(Token, usize)> {
-        // Simplified IRI reading - just find the closing >
-        let (content, raw_length) = if let Some(end) = self.input[self.position + 1..].find('>') {
-            let content = self.input[self.position + 1..self.position + 1 + end].to_string();
+        // Find the closing '>' (IRIREF does not permit a literal '>' inside
+        // it — only its UCHAR-escaped form `>` — so a raw search for
+        // '>' is a correct terminator).
+        let (raw_content, raw_length) = if let Some(end) = self.input[self.position + 1..].find('>')
+        {
+            let raw_content = &self.input[self.position + 1..self.position + 1 + end];
             // raw_length is end (bytes to '>') + 2 (for '<' and '>')
-            (content, end + 2)
+            (raw_content, end + 2)
         } else {
             return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
                 message: "Unterminated IRI reference".to_string(),
                 position,
             }));
         };
+
+        // Per the Turtle/N-Triples grammar, IRIREF may contain UCHAR escapes
+        // (\uXXXX / \UXXXXXXXX) that must be decoded to the Unicode
+        // character they denote before the IRI is used.
+        let content = self.decode_iri_uchar_escapes(raw_content, position)?;
 
         Ok((
             Token {
@@ -331,6 +339,89 @@ impl TurtleTokenizer {
             },
             raw_length,
         ))
+    }
+
+    /// Decodes `UCHAR` escapes (`\uXXXX` / `\UXXXXXXXX`) within the raw
+    /// content of an IRIREF. These are the only legal backslash escapes
+    /// inside an IRIREF per the Turtle/N-Triples grammar; any other
+    /// backslash usage, or an incomplete/invalid hex escape, is a syntax
+    /// error rather than being passed through verbatim.
+    pub(crate) fn decode_iri_uchar_escapes(
+        &self,
+        raw: &str,
+        position: TextPosition,
+    ) -> TurtleResult<String> {
+        let mut result = String::with_capacity(raw.len());
+        let mut chars = raw.chars();
+
+        while let Some(ch) = chars.next() {
+            if ch != '\\' {
+                result.push(ch);
+                continue;
+            }
+
+            match chars.next() {
+                Some('u') => {
+                    let hex: String = chars.by_ref().take(4).collect();
+                    if hex.len() != 4 {
+                        return Err(TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                            sequence: format!("u{hex}"),
+                            position,
+                        }));
+                    }
+                    let code = u32::from_str_radix(&hex, 16).map_err(|_| {
+                        TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                            sequence: format!("u{hex}"),
+                            position,
+                        })
+                    })?;
+                    let decoded = char::from_u32(code).ok_or_else(|| {
+                        TurtleParseError::syntax(TurtleSyntaxError::InvalidUnicode {
+                            codepoint: code,
+                            position,
+                        })
+                    })?;
+                    result.push(decoded);
+                }
+                Some('U') => {
+                    let hex: String = chars.by_ref().take(8).collect();
+                    if hex.len() != 8 {
+                        return Err(TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                            sequence: format!("U{hex}"),
+                            position,
+                        }));
+                    }
+                    let code = u32::from_str_radix(&hex, 16).map_err(|_| {
+                        TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                            sequence: format!("U{hex}"),
+                            position,
+                        })
+                    })?;
+                    let decoded = char::from_u32(code).ok_or_else(|| {
+                        TurtleParseError::syntax(TurtleSyntaxError::InvalidUnicode {
+                            codepoint: code,
+                            position,
+                        })
+                    })?;
+                    result.push(decoded);
+                }
+                Some(other) => {
+                    return Err(TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                        sequence: other.to_string(),
+                        position,
+                    }));
+                }
+                None => {
+                    return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                        message: "IRI reference ends with an incomplete escape sequence"
+                            .to_string(),
+                        position,
+                    }));
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     /// Reads a string literal (single or double quoted).
@@ -368,6 +459,16 @@ impl TurtleTokenizer {
                     },
                     raw_length,
                 ));
+            } else if ch == '\n' || ch == '\r' {
+                // Per Turtle 1.1 grammar [22] STRING_LITERAL_QUOTE explicitly
+                // excludes #xA and #xD: a raw (unescaped) newline is only
+                // legal inside a triple-quoted (long) string literal.
+                return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                    message: "Unterminated string literal: raw newline not permitted in a \
+                              single-line string; use \\n or a triple-quoted string"
+                        .to_string(),
+                    position,
+                }));
             }
             end_pos += ch.len_utf8();
         }
@@ -443,6 +544,17 @@ impl TurtleTokenizer {
                     },
                     raw_length,
                 ));
+            } else if ch == '\n' || ch == '\r' {
+                // Per Turtle 1.1 grammar [23] STRING_LITERAL_QUOTE excludes
+                // #xA and #xD: a raw (unescaped) newline is only legal
+                // inside a triple-quoted (long) string literal.
+                return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                    message: "Unterminated single-quoted string literal: raw newline not \
+                              permitted in a single-line string; use \\n or a triple-quoted \
+                              string"
+                        .to_string(),
+                    position,
+                }));
             }
             end_pos += ch.len_utf8();
         }
@@ -1055,4 +1167,110 @@ fn unescape_pn_local(raw: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod regression_tests {
+    use super::*;
+
+    fn tokenize_iri_ref(input: &str) -> TurtleResult<String> {
+        let tokenizer = TurtleTokenizer::new(input);
+        let position = TextPosition::start();
+        let (token, _len) = tokenizer.read_iri_ref(position)?;
+        match token.kind {
+            TokenKind::IriRef(s) => Ok(s),
+            other => panic!("expected IriRef token, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn regression_iri_ref_decodes_uchar_4digit_escape() {
+        // <http://example.org/étude> should decode to the accented
+        // character, not keep the literal 6-character escape sequence.
+        let decoded = tokenize_iri_ref("<http://example.org/\\u00E9tude>")
+            .expect("should decode UCHAR escape");
+        assert_eq!(decoded, "http://example.org/étude");
+    }
+
+    #[test]
+    fn regression_iri_ref_decodes_uchar_8digit_escape() {
+        let decoded = tokenize_iri_ref("<http://example.org/\\U000000E9>")
+            .expect("should decode 8-digit UCHAR escape");
+        assert_eq!(decoded, "http://example.org/é");
+    }
+
+    #[test]
+    fn regression_iri_ref_plain_hash_fragment_unaffected() {
+        // Ordinary IRIs without escapes must still round-trip unchanged.
+        let decoded = tokenize_iri_ref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")
+            .expect("plain IRI should parse");
+        assert_eq!(decoded, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+    }
+
+    #[test]
+    fn regression_iri_ref_invalid_escape_is_error() {
+        // '\q' is not a legal UCHAR escape in an IRIREF.
+        let result = tokenize_iri_ref("<http://example.org/\\q>");
+        assert!(result.is_err(), "invalid IRI escape must be rejected");
+    }
+
+    #[test]
+    fn regression_iri_ref_truncated_uchar_escape_is_error() {
+        let result = tokenize_iri_ref("<http://example.org/\\u12>");
+        assert!(
+            result.is_err(),
+            "truncated \\u escape must be rejected, not silently accepted"
+        );
+    }
+
+    #[test]
+    fn regression_single_line_double_quoted_string_rejects_raw_newline() {
+        let tokenizer = TurtleTokenizer::new("\"line one\nline two\"");
+        let position = TextPosition::start();
+        let result = tokenizer.read_string_literal(position);
+        assert!(
+            result.is_err(),
+            "a raw newline inside a non-triple-quoted string literal must be a syntax error"
+        );
+    }
+
+    #[test]
+    fn regression_single_line_single_quoted_string_rejects_raw_newline() {
+        let tokenizer = TurtleTokenizer::new("'line one\nline two'");
+        let position = TextPosition::start();
+        let result = tokenizer.read_single_quoted_string_literal(position);
+        assert!(
+            result.is_err(),
+            "a raw newline inside a non-triple-quoted single-quoted string must be a syntax error"
+        );
+    }
+
+    #[test]
+    fn regression_single_line_string_with_escaped_newline_is_ok() {
+        // The two-character escape \n remains legal.
+        let tokenizer = TurtleTokenizer::new("\"line one\\nline two\"");
+        let position = TextPosition::start();
+        let (token, _len) = tokenizer
+            .read_string_literal(position)
+            .expect("escaped newline should be accepted");
+        match token.kind {
+            TokenKind::StringLiteral(s) => assert_eq!(s, "line one\nline two"),
+            other => panic!("expected StringLiteral token, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn regression_triple_quoted_string_still_allows_raw_newline() {
+        // Long-form (triple-quoted) strings are unaffected by the new
+        // single-line newline check.
+        let tokenizer = TurtleTokenizer::new("\"\"\"line one\nline two\"\"\"");
+        let position = TextPosition::start();
+        let (token, _len) = tokenizer
+            .read_string_literal(position)
+            .expect("multiline triple-quoted string should still be accepted");
+        match token.kind {
+            TokenKind::StringLiteral(s) => assert_eq!(s, "line one\nline two"),
+            other => panic!("expected StringLiteral token, got {other:?}"),
+        }
+    }
 }

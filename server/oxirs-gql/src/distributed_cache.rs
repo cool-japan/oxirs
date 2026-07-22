@@ -13,6 +13,33 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
+/// A 256-bit symmetric key used to encrypt cache entries at rest / on the wire.
+///
+/// The key material is redacted from `Debug` output so it never leaks into logs
+/// when a [`CacheConfig`] is printed.
+#[derive(Clone, PartialEq, Eq)]
+pub struct EncryptionKey(Vec<u8>);
+
+impl EncryptionKey {
+    /// Wrap raw key bytes. AES-256-GCM requires exactly 32 bytes; other lengths
+    /// are accepted here and validated when the cache is constructed so callers
+    /// get an explicit error rather than a silent weak key.
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
+        Self(bytes.into())
+    }
+
+    /// Borrow the raw key bytes.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for EncryptionKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EncryptionKey([REDACTED; {} bytes])", self.0.len())
+    }
+}
+
 /// Cache configuration
 #[derive(Debug, Clone)]
 pub struct CacheConfig {
@@ -21,6 +48,10 @@ pub struct CacheConfig {
     pub max_cache_size: u64,
     pub compression_enabled: bool,
     pub encryption_enabled: bool,
+    /// 256-bit key used when `encryption_enabled` is true. Constructing a cache
+    /// with `encryption_enabled = true` but no (or an incorrectly-sized) key is
+    /// a hard error — the flag must never silently degrade to plaintext.
+    pub encryption_key: Option<EncryptionKey>,
     pub cluster_mode: bool,
     pub sharding_strategy: ShardingStrategy,
     pub eviction_policy: EvictionPolicy,
@@ -38,6 +69,7 @@ impl Default for CacheConfig {
             max_cache_size: 1024 * 1024 * 1024, // 1GB
             compression_enabled: true,
             encryption_enabled: false,
+            encryption_key: None,
             cluster_mode: false,
             sharding_strategy: ShardingStrategy::ConsistentHashing,
             eviction_policy: EvictionPolicy::LRU,
@@ -220,7 +252,16 @@ impl RedisDistributedCache {
         };
 
         let encryption = if config.encryption_enabled {
-            Some(Arc::new(AesEncryptionStrategy::new()) as Arc<dyn EncryptionStrategy>)
+            // Fail loud: encryption was requested but no usable key was provided.
+            // Never silently fall back to a plaintext passthrough.
+            let key = config.encryption_key.as_ref().ok_or_else(|| {
+                anyhow!(
+                    "CacheConfig.encryption_enabled = true but no encryption_key was provided; \
+                     refusing to start a cache that would store data in plaintext"
+                )
+            })?;
+            Some(Arc::new(AesEncryptionStrategy::new(key.as_bytes())?)
+                as Arc<dyn EncryptionStrategy>)
         } else {
             None
         };
@@ -614,31 +655,74 @@ pub trait EncryptionStrategy: Send + Sync {
     async fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>>;
 }
 
-/// AES encryption strategy (stub implementation)
-pub struct AesEncryptionStrategy;
+/// Length, in bytes, of the AES-256 key.
+const AES256_KEY_LEN: usize = 32;
+/// Length, in bytes, of the 96-bit AES-GCM nonce.
+const AES_GCM_NONCE_LEN: usize = 12;
 
-impl Default for AesEncryptionStrategy {
-    fn default() -> Self {
-        Self::new()
-    }
+/// AES-256-GCM authenticated-encryption strategy (Pure Rust, via OxiCrypto).
+///
+/// On-the-wire layout of an encrypted entry is `nonce(12) || ciphertext || tag(16)`.
+/// A fresh random nonce is generated for every `encrypt` call, so identical
+/// plaintexts do not produce identical ciphertexts and nonces never repeat under
+/// the same key (a hard requirement for GCM security).
+pub struct AesEncryptionStrategy {
+    key: [u8; AES256_KEY_LEN],
 }
 
 impl AesEncryptionStrategy {
-    pub fn new() -> Self {
-        Self
+    /// Build a strategy from a 256-bit key. Returns an error for any other length
+    /// so a misconfigured key cannot silently weaken or disable encryption.
+    pub fn new(key: &[u8]) -> Result<Self> {
+        if key.len() != AES256_KEY_LEN {
+            return Err(anyhow!(
+                "AES-256-GCM requires a {}-byte key, got {} bytes",
+                AES256_KEY_LEN,
+                key.len()
+            ));
+        }
+        let mut key_arr = [0u8; AES256_KEY_LEN];
+        key_arr.copy_from_slice(key);
+        Ok(Self { key: key_arr })
     }
 }
 
 #[async_trait]
 impl EncryptionStrategy for AesEncryptionStrategy {
     async fn encrypt(&self, data: &[u8]) -> Result<Vec<u8>> {
-        // Stub implementation - would use actual AES encryption
-        Ok(data.to_vec())
+        use oxicrypto_core::Aead;
+
+        // Fresh random 96-bit nonce per message (never reuse under the same key).
+        let nonce: [u8; AES_GCM_NONCE_LEN] = oxicrypto_rand::random_nonce()
+            .map_err(|e| anyhow!("Failed to generate AES-GCM nonce: {e}"))?;
+
+        // seal_to_vec returns `ciphertext || tag` (16-byte GCM tag appended).
+        let sealed = oxicrypto_aead::Aes256Gcm
+            .seal_to_vec(&self.key, &nonce, &[], data)
+            .map_err(|e| anyhow!("AES-256-GCM encryption failed: {e}"))?;
+
+        // Prepend the nonce so decrypt is self-describing.
+        let mut out = Vec::with_capacity(AES_GCM_NONCE_LEN + sealed.len());
+        out.extend_from_slice(&nonce);
+        out.extend_from_slice(&sealed);
+        Ok(out)
     }
 
     async fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>> {
-        // Stub implementation - would use actual AES decryption
-        Ok(data.to_vec())
+        use oxicrypto_core::Aead;
+
+        if data.len() < AES_GCM_NONCE_LEN {
+            return Err(anyhow!(
+                "Ciphertext too short: {} bytes, expected at least {} (nonce)",
+                data.len(),
+                AES_GCM_NONCE_LEN
+            ));
+        }
+        let (nonce, sealed) = data.split_at(AES_GCM_NONCE_LEN);
+
+        oxicrypto_aead::Aes256Gcm
+            .open_to_vec(&self.key, nonce, &[], sealed)
+            .map_err(|e| anyhow!("AES-256-GCM decryption/authentication failed: {e}"))
     }
 }
 
@@ -765,5 +849,81 @@ mod tests {
 
         assert_eq!(original_data.as_slice(), decompressed.as_slice());
         assert!(compressed.len() < original_data.len()); // Should be compressed
+    }
+
+    #[tokio::test]
+    async fn regression_aes_encryption_roundtrip_is_not_plaintext() {
+        let key = [7u8; AES256_KEY_LEN];
+        let strategy = AesEncryptionStrategy::new(&key).expect("32-byte key is valid");
+        let plaintext = b"sensitive GraphQL query result with PII".to_vec();
+
+        let ciphertext = strategy.encrypt(&plaintext).await.expect("encrypt");
+        // The ciphertext must NOT contain the plaintext (the old stub returned it verbatim).
+        assert_ne!(ciphertext, plaintext);
+        assert!(
+            ciphertext
+                .windows(plaintext.len())
+                .all(|w| w != plaintext.as_slice()),
+            "ciphertext must not embed the plaintext"
+        );
+        // Nonce(12) + tag(16) overhead present.
+        assert!(ciphertext.len() >= plaintext.len() + AES_GCM_NONCE_LEN + 16);
+
+        let recovered = strategy.decrypt(&ciphertext).await.expect("decrypt");
+        assert_eq!(recovered, plaintext);
+    }
+
+    #[tokio::test]
+    async fn regression_aes_encryption_fresh_nonce_per_message() {
+        let key = [3u8; AES256_KEY_LEN];
+        let strategy = AesEncryptionStrategy::new(&key).expect("valid key");
+        let plaintext = b"same input".to_vec();
+        let c1 = strategy.encrypt(&plaintext).await.expect("encrypt 1");
+        let c2 = strategy.encrypt(&plaintext).await.expect("encrypt 2");
+        // Random nonce => identical plaintext yields distinct ciphertexts.
+        assert_ne!(c1, c2);
+    }
+
+    #[tokio::test]
+    async fn regression_aes_tamper_detection_fails_loud() {
+        let key = [9u8; AES256_KEY_LEN];
+        let strategy = AesEncryptionStrategy::new(&key).expect("valid key");
+        let mut ciphertext = strategy.encrypt(b"payload").await.expect("encrypt");
+        // Flip a bit in the tag/ciphertext region.
+        let last = ciphertext.len() - 1;
+        ciphertext[last] ^= 0x01;
+        assert!(
+            strategy.decrypt(&ciphertext).await.is_err(),
+            "tampered ciphertext must be rejected, not silently returned"
+        );
+    }
+
+    #[test]
+    fn regression_bad_key_length_rejected() {
+        assert!(AesEncryptionStrategy::new(&[0u8; 16]).is_err());
+        assert!(AesEncryptionStrategy::new(&[0u8; 32]).is_ok());
+    }
+
+    #[tokio::test]
+    async fn regression_encryption_enabled_without_key_fails_loud() {
+        let config = CacheConfig {
+            encryption_enabled: true,
+            encryption_key: None,
+            ..Default::default()
+        };
+        // Must not silently construct a plaintext cache.
+        let result = RedisDistributedCache::new(config).await;
+        assert!(
+            result.is_err(),
+            "encryption_enabled without a key must be a hard error"
+        );
+    }
+
+    #[test]
+    fn regression_encryption_key_debug_is_redacted() {
+        let key = EncryptionKey::new(vec![0xAB; 32]);
+        let dbg = format!("{key:?}");
+        assert!(dbg.contains("REDACTED"));
+        assert!(!dbg.contains("171")); // 0xAB
     }
 }

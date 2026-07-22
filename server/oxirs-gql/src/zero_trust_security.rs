@@ -13,6 +13,7 @@ use tokio::sync::{broadcast, Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tracing::{debug, info, warn};
 
 use crate::ast::{Document, OperationType};
+use crate::production::{JwtClaims, JwtConfig, JwtManager};
 
 /// Zero-trust security configuration
 #[derive(Debug, Clone)]
@@ -31,6 +32,13 @@ pub struct ZeroTrustConfig {
     pub encryption_config: EncryptionConfig,
     pub audit_config: AuditConfig,
     pub threat_detection_config: ThreatDetectionConfig,
+    /// HMAC-SHA256 secret used to verify inbound JWT bearer tokens. When `None`,
+    /// [`ZeroTrustSecurityManager::authenticate_request`] rejects every request
+    /// (fail-closed) rather than fabricating an authenticated identity.
+    pub jwt_secret: Option<String>,
+    /// Optional expected `iss` (issuer) claim. When set, tokens whose issuer does
+    /// not match are rejected.
+    pub jwt_issuer: Option<String>,
 }
 
 impl Default for ZeroTrustConfig {
@@ -50,6 +58,8 @@ impl Default for ZeroTrustConfig {
             encryption_config: EncryptionConfig::default(),
             audit_config: AuditConfig::default(),
             threat_detection_config: ThreatDetectionConfig::default(),
+            jwt_secret: None,
+            jwt_issuer: None,
         }
     }
 }
@@ -572,17 +582,134 @@ impl ZeroTrustSecurityManager {
         Ok(())
     }
 
-    /// Validate authentication token
-    async fn validate_authentication_token(&self, _token: &str) -> Result<AuthenticationInfo> {
-        // In a real implementation, this would validate JWT tokens or similar
-        Ok(AuthenticationInfo {
-            user_id: Some("test_user".to_string()),
+    /// Validate an inbound JWT bearer token.
+    ///
+    /// This performs real verification (HMAC-SHA256 signature, expiry, and — when
+    /// configured — issuer). It NEVER fabricates an identity: a missing secret,
+    /// empty token, bad signature, expired token, or issuer mismatch all return
+    /// `Err`, consistent with the module's zero-trust / fail-closed contract.
+    async fn validate_authentication_token(&self, token: &str) -> Result<AuthenticationInfo> {
+        // Fail closed if authentication is not configured.
+        let secret = self.config.jwt_secret.as_ref().ok_or_else(|| {
+            anyhow!(
+                "Zero-trust authentication is not configured (jwt_secret is None); \
+                 refusing to authenticate any request"
+            )
+        })?;
+
+        // Reject empty / obviously malformed tokens up front.
+        let token = token.trim();
+        let token = token.strip_prefix("Bearer ").unwrap_or(token).trim();
+        if token.is_empty() {
+            return Err(anyhow!("Missing authentication token"));
+        }
+
+        // Verify signature + expiry via the shared HMAC-SHA256 JWT manager.
+        let jwt_config = JwtConfig {
+            secret: secret.clone(),
+            issuer: self.config.jwt_issuer.clone(),
+            ..Default::default()
+        };
+        let manager = JwtManager::new(jwt_config)?;
+        let claims = manager
+            .verify_token(token)
+            .map_err(|e| anyhow!("Token verification failed: {e}"))?;
+
+        // Enforce issuer when an expected issuer is configured.
+        if let Some(expected_iss) = &self.config.jwt_issuer {
+            match &claims.iss {
+                Some(iss) if iss == expected_iss => {}
+                _ => return Err(anyhow!("Token issuer mismatch")),
+            }
+        }
+
+        Ok(Self::authentication_info_from_claims(&claims))
+    }
+
+    /// Map verified JWT claims onto an [`AuthenticationInfo`].
+    ///
+    /// Permissions are read from a `permissions` (or `scope`) custom claim; the
+    /// authentication level is read from an `auth_level` custom claim. Absent
+    /// claims grant the minimal capability (read-only, Basic) rather than a
+    /// broad default.
+    fn authentication_info_from_claims(claims: &JwtClaims) -> AuthenticationInfo {
+        let permissions = Self::permissions_from_claims(claims);
+        let auth_level = claims
+            .custom
+            .get("auth_level")
+            .and_then(|v| v.as_str())
+            .map(Self::parse_auth_level)
+            .unwrap_or(AuthenticationLevel::Basic);
+
+        AuthenticationInfo {
+            user_id: Some(claims.sub.clone()),
             session_id: uuid::Uuid::new_v4().to_string(),
-            auth_level: AuthenticationLevel::Basic,
-            permissions: HashSet::from([Permission::ReadData, Permission::WriteData]),
+            auth_level,
+            permissions,
             session_start: SystemTime::now(),
             authentication_factors: Vec::new(),
-        })
+        }
+    }
+
+    /// Extract granted permissions from the `permissions` or `scope` claim.
+    fn permissions_from_claims(claims: &JwtClaims) -> HashSet<Permission> {
+        let mut perms = HashSet::new();
+
+        // Collect string tokens from a `permissions` array or a space-delimited
+        // `scope` string (OAuth2 convention).
+        let mut raw: Vec<String> = Vec::new();
+        if let Some(v) = claims.custom.get("permissions") {
+            if let Some(arr) = v.as_array() {
+                raw.extend(arr.iter().filter_map(|x| x.as_str().map(String::from)));
+            } else if let Some(s) = v.as_str() {
+                raw.extend(s.split_whitespace().map(String::from));
+            }
+        }
+        if let Some(scope) = claims.custom.get("scope").and_then(|v| v.as_str()) {
+            raw.extend(scope.split_whitespace().map(String::from));
+        }
+
+        for token in raw {
+            if let Some(p) = Self::parse_permission(&token) {
+                perms.insert(p);
+            }
+        }
+
+        // A verified token always grants at least read access.
+        if perms.is_empty() {
+            perms.insert(Permission::ReadData);
+        }
+        perms
+    }
+
+    /// Parse a single permission string into a [`Permission`].
+    fn parse_permission(s: &str) -> Option<Permission> {
+        match s.to_ascii_lowercase().as_str() {
+            "read" | "readdata" | "read_data" | "read:data" => Some(Permission::ReadData),
+            "write" | "writedata" | "write_data" | "write:data" => Some(Permission::WriteData),
+            "delete" | "deletedata" | "delete_data" | "delete:data" => Some(Permission::DeleteData),
+            "admin" | "adminaccess" | "admin_access" => Some(Permission::AdminAccess),
+            "introspection" | "queryintrospection" => Some(Permission::QueryIntrospection),
+            "schema" | "schemaaccess" => Some(Permission::SchemaAccess),
+            "metrics" | "metricsaccess" => Some(Permission::MetricsAccess),
+            "audit" | "auditlogaccess" => Some(Permission::AuditLogAccess),
+            "usermanagement" | "user_management" => Some(Permission::UserManagement),
+            "systemconfiguration" | "system_configuration" => Some(Permission::SystemConfiguration),
+            _ => None,
+        }
+    }
+
+    /// Parse an authentication-level string into an [`AuthenticationLevel`].
+    fn parse_auth_level(s: &str) -> AuthenticationLevel {
+        match s.to_ascii_lowercase().as_str() {
+            "mfa" | "multifactor" | "multifactorauthenticated" => {
+                AuthenticationLevel::MultiFactorAuthenticated
+            }
+            "certificate" | "certificatebased" => AuthenticationLevel::CertificateBased,
+            "biometric" | "biometricverified" => AuthenticationLevel::BiometricVerified,
+            "anonymous" => AuthenticationLevel::Anonymous,
+            _ => AuthenticationLevel::Basic,
+        }
     }
 
     /// Calculate trust score
@@ -990,4 +1117,129 @@ pub struct EncryptionKey {
     pub algorithm: EncryptionAlgorithm,
     pub created_at: SystemTime,
     pub expires_at: Option<SystemTime>,
+}
+
+#[cfg(test)]
+mod zero_trust_auth_tests {
+    use super::*;
+
+    fn manager_with_secret(secret: Option<&str>) -> ZeroTrustSecurityManager {
+        let config = ZeroTrustConfig {
+            jwt_secret: secret.map(String::from),
+            ..Default::default()
+        };
+        let (manager, _rx) = ZeroTrustSecurityManager::new(config);
+        manager
+    }
+
+    fn sign_token(secret: &str, claims: &JwtClaims) -> String {
+        let jwt_config = JwtConfig {
+            secret: secret.to_string(),
+            ..Default::default()
+        };
+        let manager = JwtManager::new(jwt_config).expect("valid jwt config");
+        manager.generate_token(claims).expect("token generated")
+    }
+
+    #[tokio::test]
+    async fn regression_no_secret_rejects_every_token() {
+        let manager = manager_with_secret(None);
+        // Even a well-formed value must be rejected when no secret is configured.
+        assert!(manager
+            .validate_authentication_token("anything")
+            .await
+            .is_err());
+        assert!(manager.validate_authentication_token("").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn regression_empty_and_garbage_token_rejected() {
+        let manager = manager_with_secret(Some("super-secret-key"));
+        assert!(manager.validate_authentication_token("").await.is_err());
+        assert!(manager
+            .validate_authentication_token("not-a-jwt")
+            .await
+            .is_err());
+        // Wrong number of segments.
+        assert!(manager.validate_authentication_token("a.b").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn regression_tampered_signature_rejected() {
+        let secret = "super-secret-key";
+        let manager = manager_with_secret(Some(secret));
+        let claims = JwtClaims::new("alice".to_string(), 3600);
+        let token = sign_token(secret, &claims);
+        // Flip a character in the signature segment.
+        let mut parts: Vec<String> = token.split('.').map(String::from).collect();
+        let sig = &mut parts[2];
+        let flipped = if sig.starts_with('A') { 'B' } else { 'A' };
+        sig.replace_range(0..1, &flipped.to_string());
+        let tampered = parts.join(".");
+        assert!(manager
+            .validate_authentication_token(&tampered)
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn regression_wrong_secret_rejected() {
+        let good = sign_token("issuer-secret", &JwtClaims::new("bob".to_string(), 3600));
+        let manager = manager_with_secret(Some("different-secret"));
+        assert!(manager.validate_authentication_token(&good).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn regression_valid_token_maps_claims() {
+        let secret = "super-secret-key";
+        let manager = manager_with_secret(Some(secret));
+        let claims = JwtClaims::new("carol".to_string(), 3600)
+            .with_claim(
+                "permissions".to_string(),
+                serde_json::json!(["read", "write", "admin"]),
+            )
+            .with_claim("auth_level".to_string(), serde_json::json!("mfa"));
+        let token = sign_token(secret, &claims);
+
+        let info = manager
+            .validate_authentication_token(&token)
+            .await
+            .expect("valid token accepted");
+        assert_eq!(info.user_id.as_deref(), Some("carol"));
+        assert_eq!(
+            info.auth_level,
+            AuthenticationLevel::MultiFactorAuthenticated
+        );
+        assert!(info.permissions.contains(&Permission::ReadData));
+        assert!(info.permissions.contains(&Permission::WriteData));
+        assert!(info.permissions.contains(&Permission::AdminAccess));
+        // A permission NOT granted must be absent.
+        assert!(!info.permissions.contains(&Permission::DeleteData));
+    }
+
+    #[tokio::test]
+    async fn regression_issuer_mismatch_rejected() {
+        let secret = "super-secret-key";
+        let config = ZeroTrustConfig {
+            jwt_secret: Some(secret.to_string()),
+            jwt_issuer: Some("expected-issuer".to_string()),
+            ..Default::default()
+        };
+        let (manager, _rx) = ZeroTrustSecurityManager::new(config);
+
+        // Token carries a different issuer.
+        let mut claims = JwtClaims::new("dave".to_string(), 3600);
+        claims.iss = Some("attacker".to_string());
+        let token = sign_token(secret, &claims);
+        assert!(manager.validate_authentication_token(&token).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn regression_bearer_prefix_stripped() {
+        let secret = "super-secret-key";
+        let manager = manager_with_secret(Some(secret));
+        let token = sign_token(secret, &JwtClaims::new("eve".to_string(), 3600));
+        let bearer = format!("Bearer {token}");
+        assert!(manager.validate_authentication_token(&bearer).await.is_ok());
+    }
 }

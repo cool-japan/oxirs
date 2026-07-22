@@ -43,6 +43,42 @@ pub enum TripleFormat {
     JsonLd,
 }
 
+/// A knowledge-graph [`Triple`] paired with a relevance score.
+///
+/// [`ContextBuilder::build`] honors [`ContextConfig::score_weighted`] by
+/// sorting these descending by `score` before truncating to the character
+/// budget. `Triple` itself carries no score (it is a plain RDF fact), so
+/// callers that want prioritized ordering must supply one explicitly — use
+/// [`ScoredTriple::unscored`] for callers with no real relevance signal,
+/// which makes `score_weighted` a stable (input-order-preserving) no-op
+/// rather than silently claiming to weight triples it has no data to weight.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScoredTriple {
+    pub triple: Triple,
+    pub score: f64,
+}
+
+impl ScoredTriple {
+    /// Wrap a triple with an explicit relevance score.
+    pub fn new(triple: Triple, score: f64) -> Self {
+        Self { triple, score }
+    }
+
+    /// Wrap a triple with a neutral score, for callers with no relevance
+    /// signal available. `Vec::sort_by` is stable, so a slice of
+    /// all-neutral-score triples is left in its original order even when
+    /// `score_weighted` is enabled.
+    pub fn unscored(triple: Triple) -> Self {
+        Self { triple, score: 0.0 }
+    }
+}
+
+impl From<Triple> for ScoredTriple {
+    fn from(triple: Triple) -> Self {
+        Self::unscored(triple)
+    }
+}
+
 /// Context builder for LLM input
 pub struct ContextBuilder {
     config: ContextConfig,
@@ -59,11 +95,19 @@ impl ContextBuilder {
         Self { config }
     }
 
-    /// Build context string from subgraph and communities
+    /// Build context string from subgraph and communities.
+    ///
+    /// When [`ContextConfig::score_weighted`] is set, `triples` are sorted
+    /// by descending [`ScoredTriple::score`] before truncation, so the most
+    /// relevant facts survive the character budget first. Pass
+    /// [`ScoredTriple::unscored`] triples (or use [`Self::build_unscored`])
+    /// if no real relevance score is available — `score_weighted` then has
+    /// no effect (stable sort preserves input order), rather than silently
+    /// pretending to prioritize triples it has no signal to prioritize by.
     pub fn build(
         &self,
         query: &str,
-        triples: &[Triple],
+        triples: &[ScoredTriple],
         communities: &[CommunitySummary],
     ) -> GraphRAGResult<String> {
         let mut context = String::new();
@@ -85,13 +129,42 @@ impl ContextBuilder {
             }
         }
 
-        // Add triples
+        // Add triples, honoring `score_weighted` if requested.
         if self.config.include_triples && !triples.is_empty() {
-            let triples_section = self.format_triples(triples, remaining_length);
+            let ordered: Vec<&ScoredTriple> = if self.config.score_weighted {
+                let mut refs: Vec<&ScoredTriple> = triples.iter().collect();
+                refs.sort_by(|a, b| {
+                    b.score
+                        .partial_cmp(&a.score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+                refs
+            } else {
+                triples.iter().collect()
+            };
+            let triples_section = self.format_triples(&ordered, remaining_length);
             context.push_str(&triples_section);
         }
 
         Ok(context)
+    }
+
+    /// Convenience wrapper for callers with no relevance score available:
+    /// wraps every triple as [`ScoredTriple::unscored`] and delegates to
+    /// [`Self::build`]. `score_weighted` becomes a no-op in this case, since
+    /// there is no real score to weight by.
+    pub fn build_unscored(
+        &self,
+        query: &str,
+        triples: &[Triple],
+        communities: &[CommunitySummary],
+    ) -> GraphRAGResult<String> {
+        let scored: Vec<ScoredTriple> = triples
+            .iter()
+            .cloned()
+            .map(ScoredTriple::unscored)
+            .collect();
+        self.build(query, &scored, communities)
     }
 
     /// Format community summaries
@@ -121,11 +194,15 @@ impl ContextBuilder {
         result
     }
 
-    /// Format triples according to configured format
-    fn format_triples(&self, triples: &[Triple], max_length: usize) -> String {
+    /// Format triples according to configured format. `triples` is assumed
+    /// to already be in the order they should be considered for inclusion
+    /// (score-weighted or input order, decided by the caller in
+    /// [`Self::build`]).
+    fn format_triples(&self, triples: &[&ScoredTriple], max_length: usize) -> String {
         let mut result = String::from("## Knowledge Graph Facts\n\n");
 
-        for triple in triples {
+        for scored in triples {
+            let triple = &scored.triple;
             let entry = match self.config.triple_format {
                 TripleFormat::NaturalLanguage => self.triple_to_natural_language(triple),
                 TripleFormat::Structured => self.triple_to_structured(triple),
@@ -254,7 +331,7 @@ mod tests {
         }];
 
         let context = builder
-            .build("What is the battery status?", &triples, &communities)
+            .build_unscored("What is the battery status?", &triples, &communities)
             .expect("should succeed");
 
         assert!(context.contains("Query"));
@@ -277,5 +354,92 @@ mod tests {
             builder.predicate_to_phrase("http://example.org/hasTemperature"),
             "has temperature"
         );
+    }
+
+    // ── Regression: score_weighted actually reorders triples (P2) ──────────
+
+    fn triple_n(n: u32) -> Triple {
+        Triple::new(
+            format!("http://example.org/s{n}"),
+            "http://example.org/rel",
+            format!("http://example.org/o{n}"),
+        )
+    }
+
+    #[test]
+    fn regression_score_weighted_true_sorts_descending_by_score() {
+        let builder = ContextBuilder::new(ContextConfig {
+            triple_format: TripleFormat::Turtle,
+            score_weighted: true,
+            ..ContextConfig::default()
+        });
+
+        // Deliberately supplied in ascending score order — a correct
+        // implementation must reorder to descending (low score last).
+        let triples = vec![
+            ScoredTriple::new(triple_n(1), 0.1),
+            ScoredTriple::new(triple_n(2), 0.9),
+            ScoredTriple::new(triple_n(3), 0.5),
+        ];
+
+        let context = builder.build("q", &triples, &[]).expect("should succeed");
+
+        let pos2 = context.find("s2").expect("s2 present");
+        let pos3 = context.find("s3").expect("s3 present");
+        let pos1 = context.find("s1").expect("s1 present");
+        assert!(
+            pos2 < pos3 && pos3 < pos1,
+            "expected order by descending score (s2=0.9, s3=0.5, s1=0.1), got: {context}"
+        );
+    }
+
+    #[test]
+    fn regression_score_weighted_false_preserves_input_order() {
+        let builder = ContextBuilder::new(ContextConfig {
+            triple_format: TripleFormat::Turtle,
+            score_weighted: false,
+            ..ContextConfig::default()
+        });
+
+        // Same triples as the sort test, but score_weighted is off: input
+        // order (ascending score here) must be preserved verbatim.
+        let triples = vec![
+            ScoredTriple::new(triple_n(1), 0.1),
+            ScoredTriple::new(triple_n(2), 0.9),
+            ScoredTriple::new(triple_n(3), 0.5),
+        ];
+
+        let context = builder.build("q", &triples, &[]).expect("should succeed");
+
+        let pos1 = context.find("s1").expect("s1 present");
+        let pos2 = context.find("s2").expect("s2 present");
+        let pos3 = context.find("s3").expect("s3 present");
+        assert!(
+            pos1 < pos2 && pos2 < pos3,
+            "expected original input order preserved, got: {context}"
+        );
+    }
+
+    #[test]
+    fn regression_unscored_triples_are_stable_regardless_of_score_weighted() {
+        // Callers with no real relevance signal (build_unscored) must get
+        // input-order-preserving output even with score_weighted enabled —
+        // `score_weighted` should never fabricate an ordering it has no
+        // data to justify.
+        let builder = ContextBuilder::new(ContextConfig {
+            triple_format: TripleFormat::Turtle,
+            score_weighted: true,
+            ..ContextConfig::default()
+        });
+
+        let triples = vec![triple_n(1), triple_n(2), triple_n(3)];
+        let context = builder
+            .build_unscored("q", &triples, &[])
+            .expect("should succeed");
+
+        let pos1 = context.find("s1").expect("s1 present");
+        let pos2 = context.find("s2").expect("s2 present");
+        let pos3 = context.find("s3").expect("s3 present");
+        assert!(pos1 < pos2 && pos2 < pos3);
     }
 }

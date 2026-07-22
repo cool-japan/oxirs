@@ -4,7 +4,10 @@
 **/*.rs.bk
 *.rs.cleanup
 *.pdb
-Cargo.lock
+# Cargo.lock is intentionally tracked (not ignored): this workspace ships
+# end-user binaries (tools/oxirs CLI, desktop/oxirs-tauri, server/oxirs-fuseki),
+# and per Cargo's own guidance, binary/application crates should commit
+# Cargo.lock for reproducible builds across clones, CI, and releases.
 **/*.rs.backup
 **/*.rs.bak
 **/*.rs.bak2

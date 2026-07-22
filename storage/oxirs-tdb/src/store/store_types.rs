@@ -103,6 +103,22 @@ pub struct TdbConfig {
     /// operation. Bulk operations are always a single WAL transaction and never
     /// fsync per element regardless of this flag.
     pub wal_sync_on_commit: bool,
+    /// Automatic WAL checkpoint threshold: after this many *single* mutating
+    /// operations have been logged since the last checkpoint, the store performs
+    /// an automatic [`sync`](crate::store::TdbStore::sync) (checkpoint) to bound
+    /// WAL growth.
+    ///
+    /// The WAL retains every appended record both in memory (its log buffer) and
+    /// in the file until a checkpoint truncates it. Single-statement writes log
+    /// to the WAL but do not themselves checkpoint, so a long-running server doing
+    /// many single writes without an explicit `sync()` would otherwise grow the
+    /// WAL — and the in-memory buffer — without bound, exhausting memory. This
+    /// threshold makes growth self-limiting.
+    ///
+    /// `0` disables automatic checkpointing (the pre-existing behaviour: the WAL
+    /// is bounded only by explicit `sync()` calls). Bulk operations are a single
+    /// WAL transaction already followed by a checkpoint and are unaffected.
+    pub wal_checkpoint_op_threshold: usize,
     /// WAL in-memory buffer size hint in bytes. Recorded from
     /// [`StoreParams::wal_buffer_size`](crate::store::StoreParams) so a later
     /// WAL revision can consume it; the current WAL buffers entries in memory and
@@ -140,6 +156,11 @@ impl TdbConfig {
             enable_quad_indexes: true,
             enable_wal: true,
             wal_sync_on_commit: false,
+            // Checkpoint roughly every 50k single writes so the WAL and its
+            // in-memory buffer stay bounded under sustained single-statement
+            // write load without an explicit sync(). High enough not to perturb
+            // small workloads/tests; low enough to cap memory in the tens of MiB.
+            wal_checkpoint_op_threshold: 50_000,
             wal_buffer_size: 1024 * 1024,
             enable_direct_io: false,
         }
@@ -193,6 +214,9 @@ impl TdbConfig {
             // StoreParams has no per-commit-fsync knob; keep the amortized F3
             // default (durability via the next checkpoint / Drop).
             wal_sync_on_commit: false,
+            // StoreParams has no explicit knob for this yet; keep the bounded
+            // default so a params-built store also caps WAL growth.
+            wal_checkpoint_op_threshold: 50_000,
             wal_buffer_size: params.wal_buffer_size,
             enable_direct_io: params.enable_direct_io,
         })
@@ -255,6 +279,14 @@ impl TdbConfig {
     /// Set whether each single mutating operation fsyncs the WAL at commit.
     pub fn with_wal_sync_on_commit(mut self, enable: bool) -> Self {
         self.wal_sync_on_commit = enable;
+        self
+    }
+
+    /// Set the automatic WAL checkpoint threshold (single-op count). `0` disables
+    /// automatic checkpointing. See
+    /// [`wal_checkpoint_op_threshold`](Self::wal_checkpoint_op_threshold).
+    pub fn with_wal_checkpoint_op_threshold(mut self, ops: usize) -> Self {
+        self.wal_checkpoint_op_threshold = ops;
         self
     }
 }

@@ -21,7 +21,7 @@ impl GraphQLFederation {
         debug!("Resolving entities for federated GraphQL query");
 
         // Parse query to identify entity references
-        let entity_references = self.extract_entity_references(query)?;
+        let entity_references = self.extract_entity_references(query).await?;
 
         // Build entity resolution plan
         let resolution_plan = self
@@ -58,69 +58,122 @@ impl GraphQLFederation {
         let mut resolved_entities = Vec::new();
 
         for (typename, reprs) in by_type {
-            // Find which service owns this entity type
-            let _service_id = self.find_service_for_entity(&typename).await?;
+            // Find which service owns this entity type.
+            let service_id = self.find_service_for_entity(&typename).await?;
 
-            // Build _entities query for this service
-            let _entities_query =
+            // Build the _entities query for this service.
+            let entities_query =
                 self.build_entities_query_for_representations(&typename, &reprs)?;
 
-            // Execute query (mock for now)
-            let mock_entity = serde_json::json!({
-                "__typename": typename,
-                "id": "123",
-                "username": "john_doe",
-                "email": "john@example.com"
-            });
+            // Build the representations variable from the real entity keys.
+            let repr_values: Vec<serde_json::Value> = reprs
+                .iter()
+                .map(|r| {
+                    let mut obj = serde_json::Map::new();
+                    obj.insert(
+                        "__typename".to_string(),
+                        serde_json::Value::String(typename.clone()),
+                    );
+                    if let serde_json::Value::Object(fields) = &r.fields {
+                        for (k, v) in fields {
+                            obj.insert(k.clone(), v.clone());
+                        }
+                    }
+                    serde_json::Value::Object(obj)
+                })
+                .collect();
+            let variables = serde_json::json!({ "representations": repr_values });
 
-            resolved_entities.push(mock_entity);
+            // Execute the real query against the owning service.
+            let response = self
+                .execute_service_query(&service_id, &entities_query, Some(variables))
+                .await?;
+
+            // Extract the resolved entities from the response. Fail loudly if the
+            // service returned an error or no `_entities` array.
+            if !response.errors.is_empty() {
+                return Err(anyhow!(
+                    "Service '{}' returned errors resolving '{}': {:?}",
+                    service_id,
+                    typename,
+                    response.errors
+                ));
+            }
+            match response.data.get("_entities").and_then(|v| v.as_array()) {
+                Some(entities) => {
+                    for entity in entities {
+                        resolved_entities.push(entity.clone());
+                    }
+                }
+                None => {
+                    return Err(anyhow!(
+                        "Service '{}' returned no `_entities` array for type '{}'",
+                        service_id,
+                        typename
+                    ));
+                }
+            }
         }
 
         Ok(resolved_entities)
     }
 
-    /// Extract entity references from GraphQL query
-    fn extract_entity_references(&self, query: &str) -> Result<Vec<EntityReference>> {
+    /// Extract entity references from a GraphQL query, driven by the composed
+    /// schemas rather than hardcoded type names.
+    ///
+    /// An entity type is a type carrying an `@key` directive in one of the
+    /// registered federated schemas. A reference is emitted for every such type
+    /// the query actually mentions, with its key fields taken from the directive
+    /// and its owning service taken from the schema that declared it.
+    async fn extract_entity_references(&self, query: &str) -> Result<Vec<EntityReference>> {
         let mut entity_refs = Vec::new();
+        let schemas = self.schemas.read().await;
 
-        // Parse query to find entities (simplified parser)
-        // In real implementation, would use proper GraphQL parser
-        let lines: Vec<&str> = query.lines().collect();
+        for (service_id, schema) in schemas.iter() {
+            for (type_name, type_def) in &schema.types {
+                // Only entity types (with an @key directive) are resolvable.
+                let Some(key_directive) = type_def.directives.iter().find(|d| d.name == "key")
+                else {
+                    continue;
+                };
 
-        for line in lines {
-            if line.trim().contains("@key") {
-                // Extract entity type and key fields
-                if let Some(entity_ref) = self.parse_entity_reference_from_line(line)? {
-                    entity_refs.push(entity_ref);
+                // The query must actually reference this type.
+                if !query.contains(type_name.as_str()) {
+                    continue;
                 }
+
+                let key_fields = key_directive
+                    .arguments
+                    .get("fields")
+                    .and_then(|v| v.as_str())
+                    .map(|s| {
+                        s.split_whitespace()
+                            .map(|f| f.to_string())
+                            .collect::<Vec<_>>()
+                    })
+                    .filter(|v: &Vec<String>| !v.is_empty())
+                    .unwrap_or_else(|| vec!["id".to_string()]);
+
+                // Required fields are all object fields that are not key fields.
+                let required_fields = match &type_def.kind {
+                    TypeKind::Object { fields } | TypeKind::Interface { fields } => fields
+                        .keys()
+                        .filter(|f| !key_fields.contains(f))
+                        .cloned()
+                        .collect(),
+                    _ => Vec::new(),
+                };
+
+                entity_refs.push(EntityReference {
+                    entity_type: type_name.clone(),
+                    key_fields,
+                    required_fields,
+                    service_id: service_id.clone(),
+                });
             }
         }
 
         Ok(entity_refs)
-    }
-
-    /// Parse entity reference from a query line
-    fn parse_entity_reference_from_line(&self, line: &str) -> Result<Option<EntityReference>> {
-        // Simplified parsing - would be more sophisticated in real implementation
-        if line.contains("User") && line.contains("id") {
-            return Ok(Some(EntityReference {
-                entity_type: "User".to_string(),
-                key_fields: vec!["id".to_string()],
-                required_fields: vec!["username".to_string(), "email".to_string()],
-                service_id: "user-service".to_string(), // Would be determined by schema analysis
-            }));
-        }
-
-        if line.contains("Product") && line.contains("sku") {
-            return Ok(Some(EntityReference {
-                entity_type: "Product".to_string(),
-                key_fields: vec!["sku".to_string()],
-                required_fields: vec!["name".to_string(), "price".to_string()],
-                service_id: "product-service".to_string(),
-            }));
-        }
-
-        Ok(None)
     }
 
     /// Build entity resolution plan with optimal execution order
@@ -306,7 +359,7 @@ impl GraphQLFederation {
             );
 
             // Extract entity references from the step query
-            let entity_refs = self.extract_entity_references(&step.query)?;
+            let entity_refs = self.extract_entity_references(&step.query).await?;
 
             debug!(
                 "Extracted {} entity references from query for service {}",
@@ -492,8 +545,28 @@ impl GraphQLFederation {
         // Build _entities query
         let query = self.build_entities_query_from_representations(representations)?;
 
-        // Execute query (mock implementation)
-        let response = self.execute_service_query(service_id, &query).await?;
+        // Build the representations variable from the real entity keys.
+        let repr_values: Vec<serde_json::Value> = representations
+            .iter()
+            .map(|r| {
+                let mut obj = serde_json::Map::new();
+                obj.insert(
+                    "__typename".to_string(),
+                    serde_json::Value::String(r.typename.clone()),
+                );
+                if let serde_json::Value::Object(fields) = &r.fields {
+                    for (k, v) in fields {
+                        obj.insert(k.clone(), v.clone());
+                    }
+                }
+                serde_json::Value::Object(obj)
+            })
+            .collect();
+        let variables = serde_json::json!({ "representations": repr_values });
+
+        let response = self
+            .execute_service_query(service_id, &query, Some(variables))
+            .await?;
 
         Ok(response)
     }
@@ -571,16 +644,36 @@ impl GraphQLFederation {
 
         let mut resolved_entities = Vec::new();
 
-        for (typename, _refs) in entities_by_type {
-            // For now, create a basic query structure - this should be enhanced
-            // to properly build GraphQL _entities queries from EntityReference data
+        for (typename, refs) in entities_by_type {
+            // Build a real _entities query selecting the entity's key and required
+            // fields, and pass the representations (key values) as variables.
+            let selection_fields = self.get_entity_selection_fields(&typename)?;
             let entities_query = format!(
-                "query {{ _entities(representations: [{{ __typename: \"{typename}\" }}]) {{ ... on {typename} {{ id }} }} }}"
+                "query GetEntities($representations: [_Any!]!) {{ _entities(representations: $representations) {{ ... on {} {{ {} }} }} }}",
+                typename,
+                selection_fields.join(" ")
             );
 
-            // Execute query against service (mock implementation)
+            // Representations are the entity key objects that need resolving.
+            let repr_values: Vec<serde_json::Value> = refs
+                .iter()
+                .map(|entity_ref| {
+                    let mut obj = serde_json::Map::new();
+                    obj.insert(
+                        "__typename".to_string(),
+                        serde_json::Value::String(typename.clone()),
+                    );
+                    for key_field in &entity_ref.key_fields {
+                        obj.insert(key_field.clone(), serde_json::Value::Null);
+                    }
+                    serde_json::Value::Object(obj)
+                })
+                .collect();
+            let variables = serde_json::json!({ "representations": repr_values });
+
+            // Execute the real query against the owning service.
             let response = self
-                .execute_service_query(service_id, &entities_query)
+                .execute_service_query(service_id, &entities_query, Some(variables))
                 .await?;
 
             // Parse response into EntityData
@@ -680,29 +773,63 @@ impl GraphQLFederation {
         }
     }
 
-    /// Execute query against a specific GraphQL service
+    /// Execute a GraphQL query against a specific federated service over HTTP.
+    ///
+    /// Fails loudly when the service has no registered endpoint or the HTTP call
+    /// fails — never returns fabricated data.
     async fn execute_service_query(
         &self,
         service_id: &str,
-        _query: &str,
+        query: &str,
+        variables: Option<serde_json::Value>,
     ) -> Result<GraphQLResponse> {
         debug!("Executing GraphQL query against service: {}", service_id);
 
-        // Mock implementation - would make actual HTTP request to service
-        Ok(GraphQLResponse {
-            data: serde_json::json!({
-                "_entities": [
-                    {
-                        "__typename": "User",
-                        "id": "1",
-                        "username": "john_doe",
-                        "email": "john@example.com"
-                    }
-                ]
-            }),
-            errors: Vec::new(),
-            extensions: None,
-        })
+        // Resolve the real endpoint URL for this service.
+        let endpoint = {
+            let endpoints = self.service_endpoints.read().await;
+            endpoints.get(service_id).cloned()
+        }
+        .ok_or_else(|| {
+            anyhow!(
+                "No registered GraphQL endpoint for service '{}'; cannot resolve entities. \
+                 Register it via GraphQLFederation::register_service_endpoint.",
+                service_id
+            )
+        })?;
+
+        let request = crate::service_client::GraphQLRequest {
+            query: query.to_string(),
+            variables,
+            operation_name: None,
+        };
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&endpoint)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| anyhow!("GraphQL request to service '{}' failed: {}", service_id, e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "GraphQL service '{}' returned error status: {}",
+                service_id,
+                response.status()
+            ));
+        }
+
+        let graphql_response: GraphQLResponse = response.json().await.map_err(|e| {
+            anyhow!(
+                "Failed to parse GraphQL response from service '{}': {}",
+                service_id,
+                e
+            )
+        })?;
+
+        Ok(graphql_response)
     }
 
     /// Parse entities from GraphQL response

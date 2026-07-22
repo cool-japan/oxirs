@@ -13,7 +13,7 @@ use oxirs_core::parallel::*;
 use parking_lot::RwLock;
 use std::collections::{HashMap, VecDeque};
 use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::warn;
@@ -88,7 +88,13 @@ pub struct PageCacheEntry {
     data: Vec<u8>,
     page_id: usize,
     last_access: Instant,
+    /// When the page was first inserted into the cache. Drives FIFO eviction
+    /// (oldest insertion evicted first), independent of subsequent accesses.
+    inserted_at: Instant,
     access_count: AtomicUsize,
+    /// Clock-algorithm reference bit: set on every access, cleared to grant a
+    /// "second chance" during a Clock eviction sweep.
+    reference_bit: AtomicBool,
     dirty: bool,
     numa_node: i32,
 }
@@ -213,6 +219,8 @@ impl AdvancedMemoryMap {
             if let Some(entry) = cache.get(&page_id) {
                 self.cache_hits.fetch_add(1, Ordering::Relaxed);
                 entry.access_count.fetch_add(1, Ordering::Relaxed);
+                // Mark the page as recently referenced for the Clock algorithm.
+                entry.reference_bit.store(true, Ordering::Relaxed);
                 self.record_access(page_id);
                 return Ok(Arc::clone(entry));
             }
@@ -248,11 +256,14 @@ impl AdvancedMemoryMap {
             0
         };
 
+        let now = Instant::now();
         let entry = Arc::new(PageCacheEntry {
             data: page_data,
             page_id,
-            last_access: Instant::now(),
+            last_access: now,
+            inserted_at: now,
             access_count: AtomicUsize::new(1),
+            reference_bit: AtomicBool::new(true),
             dirty: false,
             numa_node,
         });
@@ -468,14 +479,91 @@ impl AdvancedMemoryMap {
         Ok(())
     }
 
-    /// FIFO eviction (not implemented - uses LRU as fallback)
+    /// FIFO eviction: evict pages in insertion order (oldest `inserted_at`
+    /// first), regardless of how recently they were accessed. This is the key
+    /// behavioral difference from LRU and avoids LRU thrashing under scan-heavy
+    /// workloads.
     fn evict_fifo(&self, num_pages: usize) -> Result<()> {
-        self.evict_lru(num_pages)
+        // Snapshot (page_id, inserted_at) under a read lock, then evict the
+        // oldest under a write lock.
+        let mut pages_by_age: Vec<(usize, Instant)> = {
+            let cache = self.page_cache.read();
+            cache
+                .iter()
+                .map(|(page_id, entry)| (*page_id, entry.inserted_at))
+                .collect()
+        };
+        pages_by_age.sort_by_key(|(_, inserted_at)| *inserted_at);
+
+        let mut cache = self.page_cache.write();
+        for (page_id, _) in pages_by_age.iter().take(num_pages) {
+            if let Some(entry) = cache.pop(page_id) {
+                self.total_memory
+                    .fetch_sub(entry.data.len(), Ordering::Relaxed);
+                if entry.dirty {
+                    if let Err(e) = self.write_back_page(entry.page_id, &entry.data) {
+                        warn!("Failed to write back page {}: {}", entry.page_id, e);
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
-    /// Clock algorithm eviction (not implemented - uses LRU as fallback)
+    /// Clock (second-chance) eviction: sweep pages in a stable circular order;
+    /// a page whose reference bit is set is given a second chance (bit cleared,
+    /// page retained), a page whose bit is clear is evicted. Bounded to a few
+    /// sweeps so it always terminates even if every page was recently touched.
     fn evict_clock(&self, num_pages: usize) -> Result<()> {
-        self.evict_lru(num_pages)
+        if num_pages == 0 {
+            return Ok(());
+        }
+
+        let mut cache = self.page_cache.write();
+
+        // Stable circular order by page_id so the "clock hand" is deterministic.
+        let mut order: Vec<usize> = cache.iter().map(|(page_id, _)| *page_id).collect();
+        order.sort_unstable();
+        if order.is_empty() {
+            return Ok(());
+        }
+
+        let mut to_evict: Vec<usize> = Vec::with_capacity(num_pages);
+        // At most 2 full sweeps: pass 1 may clear reference bits, pass 2 then
+        // finds victims with cleared bits. A tiny extra margin guards rounding.
+        let max_steps = order.len() * 3 + num_pages;
+        let mut hand = 0usize;
+        let mut steps = 0usize;
+
+        while to_evict.len() < num_pages && steps < max_steps {
+            let page_id = order[hand % order.len()];
+            hand += 1;
+            steps += 1;
+
+            if let Some(entry) = cache.peek(&page_id) {
+                if entry.reference_bit.swap(false, Ordering::Relaxed) {
+                    // Reference bit was set: grant a second chance (now cleared).
+                    continue;
+                }
+                // Reference bit clear: this page is a victim.
+                to_evict.push(page_id);
+            }
+        }
+
+        for page_id in to_evict {
+            if let Some(entry) = cache.pop(&page_id) {
+                self.total_memory
+                    .fetch_sub(entry.data.len(), Ordering::Relaxed);
+                if entry.dirty {
+                    if let Err(e) = self.write_back_page(entry.page_id, &entry.data) {
+                        warn!("Failed to write back page {}: {}", entry.page_id, e);
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// ARC (Adaptive Replacement Cache) eviction
@@ -731,5 +819,79 @@ mod tests {
         assert_eq!(stats.cache_hits, 75);
         assert_eq!(stats.cache_misses, 25);
         assert_eq!(stats.hit_rate, 0.75);
+    }
+
+    /// Insert a synthetic (clean) page directly into the cache for eviction
+    /// tests, controlling its reference bit.
+    fn insert_test_page(map: &AdvancedMemoryMap, page_id: usize, referenced: bool) {
+        let now = Instant::now();
+        let entry = Arc::new(PageCacheEntry {
+            data: vec![0u8; 8],
+            page_id,
+            last_access: now,
+            inserted_at: now,
+            access_count: AtomicUsize::new(1),
+            reference_bit: AtomicBool::new(referenced),
+            dirty: false,
+            numa_node: 0,
+        });
+        map.page_cache.write().put(page_id, entry);
+    }
+
+    #[test]
+    fn regression_fifo_evicts_oldest_not_lru() {
+        let map = AdvancedMemoryMap::new(None, 100);
+        // Insert in order 0,1,2 -> page 0 is the oldest by insertion time.
+        insert_test_page(&map, 0, false);
+        insert_test_page(&map, 1, false);
+        insert_test_page(&map, 2, false);
+
+        // "Recently use" page 0 the way LRU would track (bump its recency in the
+        // LruCache). FIFO must still evict page 0 because it was inserted first.
+        {
+            let mut cache = map.page_cache.write();
+            let _ = cache.get(&0);
+        }
+
+        map.evict_fifo(1).expect("fifo eviction");
+
+        let cache = map.page_cache.read();
+        assert!(
+            cache.peek(&0).is_none(),
+            "FIFO must evict the first-inserted page (0)"
+        );
+        assert!(cache.peek(&1).is_some());
+        assert!(cache.peek(&2).is_some());
+    }
+
+    #[test]
+    fn regression_clock_gives_second_chance() {
+        let map = AdvancedMemoryMap::new(None, 100);
+        // Sweep order is by page_id ascending: [0, 1, 2].
+        // page 0 is referenced (gets a second chance), page 1 is not (victim).
+        insert_test_page(&map, 0, true);
+        insert_test_page(&map, 1, false);
+        insert_test_page(&map, 2, false);
+
+        map.evict_clock(1).expect("clock eviction");
+
+        let cache = map.page_cache.read();
+        assert!(
+            cache.peek(&0).is_some(),
+            "referenced page 0 must survive one Clock sweep (second chance)"
+        );
+        assert!(
+            cache.peek(&1).is_none(),
+            "unreferenced page 1 must be the Clock victim"
+        );
+        // Page 0's reference bit must have been cleared by the sweep.
+        assert!(
+            !cache
+                .peek(&0)
+                .expect("page 0 present")
+                .reference_bit
+                .load(Ordering::Relaxed),
+            "Clock sweep must clear the reference bit it consumed"
+        );
     }
 }

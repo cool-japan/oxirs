@@ -167,17 +167,23 @@ fn load_file(
 }
 
 /// Simple triple representation for loading
+///
+/// `pub(crate)` so `tools::tdbupdate`'s `LOAD <iri>` handler can reuse the
+/// same real RDF parsing this bulk loader uses, instead of duplicating it.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-struct LoadTriple {
-    subject: String,
-    predicate: String,
-    object: String,
+pub(crate) struct LoadTriple {
+    pub(crate) subject: String,
+    pub(crate) predicate: String,
+    pub(crate) object: String,
     graph: Option<String>,
 }
 
 /// Parse RDF content for bulk loading
-fn parse_rdf_for_loading(content: &str, format: &str) -> ToolResult<(Vec<LoadTriple>, usize)> {
+pub(crate) fn parse_rdf_for_loading(
+    content: &str,
+    format: &str,
+) -> ToolResult<(Vec<LoadTriple>, usize)> {
     let mut triples = Vec::new();
     let mut errors = 0;
 
@@ -369,7 +375,7 @@ fn store_triples_in_dataset(
 }
 
 /// Parse a term string into TDB Term
-fn parse_term(term_str: &str) -> Result<oxirs_tdb::dictionary::Term, String> {
+pub(crate) fn parse_term(term_str: &str) -> Result<oxirs_tdb::dictionary::Term, String> {
     use oxirs_tdb::dictionary::Term;
 
     let term_str = term_str.trim();

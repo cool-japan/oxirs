@@ -249,8 +249,7 @@ impl SparqlResultFormatter {
         let mut rows: Vec<String> = Vec::new();
 
         if options.include_header {
-            let header: Vec<String> =
-                results.variables.iter().map(|v| csv_field(v)).collect();
+            let header: Vec<String> = results.variables.iter().map(|v| csv_field(v)).collect();
             rows.push(header.join(","));
         }
 
@@ -439,7 +438,11 @@ fn csv_field(s: &str) -> String {
 fn sparql_value_to_tsv(val: &SparqlValue, null_repr: &str) -> String {
     match val {
         SparqlValue::Uri(u) => format!("<{}>", u),
-        SparqlValue::Literal { value, datatype, lang } => {
+        SparqlValue::Literal {
+            value,
+            datatype,
+            lang,
+        } => {
             let mut s = format!("\"{}\"", value.replace('"', "\\\""));
             if let Some(l) = lang {
                 s.push('@');
@@ -462,8 +465,15 @@ fn sparql_value_to_json(var: &str, val: &SparqlValue) -> Option<String> {
         SparqlValue::Uri(u) => {
             format!("{{\"type\":\"uri\",\"value\":\"{}\"}}", json_escape(u))
         }
-        SparqlValue::Literal { value, datatype, lang } => {
-            let mut s = format!("{{\"type\":\"literal\",\"value\":\"{}\"", json_escape(value));
+        SparqlValue::Literal {
+            value,
+            datatype,
+            lang,
+        } => {
+            let mut s = format!(
+                "{{\"type\":\"literal\",\"value\":\"{}\"",
+                json_escape(value)
+            );
             if let Some(l) = lang {
                 s.push_str(&format!(",\"xml:lang\":\"{}\"", json_escape(l)));
             } else if let Some(dt) = datatype {
@@ -483,9 +493,17 @@ fn sparql_value_to_xml(var: &str, val: &SparqlValue) -> Option<String> {
     let inner = match val {
         SparqlValue::Unbound => return None,
         SparqlValue::Uri(u) => {
-            format!("<binding name=\"{}\"><uri>{}</uri></binding>", xml_escape(var), xml_escape(u))
+            format!(
+                "<binding name=\"{}\"><uri>{}</uri></binding>",
+                xml_escape(var),
+                xml_escape(u)
+            )
         }
-        SparqlValue::Literal { value, datatype, lang } => {
+        SparqlValue::Literal {
+            value,
+            datatype,
+            lang,
+        } => {
             let mut attrs = String::new();
             if let Some(l) = lang {
                 attrs.push_str(&format!(" xml:lang=\"{}\"", xml_escape(l)));
@@ -518,19 +536,28 @@ mod tests {
 
     fn simple_results() -> SparqlResults {
         let mut row1 = HashMap::new();
-        row1.insert("name".to_string(), SparqlValue::Literal {
-            value: "Alice".to_string(),
-            datatype: None,
-            lang: Some("en".to_string()),
-        });
-        row1.insert("uri".to_string(), SparqlValue::Uri("http://example.org/alice".to_string()));
+        row1.insert(
+            "name".to_string(),
+            SparqlValue::Literal {
+                value: "Alice".to_string(),
+                datatype: None,
+                lang: Some("en".to_string()),
+            },
+        );
+        row1.insert(
+            "uri".to_string(),
+            SparqlValue::Uri("http://example.org/alice".to_string()),
+        );
 
         let mut row2 = HashMap::new();
-        row2.insert("name".to_string(), SparqlValue::Literal {
-            value: "Bob".to_string(),
-            datatype: None,
-            lang: None,
-        });
+        row2.insert(
+            "name".to_string(),
+            SparqlValue::Literal {
+                value: "Bob".to_string(),
+                datatype: None,
+                lang: None,
+            },
+        );
         row2.insert("uri".to_string(), SparqlValue::BNode("b0".to_string()));
 
         SparqlResults {
@@ -674,10 +701,12 @@ mod tests {
 
     #[test]
     fn test_csv_no_header_option() {
-        let opts = FormatterOptions { include_header: false, ..Default::default() };
-        let csv = SparqlResultFormatter::format_with_options(
-            &simple_results(), OutputFormat::Csv, &opts,
-        );
+        let opts = FormatterOptions {
+            include_header: false,
+            ..Default::default()
+        };
+        let csv =
+            SparqlResultFormatter::format_with_options(&simple_results(), OutputFormat::Csv, &opts);
         let first_line = csv.lines().next().unwrap_or("");
         assert!(!first_line.contains("name"));
     }
@@ -685,11 +714,14 @@ mod tests {
     #[test]
     fn test_csv_special_chars_quoted() {
         let mut row = HashMap::new();
-        row.insert("x".to_string(), SparqlValue::Literal {
-            value: "hello, world".to_string(),
-            datatype: None,
-            lang: None,
-        });
+        row.insert(
+            "x".to_string(),
+            SparqlValue::Literal {
+                value: "hello, world".to_string(),
+                datatype: None,
+                lang: None,
+            },
+        );
         let r = SparqlResults {
             variables: vec!["x".to_string()],
             bindings: vec![row],
@@ -702,11 +734,14 @@ mod tests {
     #[test]
     fn test_csv_quote_in_value_escaped() {
         let mut row = HashMap::new();
-        row.insert("x".to_string(), SparqlValue::Literal {
-            value: "say \"hi\"".to_string(),
-            datatype: None,
-            lang: None,
-        });
+        row.insert(
+            "x".to_string(),
+            SparqlValue::Literal {
+                value: "say \"hi\"".to_string(),
+                datatype: None,
+                lang: None,
+            },
+        );
         let r = SparqlResults {
             variables: vec!["x".to_string()],
             bindings: vec![row],
@@ -829,11 +864,14 @@ mod tests {
     #[test]
     fn test_html_xss_escaping() {
         let mut row = HashMap::new();
-        row.insert("x".to_string(), SparqlValue::Literal {
-            value: "<script>alert(1)</script>".to_string(),
-            datatype: None,
-            lang: None,
-        });
+        row.insert(
+            "x".to_string(),
+            SparqlValue::Literal {
+                value: "<script>alert(1)</script>".to_string(),
+                datatype: None,
+                lang: None,
+            },
+        );
         let r = SparqlResults {
             variables: vec!["x".to_string()],
             bindings: vec![row],

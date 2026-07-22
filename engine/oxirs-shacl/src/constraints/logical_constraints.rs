@@ -21,7 +21,6 @@ use crate::{
     ValidationConfig,
 };
 use oxirs_core::{model::Term, Store};
-use oxirs_core::{Object, Predicate, Subject};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -213,40 +212,20 @@ impl NotConstraint {
                     Err(_) => Ok(false),
                 };
             }
+            // Registry is present but does not contain this shape: we cannot
+            // know whether `value` conforms, so fail loudly.
+            return Err(ShaclError::ValidationEngine(format!(
+                "Negated shape '{}' not found in shapes registry",
+                self.shape.as_str()
+            )));
         }
 
-        // Fallback: FriendShape check for backward compatibility
-        if self.shape.as_str().contains("FriendShape") {
-            if let Term::NamedNode(node) = value {
-                // Check if the value has type Friend
-                let type_predicate = match oxirs_core::model::NamedNode::new(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-                ) {
-                    Ok(pred) => pred,
-                    Err(_) => return Ok(false),
-                };
-
-                let friend_type =
-                    match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
-                        Ok(friend) => friend,
-                        Err(_) => return Ok(false),
-                    };
-
-                // Check if the store contains the triple: value rdf:type Friend
-                let subject: Subject = node.clone().into();
-                let predicate: Predicate = type_predicate.into();
-                let object: Object = friend_type.clone().into();
-                let quads =
-                    store.find_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
-                if !quads.is_empty() {
-                    return Ok(true);
-                }
-            }
-            return Ok(false);
-        }
-
-        // Unknown shape with no registry: conservatively report non-conforming
-        Ok(false)
+        // No shapes registry available at all: we cannot know whether `value`
+        // conforms to `self.shape`, so fail loudly rather than fabricate a
+        // pass/fail result via a hardcoded shape-name substring match.
+        Err(ShaclError::ValidationEngine(
+            "Shapes registry not available in constraint context".to_string(),
+        ))
     }
 
     /// Get performance metrics for negation constraint evaluation
@@ -496,38 +475,20 @@ impl AndConstraint {
                     Err(_) => Ok(false),
                 };
             }
+            // Registry is present but does not contain this shape: we cannot
+            // know whether `value` conforms, so fail loudly.
+            return Err(ShaclError::ValidationEngine(format!(
+                "Shape '{}' referenced by sh:and not found in shapes registry",
+                shape_id.as_str()
+            )));
         }
 
-        // Fallback: FriendShape check for backward compatibility
-        if shape_id.as_str().contains("FriendShape") {
-            if let Term::NamedNode(node) = value {
-                let type_predicate = match oxirs_core::model::NamedNode::new(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-                ) {
-                    Ok(pred) => pred,
-                    Err(_) => return Ok(false),
-                };
-
-                let friend_type =
-                    match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
-                        Ok(friend) => friend,
-                        Err(_) => return Ok(false),
-                    };
-
-                let subject: Subject = node.clone().into();
-                let predicate: Predicate = type_predicate.into();
-                let object: Object = friend_type.clone().into();
-                let quads =
-                    store.find_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
-                if !quads.is_empty() {
-                    return Ok(true);
-                }
-            }
-            return Ok(false);
-        }
-
-        // Unknown shape with no registry: conservatively report non-conforming
-        Ok(false)
+        // No shapes registry available at all: we cannot know whether `value`
+        // conforms to `shape_id`, so fail loudly rather than fabricate a
+        // pass/fail result via a hardcoded shape-name substring match.
+        Err(ShaclError::ValidationEngine(
+            "Shapes registry not available in constraint context".to_string(),
+        ))
     }
 
     /// Get performance metrics for AND constraint evaluation
@@ -809,38 +770,20 @@ impl OrConstraint {
                     Err(_) => Ok(false),
                 };
             }
+            // Registry is present but does not contain this shape: we cannot
+            // know whether `value` conforms, so fail loudly.
+            return Err(ShaclError::ValidationEngine(format!(
+                "Shape '{}' referenced by sh:or not found in shapes registry",
+                shape_id.as_str()
+            )));
         }
 
-        // Fallback: FriendShape check for backward compatibility
-        if shape_id.as_str().contains("FriendShape") {
-            if let Term::NamedNode(node) = value {
-                let type_predicate = match oxirs_core::model::NamedNode::new(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-                ) {
-                    Ok(pred) => pred,
-                    Err(_) => return Ok(false),
-                };
-
-                let friend_type =
-                    match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
-                        Ok(friend) => friend,
-                        Err(_) => return Ok(false),
-                    };
-
-                let subject: Subject = node.clone().into();
-                let predicate: Predicate = type_predicate.into();
-                let object: Object = friend_type.clone().into();
-                let quads =
-                    store.find_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
-                if !quads.is_empty() {
-                    return Ok(true);
-                }
-            }
-            return Ok(false);
-        }
-
-        // Unknown shape with no registry: conservatively report non-conforming
-        Ok(false)
+        // No shapes registry available at all: we cannot know whether `value`
+        // conforms to `shape_id`, so fail loudly rather than fabricate a
+        // pass/fail result via a hardcoded shape-name substring match.
+        Err(ShaclError::ValidationEngine(
+            "Shapes registry not available in constraint context".to_string(),
+        ))
     }
 
     /// Get performance metrics for OR constraint evaluation
@@ -1173,38 +1116,20 @@ impl XoneConstraint {
                     Err(_) => Ok(false),
                 };
             }
+            // Registry is present but does not contain this shape: we cannot
+            // know whether `value` conforms, so fail loudly.
+            return Err(ShaclError::ValidationEngine(format!(
+                "Shape '{}' referenced by sh:xone not found in shapes registry",
+                shape_id.as_str()
+            )));
         }
 
-        // Fallback: FriendShape check for backward compatibility
-        if shape_id.as_str().contains("FriendShape") {
-            if let Term::NamedNode(node) = value {
-                let type_predicate = match oxirs_core::model::NamedNode::new(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-                ) {
-                    Ok(pred) => pred,
-                    Err(_) => return Ok(false),
-                };
-
-                let friend_type =
-                    match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
-                        Ok(friend) => friend,
-                        Err(_) => return Ok(false),
-                    };
-
-                let subject: Subject = node.clone().into();
-                let predicate: Predicate = type_predicate.into();
-                let object: Object = friend_type.clone().into();
-                let quads =
-                    store.find_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
-                if !quads.is_empty() {
-                    return Ok(true);
-                }
-            }
-            return Ok(false);
-        }
-
-        // Unknown shape with no registry: conservatively report non-conforming
-        Ok(false)
+        // No shapes registry available at all: we cannot know whether `value`
+        // conforms to `shape_id`, so fail loudly rather than fabricate a
+        // pass/fail result via a hardcoded shape-name substring match.
+        Err(ShaclError::ValidationEngine(
+            "Shapes registry not available in constraint context".to_string(),
+        ))
     }
 
     /// Get performance metrics for XONE constraint evaluation

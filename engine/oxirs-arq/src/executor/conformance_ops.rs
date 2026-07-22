@@ -261,12 +261,10 @@ impl QueryExecutor {
                 let mut seen_pairs: HashSet<(Term, Term)> = HashSet::new();
                 // Throttled wall-time check across the candidate fan-out: fires at
                 // 0 then every 1024 candidates (see [`Self::budget_check_time`]).
-                let mut budget_ticks: u64 = 0;
-                for s in candidates {
+                for (budget_ticks, s) in candidates.into_iter().enumerate() {
                     if budget_ticks & 0x3FF == 0 {
                         self.budget_check_time()?;
                     }
-                    budget_ticks += 1;
                     let reachable = evaluate_path_from(&path_pp, &s, &adapter, budget)?;
                     for o in reachable {
                         let pair = (s.clone(), o.clone());
@@ -293,12 +291,10 @@ impl QueryExecutor {
                     candidates.insert(o);
                 }
                 // Same throttled wall-time check as the two-variable arm above.
-                let mut budget_ticks: u64 = 0;
-                for s in candidates {
+                for (budget_ticks, s) in candidates.into_iter().enumerate() {
                     if budget_ticks & 0x3FF == 0 {
                         self.budget_check_time()?;
                     }
-                    budget_ticks += 1;
                     let reachable = evaluate_path_from(&path_pp, &s, &adapter, budget)?;
                     if reachable.contains(concrete_obj) {
                         let mut binding = Binding::new();

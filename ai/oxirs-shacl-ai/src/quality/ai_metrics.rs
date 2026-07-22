@@ -4,9 +4,10 @@
 //! that go beyond traditional rule-based assessments.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
+use oxirs_core::model::Object;
 use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
 
@@ -14,7 +15,7 @@ use super::extended_dimensions::{
     CorrelationAnalysis, DistributionAnalysis, EntropyCalculation, InformationContentMeasure,
     OutlierDetectionResult, RedundancyAssessment,
 };
-use crate::Result;
+use crate::{Result, ShaclAiError};
 
 /// AI-powered quality metrics engine
 #[derive(Debug)]
@@ -521,6 +522,306 @@ pub struct EvolutionPattern {
     pub predictability: f64,
 }
 
+/// Aggregated statistics computed from a single scan of the RDF store, used to
+/// derive real AI quality metrics (entropy, outliers, redundancy, distribution,
+/// correlation density) instead of returning fabricated constants.
+#[derive(Debug, Default)]
+pub(crate) struct StoreScanStats {
+    /// Total number of quads scanned.
+    total_triples: usize,
+    /// Count of each distinct object value.
+    object_counts: HashMap<String, usize>,
+    /// Count of each distinct predicate.
+    predicate_counts: HashMap<String, usize>,
+    /// Count of each distinct (predicate, object) pair.
+    po_pair_counts: HashMap<String, usize>,
+    /// Numeric literal object values, for distribution/outlier statistics.
+    numeric_values: Vec<f64>,
+    /// Set of distinct predicates observed per subject.
+    subject_predicates: HashMap<String, HashSet<String>>,
+}
+
+impl StoreScanStats {
+    /// Scan the store once and aggregate the statistics.
+    pub(crate) fn scan(store: &dyn Store) -> Result<Self> {
+        let quads = store.find_quads(None, None, None, None).map_err(|e| {
+            ShaclAiError::QualityAssessment(format!("failed to scan store for AI metrics: {e}"))
+        })?;
+
+        let mut stats = StoreScanStats {
+            total_triples: quads.len(),
+            ..Default::default()
+        };
+
+        for quad in &quads {
+            let subject = format!("{:?}", quad.subject());
+            let predicate = format!("{:?}", quad.predicate());
+            let object = format!("{:?}", quad.object());
+
+            *stats.predicate_counts.entry(predicate.clone()).or_insert(0) += 1;
+            *stats.object_counts.entry(object.clone()).or_insert(0) += 1;
+            *stats
+                .po_pair_counts
+                .entry(format!("{predicate}|{object}"))
+                .or_insert(0) += 1;
+            stats
+                .subject_predicates
+                .entry(subject)
+                .or_default()
+                .insert(predicate);
+
+            if let Object::Literal(lit) = quad.object() {
+                if let Ok(v) = lit.value().parse::<f64>() {
+                    if v.is_finite() {
+                        stats.numeric_values.push(v);
+                    }
+                }
+            }
+        }
+
+        Ok(stats)
+    }
+
+    /// Shannon entropy (bits) over a distribution of counts.
+    fn shannon_entropy(counts: &HashMap<String, usize>, total: usize) -> f64 {
+        if total == 0 {
+            return 0.0;
+        }
+        let total_f = total as f64;
+        counts
+            .values()
+            .filter(|&&c| c > 0)
+            .map(|&c| {
+                let p = c as f64 / total_f;
+                -p * p.log2()
+            })
+            .sum()
+    }
+
+    /// Real entropy metrics over object and predicate distributions.
+    pub(crate) fn entropy_calculation(&self) -> EntropyCalculation {
+        let object_entropy = Self::shannon_entropy(&self.object_counts, self.total_triples);
+        let predicate_entropy = Self::shannon_entropy(&self.predicate_counts, self.total_triples);
+        let joint_entropy = Self::shannon_entropy(&self.po_pair_counts, self.total_triples);
+        // I(P;O) = H(P) + H(O) - H(P,O); conditional H(O|P) = H(P,O) - H(P).
+        let mutual_information = (predicate_entropy + object_entropy - joint_entropy).max(0.0);
+        let conditional_entropy = (joint_entropy - predicate_entropy).max(0.0);
+        EntropyCalculation {
+            shannon_entropy: object_entropy,
+            conditional_entropy,
+            mutual_information,
+            entropy_variance: 0.0,
+            information_gain: mutual_information,
+        }
+    }
+
+    /// Real distribution analysis over numeric literal values.
+    pub(crate) fn distribution_analysis(&self) -> DistributionAnalysis {
+        use super::extended_dimensions::DistributionType;
+
+        let n = self.numeric_values.len();
+        if n < 2 {
+            return DistributionAnalysis {
+                distribution_type: DistributionType::Unknown,
+                parameters: HashMap::new(),
+                normality_score: 0.0,
+                skewness: 0.0,
+                kurtosis: 0.0,
+                uniformity_score: 0.0,
+            };
+        }
+        let n_f = n as f64;
+        let mean = self.numeric_values.iter().sum::<f64>() / n_f;
+        let variance = self
+            .numeric_values
+            .iter()
+            .map(|v| (v - mean).powi(2))
+            .sum::<f64>()
+            / n_f;
+        let std = variance.sqrt();
+
+        let (skewness, kurtosis) = if std > 1e-12 {
+            let m3 = self
+                .numeric_values
+                .iter()
+                .map(|v| ((v - mean) / std).powi(3))
+                .sum::<f64>()
+                / n_f;
+            let m4 = self
+                .numeric_values
+                .iter()
+                .map(|v| ((v - mean) / std).powi(4))
+                .sum::<f64>()
+                / n_f;
+            (m3, m4)
+        } else {
+            (0.0, 0.0)
+        };
+
+        // Excess kurtosis near 0 and |skew| small => approximately normal.
+        let excess_kurtosis = kurtosis - 3.0;
+        let normality_score =
+            (1.0 - (skewness.abs() + excess_kurtosis.abs()) / 4.0).clamp(0.0, 1.0);
+        let distribution_type = if skewness.abs() > 1.0 {
+            DistributionType::Skewed
+        } else if normality_score > 0.7 {
+            DistributionType::Normal
+        } else {
+            DistributionType::Unknown
+        };
+
+        let mut parameters = HashMap::new();
+        parameters.insert("mean".to_string(), mean);
+        parameters.insert("std_dev".to_string(), std);
+        parameters.insert("sample_size".to_string(), n_f);
+
+        DistributionAnalysis {
+            distribution_type,
+            parameters,
+            normality_score,
+            skewness,
+            kurtosis,
+            uniformity_score: 0.0,
+        }
+    }
+
+    /// Real outlier detection over numeric literals using a 3-sigma z-score.
+    pub(crate) fn outlier_detection(&self) -> OutlierDetectionResult {
+        use super::extended_dimensions::OutlierType;
+
+        let n = self.numeric_values.len();
+        if n < 2 {
+            return OutlierDetectionResult {
+                outlier_count: 0,
+                outlier_percentage: 0.0,
+                outlier_types: vec![],
+                outlier_confidence: 0.0,
+                detection_method: "z-score (3σ)".to_string(),
+            };
+        }
+        let n_f = n as f64;
+        let mean = self.numeric_values.iter().sum::<f64>() / n_f;
+        let variance = self
+            .numeric_values
+            .iter()
+            .map(|v| (v - mean).powi(2))
+            .sum::<f64>()
+            / n_f;
+        let std = variance.sqrt();
+        let outlier_count = if std > 1e-12 {
+            self.numeric_values
+                .iter()
+                .filter(|&&v| ((v - mean) / std).abs() > 3.0)
+                .count()
+        } else {
+            0
+        };
+        let outlier_percentage = outlier_count as f64 / n_f * 100.0;
+        OutlierDetectionResult {
+            outlier_count,
+            outlier_percentage,
+            outlier_types: if outlier_count > 0 {
+                vec![OutlierType::Statistical]
+            } else {
+                vec![]
+            },
+            // Confidence grows with sample size.
+            outlier_confidence: (n_f / (n_f + 30.0)).clamp(0.0, 1.0),
+            detection_method: "z-score (3σ)".to_string(),
+        }
+    }
+
+    /// Per-value anomaly scores (normalized |z|) for the numeric literals.
+    pub(crate) fn numeric_anomaly_scores(&self) -> Vec<f64> {
+        let n = self.numeric_values.len();
+        if n < 2 {
+            return vec![];
+        }
+        let n_f = n as f64;
+        let mean = self.numeric_values.iter().sum::<f64>() / n_f;
+        let variance = self
+            .numeric_values
+            .iter()
+            .map(|v| (v - mean).powi(2))
+            .sum::<f64>()
+            / n_f;
+        let std = variance.sqrt();
+        if std <= 1e-12 {
+            return vec![0.0; n];
+        }
+        self.numeric_values
+            .iter()
+            .map(|v| (((v - mean) / std).abs() / 6.0).clamp(0.0, 1.0))
+            .collect()
+    }
+
+    /// Real redundancy assessment based on repeated (predicate, object) pairs.
+    pub(crate) fn redundancy_assessment(&self) -> RedundancyAssessment {
+        let redundant: usize = self
+            .po_pair_counts
+            .values()
+            .filter(|&&c| c > 1)
+            .map(|&c| c - 1)
+            .sum();
+        let redundancy_ratio = if self.total_triples > 0 {
+            redundant as f64 / self.total_triples as f64
+        } else {
+            0.0
+        };
+        RedundancyAssessment {
+            redundancy_ratio,
+            duplicate_triples: redundant,
+            redundant_patterns: vec![],
+            redundancy_impact: redundancy_ratio,
+        }
+    }
+
+    /// Real information-content measure derived from distinct-object ratios and
+    /// the object entropy.
+    pub(crate) fn information_content(
+        &self,
+        entropy: &EntropyCalculation,
+    ) -> InformationContentMeasure {
+        let unique_objects = self.object_counts.len();
+        let unique_information_ratio = if self.total_triples > 0 {
+            unique_objects as f64 / self.total_triples as f64
+        } else {
+            0.0
+        };
+        let redundant_information_ratio = (1.0 - unique_information_ratio).clamp(0.0, 1.0);
+        InformationContentMeasure {
+            total_information_content: entropy.shannon_entropy * self.total_triples as f64,
+            unique_information_ratio,
+            information_density: unique_information_ratio,
+            redundant_information_ratio,
+            information_quality_score: unique_information_ratio,
+        }
+    }
+
+    /// Correlation network density: the fraction of distinct predicate pairs
+    /// that co-occur on at least one subject, out of all possible pairs.
+    pub(crate) fn correlation_network_density(&self) -> f64 {
+        let predicates: Vec<&String> = self.predicate_counts.keys().collect();
+        let p = predicates.len();
+        if p < 2 {
+            return 0.0;
+        }
+        let possible_pairs = p * (p - 1) / 2;
+
+        let mut cooccurring: HashSet<(String, String)> = HashSet::new();
+        for preds in self.subject_predicates.values() {
+            let mut sorted: Vec<&String> = preds.iter().collect();
+            sorted.sort();
+            for i in 0..sorted.len() {
+                for j in (i + 1)..sorted.len() {
+                    cooccurring.insert((sorted[i].clone(), sorted[j].clone()));
+                }
+            }
+        }
+        (cooccurring.len() as f64 / possible_pairs as f64).clamp(0.0, 1.0)
+    }
+}
+
 impl AiQualityMetricsEngine {
     /// Create a new AI quality metrics engine
     pub fn new() -> Self {
@@ -705,34 +1006,30 @@ impl AiQualityMetricsEngine {
 
     fn compute_advanced_statistical_metrics(
         &mut self,
-        _store: &dyn Store,
+        store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<AdvancedStatisticalMetrics> {
-        // Placeholder implementation
+        // Scan the store once and derive real statistics from its contents.
+        let scan = StoreScanStats::scan(store)?;
+
+        let distribution = scan.distribution_analysis();
+        let outliers = scan.outlier_detection();
+        let entropy = scan.entropy_calculation();
+        let redundancy = scan.redundancy_assessment();
+        let information = scan.information_content(&entropy);
+        let correlation_density = scan.correlation_network_density();
+
         Ok(AdvancedStatisticalMetrics {
             distribution_analysis: EnhancedDistributionAnalysis {
-                base_analysis: DistributionAnalysis {
-                    distribution_type: super::extended_dimensions::DistributionType::Normal,
-                    parameters: HashMap::new(),
-                    normality_score: 0.78,
-                    skewness: 0.12,
-                    kurtosis: 2.95,
-                    uniformity_score: 0.65,
-                },
+                base_analysis: distribution,
                 ml_distribution_type: DistributionClassification::default(),
                 goodness_of_fit: GoodnessOfFit::default(),
                 parameter_estimates: ParameterEstimates::default(),
                 distribution_evolution: DistributionEvolution::default(),
-                anomaly_scores: vec![0.1, 0.05, 0.8, 0.03, 0.15],
+                anomaly_scores: scan.numeric_anomaly_scores(),
             },
             outlier_detection: AdvancedOutlierDetection {
-                base_detection: OutlierDetectionResult {
-                    outlier_count: 15,
-                    outlier_percentage: 1.5,
-                    outlier_types: vec![super::extended_dimensions::OutlierType::Statistical],
-                    outlier_confidence: 0.82,
-                    detection_method: "Ensemble Methods".to_string(),
-                },
+                base_detection: outliers,
                 ensemble_scores: EnsembleOutlierScores::default(),
                 explanation_scores: OutlierExplanations::default(),
                 temporal_patterns: TemporalOutlierPatterns::default(),
@@ -743,152 +1040,105 @@ impl AiQualityMetricsEngine {
                     property_correlations: HashMap::new(),
                     type_correlations: HashMap::new(),
                     strongest_correlations: vec![],
-                    correlation_network_density: 0.45,
+                    correlation_network_density: correlation_density,
                 },
                 partial_correlations: PartialCorrelations::default(),
                 nonlinear_associations: NonlinearAssociations::default(),
-                causal_strengths: if self.config.enable_causal_inference {
-                    Some(CausalStrengths::default())
-                } else {
-                    None
-                },
+                // Causal inference is not implemented; expose no fabricated
+                // causal strengths even when the flag is enabled.
+                causal_strengths: None,
                 confounding_analysis: ConfoundingAnalysis::default(),
                 temporal_correlations: TemporalCorrelations::default(),
             },
             entropy_analysis: AdvancedEntropyAnalysis {
-                base_calculation: EntropyCalculation {
-                    shannon_entropy: 4.25,
-                    conditional_entropy: 3.87,
-                    mutual_information: 0.38,
-                    entropy_variance: 0.15,
-                    information_gain: 0.42,
-                },
-                differential_entropy: 3.92,
-                relative_entropy: 0.33,
-                cross_entropy: 4.58,
-                entropy_rate: 0.25,
+                base_calculation: entropy,
+                differential_entropy: 0.0,
+                relative_entropy: 0.0,
+                cross_entropy: 0.0,
+                entropy_rate: 0.0,
                 complexity_measures: ComplexityMeasures::default(),
             },
             information_theory: AdvancedInformationTheory {
-                base_measure: InformationContentMeasure {
-                    total_information_content: 8.75,
-                    unique_information_ratio: 0.78,
-                    information_density: 0.62,
-                    redundant_information_ratio: 0.22,
-                    information_quality_score: 0.81,
-                },
+                base_measure: information,
                 transfer_entropy: TransferEntropy::default(),
                 integrated_information: IntegratedInformation::default(),
                 information_bottleneck: InformationBottleneck::default(),
                 effective_information: EffectiveInformation::default(),
             },
             redundancy_analysis: AdvancedRedundancyAnalysis {
-                base_assessment: RedundancyAssessment {
-                    redundancy_ratio: 0.18,
-                    duplicate_triples: 45,
-                    redundant_patterns: vec![],
-                    redundancy_impact: 0.25,
-                },
+                base_assessment: redundancy,
                 semantic_redundancy: SemanticRedundancy::default(),
                 functional_redundancy: FunctionalRedundancy::default(),
                 information_redundancy: InformationRedundancy::default(),
                 compression_potential: CompressionPotential::default(),
             },
-            causal_relationships: if self.config.enable_causal_inference {
-                Some(CausalRelationships {
-                    causal_pairs: vec![],
-                    causal_graph: HashMap::new(),
-                    causal_strength: HashMap::new(),
-                })
-            } else {
-                None
-            },
+            // Causal inference is not implemented; do not fabricate relationships.
+            causal_relationships: None,
         })
     }
 
+    /// Advanced semantic metrics require learned concept embeddings that are not
+    /// implemented in this crate. Rather than fabricate similarity scores,
+    /// ontology-alignment values, and concept lists, honest zero/empty defaults
+    /// are returned (the deep-learning path is gated by
+    /// `config.enable_deep_learning` in the caller).
     fn compute_advanced_semantic_metrics(
         &mut self,
         _store: &dyn Store,
         _shapes: &[Shape],
     ) -> Result<AdvancedSemanticMetrics> {
-        // Placeholder implementation
-        Ok(AdvancedSemanticMetrics {
-            concept_embeddings: ConceptEmbeddings {
-                embedding_model: "transformer-based".to_string(),
-                embedding_dimension: 768,
-                concept_vectors: HashMap::new(),
-                similarity_matrix: HashMap::new(),
-                clustering_results: ConceptClusters::default(),
-            },
-            semantic_similarity: SemanticSimilarity {
-                pairwise_similarities: HashMap::new(),
-                semantic_neighborhoods: HashMap::new(),
-                similarity_distribution: SimilarityDistribution::default(),
-                outlier_concepts: vec![],
-            },
-            knowledge_graph_metrics: KnowledgeGraphMetrics {
-                graph_connectivity: GraphConnectivity::default(),
-                centrality_measures: CentralityMeasures::default(),
-                community_structure: CommunityStructure::default(),
-                path_analysis: PathAnalysis::default(),
-                structural_balance: StructuralBalance::default(),
-            },
-            ontology_alignment: OntologyAlignment {
-                alignment_score: 0.73,
-                concept_mappings: HashMap::new(),
-                mapping_confidence: HashMap::new(),
-                alignment_conflicts: vec![],
-                ontology_overlap: OntologyOverlap::default(),
-            },
-            semantic_drift: SemanticDrift {
-                drift_score: 0.15,
-                drift_direction: DriftDirection::Stable,
-                affected_concepts: vec![],
-                drift_velocity: 0.05,
-                drift_patterns: vec![],
-            },
-            concept_evolution: ConceptEvolution {
-                evolution_score: 0.28,
-                evolution_patterns: vec![],
-                stable_concepts: vec!["Person".to_string(), "Organization".to_string()],
-                emerging_concepts: vec!["DigitalAsset".to_string()],
-                declining_concepts: vec![],
-            },
-        })
+        Ok(AdvancedSemanticMetrics::default())
     }
 
+    /// Generate machine-learning predictions grounded in the real validation
+    /// outcome when a report is available.
     fn generate_ml_predictions(
         &mut self,
         _store: &dyn Store,
         _shapes: &[Shape],
-        _validation_report: Option<&ValidationReport>,
+        validation_report: Option<&ValidationReport>,
     ) -> Result<MachineLearningPredictions> {
-        // Placeholder implementation
-        Ok(MachineLearningPredictions {
-            quality_score_prediction: QualityScorePrediction::default(),
-            issue_likelihood: IssueLikelihood::default(),
-            performance_prediction: PerformancePrediction::default(),
-            degradation_forecast: DegradationForecast::default(),
-            intervention_recommendations: InterventionRecommendations::default(),
-        })
+        let mut predictions = MachineLearningPredictions::default();
+        if let Some(report) = validation_report {
+            let total = report.violations().len();
+            // A conformant report predicts high quality; more violations lower it.
+            let predicted = if report.conforms() {
+                1.0
+            } else {
+                (1.0 / (1.0 + total as f64)).clamp(0.0, 1.0)
+            };
+            predictions.quality_score_prediction.score = predicted;
+        }
+        Ok(predictions)
     }
 
+    /// Confidence scales with the amount of statistical evidence actually
+    /// available (sample size of numeric values and distinct predicates),
+    /// rather than a fixed constant.
     fn calculate_confidence_scores(
         &self,
         statistical: &AdvancedStatisticalMetrics,
-        semantic: &AdvancedSemanticMetrics,
+        _semantic: &AdvancedSemanticMetrics,
         _ml: &MachineLearningPredictions,
     ) -> ConfidenceScores {
-        let statistical_confidence = 0.82;
-        let semantic_confidence = 0.75;
-        let ml_confidence = 0.78;
+        // Sample size confidence: saturating with the number of anomaly samples.
+        let sample_n = statistical.distribution_analysis.anomaly_scores.len();
+        let statistical_confidence = (sample_n as f64 / (sample_n as f64 + 30.0)).clamp(0.0, 1.0);
+        // Semantic metrics are not computed, so their confidence is 0.
+        let semantic_confidence = 0.0;
+        let ml_confidence = statistical_confidence;
         let overall_confidence =
             (statistical_confidence + semantic_confidence + ml_confidence) / 3.0;
 
         let mut per_metric_confidence = HashMap::new();
-        per_metric_confidence.insert("distribution_analysis".to_string(), 0.85);
-        per_metric_confidence.insert("outlier_detection".to_string(), 0.80);
-        per_metric_confidence.insert("semantic_similarity".to_string(), 0.77);
+        per_metric_confidence.insert("distribution_analysis".to_string(), statistical_confidence);
+        per_metric_confidence.insert(
+            "outlier_detection".to_string(),
+            statistical
+                .outlier_detection
+                .base_detection
+                .outlier_confidence,
+        );
 
         ConfidenceScores {
             overall_confidence,
@@ -899,23 +1149,38 @@ impl AiQualityMetricsEngine {
         }
     }
 
+    /// Feature importance derived from the actually-computed statistical
+    /// metrics. Entropy and redundancy importances reflect the measured values.
     fn extract_feature_importance(
         &self,
-        _statistical: &AdvancedStatisticalMetrics,
+        statistical: &AdvancedStatisticalMetrics,
         _semantic: &AdvancedSemanticMetrics,
     ) -> FeatureImportance {
+        let entropy = statistical
+            .entropy_analysis
+            .base_calculation
+            .shannon_entropy;
+        let redundancy = statistical
+            .redundancy_analysis
+            .base_assessment
+            .redundancy_ratio;
+        // Normalize entropy (bits) to [0, 1] on a nominal 10-bit scale.
+        let entropy_importance = (entropy / 10.0).clamp(0.0, 1.0);
+
         let top_features = vec![
             FeatureScore {
-                feature_name: "entropy".to_string(),
-                importance_score: 0.89,
-                stability_score: 0.92,
-                interpretation: "High entropy indicates diverse data distribution".to_string(),
+                feature_name: "shannon_entropy".to_string(),
+                importance_score: entropy_importance,
+                stability_score: 0.0,
+                interpretation: format!(
+                    "Object-value entropy of {entropy:.3} bits indicates data diversity"
+                ),
             },
             FeatureScore {
-                feature_name: "semantic_density".to_string(),
-                importance_score: 0.76,
-                stability_score: 0.84,
-                interpretation: "Dense semantic connections improve quality".to_string(),
+                feature_name: "redundancy_ratio".to_string(),
+                importance_score: redundancy.clamp(0.0, 1.0),
+                stability_score: 0.0,
+                interpretation: format!("Predicate-object redundancy ratio of {redundancy:.3}"),
             },
         ];
 
@@ -927,26 +1192,52 @@ impl AiQualityMetricsEngine {
         }
     }
 
+    /// Quality prediction derived from the ML prediction (validation-grounded)
+    /// and the measured redundancy penalty.
     fn generate_quality_predictions(
         &self,
-        _statistical: &AdvancedStatisticalMetrics,
+        statistical: &AdvancedStatisticalMetrics,
         _semantic: &AdvancedSemanticMetrics,
-        _ml: &MachineLearningPredictions,
+        ml: &MachineLearningPredictions,
     ) -> QualityPredictions {
+        let base = ml.quality_score_prediction.score;
+        let redundancy = statistical
+            .redundancy_analysis
+            .base_assessment
+            .redundancy_ratio;
+        // Redundancy detracts from predicted quality.
+        let predicted = (base * (1.0 - redundancy * 0.5)).clamp(0.0, 1.0);
+        // Uncertainty widens as statistical confidence (sample size) shrinks.
+        let sample_n = statistical.distribution_analysis.anomaly_scores.len();
+        let margin = (1.0 / (1.0 + sample_n as f64)).clamp(0.02, 0.5);
         QualityPredictions {
-            predicted_quality_score: 0.78,
-            uncertainty_bounds: (0.72, 0.84),
+            predicted_quality_score: predicted,
+            uncertainty_bounds: (
+                (predicted - margin).clamp(0.0, 1.0),
+                (predicted + margin).clamp(0.0, 1.0),
+            ),
             quality_trajectory: vec![],
             risk_assessment: RiskAssessment::default(),
             intervention_points: vec![],
         }
     }
 
-    fn generate_cache_key(&self, _store: &dyn Store, shapes: &[Shape]) -> String {
-        // Simple cache key based on shape count and configuration
+    fn generate_cache_key(&self, store: &dyn Store, shapes: &[Shape]) -> String {
+        // The cache key MUST reflect the actual store contents, otherwise two
+        // different datasets collide and the cached metrics of the first are
+        // wrongly returned for the second.
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        shapes.len().hash(&mut hasher);
+        if let Ok(quads) = store.find_quads(None, None, None, None) {
+            quads.len().hash(&mut hasher);
+            for quad in &quads {
+                format!("{quad:?}").hash(&mut hasher);
+            }
+        }
         format!(
-            "shapes_{}_config_{}",
-            shapes.len(),
+            "aiq_{:x}_config_{}",
+            hasher.finish(),
             self.config.cache_ttl_seconds
         )
     }
@@ -1246,5 +1537,73 @@ mod tests {
         assert_eq!(causal_pair.cause, "A");
         assert_eq!(causal_pair.effect, "B");
         assert_eq!(causal_pair.strength, 0.75);
+    }
+
+    /// Regression: statistical metrics must be computed from the actual store,
+    /// so a diverse dataset and a uniform one produce different entropy /
+    /// redundancy — the old code returned identical constants for every store.
+    #[test]
+    fn regression_ai_metrics_vary_with_store() {
+        use oxirs_core::model::{Literal, NamedNode, Quad};
+        use oxirs_core::ConcreteStore;
+
+        let pred = NamedNode::new("http://example.org/p").expect("iri");
+
+        // Diverse store: every object distinct.
+        let diverse = ConcreteStore::new().expect("store");
+        for i in 0..20 {
+            let s = NamedNode::new(format!("http://example.org/s{i}")).expect("iri");
+            diverse
+                .insert_quad(Quad::new_default_graph(
+                    s,
+                    pred.clone(),
+                    Literal::new(format!("distinct-{i}")),
+                ))
+                .expect("insert");
+        }
+
+        // Redundant store: the same object repeated.
+        let redundant = ConcreteStore::new().expect("store");
+        for i in 0..20 {
+            let s = NamedNode::new(format!("http://example.org/s{i}")).expect("iri");
+            redundant
+                .insert_quad(Quad::new_default_graph(
+                    s,
+                    pred.clone(),
+                    Literal::new("same-value"),
+                ))
+                .expect("insert");
+        }
+
+        let mut engine = AiQualityMetricsEngine::new();
+        let a = engine
+            .compute_ai_quality_metrics(&diverse, &[], None)
+            .expect("compute");
+        let b = engine
+            .compute_ai_quality_metrics(&redundant, &[], None)
+            .expect("compute");
+
+        let entropy_a = a
+            .statistical_metrics
+            .entropy_analysis
+            .base_calculation
+            .shannon_entropy;
+        let entropy_b = b
+            .statistical_metrics
+            .entropy_analysis
+            .base_calculation
+            .shannon_entropy;
+        assert!(
+            entropy_a > entropy_b + 0.5,
+            "diverse data must have higher entropy: {entropy_a} vs {entropy_b}"
+        );
+        assert!(
+            b.statistical_metrics
+                .redundancy_analysis
+                .base_assessment
+                .redundancy_ratio
+                > 0.0,
+            "repeated values must register real redundancy"
+        );
     }
 }

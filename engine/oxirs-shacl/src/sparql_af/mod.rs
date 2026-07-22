@@ -160,22 +160,61 @@ impl SubstitutionContext {
     ///
     /// `$this` is replaced with the focus node.
     /// `$param_name` is replaced with the matching parameter value.
+    ///
+    /// Substitution is word-boundary aware: a `$name` placeholder is only
+    /// replaced when `name` is a *maximal* run of identifier characters
+    /// (`[A-Za-z0-9_]`). This prevents overlapping names such as `$class` and
+    /// `$classId` from corrupting each other regardless of `HashMap` iteration
+    /// order (see regression_substitution_overlapping_names).
     pub fn apply(&self, query: &str) -> String {
-        let mut result = query.to_string();
-
-        // Replace $this first
+        let mut bindings: HashMap<String, String> = self.params.clone();
         if let Some(this) = &self.this_node {
-            result = result.replace("$this", this);
+            // An explicit `this` parameter, if present, must not be clobbered.
+            bindings
+                .entry("this".to_string())
+                .or_insert_with(|| this.clone());
         }
-
-        // Replace named parameters
-        for (name, value) in &self.params {
-            let placeholder = format!("${name}");
-            result = result.replace(&placeholder, value);
-        }
-
-        result
+        substitute_named_placeholders(query, &bindings)
     }
+}
+
+/// Substitute `$name` placeholders in a SPARQL query template using a
+/// word-boundary-aware scan.
+///
+/// A placeholder is recognised only when the `$` is immediately followed by a
+/// maximal run of identifier characters (`[A-Za-z0-9_]`) that exactly matches a
+/// key in `bindings`. Because the scan consumes the *entire* identifier run
+/// before looking it up, a shorter binding (`class`) can never partially
+/// replace a longer occurrence (`$classId`), and the result is independent of
+/// map iteration order. Placeholders without a matching binding are left
+/// untouched (a downstream SPARQL parse error then surfaces the missing
+/// binding fail-loud rather than silently mangling the query).
+pub fn substitute_named_placeholders(template: &str, bindings: &HashMap<String, String>) -> String {
+    let chars: Vec<char> = template.chars().collect();
+    let mut result = String::with_capacity(template.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '$' {
+            let mut j = i + 1;
+            while j < chars.len() && (chars[j].is_ascii_alphanumeric() || chars[j] == '_') {
+                j += 1;
+            }
+            if j > i + 1 {
+                let name: String = chars[i + 1..j].iter().collect();
+                if let Some(value) = bindings.get(&name) {
+                    result.push_str(value);
+                    i = j;
+                    continue;
+                }
+            }
+            result.push('$');
+            i += 1;
+        } else {
+            result.push(chars[i]);
+            i += 1;
+        }
+    }
+    result
 }
 
 #[cfg(test)]
@@ -226,6 +265,34 @@ mod tests {
         assert!(!result.contains("$minVal"));
         assert!(result.contains("<http://example.org/Bob>"));
         assert!(result.contains("<http://example.org/age>"));
+    }
+
+    #[test]
+    fn regression_substitution_overlapping_names() {
+        // `$class` is a prefix of `$classId`; substituting the shorter name must
+        // NOT corrupt the longer occurrence, regardless of HashMap ordering.
+        let ctx = SubstitutionContext::new()
+            .bind("class", "<http://example.org/Person>")
+            .bind("classId", "\"42\"");
+        let query = "SELECT ?x WHERE { ?x a $class ; ex:id $classId }";
+        let result = ctx.apply(query);
+        assert!(result.contains("<http://example.org/Person>"));
+        assert!(result.contains("\"42\""));
+        // The corruption bug produced `<...Person>Id`; assert it is absent.
+        assert!(!result.contains("Person>Id"));
+        assert!(!result.contains("$class"));
+        assert!(!result.contains("$classId"));
+    }
+
+    #[test]
+    fn regression_substitution_unbound_placeholder_preserved() {
+        // A placeholder with no binding must be left intact (fail-loud downstream),
+        // not silently deleted.
+        let ctx = SubstitutionContext::new().bind("bound", "<http://example.org/A>");
+        let query = "SELECT ?x WHERE { ?x $bound $unbound }";
+        let result = ctx.apply(query);
+        assert!(result.contains("<http://example.org/A>"));
+        assert!(result.contains("$unbound"));
     }
 
     #[test]

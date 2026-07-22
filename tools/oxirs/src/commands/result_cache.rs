@@ -437,6 +437,23 @@ impl LruCacheInner {
         self.stats.total_bytes = self.entries.values().map(|e| e.size_bytes).sum();
     }
 
+    /// Apply new runtime-configurable limits. Lowering `max_entries`
+    /// immediately evicts least-recently-used entries down to the new
+    /// ceiling instead of only affecting future inserts, so the change is
+    /// visible right away on an already-populated cache.
+    fn reconfigure(&mut self, max_entries: Option<usize>, default_ttl_secs: Option<u64>) {
+        if let Some(max_entries) = max_entries {
+            self.config.max_entries = max_entries;
+            self.stats.max_entries = max_entries;
+            while self.entries.len() > self.config.max_entries && !self.entries.is_empty() {
+                self.evict_lru();
+            }
+        }
+        if let Some(ttl) = default_ttl_secs {
+            self.config.default_ttl_secs = ttl;
+        }
+    }
+
     fn list_entries(&self, dataset_filter: Option<&str>) -> Vec<&CachedResult> {
         self.entries
             .values()
@@ -554,6 +571,23 @@ impl LruResultCache {
     /// Get cache uptime
     pub fn uptime(&self) -> Duration {
         self.startup_time.elapsed()
+    }
+
+    /// Update the cache's runtime-configurable limits (max entry count and
+    /// default TTL), actually applying them to the running cache instead of
+    /// only printing a confirmation message. Lowering `max_entries` evicts
+    /// down to the new ceiling immediately (see
+    /// [`LruCacheInner::reconfigure`]).
+    pub fn reconfigure(&self, max_entries: Option<usize>, default_ttl_secs: Option<u64>) {
+        if let Ok(mut inner) = self.inner.write() {
+            inner.reconfigure(max_entries, default_ttl_secs);
+        }
+    }
+
+    /// The cache's current effective configuration (used to report values
+    /// back to the operator, and by tests).
+    pub fn current_config(&self) -> Option<LruCacheConfig> {
+        self.inner.read().ok().map(|inner| inner.config.clone())
     }
 
     /// Save cache to disk (if persistence is configured)
@@ -1114,5 +1148,69 @@ mod tests {
         assert!(cache.get("ds", "q1").is_some());
         assert!(cache.get("ds", "q2").is_none()); // Evicted
         assert!(cache.get("ds", "q3").is_some());
+    }
+
+    /// `reconfigure` must actually change the cache's effective config
+    /// (`oxirs result-cache config` previously printed a confirmation while
+    /// discarding both values).
+    #[test]
+    fn regression_reconfigure_actually_changes_max_entries_and_ttl() {
+        let cache = LruResultCache::new(make_config(100, 3600));
+        let before = cache.current_config().expect("config readable");
+        assert_eq!(before.max_entries, 100);
+        assert_eq!(before.default_ttl_secs, 3600);
+
+        cache.reconfigure(Some(42), Some(120));
+
+        let after = cache.current_config().expect("config readable");
+        assert_eq!(
+            after.max_entries, 42,
+            "max_entries must actually be updated"
+        );
+        assert_eq!(
+            after.default_ttl_secs, 120,
+            "default_ttl_secs must actually be updated"
+        );
+    }
+
+    /// Lowering `max_entries` below the current entry count must evict down
+    /// to the new ceiling immediately, not just apply to future inserts.
+    #[test]
+    fn regression_reconfigure_lowering_max_entries_evicts_immediately() {
+        let cache = LruResultCache::new(make_config(10, 3600));
+        for i in 0..5 {
+            cache.set("ds", &format!("q{i}"), format!("r{i}"));
+        }
+        assert_eq!(cache.len(), 5);
+
+        cache.reconfigure(Some(2), None);
+
+        assert_eq!(
+            cache.len(),
+            2,
+            "reconfigure must evict existing entries down to the new max_entries ceiling"
+        );
+    }
+
+    /// A `None` value for either parameter must leave that setting
+    /// untouched (only the specified fields are reconfigured).
+    #[test]
+    fn regression_reconfigure_none_leaves_that_field_untouched() {
+        let cache = LruResultCache::new(make_config(50, 900));
+        cache.reconfigure(Some(75), None);
+        let cfg = cache.current_config().expect("config readable");
+        assert_eq!(cfg.max_entries, 75);
+        assert_eq!(
+            cfg.default_ttl_secs, 900,
+            "ttl must be unchanged when None is passed"
+        );
+
+        cache.reconfigure(None, Some(1800));
+        let cfg = cache.current_config().expect("config readable");
+        assert_eq!(
+            cfg.max_entries, 75,
+            "max_entries must be unchanged when None is passed"
+        );
+        assert_eq!(cfg.default_ttl_secs, 1800);
     }
 }

@@ -1,5 +1,6 @@
 //! RDF Triple implementation
 
+use crate::model::star::QuotedTriple;
 use crate::model::RdfTerm;
 use crate::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Variable};
 use serde::{Deserialize, Serialize};
@@ -344,6 +345,8 @@ pub enum SubjectRef<'a> {
     NamedNode(&'a NamedNode),
     BlankNode(&'a BlankNode),
     Variable(&'a Variable),
+    /// A quoted triple (RDF-star / RDF 1.2)
+    QuotedTriple(&'a QuotedTriple),
 }
 
 impl<'a> SubjectRef<'a> {
@@ -353,6 +356,7 @@ impl<'a> SubjectRef<'a> {
             SubjectRef::NamedNode(n) => Subject::NamedNode((*n).clone()),
             SubjectRef::BlankNode(b) => Subject::BlankNode((*b).clone()),
             SubjectRef::Variable(v) => Subject::Variable((*v).clone()),
+            SubjectRef::QuotedTriple(qt) => Subject::QuotedTriple(Box::new((*qt).clone())),
         }
     }
 }
@@ -363,6 +367,7 @@ impl<'a> fmt::Display for SubjectRef<'a> {
             SubjectRef::NamedNode(n) => write!(f, "{n}"),
             SubjectRef::BlankNode(b) => write!(f, "{b}"),
             SubjectRef::Variable(v) => write!(f, "{v}"),
+            SubjectRef::QuotedTriple(qt) => write!(f, "{qt}"),
         }
     }
 }
@@ -400,6 +405,8 @@ pub enum ObjectRef<'a> {
     BlankNode(&'a BlankNode),
     Literal(&'a Literal),
     Variable(&'a Variable),
+    /// A quoted triple (RDF-star / RDF 1.2)
+    QuotedTriple(&'a QuotedTriple),
 }
 
 impl<'a> ObjectRef<'a> {
@@ -410,6 +417,7 @@ impl<'a> ObjectRef<'a> {
             ObjectRef::BlankNode(b) => Object::BlankNode((*b).clone()),
             ObjectRef::Literal(l) => Object::Literal((*l).clone()),
             ObjectRef::Variable(v) => Object::Variable((*v).clone()),
+            ObjectRef::QuotedTriple(qt) => Object::QuotedTriple(Box::new((*qt).clone())),
         }
     }
 }
@@ -421,6 +429,7 @@ impl<'a> fmt::Display for ObjectRef<'a> {
             ObjectRef::BlankNode(b) => write!(f, "{b}"),
             ObjectRef::Literal(l) => write!(f, "{l}"),
             ObjectRef::Variable(v) => write!(f, "{v}"),
+            ObjectRef::QuotedTriple(qt) => write!(f, "{qt}"),
         }
     }
 }
@@ -432,7 +441,7 @@ impl<'a> From<&'a Subject> for SubjectRef<'a> {
             Subject::NamedNode(n) => SubjectRef::NamedNode(n),
             Subject::BlankNode(b) => SubjectRef::BlankNode(b),
             Subject::Variable(v) => SubjectRef::Variable(v),
-            Subject::QuotedTriple(_) => panic!("QuotedTriple not supported in SubjectRef"),
+            Subject::QuotedTriple(qt) => SubjectRef::QuotedTriple(qt),
         }
     }
 }
@@ -453,7 +462,7 @@ impl<'a> From<&'a Object> for ObjectRef<'a> {
             Object::BlankNode(b) => ObjectRef::BlankNode(b),
             Object::Literal(l) => ObjectRef::Literal(l),
             Object::Variable(v) => ObjectRef::Variable(v),
-            Object::QuotedTriple(_) => panic!("QuotedTriple not supported in ObjectRef"),
+            Object::QuotedTriple(qt) => ObjectRef::QuotedTriple(qt),
         }
     }
 }
@@ -572,6 +581,38 @@ mod tests {
         let mut triples = vec![triple2.clone(), triple1.clone()];
         triples.sort();
         assert_eq!(triples, vec![triple1, triple2]);
+    }
+
+    #[test]
+    fn regression_rdf_star_as_ref_does_not_panic() {
+        use crate::model::star::QuotedTriple;
+
+        // Build an RDF-star triple: << <s> <p> "o" >> <asserts> "true"
+        let inner = Triple::new(
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            Literal::new("o"),
+        );
+        let qt = QuotedTriple::new(inner);
+        let outer = Triple::new(
+            Subject::QuotedTriple(Box::new(qt.clone())),
+            NamedNode::new("http://example.org/asserts").expect("valid IRI"),
+            Object::QuotedTriple(Box::new(qt)),
+        );
+
+        // Previously this panicked ("QuotedTriple not supported in SubjectRef").
+        let borrowed = outer.as_ref();
+        assert!(matches!(borrowed.subject(), SubjectRef::QuotedTriple(_)));
+        assert!(matches!(borrowed.object(), ObjectRef::QuotedTriple(_)));
+
+        // Zero-copy view must round-trip back to an equal owned triple.
+        let round = borrowed.to_owned();
+        assert_eq!(outer, round);
+
+        // Display must render RDF-star syntax without panicking.
+        let rendered = format!("{}", borrowed.subject());
+        assert!(rendered.contains("<<"));
+        assert!(rendered.contains("http://example.org/s"));
     }
 
     #[test]

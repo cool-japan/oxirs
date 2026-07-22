@@ -136,27 +136,26 @@ impl TransformationCache {
             ))
         })?;
 
-        let transformed_geom = geom.geom.map_coords(|coord| {
-            let input = oxigeo_proj::Coordinate::new(coord.x, coord.y);
-            match transformer.transform(&input) {
-                Ok(output) => geo_types::Coord {
-                    x: output.x,
-                    y: output.y,
-                },
-                Err(e) => {
-                    tracing::warn!(
-                        "CRS conversion failed for ({}, {}): {}. Using original coordinates.",
-                        coord.x,
-                        coord.y,
-                        e
-                    );
-                    geo_types::Coord {
-                        x: coord.x,
-                        y: coord.y,
-                    }
-                }
-            }
-        });
+        // Any per-coordinate failure must fail the whole transformation
+        // (fail-loud) rather than silently mixing coordinate systems under
+        // a single CRS label.
+        let transformed_geom = geom
+            .geom
+            .try_map_coords(|coord| {
+                let input = oxigeo_proj::Coordinate::new(coord.x, coord.y);
+                transformer
+                    .transform(&input)
+                    .map(|output| geo_types::Coord {
+                        x: output.x,
+                        y: output.y,
+                    })
+            })
+            .map_err(|e| {
+                GeoSparqlError::CrsTransformationFailed(format!(
+                    "CRS conversion from {} to {} failed: {}",
+                    source_string, target_string, e
+                ))
+            })?;
 
         Ok(Geometry::with_crs(transformed_geom, target_crs.clone()))
     }
@@ -450,5 +449,32 @@ mod tests {
             }
             _ => panic!("Expected Polygon geometry"),
         }
+    }
+
+    /// Regression test: a per-coordinate transform failure must fail the
+    /// whole `TransformationCache::transform` call instead of silently
+    /// substituting the original (untransformed) coordinate under the
+    /// target CRS label.
+    #[test]
+    fn regression_cache_transform_propagates_per_coordinate_failure() {
+        let cache = TransformationCache::new();
+        let wgs84 = Crs::epsg(4326);
+        let web_mercator = Crs::epsg(3857);
+
+        let line = Geometry::with_crs(
+            geo_types::LineString::from(vec![
+                coord! { x: 10.0, y: 50.0 },
+                coord! { x: f64::NAN, y: 50.0 },
+            ])
+            .into(),
+            wgs84,
+        );
+
+        let result = cache.transform(&line, &web_mercator);
+        assert!(
+            result.is_err(),
+            "a per-coordinate transform failure must propagate as an error, \
+             not silently keep the original coordinate under the target CRS"
+        );
     }
 }

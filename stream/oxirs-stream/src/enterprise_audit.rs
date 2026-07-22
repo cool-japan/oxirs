@@ -660,8 +660,16 @@ impl EnterpriseAuditLogger {
 
         debug!("Flushing {} audit events to storage", events.len());
 
-        // Write to storage
-        self.write_to_storage(&events).await?;
+        // Write to storage. If the write fails, restore the taken events to the
+        // front of the buffer so the audit trail is not silently discarded and a
+        // subsequent flush can retry.
+        if let Err(e) = self.write_to_storage(&events).await {
+            let mut buffer = self.buffer.write().await;
+            let mut restored = events;
+            restored.append(&mut buffer);
+            *buffer = restored;
+            return Err(e);
+        }
 
         // Update metrics
         {
@@ -673,30 +681,52 @@ impl EnterpriseAuditLogger {
         Ok(())
     }
 
-    /// Write events to storage
+    /// Write events to storage.
+    ///
+    /// The file backend performs a real appending JSONL write. Backends that are
+    /// not yet implemented return an explicit error (fail-loud) rather than
+    /// silently succeeding, so callers never believe an audit trail was
+    /// persisted when it was not.
     async fn write_to_storage(&self, events: &[EnterpriseAuditEvent]) -> Result<()> {
         match self.config.storage.backend {
             AuditStorageBackend::File => {
-                if let Some(path) = &self.config.storage.file_path {
-                    // Append to file in JSONL format
-                    let mut content = String::new();
-                    for event in events {
-                        let json = serde_json::to_string(event)?;
-                        content.push_str(&json);
-                        content.push('\n');
-                    }
+                let path = self.config.storage.file_path.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Audit File storage backend selected but no file_path configured"
+                    )
+                })?;
 
-                    // In production, use async file I/O
-                    // For now, this is a placeholder
-                    debug!("Would write {} bytes to {:?}", content.len(), path);
+                let mut content = String::new();
+                for event in events {
+                    let json = serde_json::to_string(event)?;
+                    content.push_str(&json);
+                    content.push('\n');
                 }
-            }
-            _ => {
-                debug!("Writing to {:?} (placeholder)", self.config.storage.backend);
-            }
-        }
 
-        Ok(())
+                if let Some(parent) = path.parent() {
+                    if !parent.as_os_str().is_empty() {
+                        tokio::fs::create_dir_all(parent).await?;
+                    }
+                }
+
+                use tokio::io::AsyncWriteExt;
+                let mut file = tokio::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+                    .await?;
+                file.write_all(content.as_bytes()).await?;
+                file.flush().await?;
+
+                debug!("Wrote {} bytes to audit log {:?}", content.len(), path);
+                Ok(())
+            }
+            other => Err(anyhow::anyhow!(
+                "Audit storage backend {:?} is not implemented; cannot persist {} event(s)",
+                other,
+                events.len()
+            )),
+        }
     }
 
     /// Stream event to real-time destinations
@@ -728,8 +758,56 @@ impl EnterpriseAuditLogger {
             standard, start_date, end_date
         );
 
-        // In a real implementation, query storage for events
-        // and generate compliance-specific report
+        // Query the persisted audit trail for events in range that carry this
+        // standard's compliance tag, then compute real totals and findings.
+        let events = self.query_events(start_date, end_date, standard).await?;
+        let total_events = events.len() as u64;
+
+        let mut findings = Vec::new();
+        for event in &events {
+            let finding = match event.result {
+                ActionResult::Denied => Some((
+                    FindingType::NonCompliance,
+                    format!("Denied {} on resource '{}'", event.action, event.resource),
+                    Some(
+                        "Review access control policy and verify the denial was expected"
+                            .to_string(),
+                    ),
+                )),
+                ActionResult::Failure => Some((
+                    FindingType::Warning,
+                    format!("Failed {} on resource '{}'", event.action, event.resource),
+                    Some(
+                        "Investigate the failure and confirm no data integrity impact".to_string(),
+                    ),
+                )),
+                _ => None,
+            };
+
+            if let Some((finding_type, description, remediation)) = finding {
+                findings.push(ComplianceFinding {
+                    finding_id: Uuid::new_v4().to_string(),
+                    finding_type,
+                    severity: event.severity,
+                    description,
+                    affected_events: vec![event.event_id.clone()],
+                    remediation,
+                });
+            }
+        }
+
+        let summary = format!(
+            "{standard} compliance report: {total_events} event(s) analyzed, {} finding(s) ({} non-compliance, {} warning)",
+            findings.len(),
+            findings
+                .iter()
+                .filter(|f| f.finding_type == FindingType::NonCompliance)
+                .count(),
+            findings
+                .iter()
+                .filter(|f| f.finding_type == FindingType::Warning)
+                .count(),
+        );
 
         Ok(ComplianceReport {
             standard,
@@ -737,10 +815,63 @@ impl EnterpriseAuditLogger {
             generated_at: Utc::now(),
             period_start: start_date,
             period_end: end_date,
-            total_events: 0,
-            findings: vec![],
-            summary: "Compliance report placeholder".to_string(),
+            total_events,
+            findings,
+            summary,
         })
+    }
+
+    /// Query persisted audit events within `[start, end]` carrying `standard`'s
+    /// compliance tag.
+    ///
+    /// Buffered events are flushed first so the report reflects the full trail.
+    /// Only the File backend supports querying today; other backends return an
+    /// explicit error rather than an empty result.
+    async fn query_events(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        standard: ComplianceStandard,
+    ) -> Result<Vec<EnterpriseAuditEvent>> {
+        // Ensure everything buffered has been persisted before querying.
+        self.flush_buffer().await?;
+
+        match self.config.storage.backend {
+            AuditStorageBackend::File => {
+                let path = self.config.storage.file_path.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Audit File storage backend selected but no file_path configured"
+                    )
+                })?;
+
+                let contents = match tokio::fs::read_to_string(path).await {
+                    Ok(contents) => contents,
+                    // No file yet means no events have been recorded.
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+                    Err(e) => return Err(e.into()),
+                };
+
+                let mut events = Vec::new();
+                for line in contents.lines() {
+                    let line = line.trim();
+                    if line.is_empty() {
+                        continue;
+                    }
+                    let event: EnterpriseAuditEvent = serde_json::from_str(line)?;
+                    if event.timestamp >= start
+                        && event.timestamp <= end
+                        && event.compliance_tags.contains(&standard)
+                    {
+                        events.push(event);
+                    }
+                }
+                Ok(events)
+            }
+            other => Err(anyhow::anyhow!(
+                "Compliance querying is not implemented for audit storage backend {:?}",
+                other
+            )),
+        }
     }
 }
 
@@ -814,6 +945,106 @@ mod tests {
         assert_eq!(ComplianceStandard::GDPR.to_string(), "GDPR");
         assert_eq!(ComplianceStandard::HIPAA.to_string(), "HIPAA");
         assert_eq!(ComplianceStandard::SOC2.to_string(), "SOC2");
+    }
+
+    fn temp_audit_config() -> EnterpriseAuditConfig {
+        let mut config = EnterpriseAuditConfig::default();
+        let path = std::env::temp_dir().join(format!("oxirs-audit-{}.jsonl", Uuid::new_v4()));
+        config.storage.file_path = Some(path);
+        config
+    }
+
+    fn sample_event(result: ActionResult) -> EnterpriseAuditEvent {
+        EnterpriseAuditEvent {
+            event_id: Uuid::new_v4().to_string(),
+            timestamp: Utc::now(),
+            event_type: AuditEventType::DataAccess,
+            severity: AuditSeverity::Critical,
+            user_id: Some("user-1".to_string()),
+            source_ip: None,
+            resource: "graph:secret".to_string(),
+            action: "read".to_string(),
+            result,
+            details: HashMap::new(),
+            compliance_tags: vec![ComplianceStandard::SOC2],
+            session_id: None,
+            request_id: None,
+            correlation_id: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn regression_audit_events_persisted_to_file() {
+        let config = temp_audit_config();
+        let path = config
+            .storage
+            .file_path
+            .clone()
+            .expect("file path configured");
+        let logger = EnterpriseAuditLogger::new(config);
+
+        logger
+            .log_event(sample_event(ActionResult::Success))
+            .await
+            .unwrap();
+        logger.flush_buffer().await.unwrap();
+
+        // The audit trail must actually be written to disk (previously a no-op).
+        let contents = tokio::fs::read_to_string(&path).await.unwrap();
+        assert!(contents.contains("graph:secret"));
+
+        let _ = tokio::fs::remove_file(&path).await;
+    }
+
+    #[tokio::test]
+    async fn regression_unimplemented_backend_fails_loud() {
+        let mut config = temp_audit_config();
+        config.storage.backend = AuditStorageBackend::S3;
+        let logger = EnterpriseAuditLogger::new(config);
+
+        logger
+            .log_event(sample_event(ActionResult::Success))
+            .await
+            .unwrap();
+        // Flushing to an unimplemented backend must error, not silently succeed.
+        assert!(logger.flush_buffer().await.is_err());
+        // Events must be retained in the buffer for a retry, not discarded.
+        assert!(!logger.buffer.read().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn regression_compliance_report_reflects_events() {
+        let config = temp_audit_config();
+        let path = config
+            .storage
+            .file_path
+            .clone()
+            .expect("file path configured");
+        let logger = EnterpriseAuditLogger::new(config);
+
+        logger
+            .log_event(sample_event(ActionResult::Denied))
+            .await
+            .unwrap();
+        logger
+            .log_event(sample_event(ActionResult::Success))
+            .await
+            .unwrap();
+
+        let start = Utc::now() - chrono::Duration::hours(1);
+        let end = Utc::now() + chrono::Duration::hours(1);
+        let report = logger
+            .generate_compliance_report(ComplianceStandard::SOC2, start, end)
+            .await
+            .unwrap();
+
+        // Both SOC2-tagged events must be counted (previously always 0).
+        assert_eq!(report.total_events, 2);
+        // The denied event produces a non-compliance finding.
+        assert_eq!(report.findings.len(), 1);
+        assert_eq!(report.findings[0].finding_type, FindingType::NonCompliance);
+
+        let _ = tokio::fs::remove_file(&path).await;
     }
 
     #[tokio::test]

@@ -49,8 +49,8 @@ pub use gpu_aggregations::{
 
 // Arrow IPC re-exports
 pub use arrow_ipc::{
-    ArrowColumn, ArrowDataType, ArrowField, ArrowIpcReader, ArrowIpcWriter, ArrowRecordBatch,
-    ArrowSchema, TaggedDataPoint, TimeUnit,
+    OxirsIpcColumn, OxirsIpcDataType, OxirsIpcField, OxirsIpcReader, OxirsIpcRecordBatch,
+    OxirsIpcSchema, OxirsIpcTimeUnit, OxirsIpcWriter, TaggedDataPoint,
 };
 // Parquet export re-exports (use qualified name to avoid collision with arrow_export::ParquetCompression)
 pub use parquet_export::{

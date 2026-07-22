@@ -7,8 +7,10 @@
 //! :alice :age 30 {| :certainty 0.9; :source :survey |} .
 //! ```
 //!
-//! This expands to multiple triples:
+//! Per the W3C RDF-star annotation-syntax equivalence this asserts the base
+//! triple AND the annotation triples:
 //! ```turtle
+//! :alice :age 30 .
 //! <<:alice :age 30>> :certainty 0.9 .
 //! <<:alice :age 30>> :source :survey .
 //! ```
@@ -28,19 +30,19 @@ fn test_annotation_syntax_single_property() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse annotation syntax");
 
-    // Should have 1 triple: the annotation triple
-    // The base triple is NOT asserted (referential opacity)
-    assert_eq!(graph.len(), 1, "Should have exactly 1 triple");
+    // Per the W3C RDF-star annotation-syntax equivalence, `s p o {| q v |} .`
+    // expands to `s p o . <<s p o>> q v .` — the base triple IS asserted in
+    // addition to the annotation triple. (Referential opacity applies to a
+    // bare `<< >>` quoted-triple TERM, not to the `{| |}` annotation sugar.)
+    // So we expect 2 triples: base + 1 annotation.
+    assert_eq!(graph.len(), 2, "Should have base triple + 1 annotation");
 
-    // Check that the triple is an annotation (subject is quoted triple)
+    // Locate the annotation triple (its subject is the quoted base triple)
     let triples = graph.triples();
-    assert_eq!(triples.len(), 1);
-    let annotation_triple = &triples[0];
-
-    assert!(
-        annotation_triple.subject.is_quoted_triple(),
-        "Subject should be a quoted triple"
-    );
+    let annotation_triple = triples
+        .iter()
+        .find(|t| t.subject.is_quoted_triple())
+        .expect("Annotation triple with quoted-triple subject should exist");
 
     // Verify the annotation predicate
     let predicate_iri = annotation_triple
@@ -72,22 +74,23 @@ fn test_annotation_syntax_multiple_properties() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse annotation syntax");
 
-    // Should have 2 triples: one for each annotation property
-    assert_eq!(graph.len(), 2, "Should have 2 annotation triples");
+    // W3C expansion: base triple + one annotation triple per property.
+    assert_eq!(graph.len(), 3, "Should have base triple + 2 annotations");
 
-    // Both triples should have the same quoted triple as subject
+    // The two annotation triples share the quoted base triple as subject.
     let triples = graph.triples();
-    assert!(
-        triples[0].subject.is_quoted_triple(),
-        "First triple subject should be quoted triple"
-    );
-    assert!(
-        triples[1].subject.is_quoted_triple(),
-        "Second triple subject should be quoted triple"
+    let annotation_triples: Vec<_> = triples
+        .iter()
+        .filter(|t| t.subject.is_quoted_triple())
+        .collect();
+    assert_eq!(
+        annotation_triples.len(),
+        2,
+        "Should have exactly 2 annotation triples"
     );
 
     // Verify both annotation predicates
-    let predicates: Vec<String> = triples
+    let predicates: Vec<String> = annotation_triples
         .iter()
         .map(|t| {
             t.predicate
@@ -119,17 +122,23 @@ fn test_annotation_syntax_three_properties() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse annotation syntax");
 
-    assert_eq!(graph.len(), 3, "Should have 3 annotation triples");
+    // W3C expansion: 1 base triple + 3 annotation triples.
+    assert_eq!(graph.len(), 4, "Should have base triple + 3 annotations");
 
-    // Verify all subjects are the same quoted triple
+    // All annotation triples (quoted-triple subjects) share the same subject.
     let triples = graph.triples();
-    let first_subject = &triples[0].subject;
-    assert!(first_subject.is_quoted_triple());
+    let annotation_triples: Vec<_> = triples
+        .iter()
+        .filter(|t| t.subject.is_quoted_triple())
+        .collect();
+    assert_eq!(annotation_triples.len(), 3, "Should have 3 annotations");
 
-    for triple in triples {
+    let first_subject = &annotation_triples[0].subject;
+    assert!(first_subject.is_quoted_triple());
+    for triple in &annotation_triples {
         assert_eq!(
             &triple.subject, first_subject,
-            "All subjects should be identical"
+            "All annotation subjects should be identical"
         );
     }
 }
@@ -148,9 +157,14 @@ fn test_annotation_syntax_with_iri_object() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse annotation syntax");
 
-    assert_eq!(graph.len(), 1);
+    // W3C expansion: base triple + 1 annotation triple.
+    assert_eq!(graph.len(), 2);
 
-    let triple = &graph.triples()[0];
+    let triples = graph.triples();
+    let triple = triples
+        .iter()
+        .find(|t| t.subject.is_quoted_triple())
+        .expect("Annotation triple with quoted-triple subject should exist");
     assert!(triple.subject.is_quoted_triple());
     assert!(
         triple.object.is_named_node(),
@@ -171,11 +185,13 @@ fn test_annotation_syntax_empty_annotation_block() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Empty annotation block should be allowed");
 
-    // Empty annotation block should result in no annotation triples
+    // Per the W3C annotation-syntax equivalence, the base triple is asserted
+    // even when the annotation block is empty (`s p o {| |} .` == `s p o .`),
+    // so exactly the base triple remains and no annotation triples are added.
     assert_eq!(
         graph.len(),
-        0,
-        "Empty annotation block should produce no triples"
+        1,
+        "Empty annotation block still asserts the base triple"
     );
 }
 
@@ -192,7 +208,8 @@ fn test_annotation_syntax_whitespace_handling() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Should handle annotation without spaces");
 
-    assert_eq!(graph.len(), 1);
+    // W3C expansion: base triple + 1 annotation triple.
+    assert_eq!(graph.len(), 2);
 }
 
 #[test]
@@ -212,14 +229,16 @@ fn test_annotation_syntax_with_literals() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse annotations with typed literals");
 
-    assert_eq!(graph.len(), 2);
+    // W3C expansion: base triple + 2 annotation triples.
+    assert_eq!(graph.len(), 3);
 
-    // Verify typed literals in annotations
+    // Every object here (base "50000"^^xsd:integer plus the two annotation
+    // values) is a literal.
     let triples = graph.triples();
     for triple in triples {
         assert!(
             triple.object.is_literal(),
-            "Annotation values should be literals"
+            "All object values should be literals"
         );
     }
 }
@@ -237,7 +256,8 @@ fn test_annotation_syntax_with_language_tags() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse annotations with language tags");
 
-    assert_eq!(graph.len(), 2);
+    // W3C expansion: base triple + 2 annotation triples.
+    assert_eq!(graph.len(), 3);
 }
 
 #[test]
@@ -255,8 +275,9 @@ fn test_annotation_syntax_multiple_statements() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse multiple annotated statements");
 
-    // 1 + 2 + 1 = 4 annotation triples total
-    assert_eq!(graph.len(), 4);
+    // W3C expansion asserts each base triple plus its annotations:
+    //   (1 base + 1 ann) + (1 base + 2 ann) + (1 base + 1 ann) = 7 triples.
+    assert_eq!(graph.len(), 7);
 
     // Count unique quoted triples
     let quoted_triples: std::collections::HashSet<_> = graph
@@ -308,8 +329,9 @@ fn test_annotation_syntax_trailing_semicolon() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Trailing semicolon should be handled gracefully");
 
-    // Should parse correctly, ignoring empty statement after semicolon
-    assert_eq!(graph.len(), 1);
+    // Ignoring the empty statement after the semicolon, the W3C expansion is
+    // base triple + 1 annotation triple.
+    assert_eq!(graph.len(), 2);
 }
 
 #[test]
@@ -376,8 +398,9 @@ fn test_annotation_syntax_mixed_with_regular_triples() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse mix of regular and annotated triples");
 
-    // 2 regular triples + 1 annotation + 1 quoted triple statement = 4 triples
-    assert_eq!(graph.len(), 4);
+    // 2 regular triples + (1 base + 1 annotation from the {| |} statement)
+    // + 1 quoted-triple statement = 5 triples.
+    assert_eq!(graph.len(), 5);
 }
 
 #[test]
@@ -393,13 +416,14 @@ fn test_annotation_syntax_blank_node_predicates() {
     // The parser should reject this or skip the malformed annotation
     let result = parser.parse_str(data, StarFormat::TurtleStar);
 
-    // In non-strict mode, the parser might skip the invalid annotation
-    // and return an empty graph
+    // In non-strict mode the base triple is still asserted (per the W3C
+    // annotation-syntax equivalence) while the invalid blank-node-predicate
+    // annotation is skipped, leaving only the base triple.
     if let Ok(graph) = result {
         assert_eq!(
             graph.len(),
-            0,
-            "Invalid annotation with blank node predicate should be skipped"
+            1,
+            "Base triple is asserted; invalid blank-node-predicate annotation is skipped"
         );
     } else {
         // In strict mode, this would error
@@ -426,13 +450,19 @@ fn test_annotation_syntax_integration_with_complex_base_triple() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse complex annotated triple");
 
-    assert_eq!(graph.len(), 4, "Should have 4 annotation triples");
+    // W3C expansion: 1 base triple + 4 annotation triples.
+    assert_eq!(graph.len(), 5, "Should have base triple + 4 annotations");
 
-    // Verify all annotations reference the same base triple
+    // Verify all annotation triples reference the same quoted base triple.
     let triples = graph.triples();
-    let first_quoted = &triples[0].subject;
+    let annotation_triples: Vec<_> = triples
+        .iter()
+        .filter(|t| t.subject.is_quoted_triple())
+        .collect();
+    assert_eq!(annotation_triples.len(), 4, "Should have 4 annotations");
 
-    for triple in triples {
+    let first_quoted = &annotation_triples[0].subject;
+    for triple in &annotation_triples {
         assert_eq!(
             &triple.subject, first_quoted,
             "All annotations should reference same base triple"
@@ -456,7 +486,8 @@ fn test_annotation_syntax_stress_many_properties() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse many annotation properties");
 
-    assert_eq!(graph.len(), 10, "Should have 10 annotation triples");
+    // W3C expansion: 1 base triple + 10 annotation triples.
+    assert_eq!(graph.len(), 11, "Should have base triple + 10 annotations");
 }
 
 #[test]
@@ -489,7 +520,13 @@ fn test_annotation_syntax_preserves_quoted_triple_structure() {
         .parse_str(data, StarFormat::TurtleStar)
         .expect("Failed to parse");
 
-    let triple = &graph.triples()[0];
+    // The graph now contains both the asserted base triple and the annotation
+    // triple; select the annotation triple, whose subject is the quoted base.
+    let triples = graph.triples();
+    let triple = triples
+        .iter()
+        .find(|t| t.subject.is_quoted_triple())
+        .expect("Annotation triple with quoted-triple subject should exist");
 
     // Extract the quoted triple
     let quoted_triple = triple

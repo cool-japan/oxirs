@@ -4,7 +4,7 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use crate::algebra::{Algebra, Expression, Literal, TriplePattern, UnaryOperator, Variable};
+use crate::algebra::{Algebra, Expression, Literal, Term, TriplePattern, UnaryOperator, Variable};
 use crate::update::{GraphReference, QuadPattern, UpdateOperation};
 use anyhow::{bail, Result};
 use oxirs_core::model::NamedNode;
@@ -66,6 +66,66 @@ fn pop_single_arg(args: Vec<Expression>) -> Expression {
             language: None,
             datatype: None,
         }))
+}
+
+/// Scope an UPDATE operation to the graph named by a `WITH <g>` clause.
+///
+/// Per SPARQL 1.1 §3.1.3, `WITH` sets the operation's default graph for BOTH
+/// the delete/insert templates AND the WHERE pattern — distinct from `USING`,
+/// which only sets the WHERE dataset. Concretely this:
+///
+/// * gives every template quad that has no explicit graph the WITH graph, so
+///   the delete/insert acts on `<g>` rather than the store's default graph; and
+/// * wraps the WHERE pattern in `GRAPH <g> { … }` so pattern matching happens
+///   inside `<g>`.
+///
+/// This corrects two prior bugs: `WITH <g> DELETE WHERE { … }` silently
+/// targeting the default graph, and `WITH <g> DELETE/INSERT … WHERE` mis-mapping
+/// the graph onto `USING`.
+fn apply_with_graph(operation: &mut UpdateOperation, graph_ref: &GraphReference) {
+    let graph_term = match graph_ref {
+        GraphReference::Iri(iri) => Term::Iri(NamedNode::new_unchecked(iri.clone())),
+        // `WITH DEFAULT` scopes to the default graph — no rewriting needed.
+        GraphReference::Default => return,
+    };
+    let scope_pattern = |pattern: &mut Box<Algebra>| {
+        let inner = std::mem::replace(pattern.as_mut(), Algebra::Table);
+        // Reuse the existing Box allocation for the new Graph node.
+        **pattern = Algebra::Graph {
+            graph: graph_term.clone(),
+            pattern: Box::new(inner),
+        };
+    };
+    let scope_template = |template: &mut [QuadPattern]| {
+        for quad in template {
+            if quad.graph.is_none() {
+                quad.graph = Some(graph_ref.clone());
+            }
+        }
+    };
+    match operation {
+        UpdateOperation::DeleteInsertWhere {
+            delete_template,
+            insert_template,
+            pattern,
+            ..
+        } => {
+            scope_template(delete_template);
+            scope_template(insert_template);
+            scope_pattern(pattern);
+        }
+        UpdateOperation::InsertWhere { pattern, template } => {
+            scope_template(template);
+            scope_pattern(pattern);
+        }
+        UpdateOperation::DeleteWhere { pattern } => {
+            scope_pattern(pattern);
+        }
+        UpdateOperation::InsertData { data } | UpdateOperation::DeleteData { data } => {
+            scope_template(data);
+        }
+        _ => {}
+    }
 }
 
 impl QueryParser {
@@ -349,7 +409,7 @@ impl QueryParser {
             prefixes: HashMap::new(),
             base_iri: None,
         };
-        self.skip_whitespace();
+        self.skip_whitespace_and_newlines();
         while let Some(token) = self.peek() {
             match token {
                 Token::Prefix => {
@@ -365,11 +425,18 @@ impl QueryParser {
                     update_request.base_iri = Some(iri.clone());
                     self.base_iri = Some(iri);
                 }
+                // A newline between two prologue lines (`PREFIX a: <..>\nPREFIX
+                // b: <..>`) or between the last prologue line and the first
+                // operation keyword must not be mistaken for "prologue over" —
+                // mirrors `parse_prologue`'s identical arm for queries.
+                Token::Newline => {
+                    self.advance();
+                }
                 _ => break,
             }
         }
         while !self.is_at_end() {
-            self.skip_whitespace();
+            self.skip_whitespace_and_newlines();
             let operation = match self.peek() {
                 Some(Token::Insert) => self.parse_insert_operation()?,
                 Some(Token::Delete) => self.parse_delete_operation()?,
@@ -382,27 +449,19 @@ impl QueryParser {
                 Some(Token::Add) => self.parse_add_operation()?,
                 Some(Token::With) => {
                     self.advance();
+                    // `WITH <g>\nDELETE { … }`: the graph IRI and the
+                    // DELETE/INSERT operation that follows are commonly on
+                    // separate lines.
+                    self.skip_whitespace_and_newlines();
                     let graph_iri = self.expect_iri()?;
                     let graph_ref = GraphReference::Iri(graph_iri);
+                    self.skip_whitespace_and_newlines();
                     let mut operation = match self.peek() {
                         Some(Token::Insert) => self.parse_insert_operation()?,
                         Some(Token::Delete) => self.parse_delete_operation()?,
                         _ => bail!("Expected INSERT or DELETE after WITH clause"),
                     };
-                    match &mut operation {
-                        UpdateOperation::DeleteInsertWhere { using, .. } if using.is_none() => {
-                            *using = Some(vec![graph_ref]);
-                        }
-                        UpdateOperation::InsertWhere { template, .. } => {
-                            for quad in template {
-                                if quad.graph.is_none() {
-                                    quad.graph = Some(graph_ref.clone());
-                                }
-                            }
-                        }
-                        UpdateOperation::DeleteWhere { .. } => {}
-                        _ => {}
-                    }
+                    apply_with_graph(&mut operation, &graph_ref);
                     operation
                 }
                 Some(Token::Eof) => break,
@@ -410,16 +469,26 @@ impl QueryParser {
             };
             update_request.operations.push(operation);
             self.match_token(&Token::Semicolon);
-            self.skip_whitespace();
+            self.skip_whitespace_and_newlines();
         }
         Ok(update_request)
     }
     /// Parse INSERT WHERE operation
+    ///
+    /// The tokenizer emits an explicit `Token::Newline` for every line break
+    /// and nothing upstream filters it out of the stream (mirroring the
+    /// query-head hardening in `queryparser_parsing.rs`), so every lookahead
+    /// below skips it explicitly — a real-world multi-line update such as
+    /// `INSERT { … }\nWHERE\n{ … }` would otherwise fail with a spurious
+    /// "Expected X, found Newline" parse error.
     pub(super) fn parse_insert_where(&mut self) -> Result<UpdateOperation> {
+        self.skip_whitespace_and_newlines();
         self.expect_token(Token::LeftBrace)?;
         let template = self.parse_quad_pattern_data()?;
         self.expect_token(Token::RightBrace)?;
+        self.skip_whitespace_and_newlines();
         self.expect_token(Token::Where)?;
+        self.skip_whitespace_and_newlines();
         self.expect_token(Token::LeftBrace)?;
         let where_clause = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
@@ -428,9 +497,11 @@ impl QueryParser {
             template,
         })
     }
-    /// Parse DELETE WHERE operation
+    /// Parse DELETE WHERE operation (the `DELETE WHERE { … }` shorthand)
     pub(super) fn parse_delete_where(&mut self) -> Result<UpdateOperation> {
+        self.skip_whitespace_and_newlines();
         self.expect_token(Token::Where)?;
+        self.skip_whitespace_and_newlines();
         self.expect_token(Token::LeftBrace)?;
         let patterns = self.parse_quad_pattern_data()?;
         self.expect_token(Token::RightBrace)?;
@@ -444,10 +515,15 @@ impl QueryParser {
     }
     /// Parse DELETE ... INSERT ... WHERE operation
     pub(super) fn parse_delete_insert_where(&mut self) -> Result<UpdateOperation> {
+        self.skip_whitespace_and_newlines();
         self.expect_token(Token::LeftBrace)?;
         let delete_patterns = self.parse_quad_pattern_data()?;
         self.expect_token(Token::RightBrace)?;
+        // `DELETE { … }\nINSERT { … }`: the delete and insert templates are
+        // very commonly written on separate lines.
+        self.skip_whitespace_and_newlines();
         let insert_patterns = if self.match_token(&Token::Insert) {
+            self.skip_whitespace_and_newlines();
             self.expect_token(Token::LeftBrace)?;
             let patterns = self.parse_quad_pattern_data()?;
             self.expect_token(Token::RightBrace)?;
@@ -455,7 +531,11 @@ impl QueryParser {
         } else {
             None
         };
+        // `INSERT { … }\nWHERE { … }` (or `DELETE { … }\nWHERE { … }` when
+        // there is no INSERT template).
+        self.skip_whitespace_and_newlines();
         self.expect_token(Token::Where)?;
+        self.skip_whitespace_and_newlines();
         self.expect_token(Token::LeftBrace)?;
         let where_clause = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
@@ -476,14 +556,50 @@ impl QueryParser {
             })
         }
     }
-    /// Parse quad data for INSERT/DELETE DATA
+    /// Parse quad data for INSERT/DELETE DATA.
+    ///
+    /// Supports the standard SPARQL 1.1 `QuadData` grammar, which interleaves
+    /// bare triples (in the default graph) with `GRAPH <label> { … }` blocks
+    /// whose triples are scoped to the named graph. For example
+    /// `INSERT DATA { :s :p :o . GRAPH <g> { :a :b :c } }` yields one quad in
+    /// the default graph and one in `<g>`.
     pub(super) fn parse_quad_data(&mut self) -> Result<Vec<QuadPattern>> {
         let mut quads = Vec::new();
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
-            let quad = self.parse_quad()?;
-            quads.push(quad);
-            self.match_token(&Token::Dot);
+            self.skip_whitespace_and_newlines();
+            if self.is_at_end() || matches!(self.peek(), Some(Token::RightBrace)) {
+                break;
+            }
+            if matches!(self.peek(), Some(Token::Graph)) {
+                self.advance(); // consume GRAPH
+                let graph_ref = self.parse_graph_label()?;
+                self.expect_token(Token::LeftBrace)?;
+                while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
+                    self.skip_whitespace_and_newlines();
+                    if matches!(self.peek(), Some(Token::RightBrace)) {
+                        break;
+                    }
+                    let mut quad = self.parse_quad()?;
+                    quad.graph = Some(graph_ref.clone());
+                    quads.push(quad);
+                    self.match_token(&Token::Dot);
+                }
+                self.expect_token(Token::RightBrace)?;
+                self.match_token(&Token::Dot);
+            } else {
+                let quad = self.parse_quad()?;
+                quads.push(quad);
+                self.match_token(&Token::Dot);
+            }
         }
         Ok(quads)
+    }
+    /// Parse a graph label (an IRI or a prefixed name) following a `GRAPH`
+    /// keyword in a quad-data block, resolving it to a [`GraphReference::Iri`].
+    fn parse_graph_label(&mut self) -> Result<GraphReference> {
+        match self.parse_term()? {
+            Term::Iri(node) => Ok(GraphReference::Iri(node.as_str().to_string())),
+            other => bail!("GRAPH label must be an IRI, got {other:?}"),
+        }
     }
 }

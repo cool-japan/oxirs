@@ -710,15 +710,22 @@ impl ConstraintMarketplace {
             }
         }
 
-        // In production, would download and install the component
-        // For now, just return success
-
-        Ok(InstallResult {
-            component_id: component_id.to_string(),
-            version,
-            dependencies,
-            warnings,
-        })
+        // The marketplace index only carries component *metadata* (name, version,
+        // dependency graph, download_url) — it does not carry the executable
+        // component payload, and no downloader/compiler/registrar is wired in.
+        // Returning Ok here would report a successful install while
+        // `list_installed()` (which reads the real registry) would not show the
+        // component, and any later validation referencing it would fail with
+        // "Component not found". That silent contradiction violates the
+        // fail-loud contract, so we surface an explicit error instead of a fake
+        // success. `version`, `dependencies` and `warnings` were still fully
+        // resolved/validated above so a future real implementation can reuse them.
+        let _ = (&version, &dependencies, &warnings);
+        Err(ShaclError::UnsupportedOperation(format!(
+            "Installing marketplace component '{component_id}' (version {version}) is not \
+             implemented: component download, compilation and registration into the \
+             constraint registry are not yet available. No component was registered."
+        )))
     }
 
     /// Uninstall a component

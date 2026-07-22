@@ -16,6 +16,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, Notify};
 use tokio::time::sleep;
+use tracing::warn;
 
 pub use file_backend::{FileAuditBackend, FileBackendConfig, SyslogAuditBackend};
 
@@ -168,6 +169,12 @@ pub enum AuditError {
 // AuditLogger
 // ---------------------------------------------------------------------------
 
+/// Multiplier applied to [`AuditLoggerConfig::buffer_capacity`] to derive
+/// the hard, unconditional ceiling on the in-memory audit buffer (see
+/// [`AuditLogger::log`]). This ceiling applies even when `drop_on_full` is
+/// `false`, so a stalled backend can never drive unbounded memory growth.
+const AUDIT_BUFFER_HARD_CEILING_MULTIPLIER: usize = 10;
+
 /// Configuration for `AuditLogger`.
 #[derive(Debug, Clone)]
 pub struct AuditLoggerConfig {
@@ -218,13 +225,33 @@ impl AuditLogger {
     ///
     /// Returns `Ok(())` if enqueued, or `Err(AuditError::ChannelClosed)` if
     /// the logger has been shut down.
+    ///
+    /// `buffer_capacity` is only a *soft* cap honoured when `drop_on_full`
+    /// is set: it lets the buffer grow past `buffer_capacity` (up to
+    /// [`AUDIT_BUFFER_HARD_CEILING_MULTIPLIER`] times it) so a brief backend
+    /// slowdown doesn't start dropping audit records the moment the soft
+    /// cap is crossed. But regardless of `drop_on_full`, once the *hard*
+    /// ceiling is reached this always drops the oldest record and logs a
+    /// loud warning — a stalled/slow backend must never be able to grow
+    /// this in-memory buffer without bound and drive the process to OOM.
     pub async fn log(&self, record: AuditRecord) -> Result<(), AuditError> {
         let mut buf = self.buffer.lock().await;
-        if buf.len() >= self.config.buffer_capacity && self.config.drop_on_full {
-            // Silently discard the oldest record to make room.
+        let soft_cap = self.config.buffer_capacity;
+        let hard_ceiling = soft_cap
+            .saturating_mul(AUDIT_BUFFER_HARD_CEILING_MULTIPLIER)
+            .max(soft_cap);
+        if buf.len() >= soft_cap && self.config.drop_on_full {
+            // Silently discard the oldest record to make room (configured policy).
             buf.pop_front();
-            // When `drop_on_full` is false we still enqueue but the caller
-            // accepts potential unbounded growth (bounded by OS memory).
+        } else if buf.len() >= hard_ceiling {
+            buf.pop_front();
+            warn!(
+                hard_ceiling,
+                soft_cap,
+                drop_on_full = self.config.drop_on_full,
+                "audit buffer hit its hard ceiling; dropping the oldest record because the \
+                 configured backend(s) are not draining the buffer fast enough (possible stall)"
+            );
         }
         buf.push_back(record);
         drop(buf);
@@ -644,6 +671,46 @@ mod tests {
         }
         // Buffer capacity = 3; oldest entries dropped.
         assert!(logger.buffered_count().await <= 3);
+        let _ = tokio::fs::remove_dir_all(&tmp).await;
+    }
+
+    /// Regression test for the audit-buffer unbounded-growth finding: with
+    /// the default `drop_on_full: false` policy, a backend that never
+    /// drains the buffer (no background flush task started) must still
+    /// have its buffer capped at the hard ceiling
+    /// (`buffer_capacity * AUDIT_BUFFER_HARD_CEILING_MULTIPLIER`) rather
+    /// than growing without bound.
+    #[tokio::test]
+    async fn regression_audit_buffer_hard_ceiling_enforced_when_drop_on_full_false() {
+        let tmp = std::env::temp_dir().join(format!(
+            "oxirs_logger_hard_ceiling_{}",
+            Utc::now().timestamp_millis()
+        ));
+        let cfg = FileBackendConfig::new(&tmp);
+        let backend = FileAuditBackend::new(cfg).await.unwrap();
+        let logger = AuditLogger::new(
+            vec![Box::new(backend)],
+            AuditLoggerConfig {
+                buffer_capacity: 5,
+                // Long enough that the background flush loop (never started
+                // here) would not interfere even if it were running.
+                flush_interval: Duration::from_secs(3600),
+                drop_on_full: false,
+            },
+        );
+        // Never call start_background_flush(): nothing drains the buffer.
+        for _ in 0..500 {
+            logger
+                .log(make_record(AuditEvent::RateLimited))
+                .await
+                .unwrap();
+        }
+        let hard_ceiling = 5 * AUDIT_BUFFER_HARD_CEILING_MULTIPLIER;
+        assert!(
+            logger.buffered_count().await <= hard_ceiling,
+            "audit buffer grew past its hard ceiling of {hard_ceiling} records with \
+             drop_on_full=false and a stalled backend"
+        );
         let _ = tokio::fs::remove_dir_all(&tmp).await;
     }
 

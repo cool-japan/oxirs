@@ -3,6 +3,8 @@
 //! This module provides basic structural validation for SAMM models.
 //! Full SHACL validation integration is planned for future releases.
 
+use crate::aspect_validator::{AspectModel, AspectValidator, Severity as ConstraintSeverity};
+use crate::constraint_validator::validate_property_example_values;
 use crate::error::Result;
 use crate::metamodel::{Aspect, ModelElement};
 use crate::validator::{ValidationError, ValidationResult, ValidationWarning};
@@ -91,6 +93,58 @@ impl ShaclValidator {
                     element_urn: Some(property.urn().to_string()),
                     property_path: None,
                 });
+            }
+        }
+
+        // Constraint-compatibility validation: catches a
+        // `samm-c:RangeConstraint` on a non-numeric characteristic,
+        // `samm-c:LengthConstraint`/`samm-c:RegularExpressionConstraint` on
+        // a non-string characteristic, an inverted min/max range or length,
+        // a boolean characteristic with a range constraint, and cyclic
+        // entity `extends` chains. This bridges the real parsed model into
+        // the `AspectValidator` constraint-validation subsystem, which is
+        // otherwise never invoked from the crate's own validation pipeline.
+        let aspect_model = AspectModel::from_metamodel(aspect);
+        for message in &AspectValidator::validate(&aspect_model).messages {
+            match message.severity {
+                ConstraintSeverity::Error => result.add_error(ValidationError {
+                    message: message.message.clone(),
+                    element_urn: Some(message.element.clone()),
+                    property_path: message.path.clone(),
+                }),
+                ConstraintSeverity::Warning => result.add_warning(ValidationWarning {
+                    message: message.message.clone(),
+                    element_urn: Some(message.element.clone()),
+                }),
+                ConstraintSeverity::Info => {
+                    // Informational-only findings (e.g. "no description")
+                    // are not surfaced as SHACL validation errors/warnings.
+                }
+            }
+        }
+
+        // Example-value constraint validation: catches a `samm:exampleValue`
+        // that violates the property's own declared SAMM constraints
+        // (Range/Length/RegularExpression/Encoding), using the real
+        // ConstraintValidator/SammConstraint value-checking subsystem. This
+        // is the one place in a parsed Aspect model where genuine
+        // instance-like data (as opposed to schema definitions) exists to
+        // check constraints against.
+        for property in aspect.properties() {
+            for (example, results) in validate_property_example_values(property) {
+                for violation in results.iter().filter(|r| !r.is_valid()) {
+                    if let Some(reason) = violation.reason() {
+                        result.add_warning(ValidationWarning {
+                            message: format!(
+                                "Example value '{}' for property '{}' violates a declared constraint: {}",
+                                example,
+                                property.name(),
+                                reason
+                            ),
+                            element_urn: Some(property.urn().to_string()),
+                        });
+                    }
+                }
             }
         }
 
@@ -248,5 +302,163 @@ mod tests {
             .errors
             .iter()
             .any(|e| e.message.contains("Duplicate")));
+    }
+
+    #[tokio::test]
+    async fn regression_validate_wires_range_constraint_compatibility_checks() {
+        use crate::metamodel::{BoundDefinition, Constraint};
+
+        let validator = ShaclValidator::new();
+
+        // A real, TTL-parser-shaped Aspect whose characteristic declares a
+        // RangeConstraint on a non-numeric (string) data type — a genuine
+        // SAMM modelling error that only the AspectValidator
+        // constraint-compatibility subsystem can detect.
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#BadModel".to_string());
+        let characteristic = Characteristic::new(
+            "urn:samm:org.example:1.0.0#BadChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#string".to_string())
+        .with_constraint(Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: BoundDefinition::AtLeast,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        });
+        let property = Property::new("urn:samm:org.example:1.0.0#bad".to_string())
+            .with_characteristic(characteristic);
+        aspect.add_property(property);
+
+        let result = validator.validate(&aspect).await;
+        assert!(result.is_ok());
+        let validation_result = result.expect("validation should succeed");
+
+        assert!(
+            !validation_result.is_valid,
+            "a RangeConstraint on a non-numeric characteristic must fail validation"
+        );
+        assert!(
+            validation_result.errors.iter().any(|e| e
+                .message
+                .contains("RangeConstraint applied to non-numeric type")),
+            "errors={:?}",
+            validation_result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_validate_accepts_valid_range_constraint_on_numeric_type() {
+        use crate::metamodel::{BoundDefinition, Constraint};
+
+        let validator = ShaclValidator::new();
+
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#GoodModel".to_string());
+        aspect
+            .metadata
+            .add_preferred_name("en".to_string(), "GoodModel".to_string());
+        let characteristic = Characteristic::new(
+            "urn:samm:org.example:1.0.0#PercentageChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string())
+        .with_constraint(Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: BoundDefinition::AtLeast,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        });
+        let property = Property::new("urn:samm:org.example:1.0.0#percentage".to_string())
+            .with_characteristic(characteristic);
+        aspect.add_property(property);
+
+        let result = validator.validate(&aspect).await;
+        assert!(result.is_ok());
+        let validation_result = result.expect("validation should succeed");
+
+        assert!(
+            !validation_result
+                .errors
+                .iter()
+                .any(|e| e.message.contains("RangeConstraint")),
+            "a valid numeric RangeConstraint must not be flagged: {:?}",
+            validation_result.errors
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_validate_flags_example_value_violating_range_constraint() {
+        use crate::metamodel::{BoundDefinition, Constraint};
+
+        let validator = ShaclValidator::new();
+
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#Reading".to_string());
+        let characteristic = Characteristic::new(
+            "urn:samm:org.example:1.0.0#PercentageChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string())
+        .with_constraint(Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: BoundDefinition::AtLeast,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        });
+        let mut property = Property::new("urn:samm:org.example:1.0.0#percentage".to_string())
+            .with_characteristic(characteristic);
+        // An exampleValue that violates the property's own declared range.
+        property.example_values = vec!["150".to_string()];
+        aspect.add_property(property);
+
+        let result = validator.validate(&aspect).await;
+        assert!(result.is_ok());
+        let validation_result = result.expect("validation should succeed");
+
+        assert!(
+            validation_result
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("Example value '150'")
+                    && w.message.contains("violates a declared constraint")),
+            "warnings={:?}",
+            validation_result.warnings
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_validate_does_not_flag_conforming_example_value() {
+        use crate::metamodel::{BoundDefinition, Constraint};
+
+        let validator = ShaclValidator::new();
+
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#Reading".to_string());
+        let characteristic = Characteristic::new(
+            "urn:samm:org.example:1.0.0#PercentageChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string())
+        .with_constraint(Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: BoundDefinition::AtLeast,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        });
+        let mut property = Property::new("urn:samm:org.example:1.0.0#percentage".to_string())
+            .with_characteristic(characteristic);
+        property.example_values = vec!["42".to_string()];
+        aspect.add_property(property);
+
+        let result = validator.validate(&aspect).await;
+        assert!(result.is_ok());
+        let validation_result = result.expect("validation should succeed");
+
+        assert!(
+            !validation_result
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("violates a declared constraint")),
+            "warnings={:?}",
+            validation_result.warnings
+        );
     }
 }

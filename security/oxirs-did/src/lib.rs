@@ -97,6 +97,15 @@ mod proof_purpose_tests;
 pub mod proof_purpose_types;
 pub(crate) mod proof_purpose_verifier;
 
+// DID-based access control (ACL) engine
+pub mod access_control;
+
+// In-memory W3C Verifiable Credential store with revocation tracking
+pub mod credential_store;
+
+// HKDF (RFC 5869) / PBKDF2 (RFC 8018) key derivation over HMAC-SHA-2
+pub mod key_derivation;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

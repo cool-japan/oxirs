@@ -238,7 +238,11 @@ impl PersistentState {
             // quad set exists, so each quad is materialized on the fly and dropped
             // after its line is written.
             for quad in storage.iter_quads() {
+                // `serialize_quad_to_nquads` already terminates its output with
+                // " .\n"; strip that before `writeln!` supplies the single
+                // terminator, avoiding a blank line after every record.
                 let line = serializer.serialize_quad_to_nquads(&quad)?;
+                let line = line.trim_end_matches('\n');
                 writeln!(writer, "{line}").map_err(|e| {
                     OxirsError::Io(format!("Failed to write {}: {e}", tmp_file.display()))
                 })?;

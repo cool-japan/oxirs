@@ -11,6 +11,7 @@
 
 use crate::parser::{RdfFormat, StreamingParser};
 use crate::store::{CompactTripleStore, RdfTerm};
+use wasm_bindgen::prelude::*;
 
 // -----------------------------------------------------------------------
 // Conversion helpers
@@ -102,6 +103,7 @@ fn rdf_term_to_str(term: &RdfTerm) -> String {
 /// let results = store.query_pattern(Some("<http://s>"), None, None);
 /// assert_eq!(results.len(), 1);
 /// ```
+#[wasm_bindgen]
 pub struct WasmSparqlStore {
     /// Compact triple store (dictionary + sorted indexes)
     store: CompactTripleStore,
@@ -436,6 +438,175 @@ impl WasmSparqlStore {
 impl Default for WasmSparqlStore {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// -----------------------------------------------------------------------
+// wasm_bindgen surface
+// -----------------------------------------------------------------------
+//
+// The plain-Rust methods above use no `JsValue`/`wasm_bindgen`-specific types
+// so they stay unit-testable natively (see the module doc). Most of those
+// signatures (`&str`, `usize`, `bool`, `String`, `Vec<String>`,
+// `Result<_, String>`) already satisfy `wasm_bindgen`'s ABI directly, so the
+// wrappers below are thin pass-throughs; the two exceptions are
+// `Vec<Vec<String>>` results (not directly ABI-compatible — converted to a
+// `js_sys::Array` of arrays here) and the `RdfFormat` parameter of
+// `begin_streaming` (translated from a JS format-name string).
+
+/// Parse a JS-facing RDF format name into an [`RdfFormat`].
+fn parse_format_name(format: &str) -> Result<RdfFormat, JsValue> {
+    match format.to_ascii_lowercase().as_str() {
+        "turtle" | "ttl" => Ok(RdfFormat::Turtle),
+        "ntriples" | "nt" => Ok(RdfFormat::NTriples),
+        "nquads" | "nq" => Ok(RdfFormat::NQuads),
+        other => Err(JsValue::from_str(&format!(
+            "unknown RDF format '{other}': expected 'turtle', 'ntriples', or 'nquads'"
+        ))),
+    }
+}
+
+/// Convert `[[s, p, o], ...]` triple rows into a `js_sys::Array` of
+/// `js_sys::Array`s of JS strings.
+fn triple_rows_to_js_array(rows: &[Vec<String>]) -> JsValue {
+    let outer = js_sys::Array::new();
+    for row in rows {
+        let inner = js_sys::Array::new();
+        for term in row {
+            inner.push(&JsValue::from_str(term));
+        }
+        outer.push(&inner);
+    }
+    outer.into()
+}
+
+#[wasm_bindgen]
+impl WasmSparqlStore {
+    /// Create a new empty store. JavaScript: `new WasmSparqlStore()`.
+    #[wasm_bindgen(constructor)]
+    pub fn create() -> WasmSparqlStore {
+        WasmSparqlStore::new()
+    }
+
+    /// Load a complete Turtle document. Returns the number of triples inserted.
+    #[wasm_bindgen(js_name = loadTurtle)]
+    pub fn js_load_turtle(&mut self, data: &str) -> Result<usize, JsValue> {
+        self.load_turtle(data).map_err(|e| JsValue::from_str(&e))
+    }
+
+    /// Load a complete N-Triples document. Returns the number of triples inserted.
+    #[wasm_bindgen(js_name = loadNTriples)]
+    pub fn js_load_ntriples(&mut self, data: &str) -> Result<usize, JsValue> {
+        self.load_ntriples(data).map_err(|e| JsValue::from_str(&e))
+    }
+
+    /// Load a complete N-Quads document (graph names are ignored for storage).
+    /// Returns the number of triples inserted.
+    #[wasm_bindgen(js_name = loadNQuads)]
+    pub fn js_load_nquads(&mut self, data: &str) -> Result<usize, JsValue> {
+        self.load_nquads(data).map_err(|e| JsValue::from_str(&e))
+    }
+
+    /// Begin a streaming load session. `format` is one of `"turtle"`,
+    /// `"ntriples"`, or `"nquads"` (case-insensitive).
+    #[wasm_bindgen(js_name = beginStreaming)]
+    pub fn js_begin_streaming(&mut self, format: &str) -> Result<(), JsValue> {
+        let fmt = parse_format_name(format)?;
+        self.begin_streaming(fmt);
+        Ok(())
+    }
+
+    /// Feed a chunk of RDF data in the current streaming session. Returns the
+    /// number of triples parsed from complete statements in this chunk.
+    #[wasm_bindgen(js_name = feedChunk)]
+    pub fn js_feed_chunk(&mut self, chunk: &str) -> Result<usize, JsValue> {
+        self.feed_chunk(chunk).map_err(|e| JsValue::from_str(&e))
+    }
+
+    /// Finish the current streaming session. Returns the total number of
+    /// triples inserted during the session.
+    #[wasm_bindgen(js_name = finishLoading)]
+    pub fn js_finish_loading(&mut self) -> Result<usize, JsValue> {
+        self.finish_loading().map_err(|e| JsValue::from_str(&e))
+    }
+
+    /// Insert a single triple (terms in N-Triples serialization format).
+    #[wasm_bindgen(js_name = insertTriple)]
+    pub fn js_insert_triple(&mut self, subject: &str, predicate: &str, object: &str) {
+        self.insert_triple(subject, predicate, object);
+    }
+
+    /// Delete a triple. Returns `true` if it existed and was deleted.
+    #[wasm_bindgen(js_name = deleteTriple)]
+    pub fn js_delete_triple(&mut self, subject: &str, predicate: &str, object: &str) -> bool {
+        self.delete_triple(subject, predicate, object)
+    }
+
+    /// Check whether a triple exists.
+    #[wasm_bindgen(js_name = tripleExists)]
+    pub fn js_triple_exists(&self, subject: &str, predicate: &str, object: &str) -> bool {
+        self.triple_exists(subject, predicate, object)
+    }
+
+    /// Execute a triple pattern query. Each argument is an optional
+    /// N-Triples-serialized term filter (`null`/`undefined` = wildcard).
+    /// Returns a JS array of `[subject, predicate, object]` arrays.
+    #[wasm_bindgen(js_name = queryPattern)]
+    pub fn js_query_pattern(
+        &mut self,
+        subject: Option<String>,
+        predicate: Option<String>,
+        object: Option<String>,
+    ) -> JsValue {
+        let results =
+            self.query_pattern(subject.as_deref(), predicate.as_deref(), object.as_deref());
+        triple_rows_to_js_array(&results)
+    }
+
+    /// Find all triples with the given subject.
+    #[wasm_bindgen(js_name = findBySubject)]
+    pub fn js_find_by_subject(&mut self, subject: &str) -> JsValue {
+        triple_rows_to_js_array(&self.find_by_subject(subject))
+    }
+
+    /// Find all triples with the given predicate.
+    #[wasm_bindgen(js_name = findByPredicate)]
+    pub fn js_find_by_predicate(&mut self, predicate: &str) -> JsValue {
+        triple_rows_to_js_array(&self.find_by_predicate(predicate))
+    }
+
+    /// Find all subjects that have a specific predicate-object pair.
+    #[wasm_bindgen(js_name = findSubjectsByPredicateObject)]
+    pub fn js_find_subjects_by_predicate_object(
+        &mut self,
+        predicate: &str,
+        object: &str,
+    ) -> Vec<String> {
+        self.find_subjects_by_predicate_object(predicate, object)
+    }
+
+    /// Export all triples as N-Triples text.
+    #[wasm_bindgen(js_name = toNTriples)]
+    pub fn js_to_ntriples(&mut self) -> String {
+        self.to_ntriples()
+    }
+
+    /// The number of triples currently stored.
+    #[wasm_bindgen(js_name = tripleCount)]
+    pub fn js_triple_count(&self) -> usize {
+        self.triple_count()
+    }
+
+    /// The number of unique RDF terms in the dictionary.
+    #[wasm_bindgen(js_name = termCount)]
+    pub fn js_term_count(&self) -> usize {
+        self.term_count()
+    }
+
+    /// Estimated memory usage in bytes (triples + dictionary).
+    #[wasm_bindgen(js_name = memoryBytes)]
+    pub fn js_memory_bytes(&self) -> usize {
+        self.memory_bytes()
     }
 }
 

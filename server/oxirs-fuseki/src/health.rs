@@ -320,6 +320,7 @@ mod tests {
             startup_time: std::time::Instant::now(),
             system_monitor: Arc::new(parking_lot::Mutex::new(sysinfo::System::new_all())),
             audit_logger: Arc::new(oxirs_core::audit::InMemoryAuditLogger::new()),
+            sparql_cache: None,
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
         });
@@ -373,6 +374,7 @@ mod tests {
             startup_time: std::time::Instant::now(),
             system_monitor: Arc::new(parking_lot::Mutex::new(sysinfo::System::new_all())),
             audit_logger: Arc::new(oxirs_core::audit::InMemoryAuditLogger::new()),
+            sparql_cache: None,
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
         });

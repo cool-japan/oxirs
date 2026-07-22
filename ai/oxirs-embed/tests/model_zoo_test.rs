@@ -3,6 +3,7 @@
 //! All file I/O uses `std::env::temp_dir()` — no persistent test artifacts.
 
 use oxirs_embed::model_zoo::{sha256_hex, ModelManifest, ModelZoo, ModelZooError, ModelZooLoader};
+use oxirs_embed::{EmbeddingModel, ModelConfig, TransE};
 use std::path::PathBuf;
 
 // ---------------------------------------------------------------------------
@@ -24,13 +25,17 @@ fn write_manifest(dir: &std::path::Path, manifest: &ModelManifest) -> String {
 
 /// Create a small synthetic TransE "checkpoint" file and return its path.
 ///
-/// The content is a minimal JSON blob so `ModelRepository::load_model` does
-/// not fail even though `TransE::load` is a no-op stub.
+/// The content is produced by the real `TransE::save` codec (the persistence
+/// layer performs a genuine oxicode round trip since the hardening round, so
+/// `ModelRepository::load_model` must be handed an actually-decodable
+/// checkpoint rather than an arbitrary JSON blob).
 fn create_synthetic_ckpt(dir: &std::path::Path, filename: &str) -> PathBuf {
     std::fs::create_dir_all(dir).expect("create ckpt dir");
     let path = dir.join(filename);
-    // Write deterministic JSON content
-    std::fs::write(&path, br#"{"type":"TransE","entities":5,"relations":2}"#).expect("write ckpt");
+    let model = TransE::new(ModelConfig::default().with_dimensions(10));
+    model
+        .save(&path.to_string_lossy())
+        .expect("save synthetic TransE checkpoint");
     path
 }
 

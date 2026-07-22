@@ -261,6 +261,78 @@ fn corrupt_term_count_is_rejected_without_panic() {
     );
 }
 
+/// Regression test: `load_snapshot` must derive the POSG/OSPG/GSPO
+/// permutations from the already-validated SPOG set instead of trusting
+/// their own on-disk copies. Scramble the on-disk POSG array in place (same
+/// byte length, so the header's `tuple_count` cross-check still passes) and
+/// confirm predicate-bound pattern queries -- which are served from `posg`
+/// (see `MemoryStorage::scan_ids`) -- still return exactly the correct
+/// results rather than silently serving the corrupted permutation.
+#[test]
+fn regression_load_snapshot_derives_posg_ignoring_corrupt_on_disk_copy() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join(SNAPSHOT_FILE_NAME);
+    let quads = diverse_quads();
+    write_snapshot(&storage_from(&quads), &path).expect("write snapshot");
+
+    // Directory layout (see snapshot.rs module docs): a 40-byte header, then
+    // four 32-byte dictionary directory entries (subjects/predicates/objects/
+    // graphs), then four 16-byte index directory entries in order
+    // [SPOG, POSG, OSPG, GSPO], each `{ array_off: u64, tuple_count: u64 }`.
+    const HEADER_LEN: u64 = 40;
+    const DICT_DIR_LEN: u64 = 32;
+    const INDEX_DIR_LEN: u64 = 16;
+    let posg_dir_off = (HEADER_LEN + 4 * DICT_DIR_LEN + INDEX_DIR_LEN) as usize;
+
+    let bytes = std::fs::read(&path).expect("read snapshot");
+    let array_off = u64::from_le_bytes(
+        bytes[posg_dir_off..posg_dir_off + 8]
+            .try_into()
+            .expect("8 bytes"),
+    );
+    let tuple_count = u64::from_le_bytes(
+        bytes[posg_dir_off + 8..posg_dir_off + 16]
+            .try_into()
+            .expect("8 bytes"),
+    );
+    assert!(tuple_count > 0, "test fixture must have quads");
+
+    // Scramble the on-disk POSG tuple array: same length (so bounds and
+    // tuple-count checks still pass), but every tuple is now wrong.
+    {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .expect("open for corruption");
+        f.seek(SeekFrom::Start(array_off))
+            .expect("seek to POSG array");
+        let garbage = vec![0xFFu8; (tuple_count * 16) as usize];
+        f.write_all(&garbage).expect("clobber POSG array");
+    }
+
+    let loaded = load_snapshot(&path, None).expect("snapshot must still load");
+
+    // Full scan (served from SPOG directly) is unaffected either way; the
+    // real assertion is that predicate-bound queries -- which are served
+    // from `posg` -- are also still correct, proving POSG was derived from
+    // SPOG rather than decoded from the corrupted on-disk bytes.
+    let label = Predicate::NamedNode(nn("http://ex.org/label"));
+    let source = storage_from(&quads);
+    let want: BTreeSet<Quad> = source
+        .query_quads(None, Some(&label), None, None)
+        .into_iter()
+        .collect();
+    let got: BTreeSet<Quad> = loaded
+        .query_quads(None, Some(&label), None, None)
+        .into_iter()
+        .collect();
+    assert_eq!(
+        got, want,
+        "predicate-bound query must be correct even though the on-disk POSG copy was corrupted"
+    );
+    assert_eq!(all_quads(&loaded), all_quads(&source));
+}
+
 #[test]
 fn truncated_file_is_rejected() {
     let dir = tempfile::tempdir().expect("tempdir");

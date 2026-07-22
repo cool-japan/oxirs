@@ -381,52 +381,90 @@ impl IncrementalReasoner {
         _rule_id: RuleId,
         body: &[RuleAtom],
         head: &[RuleAtom],
-        _new_fact_id: FactId,
+        new_fact_id: FactId,
     ) -> Result<Vec<RuleAtom>> {
-        // This is a simplified implementation
-        // In a full implementation, we would:
-        // 1. Check if the new fact matches any atom in the rule body
-        // 2. Find all possible variable bindings
-        // 3. Check if all other atoms in the body are satisfied
-        // 4. Generate head atoms with the bindings
+        // True semi-naive delta join: only substitutions that actually involve
+        // the newly added fact can yield genuinely new derivations (older
+        // combinations were already materialized in prior generations). So we
+        // seed the join by binding the new fact against each body-atom position,
+        // then join the *remaining* atoms against the full fact set — instead of
+        // re-joining the entire body against everything (which was an O(rules *
+        // facts) full pass masquerading as an incremental update).
+        let new_fact = match self.facts.get(&new_fact_id) {
+            Some(fact) => fact,
+            None => return Ok(Vec::new()),
+        };
 
-        // For now, we'll use a simpler forward-chaining approach
+        let mut substitutions: Vec<HashMap<String, Term>> = Vec::new();
+
+        for (seed_pos, seed_atom) in body.iter().enumerate() {
+            // Bind the new fact against this body position (if it can match).
+            for seed_sub in self.match_atom_against_fact(seed_atom, new_fact)? {
+                // Join every other body atom against the full fact index,
+                // carrying the seed bindings.
+                let mut partials = vec![seed_sub];
+                for (pos, atom) in body.iter().enumerate() {
+                    if pos == seed_pos {
+                        continue;
+                    }
+                    let mut extended = Vec::new();
+                    for sub in &partials {
+                        extended.extend(self.match_atom(atom, sub)?);
+                    }
+                    partials = extended;
+                    if partials.is_empty() {
+                        break;
+                    }
+                }
+                for sub in partials {
+                    if !substitutions.contains(&sub) {
+                        substitutions.push(sub);
+                    }
+                }
+            }
+        }
+
         let mut derived = Vec::new();
-
-        // Try to find substitutions that satisfy the rule body
-        let substitutions = self.find_substitutions(body)?;
-
-        for substitution in substitutions {
-            // Apply substitution to head
+        for substitution in &substitutions {
             for head_atom in head {
-                let instantiated = self.apply_substitution(head_atom, &substitution)?;
-                derived.push(instantiated);
+                derived.push(self.apply_substitution(head_atom, substitution)?);
             }
         }
 
         Ok(derived)
     }
 
-    /// Find all substitutions that satisfy the rule body
-    fn find_substitutions(&self, body: &[RuleAtom]) -> Result<Vec<HashMap<String, Term>>> {
-        if body.is_empty() {
-            return Ok(vec![HashMap::new()]);
-        }
-
-        // Start with the first atom
-        let mut substitutions = self.match_atom(&body[0], &HashMap::new())?;
-
-        // Extend with remaining atoms
-        for atom in &body[1..] {
-            let mut new_substitutions = Vec::new();
-            for sub in substitutions {
-                let extended = self.match_atom(atom, &sub)?;
-                new_substitutions.extend(extended);
+    /// Bind a single fact against a body atom, returning the (at most one)
+    /// substitution under which they unify. Non-triple atoms never match a
+    /// stored triple fact and yield no bindings.
+    fn match_atom_against_fact(
+        &self,
+        atom: &RuleAtom,
+        fact: &RuleAtom,
+    ) -> Result<Vec<HashMap<String, Term>>> {
+        match (atom, fact) {
+            (
+                RuleAtom::Triple {
+                    subject,
+                    predicate,
+                    object,
+                },
+                RuleAtom::Triple {
+                    subject: fs,
+                    predicate: fp,
+                    object: fo,
+                },
+            ) => {
+                let mut out = Vec::new();
+                if let Some(sub) =
+                    self.unify_triple((subject, predicate, object), (fs, fp, fo), &HashMap::new())?
+                {
+                    out.push(sub);
+                }
+                Ok(out)
             }
-            substitutions = new_substitutions;
+            _ => Ok(Vec::new()),
         }
-
-        Ok(substitutions)
     }
 
     /// Match an atom against known facts
@@ -671,6 +709,66 @@ mod tests {
         reasoner.restore_snapshot()?;
 
         assert_eq!(reasoner.get_stats().total_facts, 0);
+        Ok(())
+    }
+
+    /// Regression: the incremental delta join must actually join a two-atom
+    /// rule body across the newly added fact — deriving results that only exist
+    /// because of the new fact, and only when the join is genuinely satisfied.
+    #[test]
+    fn regression_incremental_delta_join_two_atoms() -> Result<(), Box<dyn std::error::Error>> {
+        let mut reasoner = IncrementalReasoner::new();
+        // grandparent(X, Z) :- parent(X, Y), parent(Y, Z)
+        reasoner.add_rule(Rule {
+            name: "grandparent".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("parent".to_string()),
+                    object: Term::Variable("Y".to_string()),
+                },
+                RuleAtom::Triple {
+                    subject: Term::Variable("Y".to_string()),
+                    predicate: Term::Constant("parent".to_string()),
+                    object: Term::Variable("Z".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("grandparent".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
+        });
+
+        // First fact: no join partner yet, so no grandparent derived.
+        let d1 = reasoner.add_fact(RuleAtom::Triple {
+            subject: Term::Constant("a".to_string()),
+            predicate: Term::Constant("parent".to_string()),
+            object: Term::Constant("b".to_string()),
+        })?;
+        assert!(d1.is_empty(), "no grandparent should exist yet: {d1:?}");
+
+        // Second fact closes the chain a->b->c: delta must contain grandparent(a,c).
+        let d2 = reasoner.add_fact(RuleAtom::Triple {
+            subject: Term::Constant("b".to_string()),
+            predicate: Term::Constant("parent".to_string()),
+            object: Term::Constant("c".to_string()),
+        })?;
+
+        let expected = RuleAtom::Triple {
+            subject: Term::Constant("a".to_string()),
+            predicate: Term::Constant("grandparent".to_string()),
+            object: Term::Constant("c".to_string()),
+        };
+        assert!(
+            d2.contains(&expected),
+            "delta join across the new fact must derive grandparent(a,c); got: {d2:?}"
+        );
+        // And must not over-derive a spurious self grandparent.
+        assert!(
+            !d2.iter().any(|f| matches!(f, RuleAtom::Triple { subject: Term::Constant(s), object: Term::Constant(o), .. } if s == "a" && o == "a")),
+            "must not derive grandparent(a,a): {d2:?}"
+        );
         Ok(())
     }
 }

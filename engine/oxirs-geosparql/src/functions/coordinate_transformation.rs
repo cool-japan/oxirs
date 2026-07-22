@@ -85,29 +85,26 @@ pub fn transform(geom: &Geometry, target_crs: &Crs) -> Result<Geometry> {
         ))
     })?;
 
-    // Transform coordinates
-    let transformed_geom = geom.geom.map_coords(|coord| {
-        let input = oxigeo_proj::Coordinate::new(coord.x, coord.y);
-        match transformer.transform(&input) {
-            Ok(output) => geo_types::Coord {
-                x: output.x,
-                y: output.y,
-            },
-            Err(e) => {
-                // Log error but fallback to original coordinates
-                tracing::warn!(
-                    "CRS conversion failed for ({}, {}): {}. Using original coordinates.",
-                    coord.x,
-                    coord.y,
-                    e
-                );
-                geo_types::Coord {
-                    x: coord.x,
-                    y: coord.y,
-                }
-            }
-        }
-    });
+    // Transform coordinates. Any per-coordinate failure must fail the whole
+    // transformation (fail-loud) rather than silently mixing coordinate
+    // systems under a single CRS label.
+    let transformed_geom = geom
+        .geom
+        .try_map_coords(|coord| {
+            let input = oxigeo_proj::Coordinate::new(coord.x, coord.y);
+            transformer
+                .transform(&input)
+                .map(|output| geo_types::Coord {
+                    x: output.x,
+                    y: output.y,
+                })
+        })
+        .map_err(|e| {
+            GeoSparqlError::CrsTransformationFailed(format!(
+                "CRS conversion from EPSG:{} to EPSG:{} failed: {}",
+                source_epsg, target_epsg, e
+            ))
+        })?;
 
     Ok(Geometry::with_crs(transformed_geom, target_crs.clone()))
 }
@@ -194,31 +191,30 @@ pub fn transform_batch(geometries: &[Geometry], target_crs: &Crs) -> Result<Vec<
         ))
     })?;
 
-    // Transform all geometries using the same Transformer object
+    // Transform all geometries using the same Transformer object. Any
+    // per-coordinate failure must fail the whole batch entry (fail-loud)
+    // rather than silently mixing coordinate systems under a single CRS
+    // label.
     let transformed: Result<Vec<_>> = geometries
         .iter()
         .map(|geom| {
-            let transformed_geom = geom.geom.map_coords(|coord| {
-                let input = oxigeo_proj::Coordinate::new(coord.x, coord.y);
-                match transformer.transform(&input) {
-                    Ok(output) => geo_types::Coord {
-                        x: output.x,
-                        y: output.y,
-                    },
-                    Err(e) => {
-                        tracing::warn!(
-                            "CRS conversion failed for ({}, {}): {}. Using original coordinates.",
-                            coord.x,
-                            coord.y,
-                            e
-                        );
-                        geo_types::Coord {
-                            x: coord.x,
-                            y: coord.y,
-                        }
-                    }
-                }
-            });
+            let transformed_geom = geom
+                .geom
+                .try_map_coords(|coord| {
+                    let input = oxigeo_proj::Coordinate::new(coord.x, coord.y);
+                    transformer
+                        .transform(&input)
+                        .map(|output| geo_types::Coord {
+                            x: output.x,
+                            y: output.y,
+                        })
+                })
+                .map_err(|e| {
+                    GeoSparqlError::CrsTransformationFailed(format!(
+                        "CRS conversion from EPSG:{} to EPSG:{} failed: {}",
+                        source_epsg, target_epsg, e
+                    ))
+                })?;
             Ok(Geometry::with_crs(transformed_geom, target_crs.clone()))
         })
         .collect();
@@ -449,6 +445,55 @@ mod tests {
 
         assert_eq!(transformed.len(), 2);
         assert!(transformed.iter().all(|g| g.crs == Crs::epsg(4326)));
+    }
+
+    // ========================================================================
+    // Regression tests: a per-coordinate transform failure must fail the
+    // whole transformation instead of silently substituting the original
+    // (untransformed) coordinate under the target CRS label.
+    // ========================================================================
+
+    #[test]
+    fn regression_transform_propagates_per_coordinate_failure() {
+        // A LineString with one valid WGS84 point and one non-finite (NaN)
+        // point. oxigeo_proj's `Transformer::transform` rejects non-finite
+        // coordinates, so this must surface as an `Err` from `transform()`
+        // -- not a geometry that's silently a mix of transformed/original
+        // coordinates all mislabeled as the target CRS.
+        let line = Geometry::with_crs(
+            GeoGeometry::LineString(geo_types::LineString::new(vec![
+                Coord { x: 139.7, y: 35.7 },
+                Coord {
+                    x: f64::NAN,
+                    y: 35.7,
+                },
+            ])),
+            Crs::epsg(4326),
+        );
+
+        let result = transform(&line, &Crs::epsg(3857));
+        assert!(
+            result.is_err(),
+            "a per-coordinate transform failure must propagate as an error, \
+             not silently keep the original coordinate under the target CRS"
+        );
+    }
+
+    #[test]
+    fn regression_transform_batch_propagates_per_coordinate_failure() {
+        let good_point =
+            Geometry::with_crs(GeoGeometry::Point(Point::new(139.7, 35.7)), Crs::epsg(4326));
+        let bad_point = Geometry::with_crs(
+            GeoGeometry::Point(Point::new(f64::NAN, 35.7)),
+            Crs::epsg(4326),
+        );
+
+        let result = transform_batch(&[good_point, bad_point], &Crs::epsg(3857));
+        assert!(
+            result.is_err(),
+            "a per-coordinate transform failure in any batch entry must fail \
+             the whole batch call, not silently substitute the original coordinate"
+        );
     }
 }
 

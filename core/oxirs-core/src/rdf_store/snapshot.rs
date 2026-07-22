@@ -830,11 +830,21 @@ pub fn load_snapshot(path: &Path, expected_source_len: Option<u64>) -> Result<Me
     let objects = ColumnDictionary::from_live_terms(objects, obj_rc);
     let graphs = ColumnDictionary::from_live_terms(graphs, graph_rc);
 
-    // Build the four permutation sets from their already-sorted arrays.
+    // Build the SPOG permutation set from its already-bounds-checked array,
+    // then *derive* the other three permutations (POSG/OSPG/GSPO) from it
+    // rather than trusting their own on-disk copies. The on-disk POSG/OSPG/
+    // GSPO arrays are id-bounds-checked (via the `tuple_count` header check
+    // above) but were never cross-checked against SPOG for tuple-set
+    // equality or per-column id range; a structurally-valid-but-corrupted
+    // (or tampered) snapshot whose secondary index disagreed with SPOG would
+    // previously load successfully and then silently serve wrong results for
+    // POS/OSP/GSP-ordered lookups. Deriving them from the validated SPOG set
+    // instead makes any such divergence impossible by construction, and is
+    // cheaper than parsing three more index sections.
     let spog: BTreeSet<[u32; 4]> = spog_vec.into_iter().collect();
-    let posg: BTreeSet<[u32; 4]> = load_index(data, &index_dirs[1])?.into_iter().collect();
-    let ospg: BTreeSet<[u32; 4]> = load_index(data, &index_dirs[2])?.into_iter().collect();
-    let gspo: BTreeSet<[u32; 4]> = load_index(data, &index_dirs[3])?.into_iter().collect();
+    let posg: BTreeSet<[u32; 4]> = spog.iter().map(|q| [q[1], q[2], q[0], q[3]]).collect();
+    let ospg: BTreeSet<[u32; 4]> = spog.iter().map(|q| [q[2], q[0], q[1], q[3]]).collect();
+    let gspo: BTreeSet<[u32; 4]> = spog.iter().map(|q| [q[3], q[0], q[1], q[2]]).collect();
 
     let storage = MemoryStorage::from_snapshot_parts(
         subjects, predicates, objects, graphs, spog, posg, ospg, gspo,

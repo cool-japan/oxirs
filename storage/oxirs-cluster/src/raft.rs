@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(feature = "raft")]
 use std::net::SocketAddr;
 #[cfg(feature = "raft")]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 #[cfg(feature = "raft")]
 use std::time::Duration;
@@ -404,6 +404,22 @@ impl RdfApp {
     }
 }
 
+/// How many applied log entries may accumulate before the durable
+/// state-machine checkpoint (`state_machine.bin`) is rewritten.
+///
+/// The checkpoint is **not** the source of truth — the fsync'd durable Raft
+/// log is — so it only needs to be rewritten often enough to bound how much of
+/// the log a restart must replay (openraft re-applies committed entries past
+/// the persisted `last_applied` on startup). Rewriting the whole,
+/// monotonically-growing state machine on *every* apply was O(n^2) over a long
+/// write burst and forced one extra fsync of an ever-larger file per commit;
+/// checkpointing every `STATE_MACHINE_CHECKPOINT_INTERVAL` applies keeps the
+/// hot commit path O(1) amortized while capping restart replay at this many
+/// entries. `build_snapshot` additionally forces a checkpoint, so the on-disk
+/// `last_applied` always covers any subsequent `purge_logs_upto` (purge safety).
+#[cfg(feature = "raft")]
+pub(crate) const STATE_MACHINE_CHECKPOINT_INTERVAL: u64 = 64;
+
 #[cfg(feature = "raft")]
 mod raft_impl {
     use super::*;
@@ -446,6 +462,20 @@ mod raft_impl {
         pub last_membership: Arc<RwLock<openraft::StoredMembership<OxirsNodeId, BasicNode>>>,
         /// Current snapshot
         pub snapshot: Arc<RwLock<Option<Snapshot<OxirsTypeConfig>>>>,
+        /// Optional durable backing store. When `Some`, every mutation to the
+        /// vote, log, committed index, state machine, membership, and snapshot
+        /// is written through to disk (with `fsync` before acknowledging the
+        /// vote and log appends), and the in-memory state above is reloaded
+        /// from it on construction via [`OxirsStorage::new_with_dir`]. When
+        /// `None` (genuine single-node / test paths), the store is purely
+        /// in-memory, exactly as before.
+        pub persist: Option<Arc<crate::raft_durable::DurableRaftStore>>,
+        /// Applies accumulated since the last durable state-machine checkpoint
+        /// (see `STATE_MACHINE_CHECKPOINT_INTERVAL`). Held in an `Arc` so the
+        /// count is shared across the clones `openraft::storage::Adaptor` makes
+        /// of this store — i.e. it is global to the single state-machine
+        /// applier, not per-clone.
+        pub apply_since_checkpoint: Arc<AtomicU64>,
     }
 
     impl OxirsStorage {
@@ -457,7 +487,90 @@ mod raft_impl {
                 last_applied: Arc::new(RwLock::new(None)),
                 last_membership: Arc::new(RwLock::new(openraft::StoredMembership::default())),
                 snapshot: Arc::new(RwLock::new(None)),
+                persist: None,
+                apply_since_checkpoint: Arc::new(AtomicU64::new(0)),
             }
+        }
+
+        /// Construct a durable storage backed by `<data_dir>/raft/`, reloading
+        /// any previously-persisted Raft state (vote, log, committed index,
+        /// applied state machine, membership, snapshot) so a restarted node
+        /// rebuilds from disk instead of an empty in-memory `Vec`. This is what
+        /// gives the node Raft's required durability across process restarts.
+        pub fn new_with_dir(data_dir: impl AsRef<std::path::Path>) -> Result<Self> {
+            use crate::raft_durable::DurableRaftStore;
+            use std::io::Cursor;
+
+            let (store, loaded) = DurableRaftStore::open(data_dir)?;
+
+            let hard_state = loaded.hard_state.unwrap_or((0, None, None));
+            let (last_applied, membership, state) = match loaded.state_machine {
+                Some(sm) => (sm.last_applied, sm.membership, sm.app),
+                None => (
+                    None,
+                    openraft::StoredMembership::default(),
+                    RdfApp::default(),
+                ),
+            };
+            let snapshot = loaded.snapshot.map(|snap| Snapshot {
+                meta: SnapshotMeta {
+                    last_log_id: snap.last_log_id,
+                    last_membership: snap.membership,
+                    snapshot_id: snap.snapshot_id,
+                },
+                snapshot: Box::new(Cursor::new(snap.data)),
+            });
+
+            Ok(Self {
+                state: Arc::new(RwLock::new(state)),
+                log: Arc::new(RwLock::new(loaded.log)),
+                hard_state: Arc::new(RwLock::new(hard_state)),
+                last_applied: Arc::new(RwLock::new(last_applied)),
+                last_membership: Arc::new(RwLock::new(membership)),
+                snapshot: Arc::new(RwLock::new(snapshot)),
+                persist: Some(Arc::new(store)),
+                apply_since_checkpoint: Arc::new(AtomicU64::new(0)),
+            })
+        }
+
+        /// Persist the current hard state tuple through the durable store, if
+        /// one is configured.
+        async fn persist_hard_state(&self) -> Result<(), StorageError<OxirsNodeId>> {
+            if let Some(store) = self.persist.as_ref() {
+                let hs = *self.hard_state.read().await;
+                store
+                    .persist_hard_state(&hs)
+                    .map_err(|e| StorageError::IO {
+                        source: StorageIOError::new(
+                            ErrorSubject::Vote,
+                            ErrorVerb::Write,
+                            openraft::AnyError::error(e),
+                        ),
+                    })?;
+            }
+            Ok(())
+        }
+
+        /// Persist the applied state-machine checkpoint through the durable
+        /// store, if one is configured.
+        async fn persist_state_machine(&self) -> Result<(), StorageError<OxirsNodeId>> {
+            if let Some(store) = self.persist.as_ref() {
+                let sm = crate::raft_durable::PersistedStateMachine {
+                    app: self.state.read().await.clone(),
+                    last_applied: *self.last_applied.read().await,
+                    membership: self.last_membership.read().await.clone(),
+                };
+                store
+                    .persist_state_machine(&sm)
+                    .map_err(|e| StorageError::IO {
+                        source: StorageIOError::new(
+                            ErrorSubject::StateMachine,
+                            ErrorVerb::Write,
+                            openraft::AnyError::error(e),
+                        ),
+                    })?;
+            }
+            Ok(())
         }
     }
 
@@ -509,17 +622,52 @@ mod raft_impl {
                     openraft::AnyError::new(&e),
                 ),
             })?;
+            // `state` is now captured into `data`; release the read guard
+            // before `persist_state_machine` (below) re-acquires it.
+            drop(state);
 
+            let snapshot_id = format!("snapshot-{}", last_applied.map_or(0, |id| id.index));
             let snapshot = Snapshot {
                 meta: SnapshotMeta {
                     last_log_id: last_applied,
-                    last_membership,
-                    snapshot_id: format!("snapshot-{}", last_applied.map_or(0, |id| id.index)),
+                    last_membership: last_membership.clone(),
+                    snapshot_id: snapshot_id.clone(),
                 },
-                snapshot: Box::new(Cursor::new(data)),
+                snapshot: Box::new(Cursor::new(data.clone())),
             };
 
+            // Durably persist the built snapshot so a restart can serve/restore
+            // from it instead of losing it with the process.
+            if let Some(store) = self.persist.as_ref() {
+                let persisted = crate::raft_durable::PersistedSnapshot {
+                    data,
+                    last_log_id: last_applied,
+                    membership: last_membership,
+                    snapshot_id,
+                };
+                store
+                    .persist_snapshot(&persisted)
+                    .map_err(|e| StorageError::IO {
+                        source: StorageIOError::new(
+                            ErrorSubject::Snapshot(None),
+                            ErrorVerb::Write,
+                            openraft::AnyError::error(e),
+                        ),
+                    })?;
+            }
+
             *self.snapshot.write().await = Some(snapshot.clone());
+
+            // Force a durable state-machine checkpoint at (>=) this snapshot's
+            // last-included index. openraft may `purge_logs_upto` that index
+            // immediately after building the snapshot; persisting the checkpoint
+            // here (with the current, >= snapshot `last_applied`) guarantees the
+            // on-disk checkpoint always covers the purge point, so a restart can
+            // still replay the surviving log tail. Reset the apply counter since
+            // the state machine is now fully persisted.
+            self.persist_state_machine().await?;
+            self.apply_since_checkpoint.store(0, Ordering::Relaxed);
+
             Ok(snapshot)
         }
     }
@@ -533,6 +681,7 @@ mod raft_impl {
             committed: Option<LogId<OxirsNodeId>>,
         ) -> Result<(), StorageError<OxirsNodeId>> {
             self.hard_state.write().await.2 = committed;
+            self.persist_hard_state().await?;
             Ok(())
         }
 
@@ -546,9 +695,14 @@ mod raft_impl {
             &mut self,
             vote: &openraft::Vote<OxirsNodeId>,
         ) -> Result<(), StorageError<OxirsNodeId>> {
-            let mut hard_state = self.hard_state.write().await;
-            hard_state.0 = vote.leader_id.term;
-            hard_state.1 = vote.leader_id.voted_for();
+            {
+                let mut hard_state = self.hard_state.write().await;
+                hard_state.0 = vote.leader_id.term;
+                hard_state.1 = vote.leader_id.voted_for();
+            }
+            // The vote MUST be durable before this returns: Raft's single-vote
+            // -per-term safety depends on a restarted node remembering it.
+            self.persist_hard_state().await?;
             Ok(())
         }
 
@@ -584,8 +738,22 @@ mod raft_impl {
         where
             I: IntoIterator<Item = Entry<OxirsTypeConfig>> + Send,
         {
-            let mut log = self.log.write().await;
-            log.extend(entries);
+            let appended: Vec<Entry<OxirsTypeConfig>> = entries.into_iter().collect();
+            {
+                let mut log = self.log.write().await;
+                log.extend(appended.iter().cloned());
+            }
+            // Durably append (fsync) before acknowledging: a committed entry
+            // must survive a restart.
+            if let Some(store) = self.persist.as_ref() {
+                store.append_log(&appended).map_err(|e| StorageError::IO {
+                    source: StorageIOError::new(
+                        ErrorSubject::Logs,
+                        ErrorVerb::Write,
+                        openraft::AnyError::error(e),
+                    ),
+                })?;
+            }
             Ok(())
         }
 
@@ -595,6 +763,16 @@ mod raft_impl {
         ) -> Result<(), StorageError<OxirsNodeId>> {
             let mut log = self.log.write().await;
             log.retain(|entry| entry.log_id.index < log_id.index);
+            // Append-only can't represent a truncation: rewrite the whole log.
+            if let Some(store) = self.persist.as_ref() {
+                store.rewrite_log(&log).map_err(|e| StorageError::IO {
+                    source: StorageIOError::new(
+                        ErrorSubject::Logs,
+                        ErrorVerb::Delete,
+                        openraft::AnyError::error(e),
+                    ),
+                })?;
+            }
             Ok(())
         }
 
@@ -604,6 +782,15 @@ mod raft_impl {
         ) -> Result<(), StorageError<OxirsNodeId>> {
             let mut log = self.log.write().await;
             log.retain(|entry| entry.log_id.index > log_id.index);
+            if let Some(store) = self.persist.as_ref() {
+                store.rewrite_log(&log).map_err(|e| StorageError::IO {
+                    source: StorageIOError::new(
+                        ErrorSubject::Logs,
+                        ErrorVerb::Delete,
+                        openraft::AnyError::error(e),
+                    ),
+                })?;
+            }
             Ok(())
         }
 
@@ -635,23 +822,53 @@ mod raft_impl {
             // first non-`Normal` entry and trip that assert on the very first
             // membership change (e.g. the bootstrap entry from `initialize()`).
             let mut responses = Vec::with_capacity(entries.len());
-            let mut state = self.state.write().await;
+            {
+                let mut state = self.state.write().await;
 
-            for entry in entries {
-                let response = match &entry.payload {
-                    EntryPayload::Normal(cmd) => state.apply_command(cmd),
-                    EntryPayload::Blank => RdfResponse::Success,
-                    EntryPayload::Membership(membership) => {
-                        // Track the actual last-applied membership so
-                        // `last_applied_state`/`build_snapshot` report the real
-                        // cluster configuration instead of a hardcoded empty one.
-                        *self.last_membership.write().await =
-                            openraft::StoredMembership::new(Some(entry.log_id), membership.clone());
-                        RdfResponse::Success
-                    }
-                };
-                responses.push(response);
-                *self.last_applied.write().await = Some(entry.log_id);
+                for entry in entries {
+                    let response = match &entry.payload {
+                        EntryPayload::Normal(cmd) => state.apply_command(cmd),
+                        EntryPayload::Blank => RdfResponse::Success,
+                        EntryPayload::Membership(membership) => {
+                            // Track the actual last-applied membership so
+                            // `last_applied_state`/`build_snapshot` report the real
+                            // cluster configuration instead of a hardcoded empty one.
+                            *self.last_membership.write().await = openraft::StoredMembership::new(
+                                Some(entry.log_id),
+                                membership.clone(),
+                            );
+                            RdfResponse::Success
+                        }
+                    };
+                    responses.push(response);
+                    *self.last_applied.write().await = Some(entry.log_id);
+                }
+            } // drop the state write guard before persisting (persist reads it)
+
+            // Durably checkpoint the applied state machine only *periodically*.
+            // The fsync'd durable log (see `append_to_log`) is the source of
+            // truth and already guarantees every committed entry survives a
+            // restart; on startup openraft re-applies committed log entries
+            // past the persisted checkpoint's `last_applied`. Rewriting the
+            // entire, monotonically-growing state machine on every apply was
+            // therefore redundant and O(n^2) over a long write burst — each
+            // apply re-serialized all prior triples and fsync'd an ever-larger
+            // file. Checkpointing every `STATE_MACHINE_CHECKPOINT_INTERVAL`
+            // applies bounds restart replay to that many entries while keeping
+            // the hot commit path O(1) amortized. (`apply_to_state_machine` is
+            // driven single-threaded by openraft's state-machine worker, so the
+            // read-modify-write of this counter needs no stronger ordering than
+            // `Relaxed`.) `build_snapshot` additionally forces a checkpoint so
+            // the on-disk `last_applied` always covers any later
+            // `purge_logs_upto` (purge safety).
+            let applied = entries.len() as u64;
+            let since = self
+                .apply_since_checkpoint
+                .fetch_add(applied, Ordering::Relaxed)
+                + applied;
+            if since >= STATE_MACHINE_CHECKPOINT_INTERVAL {
+                self.persist_state_machine().await?;
+                self.apply_since_checkpoint.store(0, Ordering::Relaxed);
             }
 
             Ok(responses)
@@ -689,6 +906,31 @@ mod raft_impl {
             // still report the hardcoded/stale membership it had before.
             *self.last_membership.write().await = meta.last_membership.clone();
 
+            // Durably persist both the installed snapshot and the resulting
+            // state-machine checkpoint so a restart reloads the caught-up state.
+            if let Some(store) = self.persist.as_ref() {
+                let persisted = crate::raft_durable::PersistedSnapshot {
+                    data: snapshot.get_ref().clone(),
+                    last_log_id: meta.last_log_id,
+                    membership: meta.last_membership.clone(),
+                    snapshot_id: meta.snapshot_id.clone(),
+                };
+                store
+                    .persist_snapshot(&persisted)
+                    .map_err(|e| StorageError::IO {
+                        source: StorageIOError::new(
+                            ErrorSubject::Snapshot(None),
+                            ErrorVerb::Write,
+                            openraft::AnyError::error(e),
+                        ),
+                    })?;
+            }
+            // The state machine has jumped forward to the installed snapshot's
+            // point, and both snapshot and checkpoint are now persisted, so the
+            // on-disk checkpoint is fully current — reset the apply counter.
+            self.persist_state_machine().await?;
+            self.apply_since_checkpoint.store(0, Ordering::Relaxed);
+
             Ok(())
         }
 
@@ -708,6 +950,8 @@ mod raft_impl {
                 last_applied: Arc::clone(&self.last_applied),
                 last_membership: Arc::clone(&self.last_membership),
                 snapshot: Arc::clone(&self.snapshot),
+                persist: self.persist.clone(),
+                apply_since_checkpoint: Arc::clone(&self.apply_since_checkpoint),
             }
         }
     }
@@ -756,6 +1000,21 @@ pub struct RaftNode {
     /// the listening port for a later restart to rebind.
     #[cfg(feature = "raft")]
     listener_task: Option<tokio::task::JoinHandle<()>>,
+    /// The exact `Arc<RwLock<_>>` peer-address map handed to the running
+    /// `OxirsRaftNetworkFactory` in `init_raft`. Kept so dynamic membership
+    /// changes (`add_node`) can register a newly-joined node's address into
+    /// the *live* factory map, otherwise the leader's outbound RaftNetwork
+    /// would have no address to dial the new voter at and replication to it
+    /// would never start. `None` until a multi-node `init_raft` succeeds.
+    #[cfg(feature = "raft")]
+    raft_peer_addresses: Option<Arc<RwLock<HashMap<OxirsNodeId, SocketAddr>>>>,
+    /// Directory under which durable Raft state (log/vote/committed/snapshot/
+    /// state machine) is persisted. When set, `init_raft` builds an
+    /// `OxirsStorage` backed by `<data_dir>/raft/` and reloads persisted state
+    /// on startup, so committed writes and the persisted vote survive process
+    /// restarts. When `None`, storage is in-memory only (single-node / tests).
+    #[cfg(feature = "raft")]
+    data_dir: Option<std::path::PathBuf>,
     storage: Arc<RwLock<RdfApp>>,
 }
 
@@ -838,8 +1097,24 @@ impl RaftNode {
             peer_addresses: HashMap::new(),
             #[cfg(feature = "raft")]
             listener_task: None,
+            #[cfg(feature = "raft")]
+            raft_peer_addresses: None,
+            #[cfg(feature = "raft")]
+            data_dir: None,
             storage: Arc::new(RwLock::new(RdfApp::default())),
         }
+    }
+
+    /// Configure the directory used to durably persist this node's Raft state.
+    /// Must be called before `init_raft` to take effect. An empty path is
+    /// treated as "no durable directory" (in-memory storage).
+    #[cfg(feature = "raft")]
+    pub fn set_data_dir(&mut self, dir: std::path::PathBuf) {
+        self.data_dir = if dir.as_os_str().is_empty() {
+            None
+        } else {
+            Some(dir)
+        };
     }
 
     /// Configure this node's Raft network: its own bind address, and the
@@ -990,7 +1265,20 @@ impl RaftNode {
             .map_err(|e| anyhow::anyhow!("invalid raft config for node {}: {e}", self.node_id))?,
         );
 
-        let store = OxirsStorage::new();
+        // Build durable storage when a data directory is configured, reloading
+        // any persisted log/vote/committed/snapshot/state-machine so a restart
+        // rejoins from disk rather than an empty in-memory Vec. Falls back to
+        // in-memory storage for single-node / test deployments.
+        let store = match self.data_dir.as_ref() {
+            Some(dir) => OxirsStorage::new_with_dir(dir).map_err(|e| {
+                anyhow::anyhow!(
+                    "node {} failed to open durable raft storage at {}: {e}",
+                    self.node_id,
+                    dir.display()
+                )
+            })?,
+            None => OxirsStorage::new(),
+        };
         // Clone the state Arc *before* handing `store` to `Adaptor::new` by
         // value (`OxirsStorage::clone` clones the inner Arcs, so this and the
         // copy inside the adaptor end up sharing the same underlying
@@ -1000,6 +1288,9 @@ impl RaftNode {
         let (log_store, state_machine) = openraft::storage::Adaptor::new(store);
 
         let peer_addresses = Arc::new(tokio::sync::RwLock::new(self.peer_addresses.clone()));
+        // Keep a handle to the *same* map the factory dials through, so a later
+        // `add_node` can register a new voter's address into it live.
+        let raft_peer_addresses = Arc::clone(&peer_addresses);
         let network =
             crate::raft_network::OxirsRaftNetworkFactory::new(self.node_id, peer_addresses);
 
@@ -1033,6 +1324,7 @@ impl RaftNode {
         // actually backing it.
         self.storage = state_arc;
         self.listener_task = Some(listener_task);
+        self.raft_peer_addresses = Some(raft_peer_addresses);
         self.raft = Some(raft);
 
         // Only the lowest-ID node in the full member set calls `initialize()`
@@ -1277,6 +1569,227 @@ impl RaftNode {
             .map(|raft| raft.metrics().borrow().clone())
     }
 
+    /// Resolve the running `Raft` handle, or a fail-loud error explaining why
+    /// this node cannot service a real cross-node consensus operation. Never
+    /// silently succeeds against local-only fallback storage — a membership or
+    /// leadership operation that never reaches openraft must not report
+    /// success (see the [`RaftClusterError`] variants).
+    #[cfg(feature = "raft")]
+    fn require_raft(&self, op: &str) -> Result<&Raft<OxirsTypeConfig>> {
+        match self.raft.as_ref() {
+            Some(raft) => Ok(raft),
+            None if self.multi_node_requested.load(Ordering::SeqCst) => {
+                Err(RaftClusterError::ConsensusUnavailable {
+                    node_id: self.node_id,
+                }
+                .into())
+            }
+            None => Err(anyhow::anyhow!(
+                "cannot {op}: node {} is not running a multi-node Raft cluster \
+                 (single-node mode has no membership to change or leadership to move)",
+                self.node_id
+            )),
+        }
+    }
+
+    /// Add a node to the cluster through real OpenRaft reconfiguration.
+    ///
+    /// This is the genuine joint-consensus path, not a no-op state-machine
+    /// command: the new node's address is registered into the live network
+    /// factory so the leader can dial it, the node is first added as a
+    /// *learner* (blocking until its log catches up), and only then promoted
+    /// to a full voter via `change_membership`. Both steps are committed
+    /// through openraft, so the added node actually counts toward quorum and
+    /// receives replication. Errors from either step are surfaced verbatim.
+    #[cfg(feature = "raft")]
+    pub async fn add_node(&self, node_id: OxirsNodeId, address: SocketAddr) -> Result<()> {
+        let raft = self.require_raft("add node")?;
+
+        // Register the joiner's address into the *live* factory map first, so
+        // the replication that `add_learner(.., blocking=true)` waits on has a
+        // real endpoint to dial. Without this the learner add would block
+        // forever (no address ⇒ RaftNetwork can never reach it).
+        if let Some(addrs) = self.raft_peer_addresses.as_ref() {
+            addrs.write().await.insert(node_id, address);
+        }
+
+        raft.add_learner(node_id, BasicNode::new(address.to_string()), true)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "node {}: failed to add learner {node_id}: {e}",
+                    self.node_id
+                )
+            })?;
+
+        raft.change_membership(
+            openraft::ChangeMembers::AddVoterIds(std::iter::once(node_id).collect()),
+            true,
+        )
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "node {}: failed to promote {node_id} to voter: {e}",
+                self.node_id
+            )
+        })?;
+
+        tracing::info!(
+            node_id = self.node_id,
+            added = node_id,
+            "committed membership change adding node {node_id} as a voter"
+        );
+        Ok(())
+    }
+
+    /// Remove a node from the cluster through real OpenRaft reconfiguration.
+    ///
+    /// Commits a `change_membership` that drops `node_id` from the voter set
+    /// (and, with `retain = false`, from the cluster entirely) so openraft
+    /// stops counting it toward quorum and stops replicating to it — as
+    /// opposed to the previous no-op state-machine command that left the
+    /// departed node counted as a live voter forever.
+    #[cfg(feature = "raft")]
+    pub async fn remove_node(&self, node_id: OxirsNodeId) -> Result<()> {
+        let raft = self.require_raft("remove node")?;
+
+        raft.change_membership(
+            openraft::ChangeMembers::RemoveVoters(std::iter::once(node_id).collect()),
+            false,
+        )
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "node {}: failed to remove voter {node_id}: {e}",
+                self.node_id
+            )
+        })?;
+
+        if let Some(addrs) = self.raft_peer_addresses.as_ref() {
+            addrs.write().await.remove(&node_id);
+        }
+
+        tracing::info!(
+            node_id = self.node_id,
+            removed = node_id,
+            "committed membership change removing node {node_id}"
+        );
+        Ok(())
+    }
+
+    /// Transfer leadership to `target_node`.
+    ///
+    /// OpenRaft 0.9.24 exposes no native leader-transfer call, so this
+    /// implements the Raft §3.10 handoff directly over the crate's own Raft
+    /// RPC transport: it verifies this node is the current leader and that
+    /// `target_node` is a voter whose log has caught up, then sends a
+    /// `TimeoutNow` RPC that makes the target immediately start an election
+    /// (via `Raft::trigger().elect()` on the receiving side). Because the
+    /// target's log is up to date, Raft's election-restriction guarantees it
+    /// wins over any stale voter, and this leader steps down when it observes
+    /// the target's higher term. Fails loud if this node is not the leader,
+    /// the target is not a caught-up voter, or the RPC cannot be delivered —
+    /// it never reports a fake success.
+    #[cfg(feature = "raft")]
+    pub async fn transfer_leadership(&self, target_node: OxirsNodeId) -> Result<()> {
+        let raft = self.require_raft("transfer leadership")?;
+        let metrics = raft.metrics().borrow().clone();
+
+        if metrics.current_leader != Some(self.node_id) {
+            return Err(anyhow::anyhow!(
+                "node {} cannot transfer leadership: it is not the current leader (leader is {:?})",
+                self.node_id,
+                metrics.current_leader
+            ));
+        }
+        if target_node == self.node_id {
+            return Ok(());
+        }
+
+        // Target must be a voter and its replication must have caught up to
+        // this leader's last log id, or the handoff could hand leadership to a
+        // node that then cannot be elected (or, worse, loses committed state).
+        let voters: BTreeSet<OxirsNodeId> =
+            metrics.membership_config.membership().voter_ids().collect();
+        if !voters.contains(&target_node) {
+            return Err(anyhow::anyhow!(
+                "node {} cannot transfer leadership to {target_node}: it is not a voter",
+                self.node_id
+            ));
+        }
+        // `caught_up` is the target's matched log id as this leader sees it.
+        let caught_up = metrics
+            .replication
+            .as_ref()
+            .and_then(|repl| repl.get(&target_node).copied())
+            .flatten();
+        match (caught_up, metrics.last_log_index) {
+            // Target has replicated up to (or past) this leader's last log.
+            (Some(matched), Some(last)) if matched.index >= last => {}
+            // Leader has no log yet: nothing for the target to catch up to.
+            (_, None) => {}
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "node {} cannot transfer leadership to {target_node}: target has not caught up \
+                     (matched={:?}, leader_last={:?})",
+                    self.node_id,
+                    caught_up,
+                    metrics.last_log_index
+                ));
+            }
+        }
+
+        let address = self
+            .raft_peer_addresses
+            .as_ref()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "node {} cannot transfer leadership: no live peer address map",
+                    self.node_id
+                )
+            })?
+            .read()
+            .await
+            .get(&target_node)
+            .copied()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "node {} cannot transfer leadership to {target_node}: no known address",
+                    self.node_id
+                )
+            })?;
+
+        crate::raft_network::send_timeout_now(self.node_id, target_node, address)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "node {} failed to deliver leadership-transfer signal to {target_node}: {e}",
+                    self.node_id
+                )
+            })?;
+
+        tracing::info!(
+            node_id = self.node_id,
+            target = target_node,
+            "sent leadership-transfer (TimeoutNow) signal; target will start an election"
+        );
+        Ok(())
+    }
+
+    /// Trigger a local election immediately (openraft `Trigger::elect`).
+    ///
+    /// Used by recovery to nudge a quorum-connected cluster that has lost its
+    /// leader back into electing one, without the destructive full re-init the
+    /// old recovery path performed.
+    #[cfg(feature = "raft")]
+    pub async fn trigger_election(&self) -> Result<()> {
+        let raft = self.require_raft("trigger election")?;
+        raft.trigger()
+            .elect()
+            .await
+            .map_err(|e| anyhow::anyhow!("node {}: failed to trigger election: {e}", self.node_id))
+    }
+
     /// This node currently has a real, running multi-node Raft instance —
     /// i.e. `self.storage` is kept in sync with (shares the same `Arc` as)
     /// that instance's own applied state machine (see `init_raft`). Reads
@@ -1377,6 +1890,9 @@ impl RaftNode {
                 listener_task.abort();
                 let _ = listener_task.await;
             }
+            // Drop the live factory address-map handle; a fresh `init_raft`
+            // installs a new one.
+            self.raft_peer_addresses = None;
         }
 
         // Clear storage reference
@@ -1846,5 +2362,104 @@ mod tests {
             "a genuine failure must leave bootstrap_attempted unlatched so a future \
              init_raft() call can retry"
         );
+    }
+
+    /// The durable state-machine checkpoint is now rewritten only periodically
+    /// (every `STATE_MACHINE_CHECKPOINT_INTERVAL` applies) rather than on every
+    /// apply, to avoid an O(n^2) full-state re-serialization on the hot commit
+    /// path. This optimization must not lose any committed data: the fsync'd
+    /// durable log stays complete, and the persisted checkpoint plus a replay
+    /// of the log tail past its `last_applied` must reconstruct the exact state
+    /// — which is precisely what a restarted node (openraft) does. Applying one
+    /// entry at a time and choosing a non-multiple of the interval forces the
+    /// final applies to land *after* the last checkpoint, so this genuinely
+    /// exercises the checkpoint-lag-then-replay recovery path.
+    #[cfg(feature = "raft")]
+    #[tokio::test]
+    async fn regression_periodic_checkpoint_preserves_all_committed_state() {
+        use openraft::{CommittedLeaderId, Entry, EntryPayload, LogId, RaftStorage};
+
+        let dir = std::env::temp_dir().join(format!(
+            "oxirs_sm_ckpt_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+
+        let n = STATE_MACHINE_CHECKPOINT_INTERVAL * 2 + 3;
+        let entries: Vec<Entry<OxirsTypeConfig>> = (1..=n)
+            .map(|i| Entry {
+                log_id: LogId::new(CommittedLeaderId::new(1, 0), i),
+                payload: EntryPayload::Normal(RdfCommand::Insert {
+                    subject: format!("http://s/{i}"),
+                    predicate: "http://p".to_string(),
+                    object: format!("\"o{i}\""),
+                }),
+            })
+            .collect();
+
+        {
+            let mut store = OxirsStorage::new_with_dir(&dir).expect("open durable store");
+            store
+                .append_to_log(entries.clone())
+                .await
+                .expect("append to durable log");
+            // Apply one entry at a time, exactly as openraft applies committed
+            // single-write entries.
+            for entry in &entries {
+                store
+                    .apply_to_state_machine(std::slice::from_ref(entry))
+                    .await
+                    .expect("apply to state machine");
+            }
+            assert_eq!(
+                store.state.read().await.triples.len(),
+                n as usize,
+                "in-memory state must reflect every applied entry"
+            );
+        }
+
+        // Re-open on the same directory (simulating a process restart).
+        let reopened = OxirsStorage::new_with_dir(&dir).expect("re-open durable store");
+
+        // The durable log must retain every committed entry regardless of
+        // checkpoint cadence — that is what makes the periodic checkpoint safe.
+        assert_eq!(
+            reopened.log.read().await.len(),
+            n as usize,
+            "durable log must retain every committed entry"
+        );
+
+        // The persisted checkpoint is expected to lag (the last few applies
+        // landed after the final periodic checkpoint), and the durable log
+        // tail past it must reconstruct the full state — exactly the recovery
+        // openraft performs on startup.
+        let checkpoint_index = reopened
+            .last_applied
+            .read()
+            .await
+            .map(|id| id.index)
+            .unwrap_or(0);
+        assert!(
+            checkpoint_index < n,
+            "checkpoint should lag the latest apply (got {checkpoint_index}, applied {n})"
+        );
+        let mut rebuilt = reopened.state.read().await.clone();
+        for entry in reopened.log.read().await.iter() {
+            if entry.log_id.index > checkpoint_index {
+                if let EntryPayload::Normal(cmd) = &entry.payload {
+                    rebuilt.apply_command(cmd);
+                }
+            }
+        }
+        assert_eq!(
+            rebuilt.triples.len(),
+            n as usize,
+            "checkpoint + durable-log replay must reconstruct the full state machine"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

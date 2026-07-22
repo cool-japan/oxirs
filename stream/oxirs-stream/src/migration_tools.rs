@@ -731,18 +731,64 @@ impl MigrationTool {
     }
 
     async fn analyze_file(&self, file_path: &Path) -> Result<FileAnalysis, StreamError> {
-        // In a real implementation, we'd parse the source file
-        // For now, return a mock analysis
+        // Read and actually inspect the source file rather than returning a
+        // fixed mock. We count real lines and scan each line for known source
+        // API tokens (from the configured `api_mappings` table), emitting a
+        // warning per occurrence with the true line number.
+        let contents = tokio::fs::read_to_string(file_path).await.map_err(|e| {
+            StreamError::Io(format!("Failed to read {}: {}", file_path.display(), e))
+        })?;
+
+        let lines = contents.lines().count();
+        let api_mappings = self.api_mappings.read().await;
+
+        let mut warnings = Vec::new();
+        let mut review_items = Vec::new();
+
+        for (index, line) in contents.lines().enumerate() {
+            let line_number = index + 1;
+            for mapping in api_mappings.iter() {
+                if mapping.source_api.is_empty() || !line.contains(&mapping.source_api) {
+                    continue;
+                }
+
+                warnings.push(MigrationWarning {
+                    code: "DEPRECATED_API".to_string(),
+                    message: format!(
+                        "Source API '{}' should be migrated to '{}'",
+                        mapping.source_api, mapping.target_api
+                    ),
+                    file: Some(file_path.to_path_buf()),
+                    line: Some(line_number),
+                    suggestion: Some(if mapping.notes.is_empty() {
+                        format!("Replace with '{}'", mapping.target_api)
+                    } else {
+                        mapping.notes.clone()
+                    }),
+                });
+
+                // APIs without a known target require manual attention.
+                if mapping.target_api.is_empty() {
+                    review_items.push(ManualReviewItem {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        description: format!(
+                            "No automated mapping for API '{}'",
+                            mapping.source_api
+                        ),
+                        file: file_path.to_path_buf(),
+                        line_range: (line_number, line_number),
+                        priority: ReviewPriority::High,
+                        reason: "Unmapped source API".to_string(),
+                        suggestion: "Manually port this API usage".to_string(),
+                    });
+                }
+            }
+        }
+
         Ok(FileAnalysis {
-            lines: 100,
-            warnings: vec![MigrationWarning {
-                code: "DEPRECATED_API".to_string(),
-                message: "Some APIs may need manual review".to_string(),
-                file: Some(file_path.to_path_buf()),
-                line: None,
-                suggestion: Some("Check API mappings".to_string()),
-            }],
-            review_items: vec![],
+            lines,
+            warnings,
+            review_items,
         })
     }
 
@@ -1153,6 +1199,40 @@ mod tests {
         let api_mappings = tool.get_api_mappings().await;
         let has_filter = api_mappings.iter().any(|m| m.source_api.contains("filter"));
         assert!(has_filter);
+    }
+
+    #[tokio::test]
+    async fn regression_analyze_file_reads_real_content() {
+        // Create a temporary source directory with a real .java file.
+        let source_dir = std::env::temp_dir().join(format!(
+            "oxirs_mig_real_{}_{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        tokio::fs::create_dir_all(&source_dir).await.unwrap();
+        let file_path = source_dir.join("Sample.java");
+        // Five lines of real content (previously analyze_file hardcoded 100).
+        let contents = "line1\nline2\nline3\nline4\nline5\n";
+        tokio::fs::write(&file_path, contents).await.unwrap();
+
+        let config = MigrationConfig {
+            source_platform: SourcePlatform::KafkaStreams,
+            source_dir: source_dir.clone(),
+            output_dir: std::env::temp_dir()
+                .join(format!("oxirs_mig_out_{}", uuid::Uuid::new_v4())),
+            ..Default::default()
+        };
+
+        let mut tool = MigrationTool::new(config);
+        tool.load_default_mappings().await;
+
+        let report = tool.analyze().await.unwrap();
+
+        assert_eq!(report.files_processed, 1);
+        // The real line count must be reported, not the previous mock value 100.
+        assert_eq!(report.lines_converted, 5);
+
+        let _ = tokio::fs::remove_dir_all(&source_dir).await;
     }
 
     #[tokio::test]

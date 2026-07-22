@@ -371,30 +371,48 @@ impl ParameterExtractor {
             }
         }
 
-        // Add defaults if needed
+        // Add defaults if needed. Track exactly which keys are synthetic
+        // (not extracted from the graph) so callers can tell fabricated
+        // fallback values apart from genuine RDF-extracted measurements
+        // instead of the two being silently indistinguishable.
+        let mut defaulted_fields = Vec::new();
         if self.config.use_defaults && initial_conditions.is_empty() {
             match simulation_type {
                 "thermal" => {
+                    let key = "temperature".to_string();
                     initial_conditions.insert(
-                        "temperature".to_string(),
+                        key.clone(),
                         PhysicalQuantity {
                             value: 293.15,
                             unit: "K".to_string(),
                             uncertainty: Some(0.1),
                         },
                     );
+                    defaulted_fields.push(key);
                 }
                 "mechanical" => {
+                    let key = "displacement".to_string();
                     initial_conditions.insert(
-                        "displacement".to_string(),
+                        key.clone(),
                         PhysicalQuantity {
                             value: 0.0,
                             unit: "m".to_string(),
                             uncertainty: Some(1e-6),
                         },
                     );
+                    defaulted_fields.push(key);
                 }
                 _ => {}
+            }
+
+            if !defaulted_fields.is_empty() {
+                tracing::debug!(
+                    entity_iri,
+                    simulation_type,
+                    ?defaulted_fields,
+                    "no matching initial-condition triples found in RDF graph; \
+                     substituting fallback default values"
+                );
             }
         }
 
@@ -407,6 +425,7 @@ impl ParameterExtractor {
             time_steps: 100,
             material_properties,
             constraints: Vec::new(),
+            defaulted_fields,
         })
     }
 
@@ -491,6 +510,15 @@ impl ParameterExtractor {
             _ => (HashMap::new(), HashMap::new()),
         };
 
+        // Every value produced by mock extraction is entirely synthetic
+        // (fabricated per simulation-type, ignoring `entity_iri`), so all
+        // of it is flagged as defaulted for provenance purposes.
+        let defaulted_fields = initial_conditions
+            .keys()
+            .chain(material_properties.keys())
+            .cloned()
+            .collect();
+
         Ok(SimulationParameters {
             entity_iri: entity_iri.to_string(),
             simulation_type: simulation_type.to_string(),
@@ -500,6 +528,7 @@ impl ParameterExtractor {
             time_steps: 100,
             material_properties,
             constraints: Vec::new(),
+            defaulted_fields,
         })
     }
 }
@@ -569,6 +598,18 @@ pub struct SimulationParameters {
 
     /// Physics constraints
     pub constraints: Vec<String>,
+
+    /// Names of keys in `initial_conditions` (and, for mock extraction,
+    /// `material_properties`) that were filled with fallback/synthetic
+    /// default values rather than genuinely extracted from an RDF graph.
+    ///
+    /// Empty means every value present was extracted from real RDF triples.
+    /// Non-empty entries let callers distinguish "the graph really has no
+    /// data for this entity, here are conservative defaults" from "these
+    /// are real measurements", instead of silently treating fabricated
+    /// values as indistinguishable from extracted ones.
+    #[serde(default)]
+    pub defaulted_fields: Vec<String>,
 }
 
 /// Physical quantity with value and unit
@@ -732,6 +773,7 @@ mod tests {
             time_steps: 50,
             material_properties: HashMap::new(),
             constraints: Vec::new(),
+            defaulted_fields: Vec::new(),
         };
 
         let json = serde_json::to_string(&params).expect("Failed to serialize");
@@ -789,6 +831,85 @@ mod tests {
         assert_eq!(
             extractor.infer_relationship_type("http://example.org/other_relation"),
             RelationType::Other
+        );
+    }
+
+    /// Regression test for the P2 finding: `extract_from_rdf` used to
+    /// silently substitute fabricated default initial conditions when a
+    /// real (but empty of matching triples) RDF store had no
+    /// "initial"/"position"/"velocity"-named properties for the entity,
+    /// with no way for the caller to tell fabricated values apart from
+    /// genuinely-extracted ones. This proves the fallback is now tracked
+    /// in `defaulted_fields`.
+    #[tokio::test]
+    async fn regression_extract_from_rdf_flags_defaulted_fields() {
+        use oxirs_core::model::{Literal, Object, Predicate, Subject, Triple};
+
+        let mut store = RdfStore::new().expect("failed to create store");
+
+        // Insert a triple whose predicate name does NOT contain
+        // "initial"/"position"/"velocity" (nor a material-property
+        // keyword), so it will not populate `initial_conditions`,
+        // forcing the fallback-default path.
+        let entity = NamedNode::new("http://example.org/entity-no-ic").expect("valid IRI");
+        let unrelated_pred = NamedNode::new("http://oxirs.org/physics#label").expect("valid IRI");
+        store
+            .insert_triple(Triple::new(
+                Subject::NamedNode(entity.clone()),
+                Predicate::NamedNode(unrelated_pred),
+                Object::Literal(Literal::new("42")),
+            ))
+            .expect("insert failed");
+
+        let extractor = ParameterExtractor::with_store(Arc::new(store));
+        let params = extractor
+            .extract("http://example.org/entity-no-ic", "thermal")
+            .await
+            .expect("extraction failed");
+
+        // The default was applied...
+        let temp = params
+            .initial_conditions
+            .get("temperature")
+            .expect("expected fallback default temperature");
+        assert_eq!(temp.value, 293.15);
+
+        // ...and is explicitly flagged as synthetic, not silently
+        // indistinguishable from a real RDF-extracted value.
+        assert_eq!(params.defaulted_fields, vec!["temperature".to_string()]);
+    }
+
+    /// Regression companion: when real RDF-extracted initial conditions
+    /// ARE found, no field should be flagged as defaulted.
+    #[tokio::test]
+    async fn regression_extract_from_rdf_no_defaulted_fields_with_real_data() {
+        use oxirs_core::model::{Literal, Object, Predicate, Subject, Triple};
+
+        let mut store = RdfStore::new().expect("failed to create store");
+
+        let entity = NamedNode::new("http://example.org/entity-with-ic").expect("valid IRI");
+        let initial_temp_pred =
+            NamedNode::new("http://oxirs.org/physics#initial_temperature").expect("valid IRI");
+        store
+            .insert_triple(Triple::new(
+                Subject::NamedNode(entity.clone()),
+                Predicate::NamedNode(initial_temp_pred),
+                Object::Literal(Literal::new("310.5")),
+            ))
+            .expect("insert failed");
+
+        let extractor = ParameterExtractor::with_store(Arc::new(store));
+        let params = extractor
+            .extract("http://example.org/entity-with-ic", "thermal")
+            .await
+            .expect("extraction failed");
+
+        assert!(params
+            .initial_conditions
+            .contains_key("initial_temperature"));
+        assert!(
+            params.defaulted_fields.is_empty(),
+            "real RDF-extracted data must not be flagged as defaulted"
         );
     }
 }

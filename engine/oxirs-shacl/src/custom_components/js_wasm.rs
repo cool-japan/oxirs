@@ -129,55 +129,25 @@ impl JavaScriptValidator {
         self
     }
 
-    /// Execute JavaScript validation
+    /// Execute JavaScript validation.
     ///
-    /// This is a placeholder implementation. In production, this would use:
-    /// - QuickJS for lightweight JavaScript execution
-    /// - rquickjs crate for Rust bindings
-    /// - Proper sandboxing with resource limits
+    /// No sandboxed JavaScript runtime is wired into this build, so a configured
+    /// JavaScript validator MUST NOT silently report conformance (which would
+    /// pass every focus node regardless of the actual validation logic).
+    /// Instead this fails loud with [`ShaclError::UnsupportedOperation`], in line
+    /// with the project's fail-loud contract. Wiring a real sandboxed engine
+    /// (e.g. QuickJS via `rquickjs`, or Boa) would replace this method body.
     pub fn execute(
-        &self,
-        value: &Term,
-        parameters: &HashMap<String, Term>,
-    ) -> Result<ComponentExecutionResult> {
-        let start = Instant::now();
-
-        // TODO: Implement actual JavaScript execution with rquickjs or similar
-        // For now, return a placeholder result
-        let result = self.execute_mock(value, parameters)?;
-
-        let execution_time = start.elapsed();
-
-        // Check execution time limit
-        if execution_time.as_millis() > self.config.max_execution_time_ms as u128 {
-            return Err(ShaclError::Timeout(format!(
-                "JavaScript execution exceeded time limit: {:?}",
-                execution_time
-            )));
-        }
-
-        Ok(result)
-    }
-
-    /// Mock execution for demonstration
-    /// In production, replace with actual JavaScript runtime
-    fn execute_mock(
         &self,
         _value: &Term,
         _parameters: &HashMap<String, Term>,
     ) -> Result<ComponentExecutionResult> {
-        // Placeholder: Always return valid for demonstration
-        Ok(ComponentExecutionResult {
-            constraint_result: ConstraintEvaluationResult::Satisfied,
-            metrics: ExecutionMetrics {
-                execution_time: Duration::from_millis(0),
-                memory_used: 0,
-                sparql_queries: 0,
-                success: true,
-                error: None,
-            },
-            security_violations: Vec::new(),
-        })
+        Err(ShaclError::UnsupportedOperation(format!(
+            "JavaScript constraint validator '{}' cannot be executed: no sandboxed \
+             JavaScript runtime is available in this build. Configure a WASM validator \
+             or a built-in/SPARQL constraint instead.",
+            self.component_id.as_str()
+        )))
     }
 
     /// Validate the JavaScript code syntax
@@ -323,8 +293,13 @@ impl WasmValidator {
     ) -> Result<ComponentExecutionResult> {
         let start = Instant::now();
 
-        // Configure wasmi with default settings
-        let config = Config::default();
+        // Configure wasmi with fuel metering enabled so that a hung or malicious
+        // module (e.g. an infinite loop) is preempted deterministically after a
+        // bounded number of instructions, rather than blocking the calling
+        // thread indefinitely and only being noticed by a post-hoc wall-clock
+        // check. The fuel budget is derived from the configured time limit.
+        let mut config = Config::default();
+        config.consume_fuel(true);
         let engine = Engine::new(&config);
 
         // Compile WASM module
@@ -335,8 +310,19 @@ impl WasmValidator {
         // Create linker with no host functions (fully sandboxed)
         let linker = Linker::new(&engine);
 
-        // Create store
+        // Create store and load a finite fuel budget. ~5M fuel units per allowed
+        // millisecond bounds runaway execution while leaving ample headroom for
+        // legitimate validators; the minimum ensures very small time limits
+        // still allow non-trivial modules to run.
         let mut store = Store::new(&engine, ());
+        let fuel_budget = self
+            .config
+            .max_execution_time_ms
+            .saturating_mul(5_000_000)
+            .max(1_000_000);
+        store.set_fuel(fuel_budget).map_err(|e| {
+            ShaclError::Configuration(format!("Failed to set WASM fuel budget: {e}"))
+        })?;
 
         // Instantiate and start module (wasmi 1.0 API)
         let instance = linker
@@ -366,7 +352,15 @@ impl WasmValidator {
         validate_func
             .call(&mut store, &[Val::I32(value_hash)], &mut results)
             .map_err(|e| {
-                ShaclError::Configuration(format!("WASM function execution failed: {}", e))
+                let msg = e.to_string();
+                if msg.to_lowercase().contains("fuel") {
+                    ShaclError::Timeout(format!(
+                        "WASM validator exhausted its instruction budget \
+                         (fuel) and was preempted: {msg}"
+                    ))
+                } else {
+                    ShaclError::Configuration(format!("WASM function execution failed: {msg}"))
+                }
             })?;
 
         // Extract result (1 = valid, 0 = invalid)
@@ -734,6 +728,73 @@ mod tests {
         );
 
         assert!(validator.validate_code().is_err());
+    }
+
+    #[test]
+    fn regression_js_validator_execute_is_fail_loud() {
+        use oxirs_core::model::NamedNode;
+        let metadata = ComponentMetadata {
+            name: "TestJS".to_string(),
+            description: None,
+            version: Some("1.0.0".to_string()),
+            author: None,
+            parameters: vec![],
+            applicable_to_node_shapes: true,
+            applicable_to_property_shapes: true,
+            example: None,
+        };
+        let validator = JavaScriptValidator::new(
+            ConstraintComponentId("test:js".to_string()),
+            metadata,
+            "function validate(v, p) { return false; }".to_string(),
+        );
+        let value = Term::NamedNode(NamedNode::new("http://example.org/x").expect("iri"));
+        let res = validator.execute(&value, &HashMap::new());
+        // Must NOT silently report Satisfied; must fail loud.
+        assert!(
+            matches!(res, Err(ShaclError::UnsupportedOperation(_))),
+            "JS validator must fail loud, got {res:?}"
+        );
+    }
+
+    #[test]
+    fn regression_wasm_infinite_loop_is_preempted_by_fuel() {
+        use oxirs_core::model::NamedNode;
+        // Hand-encoded WASM module exporting `validate` (i32)->(i32) whose body
+        // is an infinite loop `(loop (br 0))`. Without fuel metering this would
+        // hang the thread forever; with fuel it must be preempted (Timeout).
+        let wasm_bytes: Vec<u8> = vec![
+            0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, // header
+            0x01, 0x06, 0x01, 0x60, 0x01, 0x7F, 0x01, 0x7F, // type: (i32)->(i32)
+            0x03, 0x02, 0x01, 0x00, // func section: 1 func, type 0
+            0x07, 0x0C, 0x01, 0x08, 0x76, 0x61, 0x6C, 0x69, 0x64, 0x61, 0x74, 0x65, 0x00,
+            0x00, // export "validate" func 0
+            0x0A, 0x0B, 0x01, 0x09, 0x00, 0x03, 0x40, 0x0C, 0x00, 0x0B, 0x41, 0x00,
+            0x0B, // code: loop { br 0 } i32.const 0
+        ];
+        let metadata = ComponentMetadata {
+            name: "LoopWasm".to_string(),
+            description: None,
+            version: Some("1.0.0".to_string()),
+            author: None,
+            parameters: vec![],
+            applicable_to_node_shapes: true,
+            applicable_to_property_shapes: true,
+            example: None,
+        };
+        let mut validator = WasmValidator::new(
+            ConstraintComponentId("test:loop".to_string()),
+            metadata,
+            wasm_bytes,
+        );
+        // Small time budget -> small (but finite) fuel budget.
+        validator.config.max_execution_time_ms = 1;
+        let value = Term::NamedNode(NamedNode::new("http://example.org/x").expect("iri"));
+        let res = validator.execute(&value, &HashMap::new());
+        assert!(
+            matches!(res, Err(ShaclError::Timeout(_))),
+            "infinite-loop WASM must be preempted by fuel (Timeout), got {res:?}"
+        );
     }
 
     #[test]

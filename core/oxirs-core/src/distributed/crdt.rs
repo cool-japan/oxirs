@@ -467,6 +467,26 @@ struct CrdtStats {
     tombstone_count: usize,
 }
 
+/// Build the `subject_index` key for a concrete triple subject.
+///
+/// `Subject::as_str()` (via [`crate::model::RdfTerm::as_str`]) returns the
+/// fixed, non-identifying placeholder `"<<quoted-triple>>"` for *every*
+/// quoted-triple subject; keying the index off that constant would collapse
+/// all quoted-triple-subject triples into a single `subject_index` bucket,
+/// so querying by one specific quoted-triple subject pattern would
+/// incorrectly return triples for every *other* quoted-triple subject too.
+/// Serializing the full `<< s p o >>` content instead keeps distinct quoted
+/// triples in distinct buckets; it can never collide with a NamedNode,
+/// BlankNode, or Variable key since none of those start with `"<<"`.
+fn subject_index_key(subject: &crate::model::Subject) -> String {
+    match subject {
+        crate::model::Subject::NamedNode(nn) => nn.as_str().to_string(),
+        crate::model::Subject::BlankNode(bn) => bn.as_str().to_string(),
+        crate::model::Subject::Variable(v) => v.as_str().to_string(),
+        crate::model::Subject::QuotedTriple(qt) => format!("{qt}"),
+    }
+}
+
 impl RdfCrdt {
     /// Create new RDF CRDT
     pub async fn new(config: CrdtConfig) -> Result<Self, OxirsError> {
@@ -497,14 +517,9 @@ impl RdfCrdt {
             .add(triple.clone());
 
         // Update subject index
-        let subject_str = match triple.subject() {
-            crate::model::Subject::NamedNode(nn) => nn.as_str(),
-            crate::model::Subject::BlankNode(bn) => bn.as_str(),
-            crate::model::Subject::Variable(v) => v.as_str(),
-            crate::model::Subject::QuotedTriple(_qt) => "<<quoted-triple>>",
-        };
+        let subject_key = subject_index_key(triple.subject());
         self.subject_index
-            .entry(subject_str.to_string())
+            .entry(subject_key)
             .or_insert_with(|| OrSet::new(self.config.node_id.clone()))
             .add(triple);
 
@@ -532,13 +547,8 @@ impl RdfCrdt {
         }
 
         // Update subject index
-        let subject_str = match triple.subject() {
-            crate::model::Subject::NamedNode(nn) => nn.as_str(),
-            crate::model::Subject::BlankNode(bn) => bn.as_str(),
-            crate::model::Subject::Variable(v) => v.as_str(),
-            crate::model::Subject::QuotedTriple(_qt) => "<<quoted-triple>>",
-        };
-        if let Some(subject_set) = self.subject_index.get_mut(subject_str) {
+        let subject_key = subject_index_key(triple.subject());
+        if let Some(subject_set) = self.subject_index.get_mut(&subject_key) {
             subject_set.remove(triple);
         }
 
@@ -553,7 +563,27 @@ impl RdfCrdt {
 
     /// Query triples by pattern
     pub async fn query(&self, pattern: &TriplePattern) -> Result<Vec<Triple>, OxirsError> {
+        // `subject_index` is keyed by the *serialized content* of concrete
+        // quoted-triple subjects (see `subject_index_key`), not by the
+        // (possibly variable-containing) `SubjectPattern` being queried, so
+        // a `SubjectPattern::QuotedTriple` pattern can never be looked up by
+        // an exact key match the way a NamedNode/BlankNode/Variable pattern
+        // can. Fall back to a full scan for that shape instead of querying
+        // the index with a key that -- by construction -- will never be
+        // present, which would otherwise silently return an empty result
+        // for a pattern that may have real matches.
+        let is_quoted_triple_subject = matches!(
+            pattern.subject(),
+            Some(crate::model::SubjectPattern::QuotedTriple(_))
+        );
+
         let results = match (pattern.subject(), pattern.predicate(), pattern.object()) {
+            (Some(_), Some(_), _) | (Some(_), None, _) if is_quoted_triple_subject => self
+                .triples
+                .elements()
+                .into_iter()
+                .filter(|t| pattern.matches(t))
+                .collect(),
             (Some(subject), Some(_predicate), _) => {
                 // Use both subject and predicate index
                 if let Some(subject_set) = self.subject_index.get(subject.as_str()) {
@@ -871,6 +901,89 @@ mod tests {
             .expect("async operation should succeed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], triple2);
+    }
+
+    /// Regression test: `subject_index` must not collapse distinct
+    /// quoted-triple subjects into a single bucket, and querying by a
+    /// specific quoted-triple subject pattern must return exactly the
+    /// triple whose subject structurally matches -- not every
+    /// quoted-triple-subject triple in the store.
+    #[tokio::test]
+    async fn regression_rdf_crdt_distinguishes_quoted_triple_subjects() {
+        let config = CrdtConfig {
+            node_id: "node1".to_string(),
+            crdt_type: CrdtType::RdfCrdt,
+            gc_config: GcConfig::default(),
+            delta_config: DeltaConfig::default(),
+        };
+        let mut crdt = RdfCrdt::new(config)
+            .await
+            .expect("async operation should succeed");
+
+        let inner1 = Triple::new(
+            NamedNode::new("http://example.org/a1").expect("valid IRI"),
+            NamedNode::new("http://example.org/rel").expect("valid IRI"),
+            NamedNode::new("http://example.org/b1").expect("valid IRI"),
+        );
+        let inner2 = Triple::new(
+            NamedNode::new("http://example.org/a2").expect("valid IRI"),
+            NamedNode::new("http://example.org/rel").expect("valid IRI"),
+            NamedNode::new("http://example.org/b2").expect("valid IRI"),
+        );
+
+        let predicate = NamedNode::new("http://example.org/certainty").expect("valid IRI");
+        let triple1 = Triple::new(
+            crate::model::Subject::QuotedTriple(Box::new(crate::model::QuotedTriple::new(
+                inner1.clone(),
+            ))),
+            predicate.clone(),
+            Object::Literal(Literal::new("high")),
+        );
+        let triple2 = Triple::new(
+            crate::model::Subject::QuotedTriple(Box::new(crate::model::QuotedTriple::new(
+                inner2.clone(),
+            ))),
+            predicate,
+            Object::Literal(Literal::new("low")),
+        );
+
+        crdt.add_triple(triple1.clone())
+            .await
+            .expect("async operation should succeed");
+        crdt.add_triple(triple2.clone())
+            .await
+            .expect("async operation should succeed");
+
+        // A ground quoted-triple subject pattern matching only `inner1` must
+        // return exactly `triple1`, not both triples.
+        let algebra_pattern_1 = crate::query::algebra::AlgebraTriplePattern::new(
+            crate::query::algebra::TermPattern::NamedNode(
+                NamedNode::new("http://example.org/a1").expect("valid IRI"),
+            ),
+            crate::query::algebra::TermPattern::NamedNode(
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+            ),
+            crate::query::algebra::TermPattern::NamedNode(
+                NamedNode::new("http://example.org/b1").expect("valid IRI"),
+            ),
+        );
+        let pattern1 = TriplePattern::new(
+            Some(crate::model::SubjectPattern::QuotedTriple(Box::new(
+                algebra_pattern_1,
+            ))),
+            None,
+            None,
+        );
+
+        let results = crdt
+            .query(&pattern1)
+            .await
+            .expect("async operation should succeed");
+        assert_eq!(
+            results,
+            vec![triple1],
+            "quoted-triple subject query must return only the structurally matching triple"
+        );
     }
 
     #[tokio::test]

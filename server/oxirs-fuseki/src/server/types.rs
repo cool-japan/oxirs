@@ -151,7 +151,7 @@ impl Runtime {
             self.auth_service = Some(auth_service);
         }
         info!("Initializing ReBAC manager");
-        self.rebac_manager = Some(build_rebac_manager(&self.config, self.store.clone()));
+        self.rebac_manager = Some(build_rebac_manager(&self.config, self.store.clone())?);
         if self.config.monitoring.metrics.enabled {
             info!("Initializing metrics service");
             let metrics_service = MetricsService::new(self.config.monitoring.clone())?;
@@ -285,17 +285,32 @@ impl Runtime {
         let dataset_manager = DatasetManager::new(dataset_config).await?;
         self.dataset_manager = Some(dataset_manager);
         info!("Initializing persistent API key service");
-        match crate::handlers::api_keys::ApiKeyService::open(
-            crate::handlers::api_keys::default_api_key_store_path(),
-        )
-        .await
-        {
-            Ok(service) => self.api_key_service = Some(Arc::new(service)),
-            Err(e) => warn!(
+        // Honour `security.api_keys`: when the block is present and `enabled` is
+        // false, do not construct the service at all (the routes then report 503,
+        // i.e. API keys are disabled as configured). When present and enabled,
+        // thread its limits (max_keys_per_user / default_expiration_days) into the
+        // service. When absent, keep the historical default-enabled behavior.
+        let store_path = crate::handlers::api_keys::default_api_key_store_path();
+        let api_key_service = match &self.config.security.api_keys {
+            Some(cfg) if !cfg.enabled => {
+                info!(
+                    "API key authentication disabled by config (security.api_keys.enabled=false)"
+                );
+                None
+            }
+            Some(cfg) => Some(
+                crate::handlers::api_keys::ApiKeyService::open_with_config(store_path, cfg).await,
+            ),
+            None => Some(crate::handlers::api_keys::ApiKeyService::open(store_path).await),
+        };
+        match api_key_service {
+            Some(Ok(service)) => self.api_key_service = Some(Arc::new(service)),
+            Some(Err(e)) => warn!(
                 "Failed to initialize API key service ({}); /$/api-keys endpoints will report 503 \
                  rather than silently accepting keys that can never be persisted",
                 e
             ),
+            None => {}
         }
         info!("Beta.2 Performance & Scalability modules initialized successfully");
         info!("Initializing RC.1 Security Auditor");
@@ -319,6 +334,7 @@ impl Runtime {
             enable_challenge: false,
             max_connections_per_ip: 20,
             enable_traffic_analysis: true,
+            ip_tracker_retention_secs: 900,
         };
         let ddos_protector = DDoSProtectionManager::new(ddos_config);
         self.ddos_protector = Some(Arc::new(ddos_protector));
@@ -576,6 +592,7 @@ impl Runtime {
             audit_logger: self.audit_logger.clone(),
             #[cfg(feature = "rate-limit")]
             rate_limiter: self.rate_limiter.clone(),
+            sparql_cache: build_sparql_cache(&config.performance.caching),
         };
         if let Some(subscription_manager) = &self.subscription_manager {
             subscription_manager.start().await;
@@ -584,23 +601,22 @@ impl Runtime {
         let app = self.build_app(app_state_arc).await?;
         info!("Starting OxiRS Fuseki server on {}", addr);
         info!("Server configuration: {:#?}", config.server);
-        let graceful_shutdown =
-            Self::create_graceful_shutdown(config.server.graceful_shutdown_timeout_secs);
+        let shutdown_timeout = Duration::from_secs(config.server.graceful_shutdown_timeout_secs);
         #[cfg(feature = "tls")]
         if let Some(tls_config) = &config.server.tls {
             info!("TLS enabled - starting HTTPS server");
-            self.run_tls_server(addr, app, tls_config.clone(), graceful_shutdown)
+            self.run_tls_server(addr, app, tls_config.clone(), shutdown_timeout)
                 .await?;
         } else {
             info!("TLS disabled - starting HTTP server");
-            self.run_http_server(addr, app, graceful_shutdown).await?;
+            self.run_http_server(addr, app, shutdown_timeout).await?;
         }
         #[cfg(not(feature = "tls"))]
         {
             if config.server.tls.is_some() {
                 warn!("TLS configured but TLS feature not enabled. Starting HTTP server.");
             }
-            self.run_http_server(addr, app, graceful_shutdown).await?;
+            self.run_http_server(addr, app, shutdown_timeout).await?;
         }
         info!("Server shutdown complete");
         Ok(())
@@ -1073,6 +1089,17 @@ impl Runtime {
             ));
             info!("DDoS protection middleware enabled");
         }
+        // Configured per-client request rate limiting (governor). Enforced only
+        // when the `rate-limit` feature is on AND a limiter was constructed from
+        // `performance.rate_limiting.requests_per_minute`.
+        #[cfg(feature = "rate-limit")]
+        if state.rate_limiter.is_some() {
+            app = app.layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                crate::server::functions::rate_limiting_middleware,
+            ));
+            info!("Request rate limiting middleware enabled");
+        }
         if let Some(security_auditor) = &state.security_auditor {
             let auditor = security_auditor.clone();
             app = app.layer(axum::middleware::from_fn(move |req, next| {
@@ -1087,6 +1114,17 @@ impl Runtime {
         }
         app = app.layer(axum::middleware::from_fn(request_correlation_id));
         app = app.layer(axum::middleware::from_fn(request_timing));
+        // HTTP-level request metrics (Prometheus `http_requests_total`,
+        // `/metrics` summary `requests_total` / `requests_per_second`). This
+        // is distinct from the SPARQL-specific counters recorded directly by
+        // the query/update/auth handlers, and without this layer those
+        // HTTP-level counters never move off zero.
+        if state.metrics_service.is_some() {
+            app = app.layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                crate::server::functions::metrics_middleware,
+            ));
+        }
         app = app.layer(axum::middleware::from_fn(api_version));
         if self.config.security.auth_required {
             info!("RBAC middleware enabled - enforcing role-based access control");
@@ -1094,6 +1132,20 @@ impl Runtime {
         } else {
             debug!("RBAC middleware disabled - authentication not required");
         }
+        // Authentication layer. Added AFTER `route_based_rbac` so it is the
+        // *outer* layer and therefore runs first: it validates the caller's
+        // Bearer/JWT/session credential and, on success, inserts an
+        // `AuthenticatedUser` into the request extensions that the RBAC layer
+        // (and the `AuthUser` handler extractor) then consumes. It is installed
+        // unconditionally — even when `auth_required` is false — so handlers
+        // that self-enforce (e.g. the SPARQL update handler) and the
+        // `Option<AuthUser>` extractor still observe a valid identity when one
+        // is presented. The layer never rejects; enforcement lives in
+        // `route_based_rbac` and the handlers themselves.
+        app = app.layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::middleware::authenticate,
+        ));
         // axum defaults every whole-body-buffering extractor (`Bytes`, `String`,
         // `Json<T>`, ...) to a 2MiB request body cap. `/upload`, `/update`, and
         // Graph Store Protocol PUT/POST all buffer the full body, so without an
@@ -1157,57 +1209,150 @@ impl Runtime {
             Duration::from_secs(request_timeout_secs),
         ));
         if self.config.server.cors {
-            let cors = CorsLayer::new()
-                .allow_origin(tower_http::cors::Any)
-                .allow_methods([
+            let cors_config = &self.config.security.cors;
+            let has_wildcard_origin = cors_config.allow_origins.iter().any(|o| o == "*");
+
+            // A wildcard origin combined with credentialed requests lets any
+            // web page read authenticated responses from a victim browser —
+            // never allow that combination regardless of how it was
+            // configured.
+            if has_wildcard_origin && cors_config.allow_credentials {
+                return Err(FusekiError::configuration(
+                    "security.cors.allow_credentials = true cannot be combined with a \
+                     wildcard (\"*\") entry in security.cors.allow_origins: this would let \
+                     any origin make credentialed cross-origin requests against SPARQL \
+                     query/update and GSP mutation endpoints. Configure an explicit origin \
+                     allowlist, or set allow_credentials = false.",
+                ));
+            }
+
+            // Driven by `security.cors` (explicit allowlist support) rather
+            // than an unconditional `Any`; the config's own default is a
+            // wildcard for backward compatibility with existing
+            // deployments, but operators can now lock this down to an
+            // explicit origin allowlist without code changes.
+            let allow_origin = if has_wildcard_origin {
+                tower_http::cors::AllowOrigin::any()
+            } else {
+                let origins: Vec<axum::http::HeaderValue> = cors_config
+                    .allow_origins
+                    .iter()
+                    .filter_map(|o| axum::http::HeaderValue::from_str(o).ok())
+                    .collect();
+                tower_http::cors::AllowOrigin::list(origins)
+            };
+
+            let allow_methods: Vec<axum::http::Method> = cors_config
+                .allow_methods
+                .iter()
+                .filter_map(|m| m.parse::<axum::http::Method>().ok())
+                .collect();
+            let allow_methods = if allow_methods.is_empty() {
+                vec![
                     axum::http::Method::GET,
                     axum::http::Method::POST,
                     axum::http::Method::PUT,
                     axum::http::Method::DELETE,
                     axum::http::Method::OPTIONS,
-                ])
-                .allow_headers(tower_http::cors::Any)
+                ]
+            } else {
+                allow_methods
+            };
+
+            let allow_headers: Vec<axum::http::HeaderName> = cors_config
+                .allow_headers
+                .iter()
+                .filter_map(|h| axum::http::HeaderName::from_bytes(h.as_bytes()).ok())
+                .collect();
+
+            let mut cors = CorsLayer::new()
+                .allow_origin(allow_origin)
+                .allow_methods(allow_methods)
+                .allow_headers(allow_headers)
+                .max_age(Duration::from_secs(cors_config.max_age_secs))
                 .expose_headers([
                     axum::http::HeaderName::from_static("x-request-id"),
                     axum::http::HeaderName::from_static("x-response-time"),
                     axum::http::HeaderName::from_static("x-api-version"),
                 ]);
+            if cors_config.allow_credentials {
+                cors = cors.allow_credentials(true);
+            }
             app = app.layer(cors);
         }
         info!("Middleware stack configured: security, tracing, timing, CORS");
         Ok(app)
     }
-    /// Run HTTP server (without TLS)
-    async fn run_http_server<F>(
+    /// Run HTTP server (without TLS).
+    ///
+    /// On SIGTERM/Ctrl-C the server stops accepting new connections *immediately*
+    /// and then drains in-flight requests for at most `shutdown_timeout`; if the
+    /// drain does not finish within that budget the server forces exit. This is
+    /// the correct ordering for Kubernetes: new traffic is never routed to a
+    /// terminating pod, and the drain is bounded so it completes before the pod's
+    /// `terminationGracePeriodSeconds` SIGKILL.
+    async fn run_http_server(
         &self,
         addr: SocketAddr,
         app: Router,
-        graceful_shutdown: F,
-    ) -> FusekiResult<()>
-    where
-        F: std::future::Future<Output = ()> + Send + 'static,
-    {
+        shutdown_timeout: Duration,
+    ) -> FusekiResult<()> {
         let listener = tokio::net::TcpListener::bind(addr)
             .await
             .map_err(|e| FusekiError::internal(format!("Failed to bind to {addr}: {e}")))?;
-        axum::serve(listener, app)
-            .with_graceful_shutdown(graceful_shutdown)
-            .await
-            .map_err(|e| FusekiError::internal(format!("Server error: {e}")))?;
+
+        // `false` until a shutdown signal arrives, then flipped to `true`. Two
+        // independent receivers derive from it: one drives axum's graceful drain
+        // (stop accepting the instant the signal fires), the other arms the
+        // hard drain-time cap.
+        let (tx, rx) = tokio::sync::watch::channel(false);
+        tokio::spawn(async move {
+            Self::wait_for_shutdown_signal().await;
+            let _ = tx.send(true);
+        });
+
+        let axum_shutdown = {
+            let mut rx = rx.clone();
+            async move {
+                let _ = rx.wait_for(|requested| *requested).await;
+            }
+        };
+        let serve = axum::serve(listener, app).with_graceful_shutdown(axum_shutdown);
+
+        let drain_cap = {
+            let mut rx = rx.clone();
+            async move {
+                let _ = rx.wait_for(|requested| *requested).await;
+                tokio::time::sleep(shutdown_timeout).await;
+            }
+        };
+
+        tokio::select! {
+            result = serve => {
+                result.map_err(|e| FusekiError::internal(format!("Server error: {e}")))?;
+            }
+            _ = drain_cap => {
+                warn!(
+                    "Graceful shutdown drain exceeded {}s budget, forcing exit",
+                    shutdown_timeout.as_secs()
+                );
+            }
+        }
         Ok(())
     }
-    /// Run HTTPS server with TLS
+    /// Run HTTPS server with TLS.
+    ///
+    /// On SIGTERM/Ctrl-C the server stops accepting immediately and caps the
+    /// in-flight drain at the configured `shutdown_timeout` (not a hardcoded
+    /// 30 s), via `axum_server::Handle::graceful_shutdown`.
     #[cfg(feature = "tls")]
-    async fn run_tls_server<F>(
+    async fn run_tls_server(
         &self,
         addr: SocketAddr,
         app: Router,
         tls_config: TlsConfig,
-        graceful_shutdown: F,
-    ) -> FusekiResult<()>
-    where
-        F: std::future::Future<Output = ()> + Send + 'static,
-    {
+        shutdown_timeout: Duration,
+    ) -> FusekiResult<()> {
         use axum_server::tls_rustls::RustlsConfig;
         let tls_manager = TlsManager::new(tls_config.clone());
         tls_manager.validate()?;
@@ -1219,8 +1364,8 @@ impl Runtime {
         tokio::spawn({
             let handle = handle.clone();
             async move {
-                graceful_shutdown.await;
-                handle.graceful_shutdown(Some(Duration::from_secs(30)));
+                Self::wait_for_shutdown_signal().await;
+                handle.graceful_shutdown(Some(shutdown_timeout));
             }
         });
         axum_server::bind_rustls(addr, axum_tls_config)
@@ -1230,9 +1375,12 @@ impl Runtime {
             .map_err(|e| FusekiError::internal(format!("TLS server error: {e}")))?;
         Ok(())
     }
-    /// Graceful shutdown with configurable timeout
-    async fn create_graceful_shutdown(graceful_shutdown_timeout_secs: u64) {
-        let shutdown_timeout = Duration::from_secs(graceful_shutdown_timeout_secs);
+    /// Resolve as soon as a shutdown signal (Ctrl-C or, on Unix, SIGTERM) is
+    /// received. This is the trigger to *begin* draining — the caller is
+    /// responsible for stopping new accepts immediately and bounding the drain,
+    /// so there is deliberately no pre-drain sleep here (which would keep the
+    /// server accepting new traffic for the whole timeout after SIGTERM).
+    async fn wait_for_shutdown_signal() {
         let ctrl_c = async {
             signal::ctrl_c()
                 .await
@@ -1248,15 +1396,9 @@ impl Runtime {
         #[cfg(not(unix))]
         let terminate = std::future::pending::<()>();
         tokio::select! {
-            _ = ctrl_c => { info!("Received Ctrl+C, initiating graceful shutdown"); }, _
-            = terminate => { info!("Received SIGTERM, initiating graceful shutdown"); },
+            _ = ctrl_c => { info!("Received Ctrl+C, initiating graceful shutdown"); }
+            _ = terminate => { info!("Received SIGTERM, initiating graceful shutdown"); }
         }
-        info!(
-            "Allowing {}s for graceful shutdown...",
-            shutdown_timeout.as_secs()
-        );
-        tokio::time::sleep(shutdown_timeout).await;
-        warn!("Graceful shutdown timeout reached, forcing exit");
     }
 }
 /// Decide whether at least one configured dataset has a non-empty on-disk
@@ -1266,6 +1408,35 @@ impl Runtime {
 /// selection below is unit testable without spinning up a full `Runtime`.
 fn has_persistent_dataset_location(datasets: &HashMap<String, DatasetConfigAlias>) -> bool {
     datasets.values().any(|d| !d.location.trim().is_empty())
+}
+
+/// Build the SPARQL result cache from the runtime caching config, honoring the
+/// `enabled` / `query_cache_enabled` flags. Returns `None` (caching disabled)
+/// when either flag is off, or when cache construction fails (logged, non-fatal).
+fn build_sparql_cache(
+    caching: &crate::config::CacheConfig,
+) -> Option<Arc<crate::cache::SparqlQueryCache>> {
+    if !caching.enabled || !caching.query_cache_enabled {
+        return None;
+    }
+    let capacity = caching.max_size.max(1);
+    // Per-entry byte cap: allow a single cached response up to 1/8 of a nominal
+    // 64 MiB budget, so one large result cannot dominate the cache.
+    let max_size_bytes = 8 * 1024 * 1024;
+    let ttl = Duration::from_secs(caching.ttl_secs.max(1));
+    match crate::cache::SparqlQueryCache::new(capacity, max_size_bytes, ttl) {
+        Ok(cache) => {
+            info!(
+                "SPARQL result cache enabled (capacity={capacity}, ttl={}s)",
+                caching.ttl_secs
+            );
+            Some(Arc::new(cache))
+        }
+        Err(e) => {
+            warn!("Failed to construct SPARQL result cache, caching disabled: {e}");
+            None
+        }
+    }
 }
 
 /// Alias avoiding ambiguity between `crate::config::DatasetConfig` (used by
@@ -1353,19 +1524,59 @@ fn warn_on_read_only_dataset_config(config: &ServerConfig) {
 fn build_rebac_manager(
     config: &ServerConfig,
     store: Store,
-) -> Arc<dyn crate::auth::rebac::RebacEvaluator> {
+) -> FusekiResult<Arc<dyn crate::auth::rebac::RebacEvaluator>> {
+    use crate::config::config_security::RebacStorageBackend;
+
+    // Honour an explicitly-configured ReBAC storage backend. Only `Memory` and
+    // `Rdf` have real implementations; `OpenFga` and `Database` are declared in
+    // config but unimplemented, so selecting them fails loud at startup rather
+    // than silently falling back to a volatile in-memory store (which would be a
+    // durability/security-policy mismatch the operator never learns about).
+    if let Some(rebac) = &config.security.rebac {
+        match rebac.storage {
+            RebacStorageBackend::Memory => {
+                info!("ReBAC storage backend: in-memory (relationship grants are ephemeral)");
+                return Ok(Arc::new(crate::auth::rebac::InMemoryRebacManager::new()));
+            }
+            RebacStorageBackend::Rdf => {
+                info!("ReBAC storage backend: RDF named-graph store (grants survive restarts)");
+                return Ok(Arc::new(
+                    crate::auth::rdf_rebac::RdfRebacManager::with_store(store),
+                ));
+            }
+            RebacStorageBackend::OpenFga => {
+                return Err(FusekiError::configuration(
+                    "ReBAC storage backend 'openfga' is configured but not implemented in this \
+                     build; use 'memory' or 'rdf', or remove security.rebac.storage. Refusing to \
+                     start so relationship tuples are not silently kept in a volatile in-memory \
+                     store instead of the external OpenFGA service you configured.",
+                ));
+            }
+            RebacStorageBackend::Database => {
+                return Err(FusekiError::configuration(
+                    "ReBAC storage backend 'database' is configured but not implemented in this \
+                     build; use 'memory' or 'rdf', or remove security.rebac.storage.",
+                ));
+            }
+        }
+    }
+
+    // No explicit backend: auto-select by persistence (RDF store when a dataset
+    // has a durable location, in-memory otherwise).
     if has_persistent_dataset_location(&config.datasets) {
         info!(
             "Persistent dataset location configured; using SPARQL-store-backed \
              RdfRebacManagerProduction so ReBAC grants survive restarts"
         );
-        Arc::new(crate::auth::rdf_rebac::RdfRebacManager::with_store(store))
+        Ok(Arc::new(
+            crate::auth::rdf_rebac::RdfRebacManager::with_store(store),
+        ))
     } else {
         info!(
             "No persistent dataset location configured; using in-memory ReBAC \
              manager (relationship/ACL grants will not survive a restart)"
         );
-        Arc::new(crate::auth::rebac::InMemoryRebacManager::new())
+        Ok(Arc::new(crate::auth::rebac::InMemoryRebacManager::new()))
     }
 }
 
@@ -1425,6 +1636,9 @@ pub struct AppState {
     pub audit_logger: Arc<InMemoryAuditLogger>,
     #[cfg(feature = "rate-limit")]
     pub rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
+    /// SPARQL result cache, wired when `performance.caching.query_cache_enabled`
+    /// is set. `None` disables caching entirely.
+    pub sparql_cache: Option<Arc<crate::cache::SparqlQueryCache>>,
 }
 
 impl AppState {
@@ -1482,6 +1696,32 @@ impl AppState {
             )));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod sparql_cache_wiring_tests {
+    use super::build_sparql_cache;
+    use crate::config::CacheConfig;
+
+    fn cfg(enabled: bool, query_cache_enabled: bool) -> CacheConfig {
+        CacheConfig {
+            enabled,
+            max_size: 100,
+            ttl_secs: 300,
+            query_cache_enabled,
+            result_cache_enabled: true,
+            plan_cache_enabled: true,
+        }
+    }
+
+    #[test]
+    fn regression_cache_flags_control_wiring() {
+        // Both flags on → cache is constructed and reachable from AppState.
+        assert!(build_sparql_cache(&cfg(true, true)).is_some());
+        // Either flag off → no cache (the flags now have real effect).
+        assert!(build_sparql_cache(&cfg(false, true)).is_none());
+        assert!(build_sparql_cache(&cfg(true, false)).is_none());
     }
 }
 
@@ -1545,6 +1785,33 @@ mod rebac_and_config_tests {
             .datasets
             .insert("disk".to_string(), dataset_config("./data/disk-ds"));
         let _ = build_rebac_manager(&persistent_config, store);
+    }
+
+    #[test]
+    fn regression_rebac_unimplemented_backend_fails_loud() {
+        use crate::config::config_security::{RebacConfig, RebacPolicyMode, RebacStorageBackend};
+
+        let make = |backend: RebacStorageBackend| {
+            let mut config = ServerConfig::default();
+            config.security.rebac = Some(RebacConfig {
+                enabled: true,
+                policy_mode: RebacPolicyMode::Combined,
+                storage: backend,
+                openfga: None,
+                initial_relationships: vec![],
+                audit_enabled: false,
+                cache_ttl_secs: 60,
+            });
+            config
+        };
+        let store = crate::store::Store::new().expect("store");
+
+        // Unimplemented backends must fail loud.
+        assert!(build_rebac_manager(&make(RebacStorageBackend::OpenFga), store.clone()).is_err());
+        assert!(build_rebac_manager(&make(RebacStorageBackend::Database), store.clone()).is_err());
+        // Implemented backends must construct.
+        assert!(build_rebac_manager(&make(RebacStorageBackend::Memory), store.clone()).is_ok());
+        assert!(build_rebac_manager(&make(RebacStorageBackend::Rdf), store).is_ok());
     }
 
     fn read_only_dataset_config(name: &str, read_only: bool) -> crate::config::DatasetConfig {

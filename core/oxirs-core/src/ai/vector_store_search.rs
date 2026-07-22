@@ -28,10 +28,53 @@ use tokio::sync::RwLock;
 // Similarity computation kernels
 // ---------------------------------------------------------------------------
 
+/// Dot product of two equal-length vectors given as slices.
+///
+/// With the crate's `blas` feature enabled, this routes through OxiBLAS
+/// (`scirs2_core::linalg::blas::dot_ndarray`, the pure-Rust BLAS backend
+/// mandated by COOLJAPAN policy in place of linking a C BLAS/openblas) for a
+/// dedicated BLAS Level-1 kernel. Without the feature it falls back to
+/// scirs2-core's SIMD-optimized `ndarray` dot, which was this module's only
+/// behavior before the `blas` feature existed.
+fn slice_dot(a: &[f32], b: &[f32]) -> f32 {
+    #[cfg(feature = "blas")]
+    {
+        use scirs2_core::linalg::blas::dot_ndarray;
+        use scirs2_core::ndarray_ext::Array1;
+        let a_owned = Array1::from(a.to_vec());
+        let b_owned = Array1::from(b.to_vec());
+        dot_ndarray(&a_owned, &b_owned)
+    }
+    #[cfg(not(feature = "blas"))]
+    {
+        ArrayView1::from(a).dot(&ArrayView1::from(b))
+    }
+}
+
+/// Dot product of an owned 1D array with another (used for the
+/// element-wise-difference distance metrics below, whose operand is a
+/// computed `Array1` rather than a slice the caller handed us). Falls back
+/// to the plain `ndarray` dot when the array isn't contiguous (the BLAS path
+/// needs a contiguous slice) or when the `blas` feature is off.
+fn array_dot(
+    a: &scirs2_core::ndarray_ext::Array1<f32>,
+    b: &scirs2_core::ndarray_ext::Array1<f32>,
+) -> f32 {
+    #[cfg(feature = "blas")]
+    {
+        if let (Some(a_slice), Some(b_slice)) = (a.as_slice(), b.as_slice()) {
+            return slice_dot(a_slice, b_slice);
+        }
+    }
+    a.dot(b)
+}
+
 /// Compute the similarity between two float32 vectors.
 ///
-/// Uses `scirs2_core` ndarray views which delegate to BLAS / SIMD operations
-/// for maximum throughput.
+/// Uses `scirs2_core` ndarray views, which are SIMD-optimized, for the
+/// element-wise arithmetic. When built with `--features blas`, the
+/// dot-product-based metrics additionally route through OxiBLAS for a
+/// dedicated BLAS Level-1 kernel (see [`slice_dot`]).
 pub fn compute_similarity(a: &[f32], b: &[f32], metric: SimilarityMetric) -> Result<f32> {
     if a.len() != b.len() {
         return Err(anyhow!("Vector dimension mismatch"));
@@ -42,9 +85,9 @@ pub fn compute_similarity(a: &[f32], b: &[f32], metric: SimilarityMetric) -> Res
 
     match metric {
         SimilarityMetric::Cosine => {
-            let dot_product = a_arr.dot(&b_arr);
-            let norm_a = a_arr.dot(&a_arr).sqrt();
-            let norm_b = b_arr.dot(&b_arr).sqrt();
+            let dot_product = slice_dot(a, b);
+            let norm_a = slice_dot(a, a).sqrt();
+            let norm_b = slice_dot(b, b).sqrt();
 
             if norm_a == 0.0 || norm_b == 0.0 {
                 Ok(0.0)
@@ -55,7 +98,7 @@ pub fn compute_similarity(a: &[f32], b: &[f32], metric: SimilarityMetric) -> Res
 
         SimilarityMetric::Euclidean => {
             let diff = &a_arr - &b_arr;
-            let distance = diff.dot(&diff).sqrt();
+            let distance = array_dot(&diff, &diff).sqrt();
             Ok(1.0 / (1.0 + distance))
         }
 
@@ -65,7 +108,7 @@ pub fn compute_similarity(a: &[f32], b: &[f32], metric: SimilarityMetric) -> Res
             Ok(1.0 / (1.0 + distance))
         }
 
-        SimilarityMetric::DotProduct => Ok(a_arr.dot(&b_arr)),
+        SimilarityMetric::DotProduct => Ok(slice_dot(a, b)),
 
         SimilarityMetric::Jaccard => {
             let a_binary = a_arr.mapv(|x| if x > 0.0 { 1u32 } else { 0 });
@@ -123,7 +166,7 @@ pub fn compute_similarities_batch(
 
     let query_norm = match metric {
         SimilarityMetric::Cosine => {
-            let norm = query_arr.dot(&query_arr).sqrt();
+            let norm = slice_dot(query, query).sqrt();
             if norm == 0.0 {
                 return Ok(vec![0.0; candidates.len()]);
             }
@@ -141,8 +184,8 @@ pub fn compute_similarities_batch(
                 let c_arr = ArrayView1::from(*candidate);
                 match metric {
                     SimilarityMetric::Cosine => {
-                        let dot = query_arr.dot(&c_arr);
-                        let c_norm = c_arr.dot(&c_arr).sqrt();
+                        let dot = slice_dot(query, candidate);
+                        let c_norm = slice_dot(candidate, candidate).sqrt();
                         if c_norm == 0.0 {
                             0.0
                         } else {
@@ -151,7 +194,7 @@ pub fn compute_similarities_batch(
                     }
                     SimilarityMetric::Euclidean => {
                         let diff = &query_arr - &c_arr;
-                        let dist = diff.dot(&diff).sqrt();
+                        let dist = array_dot(&diff, &diff).sqrt();
                         1.0 / (1.0 + dist)
                     }
                     SimilarityMetric::Manhattan => {
@@ -159,7 +202,7 @@ pub fn compute_similarities_batch(
                         let dist = diff.mapv(f32::abs).sum();
                         1.0 / (1.0 + dist)
                     }
-                    SimilarityMetric::DotProduct => query_arr.dot(&c_arr),
+                    SimilarityMetric::DotProduct => slice_dot(query, candidate),
                     _ => compute_similarity(query, candidate, metric).unwrap_or(0.0),
                 }
             })

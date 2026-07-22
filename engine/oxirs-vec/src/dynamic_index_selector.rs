@@ -336,7 +336,13 @@ impl DynamicIndexSelector {
         match strategy {
             QueryStrategy::HnswApproximate => {
                 if let Some(ref index) = self.hnsw_index {
-                    index.search_knn(query, k)
+                    // IMPORTANT: call the `VectorIndex` *trait* method explicitly.
+                    // `HnswIndex` also has an inherent `search_knn` that returns
+                    // raw distance; on a concrete `HnswIndex` value the inherent
+                    // method wins method resolution. The selector must return the
+                    // trait's *similarity* score so results are unit-compatible
+                    // with the NSG/IVF/LSH backends dispatched below.
+                    <HnswIndex as crate::VectorIndex>::search_knn(index, query, k)
                 } else {
                     Err(anyhow::anyhow!("HNSW index not available"))
                 }

@@ -6,6 +6,8 @@ pub mod vocab {
     pub const RDF_PREDICATE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#predicate";
     pub const RDF_OBJECT: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#object";
     pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    pub const RDF_SINGLETON_PROPERTY_OF: &str =
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#singletonPropertyOf";
 }
 
 pub mod converter;

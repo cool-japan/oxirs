@@ -281,12 +281,14 @@ impl AdvancedVectorIndex {
         if let Some(ref hnsw) = self.hnsw_index {
             let results = hnsw.search_knn(query, k)?;
 
+            // `VectorIndex::search_knn` returns similarity (larger = closer);
+            // reconstruct a distance-like value for `SearchResult.distance`.
             Ok(results
                 .into_iter()
-                .map(|(uri, distance)| SearchResult {
+                .map(|(uri, similarity)| SearchResult {
                     uri,
-                    distance,
-                    score: 1.0 - distance,
+                    distance: 1.0 - similarity,
+                    score: similarity,
                     metadata: None,
                 })
                 .collect())
@@ -301,12 +303,13 @@ impl AdvancedVectorIndex {
             .as_ref()
             .ok_or_else(|| anyhow!("IVF index not built — call build() first"))?;
         let results = ivf.search_knn(query, k)?;
+        // `VectorIndex::search_knn` returns similarity (larger = closer).
         Ok(results
             .into_iter()
-            .map(|(uri, distance)| SearchResult {
+            .map(|(uri, similarity)| SearchResult {
                 uri,
-                score: 1.0 - distance,
-                distance,
+                distance: 1.0 - similarity,
+                score: similarity,
                 metadata: None,
             })
             .collect())
@@ -318,12 +321,13 @@ impl AdvancedVectorIndex {
             .as_ref()
             .ok_or_else(|| anyhow!("PQ index not built — call build() first"))?;
         let results = pq.search_knn(query, k)?;
+        // `VectorIndex::search_knn` returns similarity (larger = closer).
         Ok(results
             .into_iter()
-            .map(|(uri, distance)| SearchResult {
+            .map(|(uri, similarity)| SearchResult {
                 uri,
-                score: 1.0 - distance,
-                distance,
+                distance: 1.0 - similarity,
+                score: similarity,
                 metadata: None,
             })
             .collect())

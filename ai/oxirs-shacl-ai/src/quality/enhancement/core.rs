@@ -214,58 +214,165 @@ impl QualityEnhancementEngine {
     }
 
     // Private helper methods
+
+    /// Map a dimension score in `[0, 1]` to a priority: the worse the score, the
+    /// higher the priority. Returns `None` when the dimension is healthy enough
+    /// that no recommendation is warranted.
+    fn priority_for_score(score: f64) -> Option<Priority> {
+        if score < 0.5 {
+            Some(Priority::Critical)
+        } else if score < 0.7 {
+            Some(Priority::High)
+        } else if score < 0.85 {
+            Some(Priority::Medium)
+        } else {
+            None
+        }
+    }
+
+    /// Data-enhancement recommendations derived from the actual scored
+    /// dimensions of `quality_report` (completeness, consistency, accuracy,
+    /// duplicates, schema adherence). Dimensions that are already healthy
+    /// produce no recommendation.
     async fn generate_data_enhancement_recommendations(
         &self,
-        _quality_report: &QualityReport,
+        quality_report: &QualityReport,
     ) -> Result<Vec<EnhancementRecommendation>> {
-        // Simplified data enhancement recommendations
-        Ok(vec![EnhancementRecommendation {
-            id: "data_quality_1".to_string(),
-            title: "Improve data consistency".to_string(),
-            description: "Address inconsistent data patterns".to_string(),
-            category: EnhancementCategory::DataQuality,
-            priority: Priority::High,
-            confidence: 0.85,
-            estimated_impact: 0.7,
-            implementation_effort: ImplementationEffort::Medium,
-            automated: false,
-        }])
+        let mut recs = Vec::new();
+
+        // Each entry: (id, dimension score, title, description, estimated impact).
+        let dimensions: &[(&str, f64, &str, &str)] = &[
+            (
+                "data_completeness",
+                quality_report.completeness_score,
+                "Improve data completeness",
+                "Populate missing required properties flagged by the completeness assessment",
+            ),
+            (
+                "data_consistency",
+                quality_report.consistency_score,
+                "Improve data consistency",
+                "Reconcile inconsistent values detected across the dataset",
+            ),
+            (
+                "data_accuracy",
+                quality_report.accuracy_score,
+                "Improve data accuracy",
+                "Correct values that fail datatype/range accuracy checks",
+            ),
+            (
+                "schema_adherence",
+                quality_report.schema_adherence_score,
+                "Improve schema adherence",
+                "Align data with the expected schema/shape definitions",
+            ),
+        ];
+
+        for (id, score, title, description) in dimensions {
+            if let Some(priority) = Self::priority_for_score(*score) {
+                recs.push(EnhancementRecommendation {
+                    id: (*id).to_string(),
+                    title: (*title).to_string(),
+                    description: format!("{description} (current score: {score:.2})"),
+                    category: EnhancementCategory::DataQuality,
+                    priority,
+                    // Confidence scales with how far below perfect the score is.
+                    confidence: (0.6 + (1.0 - score) * 0.4).clamp(0.0, 1.0),
+                    estimated_impact: (1.0 - score).clamp(0.0, 1.0),
+                    implementation_effort: ImplementationEffort::Medium,
+                    automated: false,
+                });
+            }
+        }
+
+        // Duplicates are a ratio (higher is worse), so handle separately.
+        if quality_report.duplicate_ratio > 0.05 {
+            let ratio = quality_report.duplicate_ratio;
+            recs.push(EnhancementRecommendation {
+                id: "data_deduplication".to_string(),
+                title: "Deduplicate records".to_string(),
+                description: format!(
+                    "Merge or remove duplicate entities (duplicate ratio: {ratio:.2})"
+                ),
+                category: EnhancementCategory::DataQuality,
+                priority: if ratio > 0.3 {
+                    Priority::Critical
+                } else if ratio > 0.15 {
+                    Priority::High
+                } else {
+                    Priority::Medium
+                },
+                confidence: (0.6 + ratio * 0.4).clamp(0.0, 1.0),
+                estimated_impact: ratio.clamp(0.0, 1.0),
+                implementation_effort: ImplementationEffort::Medium,
+                automated: false,
+            });
+        }
+
+        Ok(recs)
     }
 
+    /// Process-optimization recommendations. Conformance and overall issue
+    /// volume drive whether validation-workflow changes are worthwhile.
     async fn generate_process_optimization_recommendations(
         &self,
-        _quality_report: &QualityReport,
+        quality_report: &QualityReport,
     ) -> Result<Vec<EnhancementRecommendation>> {
-        // Simplified process optimization recommendations
-        Ok(vec![EnhancementRecommendation {
-            id: "process_opt_1".to_string(),
-            title: "Optimize validation workflow".to_string(),
-            description: "Streamline validation process for better performance".to_string(),
-            category: EnhancementCategory::ProcessOptimization,
-            priority: Priority::Medium,
-            confidence: 0.8,
-            estimated_impact: 0.6,
-            implementation_effort: ImplementationEffort::High,
-            automated: false,
-        }])
+        let mut recs = Vec::new();
+
+        if let Some(priority) = Self::priority_for_score(quality_report.conformance_score) {
+            recs.push(EnhancementRecommendation {
+                id: "process_conformance".to_string(),
+                title: "Optimize validation workflow".to_string(),
+                description: format!(
+                    "Tighten the validation pipeline to raise shape conformance (current score: {:.2}, {} open issues)",
+                    quality_report.conformance_score,
+                    quality_report.issues.len()
+                ),
+                category: EnhancementCategory::ProcessOptimization,
+                priority,
+                confidence: (0.6 + (1.0 - quality_report.conformance_score) * 0.4).clamp(0.0, 1.0),
+                estimated_impact: (1.0 - quality_report.conformance_score).clamp(0.0, 1.0),
+                implementation_effort: ImplementationEffort::High,
+                automated: false,
+            });
+        }
+
+        Ok(recs)
     }
 
+    /// Automation recommendations. Only proposed when there is a meaningful
+    /// volume of recurring issues that automation could address.
     async fn generate_automation_recommendations(
         &self,
-        _quality_report: &QualityReport,
+        quality_report: &QualityReport,
     ) -> Result<Vec<EnhancementRecommendation>> {
-        // Simplified automation recommendations
-        Ok(vec![EnhancementRecommendation {
-            id: "automation_1".to_string(),
-            title: "Automated error correction".to_string(),
-            description: "Implement automated correction for common errors".to_string(),
-            category: EnhancementCategory::Automation,
-            priority: Priority::Medium,
-            confidence: 0.75,
-            estimated_impact: 0.8,
-            implementation_effort: ImplementationEffort::High,
-            automated: true,
-        }])
+        let mut recs = Vec::new();
+
+        let issue_count = quality_report.issues.len();
+        if issue_count >= 5 {
+            // Impact grows with issue volume but saturates.
+            let impact = (issue_count as f64 / 50.0).clamp(0.3, 1.0);
+            recs.push(EnhancementRecommendation {
+                id: "automation_error_correction".to_string(),
+                title: "Automated error correction".to_string(),
+                description: format!(
+                    "Implement automated correction for the {issue_count} recurring quality issues detected"
+                ),
+                category: EnhancementCategory::Automation,
+                priority: if issue_count >= 20 {
+                    Priority::High
+                } else {
+                    Priority::Medium
+                },
+                confidence: 0.75,
+                estimated_impact: impact,
+                implementation_effort: ImplementationEffort::High,
+                automated: true,
+            });
+        }
+
+        Ok(recs)
     }
 }
 
@@ -327,5 +434,65 @@ impl Default for EnhancementStatistics {
             total_cost_savings: 0.0,
             processing_time_improvements: 0.0,
         }
+    }
+}
+
+#[cfg(test)]
+mod regression_tests {
+    use super::*;
+    use crate::quality::QualityReport;
+
+    fn perfect_report() -> QualityReport {
+        let mut r = QualityReport::new();
+        r.completeness_score = 1.0;
+        r.consistency_score = 1.0;
+        r.accuracy_score = 1.0;
+        r.conformance_score = 1.0;
+        r.schema_adherence_score = 1.0;
+        r.duplicate_ratio = 0.0;
+        r
+    }
+
+    fn broken_report() -> QualityReport {
+        let mut r = QualityReport::new();
+        r.completeness_score = 0.3;
+        r.consistency_score = 0.4;
+        r.accuracy_score = 0.35;
+        r.conformance_score = 0.4;
+        r.schema_adherence_score = 0.3;
+        r.duplicate_ratio = 0.4;
+        r
+    }
+
+    /// Regression: a perfect report must yield no data-enhancement
+    /// recommendations (the old code always emitted the same 3 canned recs).
+    #[tokio::test]
+    async fn regression_perfect_report_yields_no_recommendations() {
+        let engine = QualityEnhancementEngine::default();
+        let recs = engine
+            .generate_recommendations(&perfect_report())
+            .await
+            .expect("recommendation generation should succeed");
+        assert!(
+            recs.is_empty(),
+            "a perfect report should produce no recommendations, got {recs:?}"
+        );
+    }
+
+    /// Regression: a badly broken report must surface recommendations that
+    /// reflect the actually-failing dimensions.
+    #[tokio::test]
+    async fn regression_broken_report_yields_targeted_recommendations() {
+        let engine = QualityEnhancementEngine::default();
+        let recs = engine
+            .generate_recommendations(&broken_report())
+            .await
+            .expect("recommendation generation should succeed");
+        assert!(!recs.is_empty(), "broken report must yield recommendations");
+        // A deduplication recommendation must appear because duplicate_ratio is high.
+        assert!(
+            recs.iter().any(|r| r.id == "data_deduplication"),
+            "expected a deduplication recommendation, got {recs:?}"
+        );
     }
 }

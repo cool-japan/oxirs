@@ -3,7 +3,7 @@
 use crate::{PatchOperation, RdfPatch};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use tracing::info;
 
 pub struct ConflictResolver {
@@ -90,65 +90,66 @@ impl ConflictResolver {
         merged_patch.id = format!("merged-{}-{}", patch1.id, patch2.id);
 
         let mut conflicts = Vec::new();
-        let mut operation_map = BTreeMap::new();
 
-        // Index operations from both patches
-        for (idx, op) in patch1.operations.iter().enumerate() {
-            let key = self.operation_key(op);
-            operation_map.insert(format!("p1-{idx}-{key}"), (op, "patch1"));
-        }
+        // Start from patch1's operations. patch2's non-conflicting operations are
+        // appended; conflicting ones are resolved according to the strategy.
+        let mut merged_ops: Vec<PatchOperation> = patch1.operations.clone();
+        // Track which patch1 operations have already been resolved so the same
+        // op isn't matched twice.
+        let mut resolved_indices: std::collections::HashSet<usize> =
+            std::collections::HashSet::new();
 
-        for (idx, op) in patch2.operations.iter().enumerate() {
-            let key = self.operation_key(op);
-            let conflict_key = format!("p2-{idx}-{key}");
+        for op2 in &patch2.operations {
+            // Find the first not-yet-resolved conflicting operation in patch1.
+            let conflicting = patch1.operations.iter().enumerate().find(|(idx, op1)| {
+                !resolved_indices.contains(idx) && self.operations_conflict(op1, op2)
+            });
 
-            // Check for conflicts
-            if let Some(existing) = operation_map
-                .iter()
-                .find(|(k, _)| self.operations_conflict(op, k.split('-').nth(2).unwrap_or("")))
-            {
-                let conflict = DetailedConflict {
+            if let Some((idx, op1)) = conflicting {
+                resolved_indices.insert(idx);
+                let resolution = self.resolve_operation_conflict(op1, op2)?;
+
+                // Apply the resolution against `merged_ops`.
+                match &resolution {
+                    ConflictResolution::KeepFirst => {
+                        // op1 already present; drop op2.
+                    }
+                    ConflictResolution::KeepSecond => {
+                        // Replace op1 with op2 in place.
+                        if let Some(slot) = merged_ops.get_mut(idx) {
+                            *slot = op2.clone();
+                        }
+                    }
+                    ConflictResolution::KeepBoth => {
+                        merged_ops.push(op2.clone());
+                    }
+                    ConflictResolution::Merged(merged_op) => {
+                        if let Some(slot) = merged_ops.get_mut(idx) {
+                            *slot = merged_op.clone();
+                        }
+                    }
+                    ConflictResolution::RequiresManualReview => {
+                        merged_ops.push(PatchOperation::Header {
+                            key: "conflict".to_string(),
+                            value: format!("Manual review required for {:?} vs {:?}", op1, op2),
+                        });
+                    }
+                }
+
+                conflicts.push(DetailedConflict {
                     conflict_type: "operation_overlap".to_string(),
-                    operation1: existing.1 .0.clone(),
-                    operation2: op.clone(),
-                    resolution: self.resolve_operation_conflict(existing.1 .0, op)?,
-                };
-                conflicts.push(conflict);
-            } else {
-                operation_map.insert(conflict_key, (op, "patch2"));
+                    operation1: op1.clone(),
+                    operation2: op2.clone(),
+                    resolution,
+                });
+            } else if !merged_ops.contains(op2) {
+                // No conflict and not a duplicate: keep it.
+                merged_ops.push(op2.clone());
             }
         }
 
-        // Apply resolution strategy
-        for (_, (operation, _source)) in operation_map {
-            merged_patch.add_operation(operation.clone());
-        }
-
-        // Apply conflict resolutions
-        for conflict in &conflicts {
-            match &conflict.resolution {
-                ConflictResolution::KeepFirst => {
-                    // Already in merged patch
-                }
-                ConflictResolution::KeepSecond => {
-                    // Replace with second operation
-                    merged_patch.add_operation(conflict.operation2.clone());
-                }
-                ConflictResolution::KeepBoth => {
-                    merged_patch.add_operation(conflict.operation1.clone());
-                    merged_patch.add_operation(conflict.operation2.clone());
-                }
-                ConflictResolution::Merged(merged_op) => {
-                    merged_patch.add_operation(merged_op.clone());
-                }
-                ConflictResolution::RequiresManualReview => {
-                    // Add as comment or metadata
-                    merged_patch.add_operation(PatchOperation::Header {
-                        key: "conflict".to_string(),
-                        value: format!("Manual review required: {:?}", conflict.conflict_type),
-                    });
-                }
-            }
+        for operation in merged_ops {
+            merged_patch.add_operation(operation);
         }
 
         let report = ConflictReport {
@@ -168,35 +169,60 @@ impl ConflictResolver {
         Ok((merged_patch, report))
     }
 
-    fn operation_key(&self, operation: &PatchOperation) -> String {
+    /// Determine whether two operations conflict.
+    ///
+    /// Two triple operations conflict when they target the same subject and
+    /// predicate but either assert a different object or have opposing Add/Delete
+    /// semantics (e.g. one adds a triple another deletes). Two graph operations
+    /// conflict when they target the same graph URI with opposing Add/Delete
+    /// semantics.
+    fn operations_conflict(&self, op1: &PatchOperation, op2: &PatchOperation) -> bool {
+        if let (Some((add1, s1, p1, o1)), Some((add2, s2, p2, o2))) =
+            (Self::triple_parts(op1), Self::triple_parts(op2))
+        {
+            if s1 == s2 && p1 == p2 {
+                // Same subject+predicate: conflict if the object differs or the
+                // Add/Delete direction differs. Identical operations (same
+                // object, same direction) are duplicates, not conflicts.
+                return o1 != o2 || add1 != add2;
+            }
+            return false;
+        }
+
+        if let (Some((add1, g1)), Some((add2, g2))) =
+            (Self::graph_parts(op1), Self::graph_parts(op2))
+        {
+            // Opposing graph operations on the same graph conflict.
+            return g1 == g2 && add1 != add2;
+        }
+
+        false
+    }
+
+    /// Return `(is_add, subject, predicate, object)` for triple operations.
+    fn triple_parts(operation: &PatchOperation) -> Option<(bool, &str, &str, &str)> {
         match operation {
             PatchOperation::Add {
                 subject,
                 predicate,
                 object,
-            } => {
-                format!("add-{subject}-{predicate}-{object}")
-            }
+            } => Some((true, subject, predicate, object)),
             PatchOperation::Delete {
                 subject,
                 predicate,
                 object,
-            } => {
-                format!("delete-{subject}-{predicate}-{object}")
-            }
-            PatchOperation::AddGraph { graph } => {
-                format!("add-graph-{graph}")
-            }
-            PatchOperation::DeleteGraph { graph } => {
-                format!("delete-graph-{graph}")
-            }
-            _ => format!("{operation:?}"),
+            } => Some((false, subject, predicate, object)),
+            _ => None,
         }
     }
 
-    fn operations_conflict(&self, _op1: &PatchOperation, _op2_key: &str) -> bool {
-        // Simplified conflict detection - in practice this would be more sophisticated
-        false
+    /// Return `(is_add, graph)` for graph operations.
+    fn graph_parts(operation: &PatchOperation) -> Option<(bool, &str)> {
+        match operation {
+            PatchOperation::AddGraph { graph } => Some((true, graph)),
+            PatchOperation::DeleteGraph { graph } => Some((false, graph)),
+            _ => None,
+        }
     }
 
     fn resolve_operation_conflict(
@@ -233,20 +259,28 @@ impl ConflictResolver {
                 PatchOperation::Add {
                     subject: s1,
                     predicate: p1,
-                    object: _o1,
+                    object: o1,
                 },
                 PatchOperation::Add {
                     subject: s2,
                     predicate: p2,
-                    object: _o2,
+                    object: o2,
                 },
             ) => {
-                if s1 == s2 && p1 == p2 {
-                    // Different objects for same subject/predicate - keep both
-                    Ok(ConflictResolution::KeepBoth)
+                if s1 == s2 && p1 == p2 && o1 == o2 {
+                    // Identical add on both sides: keep a single copy.
+                    Ok(ConflictResolution::KeepFirst)
                 } else {
+                    // Same subject/predicate but different object (multi-valued
+                    // property): retain both assertions.
                     Ok(ConflictResolution::KeepBoth)
                 }
+            }
+            // An add opposing a delete of the same triple cannot be merged
+            // automatically without a policy: keep the addition.
+            (PatchOperation::Add { .. }, PatchOperation::Delete { .. })
+            | (PatchOperation::Delete { .. }, PatchOperation::Add { .. }) => {
+                Ok(ConflictResolution::KeepFirst)
             }
             _ => Ok(ConflictResolution::RequiresManualReview),
         }
@@ -285,5 +319,65 @@ impl ConflictResolver {
         }
 
         0 // Default priority
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn add(subject: &str, object: &str) -> PatchOperation {
+        PatchOperation::Add {
+            subject: subject.to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: object.to_string(),
+        }
+    }
+
+    fn delete(subject: &str, object: &str) -> PatchOperation {
+        PatchOperation::Delete {
+            subject: subject.to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: object.to_string(),
+        }
+    }
+
+    #[test]
+    fn regression_add_vs_delete_conflict_detected() {
+        let mut p1 = RdfPatch::new();
+        p1.add_operation(add("http://example.org/s", "http://example.org/o"));
+
+        let mut p2 = RdfPatch::new();
+        p2.add_operation(delete("http://example.org/s", "http://example.org/o"));
+
+        let resolver = ConflictResolver::new(ConflictStrategy::LastWins);
+        let (merged, report) = resolver.resolve_conflicts(&p1, &p2).unwrap();
+
+        // The opposing add/delete of the same triple MUST be detected as a
+        // conflict (previously `operations_conflict` was hardcoded to false).
+        assert_eq!(report.conflicts_found, 1);
+        assert_eq!(report.conflicts_resolved, 1);
+
+        // LastWins => the delete replaces the add.
+        assert_eq!(merged.operations.len(), 1);
+        assert!(matches!(
+            merged.operations[0],
+            PatchOperation::Delete { .. }
+        ));
+    }
+
+    #[test]
+    fn regression_non_conflicting_ops_concatenate() {
+        let mut p1 = RdfPatch::new();
+        p1.add_operation(add("http://example.org/s1", "http://example.org/o"));
+
+        let mut p2 = RdfPatch::new();
+        p2.add_operation(add("http://example.org/s2", "http://example.org/o"));
+
+        let resolver = ConflictResolver::new(ConflictStrategy::LastWins);
+        let (merged, report) = resolver.resolve_conflicts(&p1, &p2).unwrap();
+
+        assert_eq!(report.conflicts_found, 0);
+        assert_eq!(merged.operations.len(), 2);
     }
 }

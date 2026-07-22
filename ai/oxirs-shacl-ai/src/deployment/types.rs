@@ -100,6 +100,8 @@ pub struct DeploymentResult {
 /// Deployment status
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DeploymentStatus {
+    /// A dry-run plan was produced from the spec; nothing was actually applied.
+    Planned,
     InProgress,
     Successful,
     Failed,

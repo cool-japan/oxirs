@@ -44,7 +44,17 @@ pub struct KafkaConfig {
     pub producer: ProducerConfig,
     /// Consumer configuration
     pub consumer: ConsumerConfig,
-    /// Enable transactional semantics
+    /// Request transactional producer semantics
+    /// (`init_transactions`/`begin_transaction`/`commit_transaction`).
+    ///
+    /// Threaded through to [`crate::streaming::kafka::KafkaConfig`] (see its
+    /// `From` impl) so the fail-loud error raised by
+    /// [`crate::streaming::kafka::KafkaProducer::new`] explicitly calls out
+    /// that transactional semantics were requested. This build has no
+    /// Pure-Rust Kafka wire-protocol client at all (`rdkafka` is C-FFI and
+    /// excluded by policy), so Kafka streaming — transactional or not —
+    /// always fails construction rather than silently downgrading or
+    /// dropping events; see `streaming::kafka`'s module docs.
     pub enable_transactions: bool,
 }
 

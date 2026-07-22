@@ -174,11 +174,42 @@ impl EventWindow {
         }
     }
 
-    /// Update aggregation state
+    /// Update aggregation state with the most recently added event.
+    ///
+    /// For every aggregate function configured on this window we lazily
+    /// initialize an [`AggregationState`] (keyed by a stable function name) and
+    /// fold the just-added event into it. This is what makes windowed
+    /// Count/Sum/Average/Min/Max/Distinct actually compute instead of returning
+    /// an empty map.
     fn update_aggregations(&mut self) -> Result<()> {
-        // Implementation details for aggregation updates
-        // This would be moved from the original processing.rs
+        // The event we just added is at the back of the queue.
+        let event = match self.events.back() {
+            Some(event) => event.clone(),
+            None => return Ok(()),
+        };
+
+        for function in &self.config.aggregates {
+            let key = aggregate_state_key(function);
+            let state = self
+                .aggregation_state
+                .entry(key)
+                .or_insert_with(|| super::aggregation::AggregationState::new(function));
+            state.update(&event, function)?;
+        }
+
         Ok(())
+    }
+
+    /// Compute the current aggregation results for this window.
+    ///
+    /// Each configured aggregate is emitted under the same stable key used by
+    /// [`Self::update_aggregations`].
+    pub fn aggregation_results(&self) -> Result<HashMap<String, serde_json::Value>> {
+        let mut results = HashMap::new();
+        for (name, state) in &self.aggregation_state {
+            results.insert(name.clone(), state.result()?);
+        }
+        Ok(results)
     }
 
     /// Get window ID
@@ -204,6 +235,23 @@ impl EventWindow {
     /// Get aggregation state
     pub fn aggregation_state(&self) -> &HashMap<String, super::aggregation::AggregationState> {
         &self.aggregation_state
+    }
+}
+
+/// Derive a stable state key for an aggregate function so that repeated updates
+/// and result reads address the same [`AggregationState`] entry.
+fn aggregate_state_key(function: &super::aggregation::AggregateFunction) -> String {
+    use super::aggregation::AggregateFunction as Af;
+    match function {
+        Af::Count => "count".to_string(),
+        Af::Sum { field } => format!("sum:{field}"),
+        Af::Average { field } => format!("avg:{field}"),
+        Af::Min { field } => format!("min:{field}"),
+        Af::Max { field } => format!("max:{field}"),
+        Af::First => "first".to_string(),
+        Af::Last => "last".to_string(),
+        Af::Distinct { field } => format!("distinct:{field}"),
+        Af::Custom { name, .. } => format!("custom:{name}"),
     }
 }
 
@@ -241,5 +289,57 @@ impl Watermark {
 impl Default for Watermark {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::aggregation::AggregateFunction;
+    use super::*;
+    use crate::event::EventMetadata;
+
+    fn triple(subject: &str) -> StreamEvent {
+        StreamEvent::TripleAdded {
+            subject: subject.to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+            graph: None,
+            metadata: EventMetadata::default(),
+        }
+    }
+
+    #[test]
+    fn regression_window_aggregations_actually_compute() {
+        let config = WindowConfig {
+            window_type: WindowType::CountBased { size: 10 },
+            aggregates: vec![
+                AggregateFunction::Count,
+                AggregateFunction::Distinct {
+                    field: "subject".to_string(),
+                },
+            ],
+            group_by: vec![],
+            filter: None,
+            allow_lateness: None,
+            trigger: WindowTrigger::OnCount(10),
+        };
+
+        let mut window = EventWindow::new(config);
+        window.add_event(triple("http://example.org/s1")).unwrap();
+        window.add_event(triple("http://example.org/s1")).unwrap();
+        window.add_event(triple("http://example.org/s2")).unwrap();
+
+        let results = window.aggregation_results().unwrap();
+
+        // Count must reflect all three events (previously always empty).
+        assert_eq!(
+            results.get("count"),
+            Some(&serde_json::Value::Number(3u64.into()))
+        );
+        // Distinct subjects: s1, s2 => 2 distinct values.
+        assert_eq!(
+            results.get("distinct:subject"),
+            Some(&serde_json::Value::Number(2u64.into()))
+        );
     }
 }

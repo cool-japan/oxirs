@@ -1,15 +1,138 @@
-//! HKDF-like key derivation for DID methods.
+//! Key derivation for DID methods.
 //!
-//! Implements structurally-correct KDF patterns (HKDF-Extract/Expand, PBKDF2)
-//! using a simplified FNV-1a-based XOR-hash PRF — pure Rust, no external
-//! crypto crates required.  The focus is on API correctness and pattern
-//! demonstration; for production use replace the PRF with a real HMAC-SHA256.
+//! Implements the standard IETF key-derivation functions over HMAC-SHA-2:
+//!
+//! * **HKDF** (RFC 5869) — Extract-then-Expand, using HMAC-SHA-256
+//!   ([`KdfAlgorithm::Hkdf256`]) or HMAC-SHA-512 ([`KdfAlgorithm::Hkdf512`]).
+//! * **PBKDF2** (RFC 8018) — HMAC-SHA-256 PRF ([`KdfAlgorithm::Pbkdf2Sha256`]).
+//!
+//! HMAC is computed over the pure-Rust `sha2` hashes already used throughout
+//! this crate (no C/Fortran dependency, no external crypto FFI). Outputs match
+//! the published RFC test vectors (see the module tests).
 
 use scirs2_core::random::Random;
+use sha2::{Digest, Sha256, Sha512};
 use std::fmt;
 
 // bring the Rng trait into scope for gen_range
 use scirs2_core::random::Rng;
+
+// ── HMAC / hash sizes ──────────────────────────────────────────────────────────
+
+/// SHA-256 output length in bytes.
+const SHA256_OUTPUT: usize = 32;
+/// SHA-256 internal block size in bytes.
+const SHA256_BLOCK: usize = 64;
+/// SHA-512 output length in bytes.
+const SHA512_OUTPUT: usize = 64;
+/// SHA-512 internal block size in bytes.
+const SHA512_BLOCK: usize = 128;
+
+/// Generic HMAC (RFC 2104) over a `sha2` digest `D`.
+///
+/// `block_size` is the hash's internal block size (64 for SHA-256, 128 for
+/// SHA-512). This is a total function — it never panics and never allocates a
+/// fallible resource, so it keeps the KDF entry points infallible.
+fn hmac<D: Digest>(key: &[u8], msg: &[u8], block_size: usize) -> Vec<u8> {
+    // Derive the block-sized key K0.
+    let mut k0 = vec![0u8; block_size];
+    if key.len() > block_size {
+        let digest = D::digest(key);
+        let n = digest.len().min(block_size);
+        k0[..n].copy_from_slice(&digest[..n]);
+    } else {
+        k0[..key.len()].copy_from_slice(key);
+    }
+
+    let ipad: Vec<u8> = k0.iter().map(|b| b ^ 0x36).collect();
+    let opad: Vec<u8> = k0.iter().map(|b| b ^ 0x5c).collect();
+
+    let mut inner = D::new();
+    inner.update(&ipad);
+    inner.update(msg);
+    let inner_hash = inner.finalize();
+
+    let mut outer = D::new();
+    outer.update(&opad);
+    outer.update(inner_hash);
+    outer.finalize().to_vec()
+}
+
+/// HMAC-SHA-256.
+fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
+    hmac::<Sha256>(key, msg, SHA256_BLOCK)
+}
+
+/// HMAC-SHA-512.
+fn hmac_sha512(key: &[u8], msg: &[u8]) -> Vec<u8> {
+    hmac::<Sha512>(key, msg, SHA512_BLOCK)
+}
+
+/// Generic HKDF-Expand (RFC 5869 §2.3).
+fn hkdf_expand_generic(
+    prk: &[u8],
+    info: &[u8],
+    length: usize,
+    hash_len: usize,
+    mac: impl Fn(&[u8], &[u8]) -> Vec<u8>,
+) -> Vec<u8> {
+    if length == 0 {
+        return Vec::new();
+    }
+    // RFC 5869 limit: L <= 255 * HashLen. Beyond that expansion is undefined;
+    // we stop at the last valid block rather than fabricate more output.
+    let max_blocks = 255usize;
+    let mut okm = Vec::with_capacity(length);
+    let mut t: Vec<u8> = Vec::new();
+    let mut counter: usize = 1;
+    while okm.len() < length && counter <= max_blocks {
+        let mut data = Vec::with_capacity(t.len() + info.len() + 1);
+        data.extend_from_slice(&t);
+        data.extend_from_slice(info);
+        data.push(counter as u8);
+        t = mac(prk, &data);
+        let take = (length - okm.len()).min(hash_len);
+        okm.extend_from_slice(&t[..take.min(t.len())]);
+        counter += 1;
+    }
+    okm.truncate(length);
+    okm
+}
+
+/// Generic PBKDF2 (RFC 8018 §5.2) with an HMAC PRF.
+fn pbkdf2_generic(
+    password: &[u8],
+    salt: &[u8],
+    iterations: u32,
+    length: usize,
+    hash_len: usize,
+    mac: impl Fn(&[u8], &[u8]) -> Vec<u8>,
+) -> Vec<u8> {
+    if length == 0 {
+        return Vec::new();
+    }
+    let blocks = length.div_ceil(hash_len);
+    let mut out = Vec::with_capacity(blocks * hash_len);
+
+    for block_index in 1u32..=(blocks as u32) {
+        // U1 = PRF(password, salt || INT_32_BE(block_index))
+        let mut seed = salt.to_vec();
+        seed.extend_from_slice(&block_index.to_be_bytes());
+        let mut u = mac(password, &seed);
+        let mut t = u.clone();
+
+        // Ui = PRF(password, U(i-1)); T = U1 xor U2 xor … xor Uc
+        for _ in 1..iterations {
+            u = mac(password, &u);
+            for (a, b) in t.iter_mut().zip(u.iter()) {
+                *a ^= b;
+            }
+        }
+        out.extend_from_slice(&t);
+    }
+    out.truncate(length);
+    out
+}
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
@@ -52,7 +175,11 @@ pub struct HkdfParams {
 impl HkdfParams {
     /// Create parameters with the given salt, info, and output length.
     pub fn new(salt: Vec<u8>, info: Vec<u8>, output_length: usize) -> Self {
-        Self { salt, info, output_length }
+        Self {
+            salt,
+            info,
+            output_length,
+        }
     }
 }
 
@@ -70,47 +197,15 @@ pub struct DerivedKey {
 /// Supported key derivation algorithms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KdfAlgorithm {
-    /// HKDF with 256-bit internal state
+    /// HKDF (RFC 5869) with the HMAC-SHA-256 PRF.
     Hkdf256,
-    /// HKDF with 512-bit internal state
+    /// HKDF (RFC 5869) with the HMAC-SHA-512 PRF.
     Hkdf512,
-    /// Simplified PBKDF2 with SHA-256-equivalent iterations
+    /// PBKDF2 (RFC 8018) with the HMAC-SHA-256 PRF.
     Pbkdf2Sha256 {
         /// Number of iterations (must be > 0)
         iterations: u32,
     },
-}
-
-// ── Internal PRF ──────────────────────────────────────────────────────────────
-
-/// FNV-1a 64-bit hash used as a building block for the PRF.
-fn fnv1a_64(data: &[u8]) -> u64 {
-    const OFFSET_BASIS: u64 = 14_695_981_039_346_656_037;
-    const PRIME: u64 = 1_099_511_628_211;
-    let mut hash = OFFSET_BASIS;
-    for &b in data {
-        hash ^= b as u64;
-        hash = hash.wrapping_mul(PRIME);
-    }
-    hash
-}
-
-/// Produce 8 pseudo-random bytes from a key and message using double FNV-1a.
-///
-/// `prf(key, data)` — not a cryptographic HMAC, but structurally equivalent
-/// for test/demonstration purposes.
-fn prf_block(key: &[u8], data: &[u8]) -> [u8; 8] {
-    // Inner: H(key || data)
-    let mut combined = key.to_vec();
-    combined.extend_from_slice(data);
-    let inner = fnv1a_64(&combined);
-
-    // Outer: H(key XOR 0x5c^8 || inner_bytes)
-    let mut outer_key: Vec<u8> = key.iter().map(|b| b ^ 0x5c).collect();
-    outer_key.extend_from_slice(&inner.to_le_bytes());
-    let outer = fnv1a_64(&outer_key);
-
-    outer.to_le_bytes()
 }
 
 // ── KeyDerivation ─────────────────────────────────────────────────────────────
@@ -144,11 +239,9 @@ impl KeyDerivation {
                 (key, "HKDF-256".to_string())
             }
             KdfAlgorithm::Hkdf512 => {
-                // For HKDF-512 we use a doubled PRK to simulate a larger internal state.
-                let prk = Self::hkdf_extract(&params.salt, ikm);
-                let prk2 = Self::hkdf_extract(ikm, &params.salt);
-                let combined_prk: Vec<u8> = prk.iter().chain(prk2.iter()).copied().collect();
-                let key = Self::hkdf_expand(&combined_prk, &params.info, params.output_length);
+                // RFC 5869 HKDF instantiated with HMAC-SHA-512.
+                let prk = Self::hkdf_extract_sha512(&params.salt, ikm);
+                let key = Self::hkdf_expand_sha512(&prk, &params.info, params.output_length);
                 (key, "HKDF-512".to_string())
             }
             KdfAlgorithm::Pbkdf2Sha256 { iterations } => {
@@ -161,97 +254,60 @@ impl KeyDerivation {
         };
 
         let key_id = Self::key_id_from_bytes(&key_bytes);
-        Ok(DerivedKey { key_bytes, key_id, algorithm: alg_name })
+        Ok(DerivedKey {
+            key_bytes,
+            key_id,
+            algorithm: alg_name,
+        })
     }
 
-    /// HKDF extract phase: PRK = PRF(salt, IKM).
+    /// HKDF-Extract (RFC 5869 §2.2) with HMAC-SHA-256: `PRK = HMAC(salt, IKM)`.
     ///
-    /// Returns a fixed-length pseudorandom key suitable for expansion.
+    /// An empty `salt` is replaced by a string of `HashLen` (32) zero bytes, per
+    /// the RFC. Returns the 32-byte pseudorandom key.
     pub fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> Vec<u8> {
-        // Use PRF blocks iteratively to produce 32 bytes of PRK.
         let effective_salt: Vec<u8> = if salt.is_empty() {
-            vec![0u8; 8]
+            vec![0u8; SHA256_OUTPUT]
         } else {
             salt.to_vec()
         };
-
-        let mut prk = Vec::with_capacity(32);
-        for counter in 0u8..4 {
-            let mut data = ikm.to_vec();
-            data.push(counter);
-            let block = prf_block(&effective_salt, &data);
-            prk.extend_from_slice(&block);
-        }
-        prk
+        hmac_sha256(&effective_salt, ikm)
     }
 
-    /// HKDF expand phase: produce `length` bytes from PRK and context info.
-    ///
-    /// Uses counter-mode expansion: T(i) = PRF(PRK, T(i-1) || info || i).
+    /// HKDF-Expand (RFC 5869 §2.3) with HMAC-SHA-256.
     pub fn hkdf_expand(prk: &[u8], info: &[u8], length: usize) -> Vec<u8> {
-        if length == 0 {
-            return vec![];
-        }
-
-        let mut output = Vec::with_capacity(length);
-        let mut t_prev: Vec<u8> = vec![];
-
-        let mut counter: u8 = 1;
-        while output.len() < length {
-            let mut data = t_prev.clone();
-            data.extend_from_slice(info);
-            data.push(counter);
-
-            let block = prf_block(prk, &data);
-            t_prev = block.to_vec();
-            output.extend_from_slice(&block);
-            counter = counter.wrapping_add(1);
-        }
-
-        output.truncate(length);
-        output
+        hkdf_expand_generic(prk, info, length, SHA256_OUTPUT, hmac_sha256)
     }
 
-    /// Simplified PBKDF2: iteratively applies PRF to password + salt.
+    /// HKDF-Extract with HMAC-SHA-512 (64-byte PRK).
+    fn hkdf_extract_sha512(salt: &[u8], ikm: &[u8]) -> Vec<u8> {
+        let effective_salt: Vec<u8> = if salt.is_empty() {
+            vec![0u8; SHA512_OUTPUT]
+        } else {
+            salt.to_vec()
+        };
+        hmac_sha512(&effective_salt, ikm)
+    }
+
+    /// HKDF-Expand with HMAC-SHA-512.
+    fn hkdf_expand_sha512(prk: &[u8], info: &[u8], length: usize) -> Vec<u8> {
+        hkdf_expand_generic(prk, info, length, SHA512_OUTPUT, hmac_sha512)
+    }
+
+    /// PBKDF2 (RFC 8018 §5.2) with the HMAC-SHA-256 PRF.
     ///
-    /// `U1 = PRF(password, salt || 0x00000001)`
-    /// `Ui = PRF(password, U(i-1))`
-    /// `T  = U1 XOR U2 XOR … XOR Uiterations`
-    pub fn pbkdf2_derive(
-        password: &[u8],
-        salt: &[u8],
-        iterations: u32,
-        length: usize,
-    ) -> Vec<u8> {
-        if length == 0 {
-            return vec![];
-        }
-
-        let blocks_needed = (length + 7) / 8;
-        let mut output = Vec::with_capacity(blocks_needed * 8);
-
-        for block_idx in 1u32..=(blocks_needed as u32) {
-            // U1 = PRF(password, salt || block_index)
-            let mut seed = salt.to_vec();
-            seed.extend_from_slice(&block_idx.to_be_bytes());
-            let u1 = prf_block(password, &seed);
-
-            let mut acc = u1;
-            let mut u_prev = u1.to_vec();
-
-            for _ in 1..iterations {
-                let u_next = prf_block(password, &u_prev);
-                for (a, b) in acc.iter_mut().zip(u_next.iter()) {
-                    *a ^= b;
-                }
-                u_prev = u_next.to_vec();
-            }
-
-            output.extend_from_slice(&acc);
-        }
-
-        output.truncate(length);
-        output
+    /// `U1 = HMAC(password, salt || INT_32_BE(i))`,
+    /// `Uj = HMAC(password, U(j-1))`,
+    /// `T  = U1 XOR U2 XOR … XOR U(iterations)`.
+    pub fn pbkdf2_derive(password: &[u8], salt: &[u8], iterations: u32, length: usize) -> Vec<u8> {
+        pbkdf2_generic(
+            password,
+            salt,
+            iterations,
+            length,
+            SHA256_OUTPUT,
+            hmac_sha256,
+        )
     }
 
     /// Generate `length` random bytes using scirs2_core::random.
@@ -267,7 +323,11 @@ impl KeyDerivation {
     ///
     /// If fewer than 8 bytes are available all bytes are encoded.
     pub fn key_id_from_bytes(key_bytes: &[u8]) -> String {
-        let slice = if key_bytes.len() > 8 { &key_bytes[..8] } else { key_bytes };
+        let slice = if key_bytes.len() > 8 {
+            &key_bytes[..8]
+        } else {
+            key_bytes
+        };
         slice.iter().map(|b| format!("{:02x}", b)).collect()
     }
 }
@@ -303,8 +363,9 @@ mod tests {
 
     #[test]
     fn test_extract_empty_salt_uses_zero_vector() {
+        // RFC 5869: an absent salt is set to HashLen (32) zero bytes.
         let prk_empty = KeyDerivation::hkdf_extract(&[], ikm());
-        let prk_zeros = KeyDerivation::hkdf_extract(&[0u8; 8], ikm());
+        let prk_zeros = KeyDerivation::hkdf_extract(&[0u8; 32], ikm());
         assert_eq!(prk_empty, prk_zeros);
     }
 
@@ -401,8 +462,7 @@ mod tests {
     #[test]
     fn test_derive_hkdf256_success() {
         let p = simple_params(32);
-        let dk = KeyDerivation::derive(ikm(), &p, KdfAlgorithm::Hkdf256)
-            .expect("derive failed");
+        let dk = KeyDerivation::derive(ikm(), &p, KdfAlgorithm::Hkdf256).expect("derive failed");
         assert_eq!(dk.key_bytes.len(), 32);
         assert_eq!(dk.algorithm, "HKDF-256");
     }
@@ -410,10 +470,10 @@ mod tests {
     #[test]
     fn test_derive_hkdf512_longer_output() {
         let p = simple_params(64);
-        let dk256 = KeyDerivation::derive(ikm(), &p, KdfAlgorithm::Hkdf256)
-            .expect("derive 256 failed");
-        let dk512 = KeyDerivation::derive(ikm(), &p, KdfAlgorithm::Hkdf512)
-            .expect("derive 512 failed");
+        let dk256 =
+            KeyDerivation::derive(ikm(), &p, KdfAlgorithm::Hkdf256).expect("derive 256 failed");
+        let dk512 =
+            KeyDerivation::derive(ikm(), &p, KdfAlgorithm::Hkdf512).expect("derive 512 failed");
         // Both should be 64 bytes but differ (different internal PRK)
         assert_eq!(dk256.key_bytes.len(), 64);
         assert_eq!(dk512.key_bytes.len(), 64);
@@ -490,7 +550,8 @@ mod tests {
 
     #[test]
     fn test_key_id_is_hex() {
-        let id = KeyDerivation::key_id_from_bytes(&[0xde, 0xad, 0xbe, 0xef, 0x01, 0x23, 0x45, 0x67]);
+        let id =
+            KeyDerivation::key_id_from_bytes(&[0xde, 0xad, 0xbe, 0xef, 0x01, 0x23, 0x45, 0x67]);
         assert_eq!(id, "deadbeef01234567");
     }
 
@@ -514,7 +575,11 @@ mod tests {
         let dk = KeyDerivation::derive(ikm(), &p, KdfAlgorithm::Hkdf256).expect("ok");
         // key_id must be 16 hex chars (8 bytes)
         assert_eq!(dk.key_id.len(), 16);
-        assert!(dk.key_id.chars().all(|c| c.is_ascii_hexdigit()), "id={}", dk.key_id);
+        assert!(
+            dk.key_id.chars().all(|c| c.is_ascii_hexdigit()),
+            "id={}",
+            dk.key_id
+        );
     }
 
     // ── cross-checks ─────────────────────────────────────────────────────────
@@ -635,5 +700,60 @@ mod tests {
     fn test_kdf_error_equality() {
         assert_eq!(KdfError::EmptyInput, KdfError::EmptyInput);
         assert_ne!(KdfError::EmptyInput, KdfError::InvalidOutputLength);
+    }
+
+    // ── RFC test vectors (prove the crypto is real, not a placeholder PRF) ─────
+
+    #[test]
+    fn regression_hmac_sha256_rfc4231_tc1() {
+        // RFC 4231, Test Case 1.
+        let key = [0x0bu8; 20];
+        let mac = hmac_sha256(&key, b"Hi There");
+        assert_eq!(
+            hex::encode(mac),
+            "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+        );
+    }
+
+    #[test]
+    fn regression_hkdf_sha256_rfc5869_tc1() {
+        // RFC 5869, Test Case 1 (HKDF-SHA256).
+        let ikm = [0x0bu8; 22];
+        let salt = hex::decode("000102030405060708090a0b0c").expect("valid hex");
+        let info = hex::decode("f0f1f2f3f4f5f6f7f8f9").expect("valid hex");
+
+        let prk = KeyDerivation::hkdf_extract(&salt, &ikm);
+        assert_eq!(
+            hex::encode(&prk),
+            "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5"
+        );
+
+        let okm = KeyDerivation::hkdf_expand(&prk, &info, 42);
+        assert_eq!(
+            hex::encode(&okm),
+            "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865"
+        );
+    }
+
+    #[test]
+    fn regression_pbkdf2_sha256_rfc7914() {
+        // RFC 7914 §11: PBKDF2-HMAC-SHA256("passwd", "salt", 1, 64).
+        let dk = KeyDerivation::pbkdf2_derive(b"passwd", b"salt", 1, 64);
+        assert_eq!(
+            hex::encode(dk),
+            "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc\
+             49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783"
+        );
+    }
+
+    #[test]
+    fn regression_hkdf512_differs_and_is_64_byte_prk() {
+        // HKDF-512 must use a genuinely different (SHA-512) PRF than HKDF-256.
+        let prk = KeyDerivation::hkdf_extract_sha512(b"salt", ikm());
+        assert_eq!(prk.len(), 64);
+        let p = simple_params(32);
+        let k256 = KeyDerivation::derive(ikm(), &p, KdfAlgorithm::Hkdf256).expect("ok");
+        let k512 = KeyDerivation::derive(ikm(), &p, KdfAlgorithm::Hkdf512).expect("ok");
+        assert_ne!(k256.key_bytes, k512.key_bytes);
     }
 }

@@ -27,6 +27,8 @@ pub struct DDoSProtectionManager {
     whitelisted_ips: Arc<DashMap<IpAddr, ()>>,
     /// Attack detection
     attack_detector: Arc<AttackDetector>,
+    /// Background sweeper that evicts idle `ip_tracker` entries, aborted on drop.
+    cleanup_handle: std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 /// DDoS protection configuration
@@ -48,6 +50,17 @@ pub struct DDoSProtectionConfig {
     pub max_connections_per_ip: u32,
     /// Enable traffic analysis
     pub enable_traffic_analysis: bool,
+    /// Retention window (seconds) for idle per-IP tracking entries. Entries with
+    /// no active connections whose last request is older than this are swept by a
+    /// background task so the `ip_tracker` map cannot grow without bound under a
+    /// spoofed-source-IP flood.
+    #[serde(default = "default_ip_tracker_retention_secs")]
+    pub ip_tracker_retention_secs: u64,
+}
+
+/// Default idle-entry retention window for the per-IP tracker (15 minutes).
+fn default_ip_tracker_retention_secs() -> u64 {
+    900
 }
 
 impl Default for DDoSProtectionConfig {
@@ -61,6 +74,7 @@ impl Default for DDoSProtectionConfig {
             enable_challenge: false,
             max_connections_per_ip: 10,
             enable_traffic_analysis: true,
+            ip_tracker_retention_secs: default_ip_tracker_retention_secs(),
         }
     }
 }
@@ -122,17 +136,75 @@ struct TrafficPattern {
 }
 
 impl DDoSProtectionManager {
-    /// Create a new DDoS protection manager
+    /// Create a new DDoS protection manager.
+    ///
+    /// If a Tokio runtime is available (the production path), a background sweeper
+    /// task is spawned that periodically evicts idle per-IP tracking entries so
+    /// the `ip_tracker` map cannot grow without bound when an attacker spoofs a
+    /// large number of distinct source IPs.
     pub fn new(config: DDoSProtectionConfig) -> Self {
+        let ip_tracker: Arc<DashMap<IpAddr, IpTrackingInfo>> = Arc::new(DashMap::new());
+
+        // Spawn the sweeper only when a runtime exists; callers without one (e.g.
+        // pure config construction) simply get no background task.
+        let cleanup_handle = if config.enabled {
+            match tokio::runtime::Handle::try_current() {
+                Ok(_) => {
+                    let retention = Duration::from_secs(config.ip_tracker_retention_secs.max(1));
+                    // Sweep a few times per retention window, but no less than every
+                    // 30s and no more than every 5 minutes.
+                    let interval =
+                        Duration::from_secs((config.ip_tracker_retention_secs / 4).clamp(30, 300));
+                    let tracker = Arc::clone(&ip_tracker);
+                    Some(tokio::spawn(async move {
+                        let mut ticker = tokio::time::interval(interval);
+                        // Skip the immediate first tick.
+                        ticker.tick().await;
+                        loop {
+                            ticker.tick().await;
+                            Self::prune_tracker(&tracker, retention);
+                        }
+                    }))
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
         Self {
             config,
-            ip_tracker: Arc::new(DashMap::new()),
+            ip_tracker,
             blocked_ips: Arc::new(DashMap::new()),
             whitelisted_ips: Arc::new(DashMap::new()),
             attack_detector: Arc::new(AttackDetector {
                 patterns: DashMap::new(),
             }),
+            cleanup_handle: std::sync::Mutex::new(cleanup_handle),
         }
+    }
+
+    /// Evict idle per-IP tracking entries. An entry is removed only when it has no
+    /// active connections AND its last request is older than `retention`; blocking
+    /// state lives in the separate `blocked_ips` map, so eviction here never
+    /// unblocks anyone, and entries with live connections are always retained so
+    /// their connection counts stay accurate.
+    fn prune_tracker(tracker: &DashMap<IpAddr, IpTrackingInfo>, retention: Duration) {
+        let before = tracker.len();
+        tracker.retain(|_ip, info| {
+            info.connection_count > 0 || info.last_request.elapsed() < retention
+        });
+        let removed = before.saturating_sub(tracker.len());
+        if removed > 0 {
+            debug!("DDoS ip_tracker swept {} idle entries", removed);
+        }
+    }
+
+    /// Run one sweep of the idle-entry eviction using the configured retention
+    /// window. Exposed for the background task and for tests.
+    pub fn prune_stale_entries(&self) {
+        let retention = Duration::from_secs(self.config.ip_tracker_retention_secs.max(1));
+        Self::prune_tracker(&self.ip_tracker, retention);
     }
 
     /// Check if request is allowed
@@ -403,6 +475,16 @@ impl DDoSProtectionManager {
     }
 }
 
+impl Drop for DDoSProtectionManager {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = self.cleanup_handle.lock() {
+            if let Some(handle) = guard.take() {
+                handle.abort();
+            }
+        }
+    }
+}
+
 /// Request decision
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RequestDecision {
@@ -503,6 +585,7 @@ mod tests {
             enable_challenge: false,
             max_connections_per_ip: 5,
             enable_traffic_analysis: true,
+            ip_tracker_retention_secs: 900,
         };
 
         let manager = DDoSProtectionManager::new(config);
@@ -521,6 +604,46 @@ mod tests {
         // Should be rate limited (11th request exceeds limit of 10)
         let decision = manager.check_request(ip).await.unwrap();
         assert!(matches!(decision, RequestDecision::RateLimit { .. }));
+    }
+
+    #[tokio::test]
+    async fn regression_ip_tracker_prune_bounds_growth() {
+        let config = DDoSProtectionConfig {
+            ip_tracker_retention_secs: 60,
+            ..Default::default()
+        };
+        let manager = DDoSProtectionManager::new(config);
+
+        // A stale, connectionless entry (older than retention) must be evicted.
+        let stale = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        manager.ip_tracker.insert(
+            stale,
+            IpTrackingInfo {
+                last_request: Instant::now() - Duration::from_secs(120),
+                connection_count: 0,
+                ..Default::default()
+            },
+        );
+        // A stale entry that still holds an active connection must be retained.
+        let stale_but_connected = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2));
+        manager.ip_tracker.insert(
+            stale_but_connected,
+            IpTrackingInfo {
+                last_request: Instant::now() - Duration::from_secs(120),
+                connection_count: 3,
+                ..Default::default()
+            },
+        );
+        // A recent entry must be retained.
+        let recent = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 3));
+        manager.ip_tracker.insert(recent, IpTrackingInfo::default());
+
+        assert_eq!(manager.ip_tracker.len(), 3);
+        manager.prune_stale_entries();
+
+        assert!(!manager.ip_tracker.contains_key(&stale));
+        assert!(manager.ip_tracker.contains_key(&stale_but_connected));
+        assert!(manager.ip_tracker.contains_key(&recent));
     }
 
     #[tokio::test]

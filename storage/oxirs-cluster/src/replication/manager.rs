@@ -308,6 +308,25 @@ impl ReplicationManager {
         }
     }
 
+    /// Perform a single maintenance iteration: health-check replicas against
+    /// `stale_threshold` and log current stats. Separated from
+    /// [`ReplicationManager::run_maintenance`]'s infinite loop so a caller can
+    /// drive the cadence itself and re-check a shutdown flag between ticks
+    /// (see `ClusterNode::start_background_tasks`).
+    pub async fn maintenance_tick(&mut self, stale_threshold: Duration) {
+        self.health_check(stale_threshold).await;
+
+        if self.stats.total_replicas > 0 {
+            tracing::debug!(
+                "Replication stats: {}/{} healthy, avg lag: {:.1}, max lag: {}",
+                self.stats.healthy_replicas,
+                self.stats.total_replicas,
+                self.stats.average_lag,
+                self.stats.max_lag
+            );
+        }
+    }
+
     /// Run periodic maintenance tasks
     pub async fn run_maintenance(&mut self) {
         const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(30);
@@ -434,6 +453,22 @@ mod tests {
         // Cannot add local node as replica
         assert!(!manager.add_replica(1, "127.0.0.1:8080".to_string()));
         assert_eq!(manager.replicas.len(), 1);
+    }
+
+    /// Regression: a single maintenance iteration must run against the real
+    /// manager (with its actual replicas) and complete, so the background task
+    /// can drive it per-tick while re-checking a shutdown flag between ticks
+    /// (instead of the old infinite loop on a throwaway empty manager).
+    #[tokio::test]
+    async fn regression_maintenance_tick_runs_on_real_manager() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::RaftConsensus, 1);
+        manager.add_replica(2, "127.0.0.1:8081".to_string());
+        manager.add_replica(3, "127.0.0.1:8082".to_string());
+
+        // One tick must complete and refresh stats over the real replica set.
+        manager.maintenance_tick(Duration::from_secs(60)).await;
+
+        assert_eq!(manager.get_stats().total_replicas, 2);
     }
 
     #[test]

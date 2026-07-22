@@ -400,6 +400,9 @@ pub struct OxiRSChat {
     llm_manager: Arc<Mutex<llm::LLMManager>>,
     /// NL2SPARQL translation engine
     nl2sparql_engine: Arc<Mutex<nl2sparql::NL2SPARQLSystem>>,
+    /// Input validator screening user content (size limit + injection detection)
+    /// before it reaches RAG retrieval or the LLM prompt.
+    input_validator: Arc<security::InputValidator>,
 }
 
 impl OxiRSChat {
@@ -463,14 +466,51 @@ impl OxiRSChat {
             }
         });
 
+        // Input validation (fail-loud screening of user content).
+        let security_config = security::SecurityConfig::default();
+        let input_validator = Arc::new(security::InputValidator::new(
+            security_config.max_input_size,
+            security_config.max_tokens_per_request,
+        ));
+
+        let sessions: Arc<RwLock<HashMap<String, Arc<Mutex<ChatSession>>>>> =
+            Arc::new(RwLock::new(HashMap::new()));
+        let session_timeout = Duration::from_secs(3600); // 1 hour default
+
+        // Spawn a background task that periodically evicts expired sessions so
+        // the in-memory session map cannot grow without bound. It holds only a
+        // Weak reference, so it exits automatically once the OxiRSChat (and its
+        // sessions map) is dropped.
+        {
+            let weak_sessions = Arc::downgrade(&sessions);
+            let timeout = session_timeout;
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(300));
+                interval.tick().await; // consume the immediate first tick
+                loop {
+                    interval.tick().await;
+                    match weak_sessions.upgrade() {
+                        Some(sessions) => {
+                            let removed = evict_expired(&sessions, timeout).await;
+                            if removed > 0 {
+                                debug!("Session cleanup evicted {} expired sessions", removed);
+                            }
+                        }
+                        None => break,
+                    }
+                }
+            });
+        }
+
         Ok(Self {
             config,
             store,
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            session_timeout: Duration::from_secs(3600), // 1 hour default
+            sessions,
+            session_timeout,
             rag_engine: Arc::new(Mutex::new(rag_engine)),
             llm_manager: Arc::new(Mutex::new(llm_manager)),
             nl2sparql_engine: nl2sparql_for_schema,
+            input_validator,
         })
     }
 
@@ -517,33 +557,89 @@ impl OxiRSChat {
         sessions.keys().cloned().collect()
     }
 
-    /// Clean up expired sessions
+    /// Clean up expired sessions (using the configured session timeout).
+    ///
+    /// Also invoked automatically by the periodic background task spawned in
+    /// [`Self::new_with_llm_config`].
     pub async fn cleanup_expired_sessions(&self) -> usize {
-        let mut sessions = self.sessions.write().await;
-        let mut expired_sessions = Vec::new();
+        evict_expired(&self.sessions, self.session_timeout).await
+    }
 
-        for (session_id, session) in sessions.iter() {
-            if let Ok(session_guard) = session.try_lock() {
-                if session_guard.should_expire(
-                    chrono::Duration::from_std(self.session_timeout)
-                        .unwrap_or(chrono::Duration::seconds(3600)),
-                ) {
-                    expired_sessions.push(session_id.clone());
-                }
-            }
-        }
-
-        for session_id in &expired_sessions {
-            sessions.remove(session_id);
-        }
-
-        expired_sessions.len()
+    /// Evict sessions idle longer than `timeout`. Exposed for deterministic
+    /// testing of the eviction policy independent of the 1-hour default.
+    pub async fn evict_expired_sessions(&self, timeout: Duration) -> usize {
+        evict_expired(&self.sessions, timeout).await
     }
 
     /// Get session count
     pub async fn session_count(&self) -> usize {
         let sessions = self.sessions.read().await;
         sessions.len()
+    }
+
+    /// Aggregate real statistics across all active sessions.
+    ///
+    /// Iterates every session, summing message and token counts, classifying
+    /// each session (active / idle / expired / suspended), and averaging the
+    /// per-session response times. `uptime_seconds` is supplied by the caller
+    /// (the server tracks its own start instant).
+    pub async fn compute_session_stats(&self, uptime_seconds: u64) -> SessionStats {
+        // Snapshot the session handles, then release the map lock before locking
+        // individual sessions to avoid contending with create/remove.
+        let session_arcs: Vec<Arc<Mutex<ChatSession>>> = {
+            let sessions = self.sessions.read().await;
+            sessions.values().cloned().collect()
+        };
+
+        let total_sessions = session_arcs.len();
+        let mut active_sessions = 0usize;
+        let mut idle_sessions = 0usize;
+        let mut expired_sessions = 0usize;
+        let mut suspended_sessions = 0usize;
+        let mut total_messages = 0usize;
+        let mut total_tokens = 0usize;
+        let mut response_time_sum = 0.0f64;
+        let mut response_time_count = 0usize;
+
+        let timeout = chrono::Duration::from_std(self.session_timeout)
+            .unwrap_or_else(|_| chrono::Duration::seconds(3600));
+        let idle_threshold = chrono::Duration::minutes(5);
+
+        for session_arc in &session_arcs {
+            let session = session_arc.lock().await;
+            total_messages += session.messages.len();
+            total_tokens += session.metrics.total_tokens_used;
+            if session.metrics.average_response_time > 0.0 {
+                response_time_sum += session.metrics.average_response_time;
+                response_time_count += 1;
+            }
+
+            let idle_for = chrono::Utc::now() - session.last_activity;
+            match session.state {
+                SessionState::Suspended => suspended_sessions += 1,
+                _ if session.should_expire(timeout) => expired_sessions += 1,
+                _ if idle_for > idle_threshold => idle_sessions += 1,
+                _ => active_sessions += 1,
+            }
+        }
+
+        let avg_response_time_ms = if response_time_count > 0 {
+            (response_time_sum / response_time_count as f64) * 1000.0
+        } else {
+            0.0
+        };
+
+        SessionStats {
+            total_sessions,
+            active_sessions,
+            idle_sessions,
+            expired_sessions,
+            suspended_sessions,
+            total_messages,
+            total_tokens,
+            avg_response_time_ms,
+            uptime_seconds,
+        }
     }
 
     /// Save all active sessions to disk
@@ -659,8 +755,48 @@ impl OxiRSChat {
         Ok(loaded_count)
     }
 
+    /// Validate user-supplied input (size limit + SQL/XSS/command/path-traversal
+    /// screening) before it reaches RAG retrieval or the LLM prompt.
+    ///
+    /// Returns an error (fail-loud) if the validator rejects the content; server
+    /// handlers map this to an HTTP 400 / WebSocket error rather than silently
+    /// forwarding a malicious or oversized payload.
+    pub fn validate_input(&self, input: &str) -> Result<()> {
+        let result = self.input_validator.validate(input)?;
+        if !result.is_valid {
+            let reasons: Vec<String> = result
+                .violations
+                .iter()
+                .map(|v| format!("{:?}: {}", v.violation_type, v.description))
+                .collect();
+            return Err(anyhow::anyhow!(
+                "input validation failed (risk score {:.2}): {}",
+                result.risk_score,
+                reasons.join("; ")
+            ));
+        }
+        Ok(())
+    }
+
     /// Process a chat message with advanced AI capabilities (Quantum RAG, Consciousness, Reasoning)
     pub async fn process_message(&self, session_id: &str, user_message: String) -> Result<Message> {
+        self.process_message_with_options(session_id, user_message, None, None, None)
+            .await
+    }
+
+    /// Process a chat message, preserving thread context (`thread_id`,
+    /// `parent_message_id`) and optional client metadata on the stored messages.
+    pub async fn process_message_with_options(
+        &self,
+        session_id: &str,
+        user_message: String,
+        thread_id: Option<String>,
+        parent_message_id: Option<String>,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<Message> {
+        // Fail-loud input screening before any downstream processing.
+        self.validate_input(&user_message)?;
+
         let processing_start = std::time::Instant::now();
         info!(
             "Processing message for session {}: {}",
@@ -675,15 +811,36 @@ impl OxiRSChat {
 
         let mut session = session.lock().await;
 
+        // Build optional user-message metadata from client-supplied fields.
+        let user_metadata = metadata.as_ref().map(|value| {
+            let custom_fields = match value {
+                serde_json::Value::Object(map) => map.clone().into_iter().collect(),
+                other => {
+                    let mut m = HashMap::new();
+                    m.insert("value".to_string(), other.clone());
+                    m
+                }
+            };
+            messages::MessageMetadata {
+                source: Some("client".to_string()),
+                confidence: None,
+                processing_time_ms: None,
+                model_used: None,
+                temperature: None,
+                max_tokens: None,
+                custom_fields,
+            }
+        });
+
         // Create user message
         let user_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             role: MessageRole::User,
             content: MessageContent::from_text(user_message.clone()),
             timestamp: chrono::Utc::now(),
-            metadata: None,
-            thread_id: None,
-            parent_message_id: None,
+            metadata: user_metadata,
+            thread_id: thread_id.clone(),
+            parent_message_id: parent_message_id.clone(),
             token_count: Some(user_message.len() / 4), // Rough estimate
             reactions: Vec::new(),
             attachments: Vec::new(),
@@ -815,7 +972,7 @@ impl OxiRSChat {
                     .map(|(k, v)| (k, serde_json::Value::String(v)))
                     .collect(),
             }),
-            thread_id: None,
+            thread_id: thread_id.clone(),
             parent_message_id: Some(user_msg_id),
             token_count: Some(response_text_len / 4), // Rough estimate
             reactions: Vec::new(),
@@ -1184,6 +1341,9 @@ impl OxiRSChat {
         session_id: &str,
         user_message: String,
     ) -> Result<tokio::sync::mpsc::Receiver<StreamResponseChunk>> {
+        // Fail-loud input screening before any streaming processing starts.
+        self.validate_input(&user_message)?;
+
         let processing_start = std::time::Instant::now();
         info!(
             "Processing streaming message for session {}: {}",
@@ -1410,25 +1570,66 @@ impl OxiRSChat {
                 }
             }
 
-            // Generate response
-            let response_text = {
-                let mut llm_manager = llm_manager.lock().await;
-                let llm_request = llm::LLMRequest {
-                    messages: vec![llm::ChatMessage {
-                        role: llm::ChatRole::User,
-                        content: prompt,
-                        metadata: None,
-                    }],
-                    system_prompt: Some("You are an advanced AI assistant.".to_string()),
-                    temperature: 0.7,
-                    max_tokens: Some(1000),
-                    use_case: llm::UseCase::Conversation,
-                    priority: llm::Priority::Normal,
-                    timeout: None,
-                };
+            // Generate the response as a REAL incremental stream and forward
+            // each token/chunk to the client as the model produces it. There is
+            // no artificial re-chunking or fabricated delay: chunks arrive from
+            // the provider's streaming API (genuine SSE for OpenAI/Anthropic).
+            let llm_request = llm::LLMRequest {
+                messages: vec![llm::ChatMessage {
+                    role: llm::ChatRole::User,
+                    content: prompt,
+                    metadata: None,
+                }],
+                system_prompt: Some("You are an advanced AI assistant.".to_string()),
+                temperature: 0.7,
+                max_tokens: Some(1000),
+                use_case: llm::UseCase::Conversation,
+                priority: llm::Priority::Normal,
+                timeout: None,
+            };
 
-                match llm_manager.generate_response(llm_request).await {
-                    Ok(response) => response.content,
+            let response_text = {
+                use futures_util::StreamExt;
+                let llm_manager = llm_manager.lock().await;
+                let stream_result = llm_manager.generate_response_stream(llm_request).await;
+                match stream_result {
+                    Ok(mut response_stream) => {
+                        let mut accumulated = String::new();
+                        while let Some(chunk) = response_stream.stream.next().await {
+                            match chunk {
+                                Ok(chunk) => {
+                                    if !chunk.content.is_empty() {
+                                        accumulated.push_str(&chunk.content);
+                                        let _ = tx
+                                            .send(StreamResponseChunk::Content {
+                                                text: chunk.content,
+                                                is_complete: chunk.is_final,
+                                            })
+                                            .await;
+                                    }
+                                }
+                                Err(e) => {
+                                    let _ = tx
+                                        .send(StreamResponseChunk::Error {
+                                            error: StructuredError {
+                                                error_type: ErrorType::LlmGenerationError,
+                                                message: format!("LLM streaming failed: {e}"),
+                                                error_code: Some(
+                                                    "LLM_STREAMING_FAILED".to_string(),
+                                                ),
+                                                component: "LLMManager".to_string(),
+                                                timestamp: chrono::Utc::now(),
+                                                context: std::collections::HashMap::new(),
+                                            },
+                                            recoverable: true,
+                                        })
+                                        .await;
+                                    return;
+                                }
+                            }
+                        }
+                        accumulated
+                    }
                     Err(e) => {
                         let _ = tx
                             .send(StreamResponseChunk::Error {
@@ -1447,23 +1648,6 @@ impl OxiRSChat {
                     }
                 }
             };
-
-            // Send response in chunks for streaming effect
-            let words: Vec<&str> = response_text.split_whitespace().collect();
-            let chunk_size = 3; // Words per chunk
-
-            for (i, chunk) in words.chunks(chunk_size).enumerate() {
-                let _progress = 0.8 + (0.2 * i as f32 / (words.len() / chunk_size) as f32);
-                let _ = tx
-                    .send(StreamResponseChunk::Content {
-                        text: chunk.join(" ") + " ",
-                        is_complete: false,
-                    })
-                    .await;
-
-                // Small delay for streaming effect
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
 
             // Create final response message
             let response = Message {
@@ -1506,6 +1690,32 @@ impl OxiRSChat {
 
         Ok(rx)
     }
+}
+
+/// Evict sessions whose last activity is older than `timeout` from the map.
+///
+/// Shared by [`OxiRSChat::cleanup_expired_sessions`], the periodic background
+/// task, and [`OxiRSChat::evict_expired_sessions`]. Returns the number removed.
+async fn evict_expired(
+    sessions: &RwLock<HashMap<String, Arc<Mutex<ChatSession>>>>,
+    timeout: Duration,
+) -> usize {
+    let chrono_timeout =
+        chrono::Duration::from_std(timeout).unwrap_or_else(|_| chrono::Duration::seconds(3600));
+
+    let mut sessions = sessions.write().await;
+    let mut expired = Vec::new();
+    for (session_id, session) in sessions.iter() {
+        if let Ok(guard) = session.try_lock() {
+            if guard.should_expire(chrono_timeout) {
+                expired.push(session_id.clone());
+            }
+        }
+    }
+    for session_id in &expired {
+        sessions.remove(session_id);
+    }
+    expired.len()
 }
 
 /// Create a default OxiRS Chat instance (synchronous helper)
@@ -1566,5 +1776,82 @@ mod tests {
         let removed = chat.remove_session(&session_id).await;
         assert!(removed);
         assert_eq!(chat.session_count().await, 0);
+    }
+
+    async fn make_chat() -> OxiRSChat {
+        let store = Arc::new(oxirs_core::ConcreteStore::new().expect("store"));
+        OxiRSChat::new(ChatConfig::default(), store)
+            .await
+            .expect("chat")
+    }
+
+    /// Regression: user input is screened (fail-loud) before reaching the LLM.
+    #[tokio::test]
+    async fn regression_input_validation_rejects_injection() {
+        let chat = make_chat().await;
+        // Benign natural-language input is accepted.
+        assert!(chat
+            .validate_input("What genes are linked to cancer?")
+            .is_ok());
+        // A SQL-injection payload is rejected.
+        assert!(chat.validate_input("'; DROP TABLE users; --").is_err());
+        // An oversized payload is rejected.
+        let huge = "a".repeat(2 * 1024 * 1024);
+        assert!(chat.validate_input(&huge).is_err());
+    }
+
+    /// Regression: process_message fails loud on invalid input rather than
+    /// forwarding it to RAG/LLM.
+    #[tokio::test]
+    async fn regression_process_message_rejects_invalid_input() {
+        let chat = make_chat().await;
+        chat.create_session("s1".to_string())
+            .await
+            .expect("session");
+        let err = chat
+            .process_message("s1", "<script>alert('x')</script>".to_string())
+            .await
+            .expect_err("XSS input must be rejected");
+        assert!(err.to_string().contains("input validation failed"));
+    }
+
+    /// Regression: expired sessions are evicted so the map cannot grow unbounded.
+    #[tokio::test]
+    async fn regression_expired_sessions_are_evicted() {
+        let chat = make_chat().await;
+        chat.create_session("s1".to_string())
+            .await
+            .expect("session");
+        chat.create_session("s2".to_string())
+            .await
+            .expect("session");
+        assert_eq!(chat.session_count().await, 2);
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        // A zero timeout expires any session with elapsed idle time.
+        let removed = chat.evict_expired_sessions(Duration::from_secs(0)).await;
+        assert_eq!(removed, 2);
+        assert_eq!(chat.session_count().await, 0);
+    }
+
+    /// Regression: /stats aggregation reports real session/uptime data.
+    #[tokio::test]
+    async fn regression_compute_session_stats_real_values() {
+        let chat = make_chat().await;
+        chat.create_session("s1".to_string())
+            .await
+            .expect("session");
+        chat.create_session("s2".to_string())
+            .await
+            .expect("session");
+
+        let stats = chat.compute_session_stats(42).await;
+        assert_eq!(stats.total_sessions, 2);
+        assert_eq!(stats.uptime_seconds, 42);
+        // Fresh sessions are active, not fabricated as idle/expired.
+        assert_eq!(
+            stats.active_sessions + stats.idle_sessions + stats.expired_sessions,
+            2
+        );
     }
 }

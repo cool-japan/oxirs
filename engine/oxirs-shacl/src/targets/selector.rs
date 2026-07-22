@@ -398,7 +398,7 @@ impl TargetSelector {
         match target {
             Target::Class(class_iri) => {
                 tracing::trace!(
-                    "execute_target_selection: finding instances of class {}",
+                    "execute_target_selection: finding SHACL instances of class {}",
                     class_iri.as_str()
                 );
 
@@ -408,31 +408,61 @@ impl TargetSelector {
                     })?;
 
                 let predicate: Predicate = rdf_type.into();
-                let object: Object = class_iri.clone().into();
 
-                let quads = if let Some(graph) = graph_name {
+                let optional_graph = if let Some(graph) = graph_name {
                     let graph_name = NamedNode::new(graph).map_err(|e| {
                         ShaclError::TargetSelection(format!("Invalid graph IRI: {e}"))
                     })?;
-                    let graph_name = oxirs_core::model::GraphName::NamedNode(graph_name);
-                    store.find_quads(None, Some(&predicate), Some(&object), Some(&graph_name))?
+                    Some(oxirs_core::model::GraphName::NamedNode(graph_name))
                 } else {
-                    store.find_quads(None, Some(&predicate), Some(&object), None)?
+                    None
                 };
 
+                // A node is a "SHACL instance" of class_iri if it is rdf:type class_iri
+                // directly, OR rdf:type of any class C such that C rdfs:subClassOf* class_iri
+                // (transitive). This matches ClassConstraint::check_class_membership so that
+                // sh:targetClass and sh:class agree on what counts as "instance of C".
+                let closure =
+                    crate::advanced_features::subclass_closure::build_rdfs_subclass_closure(store)?;
+
+                let mut classes_to_match: HashSet<NamedNode> = HashSet::new();
+                classes_to_match.insert(class_iri.clone());
+                for (sub_class, superclasses) in &closure {
+                    if superclasses.contains(class_iri) {
+                        classes_to_match.insert(sub_class.clone());
+                    }
+                }
+
                 let mut target_nodes = Vec::new();
-                for quad in quads {
-                    match quad.subject() {
-                        Subject::NamedNode(nn) => target_nodes.push(Term::NamedNode(nn.clone())),
-                        Subject::BlankNode(bn) => target_nodes.push(Term::BlankNode(bn.clone())),
-                        _ => {}
+                let mut seen: HashSet<Term> = HashSet::new();
+                for class in &classes_to_match {
+                    let object: Object = class.clone().into();
+
+                    let quads = if let Some(graph) = &optional_graph {
+                        store.find_quads(None, Some(&predicate), Some(&object), Some(graph))?
+                    } else {
+                        store.find_quads(None, Some(&predicate), Some(&object), None)?
+                    };
+
+                    for quad in quads {
+                        let term = match quad.subject() {
+                            Subject::NamedNode(nn) => Some(Term::NamedNode(nn.clone())),
+                            Subject::BlankNode(bn) => Some(Term::BlankNode(bn.clone())),
+                            _ => None,
+                        };
+                        if let Some(term) = term {
+                            if seen.insert(term.clone()) {
+                                target_nodes.push(term);
+                            }
+                        }
                     }
                 }
 
                 tracing::trace!(
-                    "execute_target_selection: found {} instances of class {}",
+                    "execute_target_selection: found {} instances of class {} ({} classes considered including subclasses)",
                     target_nodes.len(),
-                    class_iri.as_str()
+                    class_iri.as_str(),
+                    classes_to_match.len()
                 );
                 for (i, node) in target_nodes.iter().enumerate() {
                     tracing::trace!("execute_target_selection: instance[{i}] = {node:?}");
@@ -522,7 +552,57 @@ impl TargetSelector {
             }
             Target::Sparql(_sparql_target) => {
                 tracing::trace!("execute_target_selection: executing SPARQL target query");
-                Ok(Vec::new())
+
+                let query = self.generate_basic_target_query(target, graph_name)?;
+
+                let query_results = store.query(&query).map_err(|e| {
+                    ShaclError::TargetSelection(format!(
+                        "SPARQL target query execution failed: {e}"
+                    ))
+                })?;
+
+                let mut target_nodes = Vec::new();
+                match query_results.results() {
+                    oxirs_core::rdf_store::QueryResults::Bindings(bindings) => {
+                        for binding in bindings {
+                            let bound_term = binding
+                                .get("this")
+                                .or_else(|| binding.get("target"))
+                                .or_else(|| {
+                                    binding.variables().next().and_then(|v| binding.get(v))
+                                });
+
+                            match bound_term {
+                                Some(term) => target_nodes.push(term.clone()),
+                                None => {
+                                    return Err(ShaclError::TargetSelection(
+                                        "SPARQL target query returned a solution with no bound variable"
+                                            .to_string(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    oxirs_core::rdf_store::QueryResults::Boolean(_) => {
+                        return Err(ShaclError::TargetSelection(
+                            "sh:SPARQLTarget query must be a SELECT query returning focus nodes, not an ASK query"
+                                .to_string(),
+                        ));
+                    }
+                    oxirs_core::rdf_store::QueryResults::Graph(_) => {
+                        return Err(ShaclError::TargetSelection(
+                            "sh:SPARQLTarget query must be a SELECT query returning focus nodes, not a CONSTRUCT/DESCRIBE query"
+                                .to_string(),
+                        ));
+                    }
+                }
+
+                tracing::trace!(
+                    "execute_target_selection: SPARQL target query returned {} nodes",
+                    target_nodes.len()
+                );
+
+                Ok(target_nodes)
             }
             Target::Union(union_target) => {
                 tracing::trace!(
@@ -705,5 +785,157 @@ impl TargetSelector {
     /// Helper method to extract WHERE clause content from a SPARQL query
     fn extract_where_clause(&self, query: &str) -> Result<String> {
         super::selector_query::extract_where_clause(query)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxirs_core::model::{GraphName, NamedNode, Quad};
+    use oxirs_core::ConcreteStore;
+
+    fn nn(iri: &str) -> NamedNode {
+        NamedNode::new(iri).expect("valid IRI")
+    }
+
+    /// Target::Sparql previously always returned an empty Vec (see
+    /// `execute_target_selection`'s Sparql arm) instead of actually running
+    /// the SPARQL SELECT query against the store.
+    #[test]
+    fn regression_sparql_target_selects_real_focus_nodes() {
+        let store = ConcreteStore::new().expect("store");
+        let invoice1 = nn("http://example.org/invoice1");
+        let invoice2 = nn("http://example.org/invoice2");
+        let not_invoice = nn("http://example.org/notAnInvoice");
+        let rdf_type = nn("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        let invoice_class = nn("http://example.org/Invoice");
+
+        for node in [&invoice1, &invoice2] {
+            store
+                .insert_quad(Quad::new(
+                    node.clone(),
+                    rdf_type.clone(),
+                    invoice_class.clone(),
+                    GraphName::DefaultGraph,
+                ))
+                .expect("insert invoice type");
+        }
+        store
+            .insert_quad(Quad::new(
+                not_invoice.clone(),
+                rdf_type.clone(),
+                nn("http://example.org/Other"),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert other type");
+
+        // Use the expanded rdf:type IRI rather than the `a` shorthand: this
+        // exercises the same target-selection fix (a real, executed SPARQL
+        // query) without depending on `a`-shorthand support in the store's
+        // SPARQL parser.
+        let target = Target::sparql(
+            "SELECT ?this WHERE { ?this <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Invoice> }".to_string(),
+            None,
+        );
+
+        let mut selector = TargetSelector::new();
+        let nodes = selector
+            .select_targets(&store, &target, None)
+            .expect("SPARQL target selection should succeed");
+
+        assert_eq!(
+            nodes.len(),
+            2,
+            "SPARQL target must select exactly the two Invoice instances, got {nodes:?}"
+        );
+        assert!(nodes.contains(&Term::NamedNode(invoice1)));
+        assert!(nodes.contains(&Term::NamedNode(invoice2)));
+        assert!(!nodes.contains(&Term::NamedNode(not_invoice)));
+    }
+
+    /// A SPARQL target query that is not a SELECT (e.g. ASK) must fail loudly
+    /// rather than silently returning zero focus nodes.
+    #[test]
+    fn regression_sparql_target_ask_query_is_fail_loud() {
+        let store = ConcreteStore::new().expect("store");
+        let target = Target::sparql("ASK { ?s ?p ?o }".to_string(), None);
+
+        let mut selector = TargetSelector::new();
+        let result = selector.select_targets(&store, &target, None);
+
+        assert!(
+            result.is_err(),
+            "an ASK query used as a SPARQLTarget must be rejected, not silently return no nodes"
+        );
+    }
+
+    /// Target::Class (and Target::Implicit, which delegates to it) must
+    /// select "SHACL instances" of the class: nodes typed with the class
+    /// itself OR with any rdfs:subClassOf-transitive subclass, matching
+    /// ClassConstraint::check_class_membership's semantics.
+    #[test]
+    fn regression_target_class_includes_rdfs_subclass_instances() {
+        let store = ConcreteStore::new().expect("store");
+        let rex = nn("http://example.org/Rex");
+        let dog_class = nn("http://example.org/Dog");
+        let animal_class = nn("http://example.org/Animal");
+        let rdf_type = nn("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        let subclass_of = nn("http://www.w3.org/2000/01/rdf-schema#subClassOf");
+
+        // Rex is a Dog, and Dog is a rdfs:subClassOf Animal.
+        store
+            .insert_quad(Quad::new(
+                rex.clone(),
+                rdf_type,
+                dog_class.clone(),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert rex type");
+        store
+            .insert_quad(Quad::new(
+                dog_class,
+                subclass_of,
+                animal_class.clone(),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert subclass triple");
+
+        let target = Target::Class(animal_class);
+        let mut selector = TargetSelector::new();
+        let nodes = selector
+            .select_targets(&store, &target, None)
+            .expect("class target selection should succeed");
+
+        assert!(
+            nodes.contains(&Term::NamedNode(rex)),
+            "Rex is a SHACL instance of Animal via rdfs:subClassOf and must be selected, got {nodes:?}"
+        );
+    }
+
+    /// Direct rdf:type instances of the exact target class must still be
+    /// selected (baseline behavior, no regression from the subclass fix).
+    #[test]
+    fn regression_target_class_direct_instance_still_selected() {
+        let store = ConcreteStore::new().expect("store");
+        let alice = nn("http://example.org/alice");
+        let person_class = nn("http://example.org/Person");
+        let rdf_type = nn("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+
+        store
+            .insert_quad(Quad::new(
+                alice.clone(),
+                rdf_type,
+                person_class.clone(),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert alice type");
+
+        let target = Target::Class(person_class);
+        let mut selector = TargetSelector::new();
+        let nodes = selector
+            .select_targets(&store, &target, None)
+            .expect("class target selection should succeed");
+
+        assert!(nodes.contains(&Term::NamedNode(alice)));
     }
 }

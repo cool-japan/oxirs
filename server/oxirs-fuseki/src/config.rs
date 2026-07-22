@@ -95,6 +95,7 @@ impl Default for ServerConfig {
                 graceful_shutdown_timeout_secs: 30,
                 tls: None,
                 backup_directory: None,
+                static_asset_dir: None,
                 config_file: None,
             },
             datasets: HashMap::new(),
@@ -214,6 +215,7 @@ impl ServerConfig {
         config.validate().map_err(|e| {
             FusekiError::validation(format!("Configuration validation failed: {e}"))
         })?;
+        config.validate_auth_reachable()?;
 
         Ok(config)
     }
@@ -248,9 +250,55 @@ impl ServerConfig {
         config.validate().map_err(|e| {
             FusekiError::validation(format!("Configuration validation failed: {e}"))
         })?;
+        config.validate_auth_reachable()?;
 
         info!("Configuration loaded from {:?}", path);
         Ok(config)
+    }
+
+    /// Fail loud when `security.auth_required` is set but no authentication
+    /// backend is actually reachable — i.e. no static users, OAuth, LDAP,
+    /// enabled SAML, enabled API keys, or enabled client-certificate auth is
+    /// configured. Such a configuration would start successfully and then
+    /// reject every single request forever (the auth-enforcing middleware
+    /// layers are only ever wired in when `auth_required` is true), which is
+    /// indistinguishable from a broken deployment. Per the fail-loud
+    /// contract this must refuse to start rather than silently deploy a
+    /// server nobody can use.
+    pub fn validate_auth_reachable(&self) -> FusekiResult<()> {
+        if !self.security.auth_required {
+            return Ok(());
+        }
+        let has_static_users = !self.security.users.is_empty();
+        let has_oauth = self.security.oauth.is_some();
+        let has_ldap = self.security.ldap.is_some();
+        let has_saml = self.security.saml.as_ref().is_some_and(|saml| saml.enabled);
+        let has_api_keys = self
+            .security
+            .api_keys
+            .as_ref()
+            .is_some_and(|keys| keys.enabled);
+        let has_certificate_auth = self
+            .security
+            .certificate
+            .as_ref()
+            .is_some_and(|cert| cert.enabled);
+
+        if !(has_static_users
+            || has_oauth
+            || has_ldap
+            || has_saml
+            || has_api_keys
+            || has_certificate_auth)
+        {
+            return Err(FusekiError::configuration(
+                "security.auth_required is true but no authentication backend is configured \
+                 (no static users, OAuth, LDAP, enabled SAML, enabled API keys, or enabled \
+                 client-certificate auth); every request would be permanently rejected. \
+                 Configure at least one authentication method, or set auth_required = false",
+            ));
+        }
+        Ok(())
     }
 
     /// Save configuration to YAML file
@@ -551,6 +599,49 @@ mod tests {
         // Empty host should fail
         config.server.host = String::new();
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn regression_auth_required_with_no_backend_fails_loud() {
+        // auth_required = true with the default empty security config (no
+        // static users, OAuth, LDAP, SAML, API keys, or certificate auth)
+        // must be rejected at startup rather than silently deployed as a
+        // server that rejects every request forever.
+        let mut config = ServerConfig::default();
+        config.security.auth_required = true;
+        assert!(
+            config.validate_auth_reachable().is_err(),
+            "auth_required=true with no reachable auth backend must fail loud"
+        );
+    }
+
+    #[test]
+    fn regression_auth_required_with_static_users_passes() {
+        let mut config = ServerConfig::default();
+        config.security.auth_required = true;
+        config.security.users.insert(
+            "admin".to_string(),
+            UserConfig {
+                password_hash: "$argon2id$dummy".to_string(),
+                roles: vec!["admin".to_string()],
+                permissions: vec![],
+                enabled: true,
+                email: None,
+                full_name: None,
+                last_login: None,
+                failed_login_attempts: 0,
+                locked_until: None,
+            },
+        );
+        assert!(config.validate_auth_reachable().is_ok());
+    }
+
+    #[test]
+    fn regression_auth_not_required_skips_backend_check() {
+        // The default (auth_required = false) must never be rejected by
+        // this check regardless of how empty the security config is.
+        let config = ServerConfig::default();
+        assert!(config.validate_auth_reachable().is_ok());
     }
 
     #[test]

@@ -259,11 +259,16 @@ impl GraphQLFederation {
                             step.query_fragment
                         );
 
+                        // Populate the representations from the actual entity keys
+                        // referenced by the query, rather than an empty array.
+                        let representations =
+                            Self::build_representations(&step.query_fragment, query);
+
                         service_queries.push(ServiceQuery {
                             service_id: service_id.clone(),
                             query: entity_query,
                             variables: Some(serde_json::json!({
-                                "representations": []
+                                "representations": representations
                             })),
                         });
                     }
@@ -273,6 +278,89 @@ impl GraphQLFederation {
         }
 
         Ok(service_queries)
+    }
+
+    /// Build the `_entities` representations for an entity-resolution step from
+    /// the entity type named in the step fragment and the key arguments actually
+    /// present in the query's selections. Never returns a silently-empty array
+    /// when a type is known.
+    fn build_representations(fragment: &str, query: &ParsedQuery) -> Vec<serde_json::Value> {
+        let typename = Self::extract_typename(fragment);
+
+        let mut representations = Vec::new();
+        Self::collect_representations_from_selections(
+            &query.selection_set,
+            typename.as_deref(),
+            &mut representations,
+        );
+
+        // If no keyed selection was found but the type is known, emit a single
+        // representation carrying just the typename so the request stays
+        // well-formed.
+        if representations.is_empty() {
+            if let Some(tn) = typename {
+                let mut obj = serde_json::Map::new();
+                obj.insert("__typename".to_string(), serde_json::Value::String(tn));
+                representations.push(serde_json::Value::Object(obj));
+            }
+        }
+
+        representations
+    }
+
+    /// Extract an entity type name from an entity-resolution step fragment,
+    /// looking for a `__typename: "X"` marker or an `... on X` inline fragment.
+    fn extract_typename(fragment: &str) -> Option<String> {
+        if let Some(idx) = fragment.find("__typename") {
+            let rest = &fragment[idx + "__typename".len()..];
+            let rest = rest.trim_start_matches(|c: char| c == ':' || c.is_whitespace());
+            let rest = rest.trim_start_matches('"');
+            let end = rest.find(|c: char| c == '"' || c == ',' || c == '}' || c.is_whitespace());
+            let name = match end {
+                Some(e) => &rest[..e],
+                None => rest,
+            };
+            if !name.is_empty() {
+                return Some(name.to_string());
+            }
+        }
+        if let Some(idx) = fragment.find(" on ") {
+            let rest = fragment[idx + 4..].trim_start();
+            let end = rest.find(|c: char| c.is_whitespace() || c == '{');
+            let name = match end {
+                Some(e) => &rest[..e],
+                None => rest,
+            };
+            if !name.is_empty() {
+                return Some(name.to_string());
+            }
+        }
+        None
+    }
+
+    /// Collect a representation object for every selection that carries key
+    /// arguments, recursing into nested selection sets.
+    fn collect_representations_from_selections(
+        selections: &[Selection],
+        typename: Option<&str>,
+        out: &mut Vec<serde_json::Value>,
+    ) {
+        for sel in selections {
+            if !sel.arguments.is_empty() {
+                let mut obj = serde_json::Map::new();
+                if let Some(tn) = typename {
+                    obj.insert(
+                        "__typename".to_string(),
+                        serde_json::Value::String(tn.to_string()),
+                    );
+                }
+                for (k, v) in &sel.arguments {
+                    obj.insert(k.clone(), v.clone());
+                }
+                out.push(serde_json::Value::Object(obj));
+            }
+            Self::collect_representations_from_selections(&sel.selection_set, typename, out);
+        }
     }
 
     /// Parse a GraphQL query string into a structured representation
@@ -1008,5 +1096,61 @@ impl GraphQLFederation {
             // Note: In a real implementation, this would need to track the current type context
             Self::validate_selections(&selection.selection_set, operation_type, schema, errors);
         }
+    }
+}
+
+#[cfg(test)]
+mod representation_tests {
+    use super::*;
+
+    /// Regression: entity-resolution representations must be populated from the
+    /// real query keys, never a hardcoded empty array.
+    #[test]
+    fn regression_representations_not_empty() {
+        let mut args = HashMap::new();
+        args.insert("id".to_string(), serde_json::json!("1"));
+
+        let query = ParsedQuery {
+            operation_type: GraphQLOperationType::Query,
+            operation_name: None,
+            selection_set: vec![Selection {
+                name: "user".to_string(),
+                alias: None,
+                arguments: args,
+                selection_set: Vec::new(),
+                fragment: None,
+            }],
+            variables: HashMap::new(),
+        };
+
+        let fragment = "_entities(representations: [{__typename: \"User\", id: \"$id\"}])";
+        let reps = GraphQLFederation::build_representations(fragment, &query);
+
+        assert!(!reps.is_empty(), "representations must not be empty");
+        let first = &reps[0];
+        assert_eq!(
+            first.get("__typename").and_then(|v| v.as_str()),
+            Some("User")
+        );
+        assert_eq!(first.get("id").and_then(|v| v.as_str()), Some("1"));
+    }
+
+    /// Even with no key arguments, a known type yields a well-formed (non-empty)
+    /// representation carrying the typename.
+    #[test]
+    fn regression_representations_typename_only() {
+        let query = ParsedQuery {
+            operation_type: GraphQLOperationType::Query,
+            operation_name: None,
+            selection_set: Vec::new(),
+            variables: HashMap::new(),
+        };
+        let fragment = "_entities(representations: [{__typename: \"Product\"}])";
+        let reps = GraphQLFederation::build_representations(fragment, &query);
+        assert_eq!(reps.len(), 1);
+        assert_eq!(
+            reps[0].get("__typename").and_then(|v| v.as_str()),
+            Some("Product")
+        );
     }
 }

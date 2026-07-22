@@ -79,6 +79,13 @@ pub struct TdbStore {
     /// replayed and freshly-issued ids never collide. See
     /// [`crate::store::store_wal`].
     pub(crate) wal_txn_counter: u64,
+    /// Number of single mutating operations logged to the WAL since the last
+    /// checkpoint. When it reaches
+    /// [`TdbConfig::wal_checkpoint_op_threshold`](crate::store::TdbConfig) the
+    /// store auto-checkpoints (calls [`sync`](Self::sync)) to bound WAL growth.
+    /// An [`AtomicUsize`](std::sync::atomic::AtomicUsize) so `sync()` (which takes
+    /// `&self`) can reset it.
+    pub(crate) wal_ops_since_checkpoint: std::sync::atomic::AtomicUsize,
 }
 
 impl TdbStore {
@@ -282,6 +289,7 @@ impl TdbStore {
             diagnostic_engine,
             spatial_index,
             wal_txn_counter: 0,
+            wal_ops_since_checkpoint: std::sync::atomic::AtomicUsize::new(0),
         };
 
         // The bloom filter is an in-memory acceleration structure that is not
@@ -397,6 +405,11 @@ impl TdbStore {
         //    argument, so pass one below the high-water mark to drop them all.
         let truncate_up_to = Lsn::new(checkpoint_lsn.as_u64().saturating_sub(1));
         wal.truncate(truncate_up_to)?;
+
+        // The WAL (in-memory buffer and file) is now truncated: reset the
+        // since-checkpoint operation counter that drives auto-checkpointing.
+        self.wal_ops_since_checkpoint
+            .store(0, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
 

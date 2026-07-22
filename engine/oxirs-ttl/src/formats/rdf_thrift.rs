@@ -108,6 +108,16 @@ fn varint_overflow_error() -> TurtleParseError {
 
 // ─── String primitive I/O ────────────────────────────────────────────────────
 
+/// Maximum length (in bytes) accepted for a single length-prefixed string
+/// primitive in an RDF Binary Thrift stream. This bounds the allocation
+/// `read_str_primitive` performs so that a corrupt or malicious varint-encoded
+/// length (up to ~2^64) cannot force a multi-exabyte allocation attempt, which
+/// in Rust aborts the whole process via `handle_alloc_error` rather than
+/// returning a catchable error. 256 MiB comfortably covers any legitimate
+/// single RDF term (IRI, blank node id, or literal lexical form) while still
+/// rejecting pathological inputs.
+const MAX_THRIFT_STRING_LEN: u64 = 256 * 1024 * 1024;
+
 /// Write a length-prefixed UTF-8 string.
 fn write_str_primitive(s: &str, buf: &mut Vec<u8>) {
     let bytes = s.as_bytes();
@@ -117,11 +127,34 @@ fn write_str_primitive(s: &str, buf: &mut Vec<u8>) {
 
 /// Read a length-prefixed UTF-8 string.
 fn read_str_primitive<R: Read>(reader: &mut R) -> TurtleResult<String> {
-    let len = decode_varint(reader)? as usize;
-    let mut bytes = vec![0u8; len];
+    let len = decode_varint(reader)?;
+    if len > MAX_THRIFT_STRING_LEN {
+        return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+            message: format!(
+                "RDF Binary Thrift string length {len} exceeds the maximum allowed \
+                 length of {MAX_THRIFT_STRING_LEN} bytes; refusing to allocate"
+            ),
+            position: TextPosition::start(),
+        }));
+    }
+    // Read incrementally via `take` rather than pre-allocating `len` bytes up
+    // front: a truncated/short stream then surfaces as a normal I/O error
+    // (fewer bytes read than claimed) instead of an oversized allocation.
+    let mut bytes = Vec::new();
     reader
-        .read_exact(&mut bytes)
+        .take(len)
+        .read_to_end(&mut bytes)
         .map_err(TurtleParseError::io)?;
+    if bytes.len() as u64 != len {
+        return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+            message: format!(
+                "RDF Binary Thrift string declared length {len} but only {} bytes \
+                 were available before EOF",
+                bytes.len()
+            ),
+            position: TextPosition::start(),
+        }));
+    }
     String::from_utf8(bytes).map_err(|e| {
         TurtleParseError::syntax(TurtleSyntaxError::Generic {
             message: format!("invalid UTF-8 in string: {e}"),
@@ -922,6 +955,49 @@ mod tests {
         write_str_primitive("", &mut buf);
         let decoded = read_str_primitive(&mut Cursor::new(&buf)).expect("decode ok");
         assert_eq!(decoded, "");
+    }
+
+    #[test]
+    fn regression_read_str_primitive_rejects_oversized_length_without_allocating() {
+        // Craft a varint-encoded length far beyond MAX_THRIFT_STRING_LEN with
+        // only a handful of input bytes, mimicking a truncated/malicious
+        // RDF Binary Thrift stream. Before the fix this would attempt a
+        // multi-exabyte `vec![0u8; len]` allocation and abort the process;
+        // it must now return a normal, catchable `Err` instead.
+        let mut buf = Vec::new();
+        encode_varint(u64::MAX / 2, &mut buf); // ~9.2 exabytes claimed length
+                                               // Deliberately provide no payload bytes at all.
+        let result = read_str_primitive(&mut Cursor::new(&buf));
+        assert!(
+            result.is_err(),
+            "an oversized claimed string length must be rejected, not allocated"
+        );
+    }
+
+    #[test]
+    fn regression_read_str_primitive_rejects_length_exceeding_available_bytes() {
+        // A length that is within MAX_THRIFT_STRING_LEN but exceeds what is
+        // actually available in the stream must still error out (truncated
+        // stream) rather than silently returning a short string.
+        let mut buf = Vec::new();
+        encode_varint(1_000_000, &mut buf);
+        buf.extend_from_slice(b"short"); // far fewer than 1,000,000 bytes
+        let result = read_str_primitive(&mut Cursor::new(&buf));
+        assert!(
+            result.is_err(),
+            "a declared length exceeding available bytes must error, not truncate silently"
+        );
+    }
+
+    #[test]
+    fn regression_read_str_primitive_accepts_length_at_boundary() {
+        // A reasonably sized string (well under the cap) must still work
+        // exactly as before.
+        let mut buf = Vec::new();
+        let s = "x".repeat(4096);
+        write_str_primitive(&s, &mut buf);
+        let decoded = read_str_primitive(&mut Cursor::new(&buf)).expect("decode ok");
+        assert_eq!(decoded, s);
     }
 
     // ─── Optional-string primitives ─────────────────────────────────────────

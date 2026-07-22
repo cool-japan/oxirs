@@ -19,15 +19,14 @@ pub use crate::handlers::sparql::service_delegation::{
 pub use crate::handlers::sparql::sparql12_features::{AggregationEngine, Sparql12Features};
 
 use crate::{
-    auth::AuthUser,
+    auth::{permissions::PermissionChecker, types::Permission, AuthUser},
     error::{FusekiError, FusekiResult},
     server::AppState,
 };
 use axum::{
     extract::{Query, State},
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Form,
 };
 use std::sync::Arc;
 
@@ -140,18 +139,112 @@ pub async fn query_handler(
     crate::handlers::sparql::core::sparql_query(Query(params), State(state), headers, user).await
 }
 
-/// Main SPARQL update endpoint with enhanced features
+/// Main SPARQL update endpoint (SPARQL 1.1 Protocol §2.2).
+///
+/// This is the handler wired to `POST /update` by the production router, so it
+/// is the one that MUST enforce authentication and authorization — an
+/// unauthenticated caller must never be able to run `INSERT`/`DELETE`/`DROP`/
+/// `LOAD`.
+///
+/// Authorization:
+/// - No authenticated user  → `401 Unauthorized`.
+/// - User lacking `UpdateExecute` (directly or via role) → `403 Forbidden`.
+///
+/// Body handling (both protocol-defined POST forms are accepted):
+/// - `Content-Type: application/sparql-update` → the raw body **is** the update
+///   string; `using-graph-uri` / `using-named-graph-uri` come from the URL query
+///   string (used by rdflib's `SPARQLUpdateStore`, Jena's update client, ...).
+/// - `Content-Type: application/x-www-form-urlencoded` → the update is the
+///   `update=` field of the form body.
+///
+/// Any other content type is rejected with `415 Unsupported Media Type` rather
+/// than silently ignored.
 pub async fn update_handler(
     State(state): State<Arc<AppState>>,
-    Form(params): Form<SparqlUpdateParams>,
+    headers: HeaderMap,
+    user: Option<AuthUser>,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
     use axum::Json;
 
-    // Create query context
-    let context = QueryContext::default();
+    // Authentication + authorization gate — enforced ONLY when authentication is
+    // actually configured (`security.auth_required`). This mirrors the router,
+    // which wires the `route_based_rbac` layer solely when `auth_required` is set
+    // (see `Runtime::apply_middleware_stack`). When auth is disabled (the
+    // default) the endpoint serves anonymous callers and the write-protection is
+    // the dataset `read_only` flag, enforced downstream in
+    // `execute_sparql_update` (which returns 403 on a read-only dataset). When
+    // auth IS enabled the hardened enforcement below stands: no credential → 401,
+    // missing `UpdateExecute` → 403.
+    if state.config.security.auth_required {
+        match &user {
+            Some(AuthUser(u)) => {
+                if !PermissionChecker::has_permission(u, &Permission::UpdateExecute) {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(serde_json::json!({
+                            "error": "insufficient_permissions",
+                            "message": "SPARQL update permission required"
+                        })),
+                    )
+                        .into_response();
+                }
+            }
+            None => {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({
+                        "error": "authentication_required",
+                        "message": "Authentication required for SPARQL updates"
+                    })),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    // Resolve the update text from the request body according to its content
+    // type. Both SPARQL 1.1 Protocol POST forms are supported.
+    let content_type = headers
+        .get("content-type")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+
+    let update = if content_type.contains("application/sparql-update") {
+        String::from_utf8_lossy(&body).to_string()
+    } else if content_type.contains("application/x-www-form-urlencoded") {
+        match parse_update_form(&body) {
+            Some(update) => update,
+            None => {
+                return FusekiError::bad_request(
+                    "Missing required 'update' parameter in form body",
+                )
+                .into_response();
+            }
+        }
+    } else {
+        return (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            Json(serde_json::json!({
+                "error": "unsupported_media_type",
+                "message": format!(
+                    "Unsupported content type: '{content_type}'. Expected \
+                     'application/sparql-update' or 'application/x-www-form-urlencoded'"
+                )
+            })),
+        )
+            .into_response();
+    };
+
+    // Carry the authenticated identity into the execution context so downstream
+    // (read-only checks, auditing) sees the real caller.
+    let context = QueryContext {
+        user,
+        ..Default::default()
+    };
 
     // Execute update
-    match execute_sparql_update(&params.update, context, &state).await {
+    match execute_sparql_update(&update, context, &state).await {
         Ok(result) => Json(serde_json::json!({
             "success": true,
             "message": "Update executed successfully",
@@ -167,6 +260,28 @@ pub async fn update_handler(
         )
             .into_response(),
     }
+}
+
+/// Parse the `update=` field out of an `application/x-www-form-urlencoded` body.
+///
+/// Returns `None` when no `update` field is present (the caller turns that into
+/// a `400 Bad Request`).
+fn parse_update_form(body: &[u8]) -> Option<String> {
+    let body_str = String::from_utf8_lossy(body);
+    for part in body_str.split('&') {
+        if let Some((key, value)) = part.split_once('=') {
+            if key == "update" {
+                // `application/x-www-form-urlencoded` encodes spaces as `+`;
+                // decode `+`→space before percent-decoding so a literal `%2B`
+                // survives.
+                let decoded = oxirs_core::encoding::percent_decode(&value.replace('+', " "))
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|_| value.replace('+', " "));
+                return Some(decoded);
+            }
+        }
+    }
+    None
 }
 
 /// Enhanced SPARQL service with all advanced features
@@ -454,5 +569,137 @@ mod tests {
         headers.insert("accept", "application/json".parse().unwrap());
         let content_type = service.negotiate_content_type(&headers);
         assert_eq!(content_type, "application/json");
+    }
+
+    // ── /update auth + content-type regression tests ────────────────────────
+
+    use crate::auth::types::User;
+    use axum::extract::State;
+    use axum::response::IntoResponse;
+
+    fn minimal_state() -> Arc<AppState> {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let config = crate::config::ServerConfig::default();
+        Arc::new(crate::server::test_app::build_minimal_app_state(
+            store, config,
+        ))
+    }
+
+    /// State with `security.auth_required = true` — the handler enforces
+    /// authentication/authorization only in this mode (the default disables it
+    /// so anonymous callers are served, exactly as the router wires RBAC only
+    /// when `auth_required` is set).
+    fn auth_enabled_state() -> Arc<AppState> {
+        let store = crate::store::Store::new().expect("in-memory store");
+        let mut config = crate::config::ServerConfig::default();
+        config.security.auth_required = true;
+        Arc::new(crate::server::test_app::build_minimal_app_state(
+            store, config,
+        ))
+    }
+
+    fn writer_user() -> AuthUser {
+        AuthUser(User {
+            username: "writer".to_string(),
+            roles: vec!["writer".to_string()],
+            email: None,
+            full_name: None,
+            last_login: None,
+            permissions: Vec::new(),
+        })
+    }
+
+    /// Regression (P0): when authentication is enabled the wired `/update`
+    /// handler must reject an unauthenticated caller with 401 — it previously
+    /// ran the update with no authentication whatsoever.
+    #[tokio::test]
+    async fn regression_update_handler_requires_authentication() {
+        let state = auth_enabled_state();
+        let headers = HeaderMap::new();
+        let body = axum::body::Bytes::from_static(b"INSERT DATA { <urn:a> <urn:b> <urn:c> }");
+
+        let response = update_handler(State(state), headers, None, body)
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// Regression (P0): with authentication enabled, an authenticated caller
+    /// lacking `UpdateExecute` gets 403.
+    #[tokio::test]
+    async fn regression_update_handler_forbids_insufficient_permission() {
+        let state = auth_enabled_state();
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "application/sparql-update".parse().unwrap());
+        let body = axum::body::Bytes::from_static(b"INSERT DATA { <urn:a> <urn:b> <urn:c> }");
+
+        let read_only_user = AuthUser(User {
+            username: "reader".to_string(),
+            roles: vec!["user".to_string()], // no UpdateExecute
+            email: None,
+            full_name: None,
+            last_login: None,
+            permissions: Vec::new(),
+        });
+
+        let response = update_handler(State(state), headers, Some(read_only_user), body)
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    /// Regression (P1): the `/update` handler must accept a direct
+    /// `application/sparql-update` POST body (the form used by rdflib / Jena),
+    /// which the previous `Form`-only extractor rejected with 415.
+    #[tokio::test]
+    async fn regression_update_handler_accepts_direct_sparql_update_body() {
+        let state = minimal_state();
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "application/sparql-update".parse().unwrap());
+        let body = axum::body::Bytes::from_static(b"INSERT DATA { <urn:a> <urn:b> <urn:c> }");
+
+        let response = update_handler(State(state), headers, Some(writer_user()), body)
+            .await
+            .into_response();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "a direct application/sparql-update POST must be executed, not rejected"
+        );
+    }
+
+    /// Regression (P1): a form-encoded body with an `update=` field is also
+    /// accepted (SPARQL 1.1 Protocol update-via-urlencoded form).
+    #[tokio::test]
+    async fn regression_update_handler_accepts_form_encoded_body() {
+        let state = minimal_state();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "content-type",
+            "application/x-www-form-urlencoded".parse().unwrap(),
+        );
+        let body = axum::body::Bytes::from_static(
+            b"update=INSERT+DATA+%7B+%3Curn%3Aa%3E+%3Curn%3Ab%3E+%3Curn%3Ac%3E+%7D",
+        );
+
+        let response = update_handler(State(state), headers, Some(writer_user()), body)
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    /// Regression (P1/fail-loud): an unsupported content type is rejected with
+    /// 415, never silently ignored.
+    #[tokio::test]
+    async fn regression_update_handler_rejects_unsupported_content_type() {
+        let state = minimal_state();
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "text/plain".parse().unwrap());
+        let body = axum::body::Bytes::from_static(b"INSERT DATA { <urn:a> <urn:b> <urn:c> }");
+
+        let response = update_handler(State(state), headers, Some(writer_user()), body)
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
     }
 }

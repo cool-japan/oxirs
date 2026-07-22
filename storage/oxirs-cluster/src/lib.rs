@@ -119,6 +119,8 @@ pub mod performance_metrics;
 pub mod performance_monitor;
 pub mod raft;
 #[cfg(feature = "raft")]
+pub mod raft_durable;
+#[cfg(feature = "raft")]
 mod raft_network;
 pub mod raft_optimization;
 pub mod raft_profiling;
@@ -490,7 +492,10 @@ pub struct ClusterNode {
     config: NodeConfig,
     consensus: ConsensusManager,
     discovery: DiscoveryService,
-    replication: ReplicationManager,
+    /// The node's replication manager, shared so the background maintenance
+    /// task operates on the *real* manager (with the node's actual replicas)
+    /// rather than a throwaway instance holding no state.
+    replication: Arc<RwLock<ReplicationManager>>,
     query_executor: DistributedQueryExecutor,
     region_manager: Option<Arc<RegionManager>>,
     conflict_resolver: Arc<ConflictResolver>,
@@ -530,7 +535,8 @@ impl ClusterNode {
         // genuine single-node peer set works without it).
         #[cfg(feature = "raft")]
         let consensus = ConsensusManager::new(config.node_id, config.peers.clone())
-            .with_raft_network(config.address, config.peer_addresses.clone());
+            .with_raft_network(config.address, config.peer_addresses.clone())
+            .with_raft_storage_dir(std::path::PathBuf::from(&config.data_dir));
         #[cfg(not(feature = "raft"))]
         let consensus = ConsensusManager::new(config.node_id, config.peers.clone());
 
@@ -540,7 +546,10 @@ impl ClusterNode {
 
         // Initialize replication manager
         let replication_strategy = config.replication_strategy.clone().unwrap_or_default();
-        let replication = ReplicationManager::new(replication_strategy, config.node_id);
+        let replication = Arc::new(RwLock::new(ReplicationManager::new(
+            replication_strategy,
+            config.node_id,
+        )));
 
         // Initialize distributed query executor
         let query_executor = DistributedQueryExecutor::new(config.node_id);
@@ -741,6 +750,8 @@ impl ClusterNode {
         for node in discovered_nodes {
             if node.node_id != self.config.node_id {
                 self.replication
+                    .write()
+                    .await
                     .add_replica(node.node_id, node.address.to_string());
                 self.query_executor.add_node(node.node_id).await;
             }
@@ -983,7 +994,10 @@ impl ClusterNode {
         self.discovery.add_node(node_info);
 
         // Add to replication
-        self.replication.add_replica(node_id, address.to_string());
+        self.replication
+            .write()
+            .await
+            .add_replica(node_id, address.to_string());
 
         // Add to query executor
         self.query_executor.add_node(node_id).await;
@@ -1011,7 +1025,7 @@ impl ClusterNode {
         self.discovery.remove_node(node_id);
 
         // Remove from replication
-        self.replication.remove_replica(node_id);
+        self.replication.write().await.remove_replica(node_id);
 
         // Remove from query executor
         self.query_executor.remove_node(node_id).await;
@@ -1028,7 +1042,7 @@ impl ClusterNode {
     pub async fn get_status(&self) -> ClusterStatus {
         let consensus_status = self.consensus.get_status().await;
         let discovery_stats = self.discovery.get_stats().clone();
-        let replication_stats = self.replication.get_stats().clone();
+        let replication_stats = self.replication.read().await.get_stats().clone();
 
         // Get region status if multi-region is enabled
         let region_status = if let Some(region_manager) = &self.region_manager {
@@ -1079,13 +1093,31 @@ impl ClusterNode {
             }
         });
 
-        // Replication maintenance task
-        let mut replication_clone = ReplicationManager::with_raft_consensus(self.config.node_id);
+        // Replication maintenance task.
+        //
+        // Runs against the node's REAL, shared replication manager (so it sees
+        // the node's actual replicas), and re-checks the `running` flag every
+        // iteration so `stop()`/`graceful_shutdown()` actually terminates it —
+        // instead of the previous throwaway `with_raft_consensus(...)` instance
+        // (empty state) driven by an infinite loop that never observed
+        // shutdown (a permanent task leak).
+        let replication = Arc::clone(&self.replication);
         let running_clone = Arc::clone(&self.running);
 
         tokio::spawn(async move {
-            if *running_clone.read().await {
-                replication_clone.run_maintenance().await; // run_maintenance() is infinite loop
+            const HEALTH_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+            const STALE_THRESHOLD: std::time::Duration = std::time::Duration::from_secs(60);
+
+            while *running_clone.read().await {
+                tokio::time::sleep(HEALTH_CHECK_INTERVAL).await;
+                if !*running_clone.read().await {
+                    break;
+                }
+                replication
+                    .write()
+                    .await
+                    .maintenance_tick(STALE_THRESHOLD)
+                    .await;
             }
         });
     }
@@ -1109,7 +1141,10 @@ impl ClusterNode {
         // Add to discovery, replication, and query executor
         let node_info = NodeInfo::new(node_id, address);
         self.discovery.add_node(node_info);
-        self.replication.add_replica(node_id, address.to_string());
+        self.replication
+            .write()
+            .await
+            .add_replica(node_id, address.to_string());
         self.query_executor.add_node(node_id).await;
 
         Ok(())
@@ -1129,7 +1164,7 @@ impl ClusterNode {
 
         // Remove from discovery, replication, and query executor
         self.discovery.remove_node(node_id);
-        self.replication.remove_replica(node_id);
+        self.replication.write().await.remove_replica(node_id);
         self.query_executor.remove_node(node_id).await;
 
         Ok(())
@@ -1190,7 +1225,7 @@ impl ClusterNode {
         // Update local configuration
         self.config.peers.retain(|&id| id != node_id);
         self.discovery.remove_node(node_id);
-        self.replication.remove_replica(node_id);
+        self.replication.write().await.remove_replica(node_id);
         self.query_executor.remove_node(node_id).await;
 
         Ok(())

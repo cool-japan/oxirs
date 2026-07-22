@@ -287,7 +287,7 @@ async fn compute_link_prediction_metrics(
                 compute_entity_rank(model, head, relation, "?", all_triples, false).await?
             }
             LinkPredictionTask::RelationPrediction => {
-                compute_relation_rank(model, head, tail, all_triples).await?
+                compute_relation_rank(model, head, relation, tail, all_triples).await?
             }
         };
 
@@ -384,6 +384,7 @@ async fn compute_entity_rank(
 async fn compute_relation_rank(
     model: &dyn KnowledgeGraphEmbedding,
     head: &str,
+    correct_relation: &str,
     tail: &str,
     all_triples: &HashSet<(String, String, String)>,
 ) -> Result<u32> {
@@ -405,8 +406,16 @@ async fn compute_relation_rank(
     // Sort by score (descending)
     scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    // Find rank (simplified - assumes first relation is correct)
-    Ok(1) // Placeholder
+    // Find rank of the correct relation. If the correct relation was not
+    // present in `all_triples` (and thus not scored), it is treated as
+    // ranked last, matching `compute_entity_rank`'s fallback.
+    let rank = scores
+        .iter()
+        .position(|(relation, _)| relation == correct_relation)
+        .unwrap_or(scores.len().saturating_sub(1))
+        + 1;
+
+    Ok(rank as u32)
 }
 
 /// Compute per-relation performance metrics

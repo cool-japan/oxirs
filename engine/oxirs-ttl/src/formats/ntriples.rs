@@ -151,8 +151,9 @@ impl NTriplesParser {
     /// Parse a subject (IRI or blank node)
     fn parse_subject(&self, token: &str, line_number: usize) -> TurtleResult<Subject> {
         if token.starts_with('<') && token.ends_with('>') {
-            let iri = &token[1..token.len() - 1];
-            let named_node = NamedNode::new(iri).map_err(TurtleParseError::model)?;
+            let raw_iri = &token[1..token.len() - 1];
+            let iri = self.unescape_iri(raw_iri, line_number)?;
+            let named_node = NamedNode::new(&iri).map_err(TurtleParseError::model)?;
             Ok(Subject::NamedNode(named_node))
         } else if let Some(id) = token.strip_prefix("_:") {
             let blank_node = BlankNode::new(id).map_err(TurtleParseError::model)?;
@@ -168,8 +169,9 @@ impl NTriplesParser {
     /// Parse a predicate (must be an IRI)
     fn parse_predicate(&self, token: &str, line_number: usize) -> TurtleResult<Predicate> {
         if token.starts_with('<') && token.ends_with('>') {
-            let iri = &token[1..token.len() - 1];
-            let named_node = NamedNode::new(iri).map_err(TurtleParseError::model)?;
+            let raw_iri = &token[1..token.len() - 1];
+            let iri = self.unescape_iri(raw_iri, line_number)?;
+            let named_node = NamedNode::new(&iri).map_err(TurtleParseError::model)?;
             Ok(Predicate::NamedNode(named_node))
         } else {
             Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
@@ -182,8 +184,9 @@ impl NTriplesParser {
     /// Parse an object (IRI, blank node, or literal)
     fn parse_object(&self, token: &str, line_number: usize) -> TurtleResult<Object> {
         if token.starts_with('<') && token.ends_with('>') {
-            let iri = &token[1..token.len() - 1];
-            let named_node = NamedNode::new(iri).map_err(TurtleParseError::model)?;
+            let raw_iri = &token[1..token.len() - 1];
+            let iri = self.unescape_iri(raw_iri, line_number)?;
+            let named_node = NamedNode::new(&iri).map_err(TurtleParseError::model)?;
             Ok(Object::NamedNode(named_node))
         } else if let Some(id) = token.strip_prefix("_:") {
             let blank_node = BlankNode::new(id).map_err(TurtleParseError::model)?;
@@ -252,8 +255,9 @@ impl NTriplesParser {
             Ok(Object::Literal(literal))
         } else if remainder.starts_with("^^<") && remainder.ends_with('>') {
             // Typed literal
-            let datatype_iri = &remainder[3..remainder.len() - 1];
-            let datatype = NamedNode::new(datatype_iri).map_err(TurtleParseError::model)?;
+            let raw_datatype_iri = &remainder[3..remainder.len() - 1];
+            let datatype_iri = self.unescape_iri(raw_datatype_iri, line_number)?;
+            let datatype = NamedNode::new(&datatype_iri).map_err(TurtleParseError::model)?;
             let literal = Literal::new_typed_literal(&unescaped_value, datatype);
             Ok(Object::Literal(literal))
         } else {
@@ -349,6 +353,85 @@ impl NTriplesParser {
                 }
             } else {
                 result.push(ch);
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Decode `UCHAR` escapes (`\uXXXX` / `\UXXXXXXXX`) within the raw
+    /// content of an IRIREF. Per the N-Triples grammar, these are the only
+    /// legal backslash escapes inside an IRIREF; any other backslash usage,
+    /// or an incomplete/invalid hex escape, is a syntax error rather than
+    /// being stored verbatim as part of the IRI.
+    fn unescape_iri(&self, raw: &str, line_number: usize) -> TurtleResult<String> {
+        let mut result = String::with_capacity(raw.len());
+        let mut chars = raw.chars();
+
+        while let Some(ch) = chars.next() {
+            if ch != '\\' {
+                result.push(ch);
+                continue;
+            }
+
+            match chars.next() {
+                Some('u') => {
+                    let hex: String = chars.by_ref().take(4).collect();
+                    if hex.len() != 4 {
+                        return Err(TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                            sequence: format!("u{hex}"),
+                            position: TextPosition::new(line_number, 1, 0),
+                        }));
+                    }
+                    let code_point = u32::from_str_radix(&hex, 16).map_err(|_| {
+                        TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                            sequence: format!("u{hex}"),
+                            position: TextPosition::new(line_number, 1, 0),
+                        })
+                    })?;
+                    let unicode_char = char::from_u32(code_point).ok_or_else(|| {
+                        TurtleParseError::syntax(TurtleSyntaxError::InvalidUnicode {
+                            codepoint: code_point,
+                            position: TextPosition::new(line_number, 1, 0),
+                        })
+                    })?;
+                    result.push(unicode_char);
+                }
+                Some('U') => {
+                    let hex: String = chars.by_ref().take(8).collect();
+                    if hex.len() != 8 {
+                        return Err(TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                            sequence: format!("U{hex}"),
+                            position: TextPosition::new(line_number, 1, 0),
+                        }));
+                    }
+                    let code_point = u32::from_str_radix(&hex, 16).map_err(|_| {
+                        TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                            sequence: format!("U{hex}"),
+                            position: TextPosition::new(line_number, 1, 0),
+                        })
+                    })?;
+                    let unicode_char = char::from_u32(code_point).ok_or_else(|| {
+                        TurtleParseError::syntax(TurtleSyntaxError::InvalidUnicode {
+                            codepoint: code_point,
+                            position: TextPosition::new(line_number, 1, 0),
+                        })
+                    })?;
+                    result.push(unicode_char);
+                }
+                Some(other) => {
+                    return Err(TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                        sequence: other.to_string(),
+                        position: TextPosition::new(line_number, 1, 0),
+                    }));
+                }
+                None => {
+                    return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                        message: "IRI reference ends with an incomplete escape sequence"
+                            .to_string(),
+                        position: TextPosition::new(line_number, 1, 0),
+                    }));
+                }
             }
         }
 
@@ -649,5 +732,94 @@ mod tests {
         let output_str = String::from_utf8(output).expect("valid UTF-8");
         assert!(output_str.contains("<http://example.org/subject>"));
         assert!(output_str.contains("\"object\""));
+    }
+
+    // ─── IRI UCHAR escape decoding regression tests ─────────────────────────
+
+    #[test]
+    fn regression_subject_iri_decodes_uchar_escape() {
+        let parser = NTriplesParser::new();
+        let line = "<http://example.org/\\u00E9> <http://example.org/p> \"o\" .";
+        let triple = parser
+            .parse_line(line, 1)
+            .expect("parsing should succeed")
+            .expect("should produce a triple");
+        match triple.subject() {
+            Subject::NamedNode(nn) => assert_eq!(nn.as_str(), "http://example.org/é"),
+            other => panic!("expected NamedNode subject, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn regression_predicate_iri_decodes_uchar_escape() {
+        let parser = NTriplesParser::new();
+        let line = "<http://example.org/s> <http://example.org/\\u00E9> \"o\" .";
+        let triple = parser
+            .parse_line(line, 1)
+            .expect("parsing should succeed")
+            .expect("should produce a triple");
+        match triple.predicate() {
+            Predicate::NamedNode(nn) => assert_eq!(nn.as_str(), "http://example.org/é"),
+            other => panic!("expected NamedNode predicate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn regression_object_iri_decodes_uchar_escape() {
+        let parser = NTriplesParser::new();
+        let line =
+            "<http://example.org/s> <http://example.org/p> <http://example.org/\\U000000E9> .";
+        let triple = parser
+            .parse_line(line, 1)
+            .expect("parsing should succeed")
+            .expect("should produce a triple");
+        match triple.object() {
+            Object::NamedNode(nn) => assert_eq!(nn.as_str(), "http://example.org/é"),
+            other => panic!("expected NamedNode object, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn regression_datatype_iri_decodes_uchar_escape() {
+        let parser = NTriplesParser::new();
+        let line =
+            "<http://example.org/s> <http://example.org/p> \"1\"^^<http://example.org/\\u00E9> .";
+        let triple = parser
+            .parse_line(line, 1)
+            .expect("parsing should succeed")
+            .expect("should produce a triple");
+        match triple.object() {
+            Object::Literal(lit) => {
+                assert_eq!(lit.datatype().as_str(), "http://example.org/é");
+            }
+            other => panic!("expected Literal object, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn regression_iri_with_invalid_escape_is_error() {
+        let parser = NTriplesParser::new();
+        let line = "<http://example.org/\\q> <http://example.org/p> \"o\" .";
+        let result = parser.parse_line(line, 1);
+        assert!(result.is_err(), "invalid IRI escape must be rejected");
+    }
+
+    #[test]
+    fn regression_plain_iri_without_escapes_unaffected() {
+        let parser = NTriplesParser::new();
+        let line = "<http://example.org/s> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/o> .";
+        let triple = parser
+            .parse_line(line, 1)
+            .expect("parsing should succeed")
+            .expect("should produce a triple");
+        match triple.predicate() {
+            Predicate::NamedNode(nn) => {
+                assert_eq!(
+                    nn.as_str(),
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                );
+            }
+            other => panic!("expected NamedNode predicate, got {other:?}"),
+        }
     }
 }

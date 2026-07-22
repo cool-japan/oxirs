@@ -58,6 +58,11 @@ hmac.workspace = true
 hex.workspace = true
 base64.workspace = true
 
+# Pure-Rust authenticated encryption (OxiCrypto) for the distributed cache
+oxicrypto-core.workspace = true
+oxicrypto-aead.workspace = true
+oxicrypto-rand.workspace = true
+
 [dev-dependencies]
 criterion.workspace = true
 

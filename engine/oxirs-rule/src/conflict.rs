@@ -250,32 +250,62 @@ impl ConflictResolver {
         Ok(resolved)
     }
 
-    /// Detect conflicts in derived facts
-    fn detect_conflicts(&mut self, _rules: &[Rule], facts: &[RuleAtom]) -> Result<()> {
+    /// Detect conflicts in derived facts.
+    ///
+    /// Two kinds of conflict are reported, each tagged with the *actual* names
+    /// of the rules whose heads derive the facts (via structural head matching):
+    /// - **Value conflicts**: facts that share a subject+predicate but assert
+    ///   different objects (e.g. `john age 30` vs `john age 31`).
+    /// - **Multiple derivation paths**: a single fact derivable by more than one
+    ///   distinct rule.
+    fn detect_conflicts(&mut self, rules: &[Rule], facts: &[RuleAtom]) -> Result<()> {
         self.conflicts.clear();
 
-        // Check for negation conflicts (simplified)
-        // In a full implementation, we would check for:
-        // - Contradictory facts (e.g., both P and NOT P)
-        // - Inconsistent cardinality constraints
-        // - Disjoint class violations
-        // etc.
-
-        // For now, just detect duplicate facts with different sources
-        let mut fact_sources: HashMap<RuleAtom, Vec<String>> = HashMap::new();
-
+        // Group triple facts by (subject, predicate) to find competing objects.
+        let mut groups: HashMap<(String, String), Vec<(RuleAtom, String)>> = HashMap::new();
         for fact in facts {
-            fact_sources
-                .entry(fact.clone())
-                .or_default()
-                .push("source".to_string());
+            if let RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } = fact
+            {
+                let key = (Self::term_key(subject), Self::term_key(predicate));
+                groups
+                    .entry(key)
+                    .or_default()
+                    .push((fact.clone(), Self::term_key(object)));
+            }
         }
 
-        for (fact, sources) in fact_sources {
-            if sources.len() > 1 {
+        for members in groups.values() {
+            let distinct_objects: std::collections::HashSet<&String> =
+                members.iter().map(|(_, o)| o).collect();
+            if distinct_objects.len() > 1 {
+                let mut involved: Vec<String> = Vec::new();
+                for (fact, _) in members {
+                    for name in self.deriving_rule_names(rules, fact) {
+                        if !involved.contains(&name) {
+                            involved.push(name);
+                        }
+                    }
+                }
                 self.conflicts.push(Conflict {
-                    rules: sources,
-                    facts: vec![fact],
+                    rules: involved,
+                    facts: members.iter().map(|(f, _)| f.clone()).collect(),
+                    description: "Competing values for the same subject/predicate".to_string(),
+                    severity: ConflictSeverity::High,
+                });
+            }
+        }
+
+        // Multiple derivation paths for a single fact.
+        for fact in facts {
+            let names = self.deriving_rule_names(rules, fact);
+            if names.len() > 1 {
+                self.conflicts.push(Conflict {
+                    rules: names,
+                    facts: vec![fact.clone()],
                     description: "Multiple derivation paths".to_string(),
                     severity: ConflictSeverity::Low,
                 });
@@ -286,26 +316,219 @@ impl ConflictResolver {
         Ok(())
     }
 
-    /// Resolve conflicts by priority
-    fn resolve_by_priority(&self, _rules: &[Rule], facts: &[RuleAtom]) -> Result<Vec<RuleAtom>> {
-        // Keep all facts for now
-        // In a full implementation, we would track which rule derived each fact
-        // and filter based on priority
-        Ok(facts.to_vec())
+    /// Names of the rules whose head could have derived `fact` (structural
+    /// match, treating head variables as wildcards). Distinct, order-preserving.
+    fn deriving_rule_names(&self, rules: &[Rule], fact: &RuleAtom) -> Vec<String> {
+        let mut names = Vec::new();
+        for rule in rules {
+            if rule.head.iter().any(|h| Self::head_atom_matches(h, fact))
+                && !names.contains(&rule.name)
+            {
+                names.push(rule.name.clone());
+            }
+        }
+        names
     }
 
-    /// Resolve conflicts by specificity
-    fn resolve_by_specificity(&self, _rules: &[Rule], facts: &[RuleAtom]) -> Result<Vec<RuleAtom>> {
-        // Keep all facts for now
-        // In a full implementation, we would use specificity scores
-        Ok(facts.to_vec())
+    /// Structural match of a rule head atom against a (ground) fact.
+    fn head_atom_matches(head: &RuleAtom, fact: &RuleAtom) -> bool {
+        match (head, fact) {
+            (
+                RuleAtom::Triple {
+                    subject: hs,
+                    predicate: hp,
+                    object: ho,
+                },
+                RuleAtom::Triple {
+                    subject: fs,
+                    predicate: fp,
+                    object: fo,
+                },
+            ) => {
+                Self::term_matches(hs, fs)
+                    && Self::term_matches(hp, fp)
+                    && Self::term_matches(ho, fo)
+            }
+            (
+                RuleAtom::NotEqual {
+                    left: hl,
+                    right: hr,
+                },
+                RuleAtom::NotEqual {
+                    left: fl,
+                    right: fr,
+                },
+            )
+            | (
+                RuleAtom::GreaterThan {
+                    left: hl,
+                    right: hr,
+                },
+                RuleAtom::GreaterThan {
+                    left: fl,
+                    right: fr,
+                },
+            )
+            | (
+                RuleAtom::LessThan {
+                    left: hl,
+                    right: hr,
+                },
+                RuleAtom::LessThan {
+                    left: fl,
+                    right: fr,
+                },
+            ) => Self::term_matches(hl, fl) && Self::term_matches(hr, fr),
+            _ => false,
+        }
     }
 
-    /// Resolve conflicts using combined strategy
+    fn term_matches(pattern: &crate::Term, value: &crate::Term) -> bool {
+        use crate::Term;
+        match (pattern, value) {
+            (Term::Variable(_), _) => true,
+            (Term::Constant(a), Term::Constant(b)) => a == b,
+            (Term::Literal(a), Term::Literal(b)) => a == b,
+            (Term::Constant(a), Term::Literal(b)) | (Term::Literal(a), Term::Constant(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    fn term_key(term: &crate::Term) -> String {
+        use crate::Term;
+        match term {
+            Term::Variable(v) => format!("?{v}"),
+            Term::Constant(c) => c.clone(),
+            Term::Literal(l) => format!("\"{l}\""),
+            Term::Function { name, args } => {
+                let inner: Vec<String> = args.iter().map(Self::term_key).collect();
+                format!("{name}({})", inner.join(","))
+            }
+        }
+    }
+
+    /// Static specificity score (mirrors `calculate_specificity` without
+    /// mutating the resolver's cache), for use on the read-only resolve path.
+    fn rule_specificity_score(rule: &Rule) -> f64 {
+        let body_size = rule.body.len() as f64;
+        let mut variables = 0usize;
+        let mut constants = 0usize;
+        for atom in &rule.body {
+            match atom {
+                RuleAtom::Triple {
+                    subject,
+                    predicate,
+                    object,
+                } => {
+                    Self::count_term(subject, &mut variables, &mut constants);
+                    Self::count_term(predicate, &mut variables, &mut constants);
+                    Self::count_term(object, &mut variables, &mut constants);
+                }
+                RuleAtom::Builtin { args, .. } => {
+                    for arg in args {
+                        Self::count_term(arg, &mut variables, &mut constants);
+                    }
+                }
+                RuleAtom::NotEqual { left, right }
+                | RuleAtom::GreaterThan { left, right }
+                | RuleAtom::LessThan { left, right } => {
+                    Self::count_term(left, &mut variables, &mut constants);
+                    Self::count_term(right, &mut variables, &mut constants);
+                }
+            }
+        }
+        body_size + (constants as f64 * 2.0) - (variables as f64 * 0.5)
+    }
+
+    /// Score of a fact under a per-rule metric: the best (max) metric over the
+    /// rules that could derive it. Facts with no deriving rule are treated as
+    /// asserted ground truth (`+inf`) and always survive resolution.
+    fn fact_score<F: Fn(&Rule) -> f64>(&self, rules: &[Rule], fact: &RuleAtom, metric: &F) -> f64 {
+        let mut best = f64::NEG_INFINITY;
+        let mut any = false;
+        for rule in rules {
+            if rule.head.iter().any(|h| Self::head_atom_matches(h, fact)) {
+                any = true;
+                best = best.max(metric(rule));
+            }
+        }
+        if any {
+            best
+        } else {
+            f64::INFINITY
+        }
+    }
+
+    /// Generic conflict resolution: within each (subject, predicate) group keep
+    /// only the facts whose deriving-rule score equals the group maximum; facts
+    /// with a unique subject/predicate (or non-triple facts) are always kept.
+    fn resolve_by_metric<F: Fn(&Rule) -> f64>(
+        &self,
+        rules: &[Rule],
+        facts: &[RuleAtom],
+        metric: F,
+    ) -> Vec<RuleAtom> {
+        // Precompute each fact's score once.
+        let scores: Vec<f64> = facts
+            .iter()
+            .map(|f| self.fact_score(rules, f, &metric))
+            .collect();
+
+        // Group maxima keyed by (subject, predicate).
+        let mut group_max: HashMap<(String, String), f64> = HashMap::new();
+        for (idx, fact) in facts.iter().enumerate() {
+            if let RuleAtom::Triple {
+                subject, predicate, ..
+            } = fact
+            {
+                let key = (Self::term_key(subject), Self::term_key(predicate));
+                let entry = group_max.entry(key).or_insert(f64::NEG_INFINITY);
+                *entry = entry.max(scores[idx]);
+            }
+        }
+
+        let mut resolved = Vec::new();
+        for (idx, fact) in facts.iter().enumerate() {
+            let keep = match fact {
+                RuleAtom::Triple {
+                    subject, predicate, ..
+                } => {
+                    let key = (Self::term_key(subject), Self::term_key(predicate));
+                    let max = group_max.get(&key).copied().unwrap_or(scores[idx]);
+                    // Keep facts at the group maximum (handles +inf asserted facts
+                    // and ties). Epsilon guards float comparison of finite scores.
+                    scores[idx] == max || (scores[idx] - max).abs() < f64::EPSILON
+                }
+                // Non-triple facts have no subject/predicate grouping; keep them.
+                _ => true,
+            };
+            if keep {
+                resolved.push(fact.clone());
+            }
+        }
+        resolved
+    }
+
+    /// Resolve conflicts by rule priority: among facts competing for the same
+    /// subject/predicate, keep those derived by the highest-priority rule.
+    fn resolve_by_priority(&self, rules: &[Rule], facts: &[RuleAtom]) -> Result<Vec<RuleAtom>> {
+        Ok(self.resolve_by_metric(rules, facts, |rule| {
+            self.get_priority(&rule.name) as u8 as f64
+        }))
+    }
+
+    /// Resolve conflicts by rule specificity: more specific rules win.
+    fn resolve_by_specificity(&self, rules: &[Rule], facts: &[RuleAtom]) -> Result<Vec<RuleAtom>> {
+        Ok(self.resolve_by_metric(rules, facts, Self::rule_specificity_score))
+    }
+
+    /// Resolve conflicts using a combined metric: priority dominates, ties are
+    /// broken by specificity.
     fn resolve_combined(&self, rules: &[Rule], facts: &[RuleAtom]) -> Result<Vec<RuleAtom>> {
-        // Use both priority and specificity
-        // Priority takes precedence, then specificity
-        self.resolve_by_priority(rules, facts)
+        Ok(self.resolve_by_metric(rules, facts, |rule| {
+            (self.get_priority(&rule.name) as u8 as f64) * 1_000_000.0
+                + Self::rule_specificity_score(rule)
+        }))
     }
 
     /// Resolve conflicts by confidence scores
@@ -472,5 +695,66 @@ mod tests {
 
         assert_eq!(stats.total_conflicts, 0);
         assert_eq!(stats.rules_with_priority, 0);
+    }
+
+    /// Regression: the Priority strategy must actually drop the lower-priority
+    /// competing fact (previously it returned every fact unchanged, identical to
+    /// KeepAll), and detect_conflicts must record real rule names.
+    #[test]
+    fn regression_priority_resolution_drops_competing_fact(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut resolver = ConflictResolver::new();
+
+        let high_fact = RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant("age".to_string()),
+            object: Term::Literal("30".to_string()),
+        };
+        let low_fact = RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant("age".to_string()),
+            object: Term::Literal("25".to_string()),
+        };
+
+        let rules = vec![
+            Rule {
+                name: "specific".to_string(),
+                body: vec![],
+                head: vec![high_fact.clone()],
+            },
+            Rule {
+                name: "general".to_string(),
+                body: vec![],
+                head: vec![low_fact.clone()],
+            },
+        ];
+
+        resolver.set_priority("specific", Priority::VeryHigh);
+        resolver.set_priority("general", Priority::Low);
+        resolver.set_strategy(ResolutionStrategy::Priority);
+
+        let resolved =
+            resolver.resolve_conflicts(&rules, &[high_fact.clone(), low_fact.clone()])?;
+
+        assert!(
+            resolved.contains(&high_fact),
+            "high-priority fact must survive: {resolved:?}"
+        );
+        assert!(
+            !resolved.contains(&low_fact),
+            "low-priority competing fact must be dropped: {resolved:?}"
+        );
+
+        // A genuine value conflict was detected, tagged with real rule names.
+        assert!(resolver.has_conflicts());
+        let named: Vec<String> = resolver
+            .get_conflicts()
+            .iter()
+            .flat_map(|c| c.rules.clone())
+            .collect();
+        assert!(named.contains(&"specific".to_string()));
+        assert!(named.contains(&"general".to_string()));
+        assert!(!named.contains(&"source".to_string()));
+        Ok(())
     }
 }

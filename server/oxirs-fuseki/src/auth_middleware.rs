@@ -513,7 +513,22 @@ struct UserRateBucket {
     total_denied: u64,
 }
 
+/// Default idle TTL after which an inactive user's bucket is evicted (30 min).
+const DEFAULT_BUCKET_IDLE_TTL_MS: u64 = 30 * 60 * 1000;
+
+/// Minimum interval between opportunistic eviction sweeps (1 min) so a busy
+/// server does not scan the whole map on every request.
+const BUCKET_SWEEP_INTERVAL_MS: u64 = 60 * 1000;
+
 /// Per-authenticated-user rate limiter.
+///
+/// Buckets are keyed by `user_id` and created lazily on first request. To keep
+/// memory bounded for long-lived processes that see many distinct users, idle
+/// buckets are evicted after [`UserRateLimiter::idle_ttl_ms`] of inactivity via
+/// an opportunistic sweep run at most once per [`BUCKET_SWEEP_INTERVAL_MS`]
+/// during [`UserRateLimiter::check`]. Eviction is safe: a user whose bucket was
+/// dropped simply gets a fresh full-burst bucket on their next request, exactly
+/// as a brand-new user would.
 pub struct UserRateLimiter {
     /// Requests per second per user.
     requests_per_second: f64,
@@ -521,6 +536,10 @@ pub struct UserRateLimiter {
     burst_size: usize,
     /// Per-user buckets.
     buckets: HashMap<String, UserRateBucket>,
+    /// Evict a bucket after this many ms without activity.
+    idle_ttl_ms: u64,
+    /// Wall-clock (in the same `now_ms` domain as `check`) of the last sweep.
+    last_sweep_ms: u64,
 }
 
 impl UserRateLimiter {
@@ -529,11 +548,39 @@ impl UserRateLimiter {
             requests_per_second,
             burst_size,
             buckets: HashMap::new(),
+            idle_ttl_ms: DEFAULT_BUCKET_IDLE_TTL_MS,
+            last_sweep_ms: 0,
         }
+    }
+
+    /// Override the idle TTL (ms) after which inactive buckets are evicted.
+    #[must_use]
+    pub fn with_idle_ttl_ms(mut self, idle_ttl_ms: u64) -> Self {
+        self.idle_ttl_ms = idle_ttl_ms;
+        self
+    }
+
+    /// Evict buckets that have been idle longer than `idle_ttl_ms`.
+    ///
+    /// Runs at most once per [`BUCKET_SWEEP_INTERVAL_MS`]. Returns the number of
+    /// buckets removed (primarily for tests/metrics).
+    pub fn sweep_idle(&mut self, now_ms: u64) -> usize {
+        let ttl = self.idle_ttl_ms;
+        let before = self.buckets.len();
+        self.buckets
+            .retain(|_, bucket| now_ms.saturating_sub(bucket.last_refill_ms) < ttl);
+        self.last_sweep_ms = now_ms;
+        before - self.buckets.len()
     }
 
     /// Check whether a request from `user_id` is allowed at `now_ms`.
     pub fn check(&mut self, user_id: &str, now_ms: u64) -> bool {
+        // Opportunistic, rate-limited eviction sweep so `buckets` cannot grow
+        // unbounded across the lifetime of a long-running process.
+        if now_ms.saturating_sub(self.last_sweep_ms) >= BUCKET_SWEEP_INTERVAL_MS {
+            self.sweep_idle(now_ms);
+        }
+
         let burst = self.burst_size as f64;
         let rps = self.requests_per_second;
 
@@ -1160,6 +1207,49 @@ mod tests {
         assert_eq!(limiter.allowed_count("alice"), 1);
         assert_eq!(limiter.denied_count("alice"), 1);
         assert_eq!(limiter.user_count(), 1);
+    }
+
+    #[test]
+    fn regression_user_rate_limiter_evicts_idle_buckets() {
+        // Short 1s idle TTL so the test does not need long simulated time.
+        let mut limiter = UserRateLimiter::new(1.0, 1).with_idle_ttl_ms(1_000);
+
+        // Register three users at t=0.
+        assert!(limiter.check("alice", 0));
+        assert!(limiter.check("bob", 0));
+        assert!(limiter.check("carol", 0));
+        assert_eq!(limiter.user_count(), 3);
+
+        // Advance past both the idle TTL (1s) and the opportunistic sweep
+        // interval (60s) so the next `check` triggers a sweep. alice is active
+        // again; bob and carol have been idle far longer than the TTL, so the
+        // sweep in `check` must drop their buckets.
+        let t = BUCKET_SWEEP_INTERVAL_MS + 1;
+        assert!(limiter.check("alice", t));
+        assert_eq!(
+            limiter.user_count(),
+            1,
+            "idle buckets for bob and carol must be evicted, leaving only active alice"
+        );
+        assert!(limiter.buckets.contains_key("alice"));
+        assert!(!limiter.buckets.contains_key("bob"));
+        assert!(!limiter.buckets.contains_key("carol"));
+    }
+
+    #[test]
+    fn regression_user_rate_limiter_evicted_user_gets_fresh_bucket() {
+        let mut limiter = UserRateLimiter::new(1.0, 1).with_idle_ttl_ms(1_000);
+
+        // Exhaust alice's single burst token at t=0.
+        assert!(limiter.check("alice", 0));
+        assert!(!limiter.check("alice", 0)); // denied, bucket empty
+
+        // After the idle TTL elapses, an explicit sweep evicts alice.
+        assert_eq!(limiter.sweep_idle(2_000), 1);
+        assert_eq!(limiter.user_count(), 0);
+
+        // A subsequent request gets a brand-new full-burst bucket and is allowed.
+        assert!(limiter.check("alice", 2_000));
     }
 
     // ── Anonymous policy ────────────────────────────────────────────────────

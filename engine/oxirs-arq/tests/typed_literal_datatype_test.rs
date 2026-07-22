@@ -71,12 +71,10 @@ fn http_angle_bracket_datatype_is_kept_verbatim() {
 
 #[test]
 fn prefixed_datatype_is_resolved_against_prologue() {
-    let q = format!(
-        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
-         SELECT ?s WHERE {{ ?s ?p \"5\"^^xsd:integer }}"
-    );
+    let q = "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
+         SELECT ?s WHERE { ?s ?p \"5\"^^xsd:integer }";
     assert_eq!(
-        object_datatype(&q).as_deref(),
+        object_datatype(q).as_deref(),
         Some(XSD_INTEGER),
         "`^^xsd:integer` must resolve to the full XSD IRI"
     );

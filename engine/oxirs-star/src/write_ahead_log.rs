@@ -74,7 +74,12 @@ pub struct WalConfig {
 impl Default for WalConfig {
     fn default() -> Self {
         Self {
-            wal_dir: std::env::temp_dir().join("oxirs_wal"),
+            // Instance-unique, not a fixed shared path: see
+            // `tiered_storage::unique_tier_dir` for why a process-global
+            // default directory here would leak on-disk state between
+            // concurrently-running store instances (e.g. nextest's
+            // process-per-test execution).
+            wal_dir: crate::tiered_storage::unique_tier_dir("oxirs_wal"),
             segment_size_threshold: 64 * 1024 * 1024, // 64 MB
             enable_fsync: true,
             write_buffer_size: 8192,

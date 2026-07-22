@@ -303,7 +303,7 @@ fn validate_integer_range_oxs(integer: Integer, datatype_iri: &str) -> Result<()
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Literal(LiteralContent);
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 enum LiteralContent {
     String(String),
@@ -321,6 +321,159 @@ enum LiteralContent {
         value: String,
         datatype: NamedNode,
     },
+}
+
+/// Ordinal used to order/compare `LiteralContent` variants (mirrors the
+/// enum's declaration order, matching what `#[derive(PartialOrd, Ord)]`
+/// would have produced).
+fn literal_content_variant_rank(content: &LiteralContent) -> u8 {
+    match content {
+        LiteralContent::String(_) => 0,
+        LiteralContent::LanguageTaggedString { .. } => 1,
+        #[cfg(feature = "rdf-12")]
+        LiteralContent::DirectionalLanguageTaggedString { .. } => 2,
+        LiteralContent::TypedLiteral { .. } => 3,
+    }
+}
+
+// `LiteralContent`'s `PartialEq`/`Eq`/`Hash`/`PartialOrd`/`Ord` are hand-written
+// rather than derived so that a language tag on `LanguageTaggedString`/
+// `DirectionalLanguageTaggedString` compares and hashes *case-insensitively*,
+// per RDF 1.1 (language tags are compared case-insensitively -- `"foo"@en-US`
+// and `"foo"@en-us` denote the same literal) -- while the *stored* lexical
+// form still preserves whatever case the caller originally supplied (see
+// `Literal::new_language_tagged_literal`, which used to destructively
+// lowercase the tag before storing it). A naive `#[derive]` here would make
+// two RDF-equal literals compare unequal whenever their tags differ only in
+// case.
+impl PartialEq for LiteralContent {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (LiteralContent::String(a), LiteralContent::String(b)) => a == b,
+            (
+                LiteralContent::LanguageTaggedString {
+                    value: v1,
+                    language: l1,
+                },
+                LiteralContent::LanguageTaggedString {
+                    value: v2,
+                    language: l2,
+                },
+            ) => v1 == v2 && l1.eq_ignore_ascii_case(l2),
+            #[cfg(feature = "rdf-12")]
+            (
+                LiteralContent::DirectionalLanguageTaggedString {
+                    value: v1,
+                    language: l1,
+                    direction: d1,
+                },
+                LiteralContent::DirectionalLanguageTaggedString {
+                    value: v2,
+                    language: l2,
+                    direction: d2,
+                },
+            ) => v1 == v2 && l1.eq_ignore_ascii_case(l2) && d1 == d2,
+            (
+                LiteralContent::TypedLiteral {
+                    value: v1,
+                    datatype: d1,
+                },
+                LiteralContent::TypedLiteral {
+                    value: v2,
+                    datatype: d2,
+                },
+            ) => v1 == v2 && d1 == d2,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for LiteralContent {}
+
+impl std::hash::Hash for LiteralContent {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        literal_content_variant_rank(self).hash(state);
+        match self {
+            LiteralContent::String(value) => value.hash(state),
+            LiteralContent::LanguageTaggedString { value, language } => {
+                value.hash(state);
+                // Hash the case-folded tag so tags that are `eq_ignore_ascii_case`
+                // (and thus `PartialEq`-equal above) always hash equal.
+                for b in language.bytes() {
+                    b.to_ascii_lowercase().hash(state);
+                }
+            }
+            #[cfg(feature = "rdf-12")]
+            LiteralContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction,
+            } => {
+                value.hash(state);
+                for b in language.bytes() {
+                    b.to_ascii_lowercase().hash(state);
+                }
+                direction.hash(state);
+            }
+            LiteralContent::TypedLiteral { value, datatype } => {
+                value.hash(state);
+                datatype.hash(state);
+            }
+        }
+    }
+}
+
+impl PartialOrd for LiteralContent {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for LiteralContent {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (LiteralContent::String(a), LiteralContent::String(b)) => a.cmp(b),
+            (
+                LiteralContent::LanguageTaggedString {
+                    value: v1,
+                    language: l1,
+                },
+                LiteralContent::LanguageTaggedString {
+                    value: v2,
+                    language: l2,
+                },
+            ) => v1
+                .cmp(v2)
+                .then_with(|| l1.to_ascii_lowercase().cmp(&l2.to_ascii_lowercase())),
+            #[cfg(feature = "rdf-12")]
+            (
+                LiteralContent::DirectionalLanguageTaggedString {
+                    value: v1,
+                    language: l1,
+                    direction: d1,
+                },
+                LiteralContent::DirectionalLanguageTaggedString {
+                    value: v2,
+                    language: l2,
+                    direction: d2,
+                },
+            ) => v1
+                .cmp(v2)
+                .then_with(|| l1.to_ascii_lowercase().cmp(&l2.to_ascii_lowercase()))
+                .then_with(|| d1.cmp(d2)),
+            (
+                LiteralContent::TypedLiteral {
+                    value: v1,
+                    datatype: d1,
+                },
+                LiteralContent::TypedLiteral {
+                    value: v2,
+                    datatype: d2,
+                },
+            ) => v1.cmp(v2).then_with(|| d1.cmp(d2)),
+            _ => literal_content_variant_rank(self).cmp(&literal_content_variant_rank(other)),
+        }
+    }
 }
 
 impl Literal {
@@ -370,9 +523,14 @@ impl Literal {
         value: impl Into<String>,
         language: impl Into<String>,
     ) -> Result<Self, LanguageTagParseError> {
-        let language = language.into().to_ascii_lowercase();
-        // Normalize to lowercase per RDF 1.1 spec (language tags are case-insensitive,
-        // stored as lowercase for consistent comparison and lookup).
+        let language = language.into();
+        // RDF 1.1/1.2 language tags are compared case-insensitively, but the
+        // *lexical form* must be preserved as authored (e.g. SPARQL `LANG()`
+        // returns the tag exactly as written, and a parse -> serialize round
+        // trip must not mutate the term). Validate the tag without mutating
+        // it; `LiteralContent`'s `PartialEq`/`Eq`/`Hash`/`Ord` fold case for
+        // language tags so equality/lookup semantics stay RDF-1.1-correct
+        // even though the stored string keeps its original case.
         validate_language_tag(&language)?;
         Ok(Self::new_language_tagged_literal_unchecked(value, language))
     }
@@ -412,8 +570,10 @@ impl Literal {
         language: impl Into<String>,
         direction: impl Into<BaseDirection>,
     ) -> Result<Self, LanguageTagParseError> {
-        let mut language = language.into();
-        language.make_ascii_lowercase();
+        // See `new_language_tagged_literal`: preserve the tag's original
+        // case for round-tripping; case-insensitive comparison is handled by
+        // `LiteralContent`'s `PartialEq`/`Eq`/`Hash`/`Ord` impls.
+        let language = language.into();
         validate_language_tag(&language)?;
         Ok(Self::new_directional_language_tagged_literal_unchecked(
             value, language, direction,
@@ -792,7 +952,7 @@ impl ObjectTerm for Literal {}
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub struct LiteralRef<'a>(LiteralRefContent<'a>);
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[derive(Debug, Clone, Copy)]
 enum LiteralRefContent<'a> {
     String(&'a str),
     LanguageTaggedString {
@@ -809,6 +969,92 @@ enum LiteralRefContent<'a> {
         value: &'a str,
         datatype: NamedNodeRef<'a>,
     },
+}
+
+// Hand-written to match `LiteralContent`'s case-insensitive language-tag
+// `PartialEq`/`Eq`/`Hash` (see the comment there): `LiteralRef == Literal`
+// comparisons (below) go through this borrowed variant's equality, so it
+// must agree with the owned `LiteralContent`'s semantics or the two
+// directions of the cross-type `PartialEq` impls would disagree with each
+// other.
+impl PartialEq for LiteralRefContent<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (LiteralRefContent::String(a), LiteralRefContent::String(b)) => a == b,
+            (
+                LiteralRefContent::LanguageTaggedString {
+                    value: v1,
+                    language: l1,
+                },
+                LiteralRefContent::LanguageTaggedString {
+                    value: v2,
+                    language: l2,
+                },
+            ) => v1 == v2 && l1.eq_ignore_ascii_case(l2),
+            #[cfg(feature = "rdf-12")]
+            (
+                LiteralRefContent::DirectionalLanguageTaggedString {
+                    value: v1,
+                    language: l1,
+                    direction: d1,
+                },
+                LiteralRefContent::DirectionalLanguageTaggedString {
+                    value: v2,
+                    language: l2,
+                    direction: d2,
+                },
+            ) => v1 == v2 && l1.eq_ignore_ascii_case(l2) && d1 == d2,
+            (
+                LiteralRefContent::TypedLiteral {
+                    value: v1,
+                    datatype: d1,
+                },
+                LiteralRefContent::TypedLiteral {
+                    value: v2,
+                    datatype: d2,
+                },
+            ) => v1 == v2 && d1 == d2,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for LiteralRefContent<'_> {}
+
+impl std::hash::Hash for LiteralRefContent<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            LiteralRefContent::String(value) => {
+                0u8.hash(state);
+                value.hash(state);
+            }
+            LiteralRefContent::LanguageTaggedString { value, language } => {
+                1u8.hash(state);
+                value.hash(state);
+                for b in language.bytes() {
+                    b.to_ascii_lowercase().hash(state);
+                }
+            }
+            #[cfg(feature = "rdf-12")]
+            LiteralRefContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction,
+            } => {
+                2u8.hash(state);
+                value.hash(state);
+                for b in language.bytes() {
+                    b.to_ascii_lowercase().hash(state);
+                }
+                direction.hash(state);
+            }
+            LiteralRefContent::TypedLiteral { value, datatype } => {
+                3u8.hash(state);
+                value.hash(state);
+                datatype.hash(state);
+            }
+        }
+    }
 }
 
 impl<'a> LiteralRef<'a> {
@@ -1448,5 +1694,69 @@ mod tests {
 
         let bool_lit = Literal::new_typed("true", xsd::BOOLEAN.clone());
         assert!(!bool_lit.is_numeric());
+    }
+
+    /// Regression test: `new_language_tagged_literal` must preserve the
+    /// language tag's original case (round-trip fidelity / SPARQL `LANG()`
+    /// contract) rather than destructively lowercasing it.
+    #[test]
+    fn regression_language_tag_preserves_original_case() {
+        let literal =
+            Literal::new_language_tagged_literal("foo", "en-US").expect("valid language literal");
+        assert_eq!(
+            literal.language(),
+            Some("en-US"),
+            "the stored language tag must keep its original case"
+        );
+        assert_eq!(format!("{literal}"), "\"foo\"@en-US");
+    }
+
+    /// Regression test: two language-tagged literals whose tags differ only
+    /// in case are still RDF-1.1 equal (and hash equal), even though the
+    /// lexical form of the tag is no longer normalized to lowercase at
+    /// construction time.
+    #[test]
+    fn regression_language_tag_case_insensitive_equality_and_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let upper =
+            Literal::new_language_tagged_literal("foo", "en-US").expect("valid language literal");
+        let lower =
+            Literal::new_language_tagged_literal("foo", "en-us").expect("valid language literal");
+        let different_value =
+            Literal::new_language_tagged_literal("bar", "en-US").expect("valid language literal");
+
+        assert_eq!(upper, lower, "tags differing only in case must be equal");
+        assert_ne!(upper, different_value);
+
+        // Case-insensitively-equal tags must hash equal too, so they behave
+        // correctly as `HashMap`/`HashSet` keys.
+        let hash_of = |l: &Literal| {
+            let mut hasher = DefaultHasher::new();
+            l.hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_eq!(hash_of(&upper), hash_of(&lower));
+
+        // And they must compare `Equal` under `Ord`, consistent with `PartialEq`.
+        assert_eq!(upper.cmp(&lower), std::cmp::Ordering::Equal);
+
+        // The cross-type `Literal == LiteralRef` comparison must agree too.
+        let lower_ref = LiteralRef::new_language_tagged_literal_unchecked("foo", "en-us");
+        assert_eq!(upper, lower_ref);
+        assert_eq!(lower_ref, upper);
+    }
+
+    /// Regression test: the directional (rdf-12) language-tagged literal
+    /// constructor must also preserve tag case, matching
+    /// `new_language_tagged_literal`.
+    #[cfg(feature = "rdf-12")]
+    #[test]
+    fn regression_directional_language_tag_preserves_original_case() {
+        let literal =
+            Literal::new_directional_language_tagged_literal("foo", "en-US", BaseDirection::Ltr)
+                .expect("valid directional language literal");
+        assert_eq!(literal.language(), Some("en-US"));
     }
 }

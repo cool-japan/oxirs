@@ -5,7 +5,49 @@ All notable changes to OxiRS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.1] - Unreleased
+## [0.4.1] - 2026-07-22
+
+A workspace-wide production-readiness hardening pass: a 38-scope multi-agent audit surfaced 308 verified findings (62 P0, 131 P1, 115 P2), of which roughly 300 were fixed across 38 work packages, plus 74 test regressions caught by the full-suite gate and a follow-up chain of SPARQL-parser, storage-durability, and CLI/DID data-integrity fixes.
+
+### Security
+- **oxirs-fuseki**: closed a full authentication/authorization bypass — the `AuthUser` extractor never actually authenticated requests, `route_based_rbac` failed open, and the `/update` endpoint had no auth check at all; all three now correctly gate on `config.security.auth_required`
+- **oxirs-fuseki**: X.509 client-certificate trust now verifies the certificate's signature chain instead of only comparing DN strings
+- **oxirs-fuseki**: fixed a SPARQL injection vulnerability in the REST API v2 endpoints
+- **oxirs-fuseki**: SPARQL `LOAD` now carries SSRF guards against internal/loopback targets
+- **oxirs-gql**: the "AES" cache-encryption layer was a plaintext passthrough (data was never actually encrypted) and its token validation unconditionally granted access regardless of the token presented — both fixed
+- **oxirs-did**: DID/VC verification now checks credential revocation status, consumes the auth challenge to prevent replay, and verifies ZKP selective-disclosure proofs, instead of accepting them unconditionally
+- **oxirs-chat**: SAML signature verification hardened against XML Signature Wrapping attacks
+
+### Fixed
+- **oxirs-core**: the core SPARQL parser no longer silently drops `FILTER` clauses
+- **oxirs-core**: `Store::flush()` now actually flushes to disk (was a no-op)
+- **oxirs-embed**: KGE model save/load is now implemented (was a no-op); TransE/RotatE training loss sign corrected
+- **oxirs-stream**: the NATS consumer no longer acknowledges a message before it has actually been processed
+- **oxirs-shacl**: removed fabricated results from the W3C SHACL conformance test harness
+- **oxirs-shacl-ai**: removed fabricated quality metrics and fabricated AutoML "training" results
+- **oxirs-federate**: federated query planning now really decomposes queries instead of returning a canned plan
+- **oxirs-stream**: Kafka/NATS producers now fail loud instead of silently no-op'ing on a publish failure
+- **oxirs-arq** / **oxirs-fuseki**: multi-line `CONSTRUCT`/`SELECT`/`ASK`/`DESCRIBE` queries and `UPDATE` statements (a newline before `WHERE`/braces, or a multi-`PREFIX` prologue) now parse correctly instead of failing
+- **oxirs-cluster**: Raft node state (vote/log/state-machine/snapshot) is now durably persisted — a new `DurableRaftStore` fsyncs every log append and writes hard state/snapshots atomically (write-temp + fsync + rename); previously all Raft state was in-memory only, so a node restart could double-vote or lose committed writes. Resolves the durable-storage gap deferred from the 0.4.0 Raft integration
+- **oxirs-cluster**: the replication-maintenance background task ran against a throwaway, empty `ReplicationManager` in a shutdown-blind infinite loop (a permanent task leak on every node); it now operates on the node's real shared manager with shutdown-aware periodic ticks
+- **oxirs** (CLI): `tdbupdate` (SPARQL Update against a TDB-backed store) no longer collapses every literal/blank-node position to an IRI before writing — this silently corrupted the store for every other reader (`tdbquery`, `tdbdump`); term kind is now preserved
+- **oxirs-tdb**: `repair_page_checksums` no longer re-stamps a fresh checksum over already-corrupt page bytes and reports success; it now repairs strictly from a trusted WAL redo image, or fails loud when no redo image exists
+- **oxirs-tdb**: superblock reads now verify the page checksum before decoding — a crash-torn superblock page previously could be decoded anyway and silently yield wrong query results or data loss
+- **oxirs-did**: `StatusList2021` credential-status encoding is now genuinely GZIP-compressed before base64url (previously plain base64url of the packed bits despite documentation claiming GZIP), fixing interoperability with external W3C-compliant verifiers
+- **performance_validation**: benchmark scenarios called `sleep()` to simulate workload instead of executing real queries; they now load real datasets and run genuine end-to-end SPARQL queries
+
+### Added
+- **oxirs-arq**: SPARQL 1.1 sub-`SELECT` (a nested `{ SELECT ... }` inside a query's `WHERE` clause) and Turtle collection (`( )`) / property-list (`[ ]`) syntax are now supported inside query patterns
+- **oxirs-fuseki**: RDF-vocabulary-driven GraphQL schema auto-generation (`graphql_autoschema`), bridging discovered RDFS/OWL vocabulary into a generated GraphQL schema via oxirs-gql
+- **oxirs-core**: a new mmap-able RDF store snapshot format gives sub-second cold start on reopen, versus ~13.6s re-parsing 1.35M quads from N-Quads
+
+### Changed
+- **oxirs-fuseki** / **oxirs-arq**: the SPARQL query path is unified onto the real oxirs-arq execution engine
+- **oxirs-cluster**: state-machine checkpointing is now durable and amortized O(1) (was O(n²))
+- **oxirs-star**: tiered-storage default directories are now instance-unique, fixing a cross-process data-leakage bug where concurrent instances could share the same on-disk location
+- **oxirs-core**: the `blas` Cargo feature previously compiled but had no effect; it now wires into real OxiBLAS linear-algebra routines
+- **oxirs** (CLI): the `all-features` Cargo feature (which silently omitted `excel-export` and `system-keyring`) has been renamed to `full-cli` and now genuinely enables every optional CLI feature; build scripts referencing `--features all-features` must switch to `--features full-cli`
+- COOLJAPAN ecosystem: `scirs2-*` 0.6.1 → 0.6.2; `oxigdal-proj` renamed to `oxigeo-proj` (0.2.0); new Pure-Rust `oxiarc-bzip2` dependency
 
 ## [0.4.0] - 2026-07-19
 
@@ -649,6 +691,7 @@ Production Impact (100K QPS):
 
 *"Rust makes memory safety table stakes; OxiRS makes knowledge-graph engineering table stakes."*
 
+[0.4.1]: https://github.com/cool-japan/oxirs/releases/tag/v0.4.1
 [0.4.0]: https://github.com/cool-japan/oxirs/releases/tag/v0.4.0
 [0.3.2]: https://github.com/cool-japan/oxirs/releases/tag/v0.3.2
 [0.3.1]: https://github.com/cool-japan/oxirs/releases/tag/v0.3.1

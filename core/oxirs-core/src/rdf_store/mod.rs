@@ -801,8 +801,14 @@ impl RdfStore {
     }
 
     /// Serialize a single quad to one N-Quads line (no trailing newline).
+    ///
+    /// `Serializer::serialize_quad_to_nquads` always terminates its output with
+    /// `" .\n"`; strip that trailing newline here so callers that add their own
+    /// terminator (e.g. via `writeln!`) don't end up with a blank line after
+    /// every persisted quad.
     fn quad_to_nquads_line(quad: &Quad) -> Result<String> {
-        Serializer::new(RdfFormat::NQuads).serialize_quad_to_nquads(quad)
+        let line = Serializer::new(RdfFormat::NQuads).serialize_quad_to_nquads(quad)?;
+        Ok(line.trim_end_matches('\n').to_string())
     }
 
     /// Flush pending writes and make prior deletions durable.

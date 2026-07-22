@@ -574,14 +574,17 @@ impl VectorIndex for LshIndex {
             })
             .collect();
 
-        // Sort by distance and take top k
+        // Sort by distance (ascending) and take top k, then convert to the
+        // trait's similarity contract: similarity = 1 / (1 + distance), larger =
+        // closer. Ascending distance == descending similarity, so ordering is
+        // preserved (best match first).
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(k);
 
         // Convert to final result format
         Ok(results
             .into_iter()
-            .map(|(id, dist)| (self.vectors[id].0.clone(), dist))
+            .map(|(id, dist)| (self.vectors[id].0.clone(), 1.0 / (1.0 + dist)))
             .collect())
     }
 
@@ -646,8 +649,11 @@ impl VectorIndex for LshIndex {
                         }
                     };
 
-                    if distance <= threshold {
-                        Some((uri.clone(), distance))
+                    // Trait contract: similarity >= threshold, where
+                    // similarity = 1 / (1 + distance).
+                    let similarity = 1.0 / (1.0 + distance);
+                    if similarity >= threshold {
+                        Some((uri.clone(), similarity))
                     } else {
                         None
                     }
@@ -655,7 +661,8 @@ impl VectorIndex for LshIndex {
             })
             .collect();
 
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        // Sort by descending similarity (best match first).
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(results)
     }
 
@@ -786,9 +793,9 @@ mod tests {
         let results = index.search_knn(&query, 5)?;
 
         assert_eq!(results.len(), 5);
-        // Results should be ordered by distance
+        // Results are similarities (larger = closer) sorted descending.
         for i in 1..results.len() {
-            assert!(results[i - 1].1 <= results[i].1);
+            assert!(results[i - 1].1 >= results[i].1);
         }
         Ok(())
     }

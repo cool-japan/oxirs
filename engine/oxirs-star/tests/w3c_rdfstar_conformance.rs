@@ -173,21 +173,9 @@ fn test_w3c_annotation_syntax_conformance() {
         ex:alice ex:age "30" {| ex:certainty "0.9" |} .
     "#;
 
+    // W3C equivalence: `s p o {| q v |}` == `s p o . <<s p o>> q v .`
+    // so the base triple plus one annotation triple = 2 triples.
     match parser.parse_str(test1, StarFormat::TurtleStar) {
-        Ok(graph) => {
-            assert_eq!(graph.len(), 1);
-            stats.record_pass();
-        }
-        Err(_) => stats.record_fail(),
-    }
-
-    // Test 2: Multiple annotation properties
-    let test2 = r#"
-        @prefix ex: <http://example.org/> .
-        ex:alice ex:age "30" {| ex:certainty "0.9"; ex:source ex:census |} .
-    "#;
-
-    match parser.parse_str(test2, StarFormat::TurtleStar) {
         Ok(graph) => {
             assert_eq!(graph.len(), 2);
             stats.record_pass();
@@ -195,7 +183,21 @@ fn test_w3c_annotation_syntax_conformance() {
         Err(_) => stats.record_fail(),
     }
 
-    // Test 3: Multi-line annotation block
+    // Test 2: Multiple annotation properties (base + 2 annotations = 3)
+    let test2 = r#"
+        @prefix ex: <http://example.org/> .
+        ex:alice ex:age "30" {| ex:certainty "0.9"; ex:source ex:census |} .
+    "#;
+
+    match parser.parse_str(test2, StarFormat::TurtleStar) {
+        Ok(graph) => {
+            assert_eq!(graph.len(), 3);
+            stats.record_pass();
+        }
+        Err(_) => stats.record_fail(),
+    }
+
+    // Test 3: Multi-line annotation block (base + 3 annotations = 4)
     let test3 = r#"
         @prefix ex: <http://example.org/> .
         ex:alice ex:age "30" {|
@@ -207,13 +209,13 @@ fn test_w3c_annotation_syntax_conformance() {
 
     match parser.parse_str(test3, StarFormat::TurtleStar) {
         Ok(graph) => {
-            assert_eq!(graph.len(), 3);
+            assert_eq!(graph.len(), 4);
             stats.record_pass();
         }
         Err(_) => stats.record_fail(),
     }
 
-    // Test 4: Empty annotation block
+    // Test 4: Empty annotation block — base triple is still asserted (== 1)
     let test4 = r#"
         @prefix ex: <http://example.org/> .
         ex:alice ex:age "30" {| |} .
@@ -221,7 +223,7 @@ fn test_w3c_annotation_syntax_conformance() {
 
     match parser.parse_str(test4, StarFormat::TurtleStar) {
         Ok(graph) => {
-            assert_eq!(graph.len(), 0); // Empty block produces no triples
+            assert_eq!(graph.len(), 1); // Empty block still asserts the base triple
             stats.record_pass();
         }
         Err(_) => stats.record_fail(),
@@ -740,27 +742,29 @@ ex:source ex:states <<ex:alice ex:age "30">> ."#,
         }
     }
 
-    // Annotation syntax tests (use multiline format)
+    // Annotation syntax tests (use multiline format). Per the W3C
+    // annotation-syntax equivalence each case asserts the base triple plus one
+    // annotation triple per property; the empty block asserts just the base.
     let annotation_tests = vec![
         (
             r#"@prefix ex: <http://example.org/> .
 ex:alice ex:age "30" {| ex:certainty "0.9" |} ."#,
-            1,
-        ),
-        (
-            r#"@prefix ex: <http://example.org/> .
-ex:alice ex:age "30" {| ex:certainty "0.9"; ex:source ex:census |} ."#,
             2,
         ),
         (
             r#"@prefix ex: <http://example.org/> .
-ex:alice ex:age "30" {| ex:certainty "0.9"; ex:source ex:census; ex:timestamp "2023-10-12" |} ."#,
+ex:alice ex:age "30" {| ex:certainty "0.9"; ex:source ex:census |} ."#,
             3,
         ),
         (
             r#"@prefix ex: <http://example.org/> .
+ex:alice ex:age "30" {| ex:certainty "0.9"; ex:source ex:census; ex:timestamp "2023-10-12" |} ."#,
+            4,
+        ),
+        (
+            r#"@prefix ex: <http://example.org/> .
 ex:alice ex:age "30" {| |} ."#,
-            0,
+            1,
         ),
     ];
 

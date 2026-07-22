@@ -141,15 +141,20 @@ impl HnswIndex {
         let mut candidates = BinaryHeap::new();
         let mut dynamic_list: BinaryHeap<std::cmp::Reverse<Candidate>> = BinaryHeap::new();
 
-        // Initialize with entry points
+        // Initialize with entry points. They must ALWAYS seed the frontier —
+        // `visited` is shared across the per-level insertion loop, so the entry
+        // points for a given level are typically already marked visited (from a
+        // higher level or the initial `visited.insert(entry_point)`). Guarding
+        // the seeding on `!visited.contains` left the construction search with an
+        // empty candidate set, so NO neighbors were ever selected and the graph
+        // was built with zero connections. Marking `visited` stays idempotent;
+        // the guard only ever belongs on *neighbor* expansion below.
         for &entry_id in entry_points {
-            if !visited.contains(&entry_id) {
-                visited.insert(entry_id);
-                let distance = self.calculate_distance(query, entry_id)?;
-                let candidate = Candidate::new(entry_id, distance);
-                candidates.push(candidate);
-                dynamic_list.push(std::cmp::Reverse(candidate));
-            }
+            visited.insert(entry_id);
+            let distance = self.calculate_distance(query, entry_id)?;
+            let candidate = Candidate::new(entry_id, distance);
+            candidates.push(candidate);
+            dynamic_list.push(std::cmp::Reverse(candidate));
         }
 
         // Main search loop
@@ -212,17 +217,22 @@ impl HnswIndex {
         self.select_neighbors_heuristic(candidates, m)
     }
 
-    /// Calculate distance between two nodes
+    /// Calculate distance between two nodes.
+    ///
+    /// Uses the index's configured [`SimilarityMetric`](crate::similarity::SimilarityMetric)
+    /// so that graph construction (neighbor selection & pruning) agrees with
+    /// query-time traversal. Previously this was hardcoded to cosine distance,
+    /// which silently degraded recall for indices configured with Euclidean /
+    /// Manhattan / other metrics.
     fn calculate_distance_between_nodes(&self, node1_id: usize, node2_id: usize) -> Option<f32> {
         let nodes = self.nodes();
         let node1 = nodes.get(node1_id)?;
         let node2 = nodes.get(node2_id)?;
 
-        // Use cosine distance (1 - cosine_similarity) for similarity calculations
-        match node1.vector.cosine_similarity(&node2.vector) {
-            Ok(similarity) => Some(1.0 - similarity),
-            _ => None,
-        }
+        self.config()
+            .metric
+            .distance(&node1.vector, &node2.vector)
+            .ok()
     }
 
     /// Generate a random level for a new node

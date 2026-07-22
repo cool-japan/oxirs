@@ -300,6 +300,7 @@ mod tests {
             time_steps: 20,
             material_properties: HashMap::new(),
             constraints: Vec::new(),
+            defaulted_fields: Vec::new(),
         };
 
         let result = sim.run(&params).await.expect("should succeed");

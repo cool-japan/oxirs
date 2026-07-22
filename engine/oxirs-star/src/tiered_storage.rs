@@ -46,8 +46,35 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use tracing::{debug, info, span, Level};
+
+/// Build a process- and instance-unique storage directory under the system
+/// temp directory.
+///
+/// The default warm/cold tiers (and the sibling LSM annotation store's
+/// default data directory) must never be a single process-global path: two
+/// store instances (including concurrently-running tests, which `cargo
+/// nextest` executes as separate OS processes) would otherwise read and
+/// write the same on-disk files. A fresh, default-constructed store could
+/// then observe another instance's leftover data — e.g. `get()` returning
+/// `Some(..)` for a key this instance never inserted — or a read could race
+/// an in-progress write and observe a truncated frame, surfacing as a
+/// spurious "truncated frame header" decompression error. Namespacing each
+/// instance's directory by process id plus a monotonically increasing
+/// counter keeps on-disk state private to the instance that owns it.
+///
+/// This is `pub(crate)` so other default-constructing modules in this crate
+/// (e.g. `lsm_annotation_store`) can share the same uniqueness scheme rather
+/// than re-deriving it. Callers that supply an explicit directory (a real
+/// deployment configuring its own paths) must not route through this
+/// helper — it is only for constructing a *default*.
+pub(crate) fn unique_tier_dir(prefix: &str) -> PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("{prefix}_{}_{seq}", std::process::id()))
+}
 
 // SciRS2 imports for parallel operations (SCIRS2 POLICY)
 // Note: par_chunks available for parallel tier migration
@@ -129,7 +156,7 @@ pub struct WarmTierConfig {
 impl Default for WarmTierConfig {
     fn default() -> Self {
         Self {
-            data_dir: std::env::temp_dir().join("oxirs_warm"),
+            data_dir: unique_tier_dir("oxirs_warm"),
             max_size_bytes: 10 * 1024 * 1024 * 1024, // 10 GB
             cold_tier_threshold_days: 30,
             enable_compression: true,
@@ -153,7 +180,7 @@ pub struct ColdTierConfig {
 impl Default for ColdTierConfig {
     fn default() -> Self {
         Self {
-            data_location: std::env::temp_dir().join("oxirs_cold"),
+            data_location: unique_tier_dir("oxirs_cold"),
             enable_compression: true,
             compression_level: 15, // Maximum compression for archival
         }
@@ -863,19 +890,26 @@ mod tests {
     }
 
     #[test]
-    fn test_statistics() {
+    fn test_statistics() -> StarResult<()> {
         let config = TierConfig::default();
-        let mut storage = TieredStorage::new(config).unwrap();
+        let mut storage = TieredStorage::new(config)?;
 
         let annotation = TripleAnnotation::new().with_confidence(0.9);
-        storage.insert(1, annotation).unwrap();
+        storage.insert(1, annotation)?;
 
-        storage.get(1).unwrap();
-        storage.get(2).unwrap();
+        // Key 1 is a hot-tier hit; key 2 is absent across every tier and must
+        // resolve to `None` without error. Propagate any tier error rather than
+        // unwrapping so a genuine failure reports its cause instead of a bare
+        // panic.
+        let hit = storage.get(1)?;
+        assert!(hit.is_some(), "key 1 should be present in the hot tier");
+        let miss = storage.get(2)?;
+        assert!(miss.is_none(), "key 2 was never inserted");
 
         let stats = storage.statistics();
         assert_eq!(stats.total_writes, 1);
         assert_eq!(stats.total_reads, 2);
         assert_eq!(stats.hot_hits, 1);
+        Ok(())
     }
 }

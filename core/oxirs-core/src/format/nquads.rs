@@ -69,7 +69,25 @@ impl NQuadsSerializer {
             SubjectRef::Variable(v) => {
                 write!(writer, "?{}", v.name()).map_err(FormatError::from)?;
             }
+            SubjectRef::QuotedTriple(qt) => {
+                self.write_quoted_triple(qt.inner(), writer)?;
+            }
         }
+        Ok(())
+    }
+
+    fn write_quoted_triple<W: Write>(
+        &self,
+        inner: &crate::model::Triple,
+        writer: &mut W,
+    ) -> Result<(), FormatError> {
+        write!(writer, "<< ").map_err(FormatError::from)?;
+        self.write_subject(inner.subject().into(), writer)?;
+        write!(writer, " ").map_err(FormatError::from)?;
+        self.write_predicate(inner.predicate().into(), writer)?;
+        write!(writer, " ").map_err(FormatError::from)?;
+        self.write_object(inner.object().into(), writer)?;
+        write!(writer, " >>").map_err(FormatError::from)?;
         Ok(())
     }
 
@@ -108,6 +126,9 @@ impl NQuadsSerializer {
             }
             ObjectRef::Variable(v) => {
                 write!(writer, "?{}", v.name()).map_err(FormatError::from)?;
+            }
+            ObjectRef::QuotedTriple(qt) => {
+                self.write_quoted_triple(qt.inner(), writer)?;
             }
         }
         Ok(())

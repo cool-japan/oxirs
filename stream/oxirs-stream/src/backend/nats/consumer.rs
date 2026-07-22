@@ -37,6 +37,12 @@ pub struct NatsConsumer {
     pub jetstream: Option<jetstream::Context>,
     #[cfg(feature = "nats")]
     pub consumer: Option<PullConsumer>,
+    /// The most recently delivered but not-yet-acknowledged JetStream message.
+    /// It is acknowledged only after the caller has processed it (on the next
+    /// `consume()` call, or via an explicit `ack()`), preserving at-least-once
+    /// delivery. A crash before ack causes JetStream to redeliver.
+    #[cfg(feature = "nats")]
+    pub pending_ack: Option<async_nats::jetstream::Message>,
     #[cfg(not(feature = "nats"))]
     pub _phantom: std::marker::PhantomData<()>,
     pub stats: Arc<RwLock<ConsumerStats>>,
@@ -71,6 +77,8 @@ impl NatsConsumer {
             jetstream: None,
             #[cfg(feature = "nats")]
             consumer: None,
+            #[cfg(feature = "nats")]
+            pending_ack: None,
             #[cfg(not(feature = "nats"))]
             _phantom: std::marker::PhantomData,
             stats: Arc::new(RwLock::new(ConsumerStats::default())),
@@ -195,6 +203,17 @@ impl NatsConsumer {
     pub async fn consume(&mut self) -> Result<Option<StreamEvent>> {
         #[cfg(feature = "nats")]
         {
+            // Acknowledge the previously-delivered message now that the caller
+            // has requested the next one (auto-commit-on-next-poll). This defers
+            // the ack until after the caller has processed the prior event,
+            // giving at-least-once delivery: a crash before this point leaves
+            // the message un-acked and JetStream will redeliver it.
+            if let Some(prev) = self.pending_ack.take() {
+                if let Err(e) = prev.ack().await {
+                    error!("Failed to acknowledge previously processed message: {}", e);
+                }
+            }
+
             if self.consumer.is_none() {
                 self.connect().await?;
             }
@@ -215,22 +234,29 @@ impl NatsConsumer {
                             // Deserialize the message
                             match serde_json::from_slice::<NatsEventMessage>(&payload) {
                                 Ok(nats_event) => {
-                                    // Acknowledge the message
-                                    if let Err(e) = msg.ack().await {
-                                        error!("Failed to acknowledge message: {}", e);
-                                    }
-
-                                    let mut stats = self.stats.write().await;
-                                    stats.events_consumed += 1;
-                                    stats.bytes_received += payload_len as u64;
-                                    stats.last_consume = Some(chrono::Utc::now());
-
                                     debug!("Consumed event from NATS: {}", nats_event.event_id);
-                                    let stream_event: StreamEvent =
-                                        nats_event.try_into().map_err(|e| {
-                                            anyhow!("Failed to convert NATS message: {}", e)
-                                        })?;
-                                    Ok(Some(stream_event))
+                                    match TryInto::<StreamEvent>::try_into(nats_event) {
+                                        Ok(stream_event) => {
+                                            let mut stats = self.stats.write().await;
+                                            stats.events_consumed += 1;
+                                            stats.bytes_received += payload_len as u64;
+                                            stats.last_consume = Some(chrono::Utc::now());
+                                            drop(stats);
+
+                                            // Defer acknowledgement until the
+                                            // caller has processed this event.
+                                            self.pending_ack = Some(msg);
+                                            Ok(Some(stream_event))
+                                        }
+                                        Err(e) => {
+                                            // Unconvertible message: ack it so it
+                                            // is not redelivered forever (poison).
+                                            let _ = msg.ack().await;
+                                            let mut stats = self.stats.write().await;
+                                            stats.events_failed += 1;
+                                            Err(anyhow!("Failed to convert NATS message: {}", e))
+                                        }
+                                    }
                                 }
                                 Err(e) => {
                                     error!("Failed to deserialize NATS message: {}", e);
@@ -267,6 +293,32 @@ impl NatsConsumer {
             debug!("Mock NATS consume");
             Ok(None)
         }
+    }
+
+    /// Explicitly acknowledge the last consumed message, confirming successful
+    /// processing. Used by callers that want to commit before requesting the
+    /// next message rather than relying on auto-commit-on-next-poll.
+    #[cfg(feature = "nats")]
+    pub async fn ack(&mut self) -> Result<()> {
+        if let Some(msg) = self.pending_ack.take() {
+            msg.ack()
+                .await
+                .map_err(|e| anyhow!("Failed to acknowledge message: {}", e))?;
+        }
+        Ok(())
+    }
+
+    /// Negatively acknowledge the last consumed message so JetStream redelivers
+    /// it (up to `max_deliver`). Call this when processing failed and the event
+    /// should be retried.
+    #[cfg(feature = "nats")]
+    pub async fn nak(&mut self) -> Result<()> {
+        if let Some(msg) = self.pending_ack.take() {
+            msg.ack_with(async_nats::jetstream::AckKind::Nak(None))
+                .await
+                .map_err(|e| anyhow!("Failed to negatively acknowledge message: {}", e))?;
+        }
+        Ok(())
     }
 
     pub async fn get_stats(&self) -> ConsumerStats {

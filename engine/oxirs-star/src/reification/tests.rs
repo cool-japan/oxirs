@@ -487,3 +487,145 @@ fn test_embedded_triple_type_alias() {
     let et: EmbeddedTriple = sample_triple();
     assert!(et.validate().is_ok());
 }
+
+/// Regression coverage for the P0 fix: `Reificator::dereify_graph` must
+/// round-trip every `ReificationStrategy` variant, not just
+/// `StandardReification`. Previously `UniqueIris`, `BlankNodes`, and
+/// `SingletonProperties` produced scaffolding triples with no
+/// `rdf:type rdf:Statement` marker, so `dereify_graph`'s statement-discovery
+/// pass (which only looked for that marker) found nothing and returned the
+/// reified graph completely unchanged.
+fn assert_reify_dereify_roundtrip(strategy: ReificationStrategy) {
+    let inner = StarTriple::new(
+        StarTerm::iri("http://example.org/alice").unwrap(),
+        StarTerm::iri("http://example.org/age").unwrap(),
+        StarTerm::literal("25").unwrap(),
+    );
+
+    let outer = StarTriple::new(
+        StarTerm::quoted_triple(inner.clone()),
+        StarTerm::iri("http://example.org/certainty").unwrap(),
+        StarTerm::literal("0.9").unwrap(),
+    );
+
+    let mut original_graph = StarGraph::new();
+    original_graph.insert(outer).unwrap();
+
+    let mut reificator = Reificator::new(
+        strategy.clone(),
+        Some("http://example.org/stmt/".to_string()),
+    );
+    let reified_graph = reificator.reify_graph(&original_graph).unwrap();
+
+    // The reified graph must not itself already be RDF-star (all scaffolding
+    // triples must be plain RDF).
+    assert!(
+        reified_graph
+            .triples()
+            .iter()
+            .all(|t| !t.subject.is_quoted_triple()
+                && !t.predicate.is_quoted_triple()
+                && !t.object.is_quoted_triple()),
+        "{strategy:?}: reified graph must contain no quoted triples"
+    );
+
+    let mut dereificator = Reificator::new(
+        strategy.clone(),
+        Some("http://example.org/stmt/".to_string()),
+    );
+    let recovered_graph = dereificator.dereify_graph(&reified_graph).unwrap();
+
+    assert_eq!(
+        recovered_graph.len(),
+        original_graph.len(),
+        "{strategy:?}: round-trip must recover exactly the original triple count"
+    );
+
+    let recovered_triple = &recovered_graph.triples()[0];
+    assert!(
+        recovered_triple.subject.is_quoted_triple(),
+        "{strategy:?}: recovered triple's subject must be a reconstructed quoted triple"
+    );
+    if let StarTerm::QuotedTriple(qt) = &recovered_triple.subject {
+        assert_eq!(
+            **qt, inner,
+            "{strategy:?}: reconstructed quoted triple content mismatch"
+        );
+    }
+    assert_eq!(
+        recovered_triple.predicate,
+        StarTerm::iri("http://example.org/certainty").unwrap()
+    );
+    assert_eq!(recovered_triple.object, StarTerm::literal("0.9").unwrap());
+}
+
+#[test]
+fn regression_dereify_roundtrip_standard_reification() {
+    assert_reify_dereify_roundtrip(ReificationStrategy::StandardReification);
+}
+
+#[test]
+fn regression_dereify_roundtrip_unique_iris() {
+    assert_reify_dereify_roundtrip(ReificationStrategy::UniqueIris);
+}
+
+#[test]
+fn regression_dereify_roundtrip_blank_nodes() {
+    assert_reify_dereify_roundtrip(ReificationStrategy::BlankNodes);
+}
+
+#[test]
+fn regression_dereify_roundtrip_singleton_properties() {
+    assert_reify_dereify_roundtrip(ReificationStrategy::SingletonProperties);
+}
+
+/// Regression: a quoted triple referenced in *object* position (e.g.
+/// `:report :about <<:alice :age 25>>`) must also be reconstructed on
+/// dereification, not just quoted triples in subject position.
+#[test]
+fn regression_dereify_quoted_triple_in_object_position() {
+    let inner = StarTriple::new(
+        StarTerm::iri("http://example.org/alice").unwrap(),
+        StarTerm::iri("http://example.org/age").unwrap(),
+        StarTerm::literal("25").unwrap(),
+    );
+
+    let outer = StarTriple::new(
+        StarTerm::iri("http://example.org/report").unwrap(),
+        StarTerm::iri("http://example.org/about").unwrap(),
+        StarTerm::quoted_triple(inner.clone()),
+    );
+
+    let mut original_graph = StarGraph::new();
+    original_graph.insert(outer).unwrap();
+
+    let mut reificator = Reificator::new(
+        ReificationStrategy::StandardReification,
+        Some("http://example.org/stmt/".to_string()),
+    );
+    let reified_graph = reificator.reify_graph(&original_graph).unwrap();
+
+    let mut dereificator = Reificator::new(
+        ReificationStrategy::StandardReification,
+        Some("http://example.org/stmt/".to_string()),
+    );
+    let recovered_graph = dereificator.dereify_graph(&reified_graph).unwrap();
+
+    assert_eq!(recovered_graph.len(), 1);
+    let recovered = &recovered_graph.triples()[0];
+    assert_eq!(
+        recovered.subject,
+        StarTerm::iri("http://example.org/report").unwrap()
+    );
+    assert_eq!(
+        recovered.predicate,
+        StarTerm::iri("http://example.org/about").unwrap()
+    );
+    assert!(
+        recovered.object.is_quoted_triple(),
+        "object position quoted triple was not reconstructed: {recovered:?}"
+    );
+    if let StarTerm::QuotedTriple(qt) = &recovered.object {
+        assert_eq!(**qt, inner);
+    }
+}

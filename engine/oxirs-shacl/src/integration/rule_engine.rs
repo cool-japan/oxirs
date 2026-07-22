@@ -11,11 +11,51 @@
 //! - **Rule-based validators**: Define custom validators using rules
 //! - **Incremental reasoning**: Update inferred knowledge incrementally
 
-use crate::{Constraint, Result, Shape, ValidationReport};
+use crate::{Constraint, Result, ShaclError, Shape, ValidationReport};
 use oxirs_core::{model::*, Store};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
+
+/// Well-known RDF/RDFS IRIs used by the forward-chaining RDFS reasoner.
+const RDF_TYPE_IRI: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const RDFS_SUBCLASS_IRI: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+const RDFS_SUBPROP_IRI: &str = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf";
+const RDFS_DOMAIN_IRI: &str = "http://www.w3.org/2000/01/rdf-schema#domain";
+const RDFS_RANGE_IRI: &str = "http://www.w3.org/2000/01/rdf-schema#range";
+
+/// Build a [`Predicate`] from an IRI string.
+fn named_predicate(iri: &str) -> Result<Predicate> {
+    Ok(Predicate::NamedNode(NamedNode::new(iri).map_err(|e| {
+        ShaclError::ValidationEngine(format!("Invalid reasoning IRI '{iri}': {e}"))
+    })?))
+}
+
+/// Convert an object term into a subject term when it is a resource
+/// (NamedNode/BlankNode); literals and other terms yield `None`.
+fn object_to_subject(object: &Object) -> Option<Subject> {
+    match object {
+        Object::NamedNode(n) => Some(Subject::NamedNode(n.clone())),
+        Object::BlankNode(b) => Some(Subject::BlankNode(b.clone())),
+        _ => None,
+    }
+}
+
+/// Extract the [`NamedNode`] of a subject term, if it is an IRI.
+fn subject_to_named(subject: &Subject) -> Option<NamedNode> {
+    match subject {
+        Subject::NamedNode(n) => Some(n.clone()),
+        _ => None,
+    }
+}
+
+/// Extract the [`NamedNode`] of an object term, if it is an IRI.
+fn object_to_named(object: &Object) -> Option<NamedNode> {
+    match object {
+        Object::NamedNode(n) => Some(n.clone()),
+        _ => None,
+    }
+}
 
 /// Configuration for rule engine integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,10 +149,20 @@ impl RuleBasedValidator {
     ) -> Result<ValidationReport> {
         info!("Starting validation with reasoning integration");
 
-        // Step 1: Perform reasoning if enabled
-        // Note: For now, we use the original store directly
-        // TODO: Implement proper Store cloning/augmentation for inferred triples
-        let _forward_chaining_enabled = self.config.forward_chaining;
+        // Step 1: Perform reasoning if enabled. Backward chaining is not
+        // implemented, so requesting it fails loud rather than silently running
+        // plain validation with no reasoning applied.
+        if self.config.backward_chaining {
+            return Err(ShaclError::UnsupportedOperation(
+                "Backward-chaining reasoning is not implemented for reasoning-aware SHACL \
+                 validation; disable backward_chaining or use forward_chaining (RDFS/OWL-RL)"
+                    .to_string(),
+            ));
+        }
+        if self.config.forward_chaining {
+            let inferred = self.forward_chain(store)?;
+            debug!("Forward chaining materialized {inferred} inferred triple(s)");
+        }
 
         // Step 2: Infer additional constraints if enabled
         let enhanced_shapes = if self.config.infer_constraints {
@@ -159,12 +209,205 @@ impl RuleBasedValidator {
 
     // Private methods
 
-    fn forward_chain(&self, _store: &dyn Store) -> Result<()> {
-        // TODO: Implement proper forward chaining with store augmentation
-        // This is a stub implementation
-        // For now, we just return Ok(()) as the reasoning integration is not yet complete
+    /// Apply RDFS (and, for OWL strategies, OWL-RL-flavoured) forward chaining
+    /// by materialising inferred triples into the store to a fixpoint.
+    ///
+    /// Returns the total number of newly-inferred triples inserted. The
+    /// iteration is bounded by `max_reasoning_depth`; any reasoning query
+    /// failure is surfaced as an error rather than silently skipped.
+    fn forward_chain(&self, store: &dyn Store) -> Result<usize> {
+        if self.config.strategy == ReasoningStrategy::None {
+            return Ok(0);
+        }
 
-        Ok(())
+        let type_pred = named_predicate(RDF_TYPE_IRI)?;
+        let subclass_pred = named_predicate(RDFS_SUBCLASS_IRI)?;
+        let subprop_pred = named_predicate(RDFS_SUBPROP_IRI)?;
+        let domain_pred = named_predicate(RDFS_DOMAIN_IRI)?;
+        let range_pred = named_predicate(RDFS_RANGE_IRI)?;
+
+        let mut total_new = 0usize;
+        let max_iters = self.config.max_reasoning_depth.max(1);
+
+        for _ in 0..max_iters {
+            let inferred = self.rdfs_inference_pass(
+                store,
+                &type_pred,
+                &subclass_pred,
+                &subprop_pred,
+                &domain_pred,
+                &range_pred,
+            )?;
+
+            let mut iteration_new = 0usize;
+            for quad in inferred {
+                let inserted = store.insert_quad(quad).map_err(|e| {
+                    ShaclError::ValidationEngine(format!(
+                        "Failed to materialize inferred triple: {e}"
+                    ))
+                })?;
+                if inserted {
+                    iteration_new += 1;
+                }
+            }
+
+            total_new += iteration_new;
+            if iteration_new == 0 {
+                break; // fixpoint reached
+            }
+        }
+
+        Ok(total_new)
+    }
+
+    /// Compute one pass of RDFS entailment over the store, returning the
+    /// candidate inferred quads (which may already exist — the caller counts
+    /// only the genuinely new insertions and iterates to a fixpoint).
+    ///
+    /// This is implemented with direct pattern matching (`Store::find_quads`)
+    /// rather than multi-pattern SPARQL joins so the closure is computed
+    /// correctly and deterministically regardless of query-engine join support.
+    #[allow(clippy::too_many_arguments)]
+    fn rdfs_inference_pass(
+        &self,
+        store: &dyn Store,
+        type_pred: &Predicate,
+        subclass_pred: &Predicate,
+        subprop_pred: &Predicate,
+        domain_pred: &Predicate,
+        range_pred: &Predicate,
+    ) -> Result<Vec<Quad>> {
+        let map_err = |e| ShaclError::ValidationEngine(format!("Reasoning query failed: {e}"));
+        let mut inferred: Vec<Quad> = Vec::new();
+
+        // rdfs11: subClassOf transitivity.
+        let subclass = store
+            .find_quads(None, Some(subclass_pred), None, None)
+            .map_err(map_err)?;
+        for q in &subclass {
+            if let Some(mid) = object_to_subject(q.object()) {
+                for q2 in store
+                    .find_quads(Some(&mid), Some(subclass_pred), None, None)
+                    .map_err(map_err)?
+                {
+                    inferred.push(Quad::new(
+                        q.subject().clone(),
+                        subclass_pred.clone(),
+                        q2.object().clone(),
+                        q.graph_name().clone(),
+                    ));
+                }
+            }
+        }
+
+        // rdfs5: subPropertyOf transitivity.
+        let subprop = store
+            .find_quads(None, Some(subprop_pred), None, None)
+            .map_err(map_err)?;
+        for q in &subprop {
+            if let Some(mid) = object_to_subject(q.object()) {
+                for q2 in store
+                    .find_quads(Some(&mid), Some(subprop_pred), None, None)
+                    .map_err(map_err)?
+                {
+                    inferred.push(Quad::new(
+                        q.subject().clone(),
+                        subprop_pred.clone(),
+                        q2.object().clone(),
+                        q.graph_name().clone(),
+                    ));
+                }
+            }
+        }
+
+        // rdfs9: rdf:type propagation across subClassOf.
+        let types = store
+            .find_quads(None, Some(type_pred), None, None)
+            .map_err(map_err)?;
+        for q in &types {
+            if let Some(class_subj) = object_to_subject(q.object()) {
+                for sc in store
+                    .find_quads(Some(&class_subj), Some(subclass_pred), None, None)
+                    .map_err(map_err)?
+                {
+                    inferred.push(Quad::new(
+                        q.subject().clone(),
+                        type_pred.clone(),
+                        sc.object().clone(),
+                        q.graph_name().clone(),
+                    ));
+                }
+            }
+        }
+
+        // rdfs7: subPropertyOf application (?s ?p ?o + ?p subPropertyOf ?q => ?s ?q ?o).
+        for sp in &subprop {
+            if let (Some(p_named), Some(q_named)) =
+                (subject_to_named(sp.subject()), object_to_named(sp.object()))
+            {
+                let p_pred = Predicate::NamedNode(p_named);
+                let q_pred = Predicate::NamedNode(q_named);
+                for t in store
+                    .find_quads(None, Some(&p_pred), None, None)
+                    .map_err(map_err)?
+                {
+                    inferred.push(Quad::new(
+                        t.subject().clone(),
+                        q_pred.clone(),
+                        t.object().clone(),
+                        t.graph_name().clone(),
+                    ));
+                }
+            }
+        }
+
+        // rdfs2: rdfs:domain typing (?p domain ?c + ?s ?p ?o => ?s a ?c).
+        for d in store
+            .find_quads(None, Some(domain_pred), None, None)
+            .map_err(map_err)?
+        {
+            if let Some(p_named) = subject_to_named(d.subject()) {
+                let class_obj = d.object().clone();
+                let p_pred = Predicate::NamedNode(p_named);
+                for t in store
+                    .find_quads(None, Some(&p_pred), None, None)
+                    .map_err(map_err)?
+                {
+                    inferred.push(Quad::new(
+                        t.subject().clone(),
+                        type_pred.clone(),
+                        class_obj.clone(),
+                        t.graph_name().clone(),
+                    ));
+                }
+            }
+        }
+
+        // rdfs3: rdfs:range typing (?p range ?c + ?s ?p ?o => ?o a ?c).
+        for r in store
+            .find_quads(None, Some(range_pred), None, None)
+            .map_err(map_err)?
+        {
+            if let Some(p_named) = subject_to_named(r.subject()) {
+                let class_obj = r.object().clone();
+                let p_pred = Predicate::NamedNode(p_named);
+                for t in store
+                    .find_quads(None, Some(&p_pred), None, None)
+                    .map_err(map_err)?
+                {
+                    if let Some(obj_subj) = object_to_subject(t.object()) {
+                        inferred.push(Quad::new(
+                            obj_subj,
+                            type_pred.clone(),
+                            class_obj.clone(),
+                            t.graph_name().clone(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(inferred)
     }
 
     fn rdfs_reasoning(&self, _store: &dyn Store) -> Result<Vec<Triple>> {
@@ -236,20 +479,19 @@ impl RuleBasedValidator {
         Ok(enhanced)
     }
 
-    fn perform_validation(
-        &self,
-        _store: &dyn Store,
-        _shapes: &[Shape],
-    ) -> Result<ValidationReport> {
-        // Delegate to standard validation engine
-        // This would use the actual ValidationEngine
+    fn perform_validation(&self, store: &dyn Store, shapes: &[Shape]) -> Result<ValidationReport> {
+        use crate::{ValidationConfig, ValidationEngine};
 
-        Ok(ValidationReport {
-            conforms: true,
-            violations: Vec::new(),
-            metadata: Default::default(),
-            summary: Default::default(),
-        })
+        // Run the real SHACL validation engine against the (possibly
+        // reasoning-augmented) store instead of fabricating a conforming report.
+        let mut shape_map = indexmap::IndexMap::new();
+        for shape in shapes {
+            shape_map.insert(shape.id.clone(), shape.clone());
+        }
+
+        let config = ValidationConfig::default();
+        let mut engine = ValidationEngine::new(&shape_map, config);
+        engine.validate_store(store)
     }
 
     fn refine_shapes(&self, _report: &ValidationReport) -> Result<()> {
@@ -557,6 +799,68 @@ mod tests {
             .build();
 
         assert!(validator.config.forward_chaining);
+    }
+
+    #[test]
+    fn regression_backward_chaining_fails_loud() {
+        use oxirs_core::ConcreteStore;
+        let config = RuleEngineConfig {
+            backward_chaining: true,
+            ..Default::default()
+        };
+        let validator = RuleBasedValidator::new(config);
+        let store = ConcreteStore::new().expect("store");
+        let result = validator.validate_with_reasoning(&store, &[]);
+        assert!(
+            matches!(result, Err(ShaclError::UnsupportedOperation(_))),
+            "backward chaining must fail loud, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn regression_forward_chain_materializes_rdfs_closure() {
+        use oxirs_core::model::{GraphName, NamedNode, Object, Predicate, Quad, Subject};
+        use oxirs_core::rdf_store::QueryResults;
+        use oxirs_core::ConcreteStore;
+
+        const RDFS_SUBCLASS: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+        const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+        let store = ConcreteStore::new().expect("store");
+        // :Dog rdfs:subClassOf :Animal
+        store
+            .insert_quad(Quad::new(
+                Subject::from(NamedNode::new("http://ex/Dog").expect("iri")),
+                Predicate::from(NamedNode::new(RDFS_SUBCLASS).expect("iri")),
+                Object::from(NamedNode::new("http://ex/Animal").expect("iri")),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert");
+        // :rex a :Dog
+        store
+            .insert_quad(Quad::new(
+                Subject::from(NamedNode::new("http://ex/rex").expect("iri")),
+                Predicate::from(NamedNode::new(RDF_TYPE).expect("iri")),
+                Object::from(NamedNode::new("http://ex/Dog").expect("iri")),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert");
+
+        let validator = RuleBasedValidator::new(RuleEngineConfig::default());
+        let inferred = validator.forward_chain(&store).expect("forward chain");
+        assert!(
+            inferred > 0,
+            "RDFS closure should infer at least one triple"
+        );
+
+        // The inferred triple :rex a :Animal must now be in the store.
+        let ask = "ASK { <http://ex/rex> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> \
+                   <http://ex/Animal> }";
+        let results = store.query(ask).expect("ask");
+        assert!(
+            matches!(results.results(), QueryResults::Boolean(true)),
+            "reasoning must materialize rex a Animal via subClassOf"
+        );
     }
 
     #[test]

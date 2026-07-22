@@ -365,16 +365,29 @@ impl JsonSchemaGenerator {
                     Constraint::RangeConstraint {
                         min_value,
                         max_value,
-                        ..
+                        lower_bound_definition,
+                        upper_bound_definition,
                     } => {
                         if let Some(min) = min_value {
                             if let Ok(n) = min.parse::<f64>() {
-                                obj.insert("minimum".to_string(), json!(n));
+                                self.apply_bound(
+                                    obj,
+                                    "minimum",
+                                    "exclusiveMinimum",
+                                    n,
+                                    lower_bound_definition,
+                                );
                             }
                         }
                         if let Some(max) = max_value {
                             if let Ok(n) = max.parse::<f64>() {
-                                obj.insert("maximum".to_string(), json!(n));
+                                self.apply_bound(
+                                    obj,
+                                    "maximum",
+                                    "exclusiveMaximum",
+                                    n,
+                                    upper_bound_definition,
+                                );
                             }
                         }
                     }
@@ -409,6 +422,51 @@ impl JsonSchemaGenerator {
             }
         }
         Ok(schema)
+    }
+
+    /// Insert a numeric range bound as either an inclusive (`minimum`/
+    /// `maximum`) or exclusive (`exclusiveMinimum`/`exclusiveMaximum`) JSON
+    /// Schema keyword, honoring the SAMM `samm-c:lowerBoundDefinition` /
+    /// `samm-c:upperBoundDefinition` semantics:
+    ///
+    /// - [`BoundDefinition::AtLeast`] is a closed (inclusive) bound.
+    /// - [`BoundDefinition::Open`], [`BoundDefinition::GreaterThan`], and
+    ///   [`BoundDefinition::LessThan`] are open (exclusive) bounds.
+    ///
+    /// The wire representation of the exclusive form differs by draft:
+    /// draft 2020-12 (`use_defs_keyword = true`) represents
+    /// `exclusiveMinimum`/`exclusiveMaximum` as the numeric bound itself,
+    /// while draft-07 represents them as a boolean flag alongside a
+    /// `minimum`/`maximum` carrying the same numeric value.
+    fn apply_bound(
+        &self,
+        obj: &mut Map<String, Value>,
+        inclusive_key: &str,
+        exclusive_key: &str,
+        value: f64,
+        bound: &crate::metamodel::BoundDefinition,
+    ) {
+        use crate::metamodel::BoundDefinition;
+
+        let exclusive = matches!(
+            bound,
+            BoundDefinition::Open | BoundDefinition::GreaterThan | BoundDefinition::LessThan
+        );
+
+        if exclusive {
+            if self.options.use_defs_keyword {
+                // Draft 2020-12: exclusiveMinimum/exclusiveMaximum carry the
+                // numeric bound directly.
+                obj.insert(exclusive_key.to_string(), json!(value));
+            } else {
+                // Draft-07: minimum/maximum carry the numeric bound and
+                // exclusiveMinimum/exclusiveMaximum is a sibling boolean.
+                obj.insert(inclusive_key.to_string(), json!(value));
+                obj.insert(exclusive_key.to_string(), json!(true));
+            }
+        } else {
+            obj.insert(inclusive_key.to_string(), json!(value));
+        }
     }
 
     /// Map a SAMM / XSD data type string to a JSON Schema type keyword.
@@ -1201,5 +1259,90 @@ mod tests {
         });
         let errors = v.validate(&schema, &instance);
         assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+    }
+
+    // ─── RangeConstraint bound-definition regression tests ─────────────────
+
+    fn range_constraint_aspect(
+        lower: crate::metamodel::BoundDefinition,
+        upper: crate::metamodel::BoundDefinition,
+    ) -> Aspect {
+        use crate::metamodel::Constraint;
+
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#Reading".to_string());
+        let char = Characteristic::new(
+            "urn:samm:org.example:1.0.0#PercentageChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string())
+        .with_constraint(Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: lower,
+            upper_bound_definition: upper,
+        });
+        let prop = Property::new("urn:samm:org.example:1.0.0#percentage".to_string())
+            .with_characteristic(char);
+        aspect.add_property(prop);
+        aspect
+    }
+
+    #[test]
+    fn regression_range_constraint_at_least_emits_inclusive_minimum() {
+        use crate::metamodel::BoundDefinition;
+
+        let aspect = range_constraint_aspect(BoundDefinition::AtLeast, BoundDefinition::AtLeast);
+        let gen = JsonSchemaGenerator::new();
+        let schema = gen.generate(&aspect).expect("generation should succeed");
+        let prop_schema = &schema["properties"]["percentage"];
+
+        assert_eq!(prop_schema["minimum"], json!(0.0));
+        assert!(prop_schema.get("exclusiveMinimum").is_none());
+        assert_eq!(prop_schema["maximum"], json!(100.0));
+        assert!(prop_schema.get("exclusiveMaximum").is_none());
+    }
+
+    #[test]
+    fn regression_range_constraint_open_emits_exclusive_minimum_2020_12() {
+        use crate::metamodel::BoundDefinition;
+
+        // Draft 2020-12 (default options): exclusiveMinimum carries the
+        // numeric bound directly, and minimum must NOT also be present
+        // (which would wrongly make 0 an accepted value).
+        let aspect = range_constraint_aspect(BoundDefinition::Open, BoundDefinition::LessThan);
+        let gen = JsonSchemaGenerator::new();
+        let schema = gen.generate(&aspect).expect("generation should succeed");
+        let prop_schema = &schema["properties"]["percentage"];
+
+        assert_eq!(prop_schema["exclusiveMinimum"], json!(0.0));
+        assert!(
+            prop_schema.get("minimum").is_none(),
+            "an exclusive bound must not also be emitted as inclusive minimum"
+        );
+        assert_eq!(prop_schema["exclusiveMaximum"], json!(100.0));
+        assert!(prop_schema.get("maximum").is_none());
+    }
+
+    #[test]
+    fn regression_range_constraint_greater_than_emits_boolean_exclusive_draft07() {
+        use crate::metamodel::BoundDefinition;
+
+        // Draft-07 style: exclusiveMinimum/exclusiveMaximum are boolean
+        // flags alongside minimum/maximum carrying the numeric bound.
+        let aspect =
+            range_constraint_aspect(BoundDefinition::GreaterThan, BoundDefinition::AtLeast);
+        let gen = JsonSchemaGenerator {
+            options: JsonSchemaOptions {
+                use_defs_keyword: false,
+                ..JsonSchemaOptions::default()
+            },
+        };
+        let schema = gen.generate(&aspect).expect("generation should succeed");
+        let prop_schema = &schema["properties"]["percentage"];
+
+        assert_eq!(prop_schema["minimum"], json!(0.0));
+        assert_eq!(prop_schema["exclusiveMinimum"], json!(true));
+        assert_eq!(prop_schema["maximum"], json!(100.0));
+        assert!(prop_schema.get("exclusiveMaximum").is_none());
     }
 }

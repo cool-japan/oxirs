@@ -358,6 +358,46 @@ impl BufferPool {
         Ok(())
     }
 
+    /// Drop a page from the cache WITHOUT writing it back to disk.
+    ///
+    /// This is required before a page is returned to the file manager's free
+    /// list (see [`crate::storage::FileManager::free_page`]): `free_page` writes a
+    /// free-list node directly through the file manager, bypassing the buffer
+    /// pool. If a stale (possibly dirty) copy of that page remained cached, a
+    /// later [`Self::flush_all`] would write it back over the free-list node,
+    /// corrupting the free list. Discarding the cached frame first closes that
+    /// cache-coherence hazard.
+    ///
+    /// The caller must ensure the page is no longer pinned (no live
+    /// [`PageGuard`] to it); a pinned frame is left in place and `false` is
+    /// returned so the caller can detect the misuse. Returns `true` when the page
+    /// was resident and has been evicted (or was not cached at all).
+    pub fn discard_page(&self, page_id: PageId) -> bool {
+        // Serialize with the miss/eviction path so we never race a concurrent
+        // load that is re-assigning a frame.
+        let _load = self.load_lock.lock();
+
+        let frame_id = match self.page_table.get(&page_id).map(|e| *e) {
+            Some(fid) => fid,
+            None => return true, // not cached: nothing to do
+        };
+
+        let frame = &self.frames[frame_id];
+        if frame.is_pinned() {
+            // A live guard still references this page; refuse to discard.
+            return false;
+        }
+
+        let mut page_guard = frame.page.write();
+        // Re-check identity under the latch.
+        if page_guard.as_ref().map(|p| p.page_id()) == Some(page_id) {
+            *page_guard = None;
+            frame.access_count.store(0, Ordering::Release);
+            self.page_table.remove(&page_id);
+        }
+        true
+    }
+
     /// Unpin a page
     fn unpin_page(&self, frame_id: FrameId) {
         self.frames[frame_id].unpin();

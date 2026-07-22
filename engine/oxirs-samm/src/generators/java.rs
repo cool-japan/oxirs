@@ -140,7 +140,9 @@ fn generate_enum_class(name: &str, values: &[String], options: &JavaOptions) -> 
 
     // Enum constants
     for (i, value) in values.iter().enumerate() {
-        let member_name = to_screaming_snake_case(value);
+        // A bare Java enum constant name cannot start with a digit or
+        // contain symbol characters — see `super::ensure_valid_identifier`.
+        let member_name = super::ensure_valid_identifier(&to_screaming_snake_case(value), "VALUE_");
         let comma = if i < values.len() - 1 { "," } else { ";" };
         enum_def.push_str(&format!("    {}(\"{}\"){}\n", member_name, value, comma));
     }
@@ -616,5 +618,20 @@ mod tests {
         assert!(enum_def.contains("RED(\"red\")"));
         assert!(enum_def.contains("public String getValue()"));
         assert!(enum_def.contains("public static TrafficLight fromValue"));
+    }
+
+    #[test]
+    fn regression_enum_generation_numeric_values_produce_valid_identifiers() {
+        let values = vec!["1".to_string(), "2".to_string(), "3".to_string()];
+        let options = JavaOptions::default();
+        let enum_def = generate_enum_class("StatusCode", &values, &options);
+
+        assert!(
+            !enum_def.contains("    1(\"1\")"),
+            "a bare numeric literal is not a legal Java enum constant name: {enum_def}"
+        );
+        assert!(enum_def.contains("VALUE_1(\"1\")"), "{enum_def}");
+        assert!(enum_def.contains("VALUE_2(\"2\")"), "{enum_def}");
+        assert!(enum_def.contains("VALUE_3(\"3\")"), "{enum_def}");
     }
 }

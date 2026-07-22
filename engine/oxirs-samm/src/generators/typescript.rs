@@ -111,8 +111,11 @@ fn generate_enum_type(name: &str, values: &[String], options: &TsOptions) -> Str
     enum_def.push_str(&format!("export enum {} {{\n", name));
 
     for (i, value) in values.iter().enumerate() {
-        // Convert to PascalCase for enum member name
-        let member_name = to_pascal_case(value);
+        // Convert to PascalCase for enum member name, then guarantee the
+        // result is a syntactically valid TypeScript identifier (an enum
+        // member name cannot be a bare numeric literal or contain symbol
+        // characters — see `super::ensure_valid_identifier`).
+        let member_name = super::ensure_valid_identifier(&to_pascal_case(value), "Value");
         let comma = if i < values.len() - 1 { "," } else { "" };
         enum_def.push_str(&format!("  {} = \"{}\"{}\n", member_name, value, comma));
     }
@@ -354,6 +357,34 @@ mod tests {
         assert!(enum_def.contains("Green = \"green\""));
         assert!(enum_def.contains("Yellow = \"yellow\""));
         assert!(enum_def.contains("Red = \"red\""));
+    }
+
+    #[test]
+    fn regression_enum_generation_numeric_values_produce_valid_identifiers() {
+        let values = vec!["1".to_string(), "2".to_string(), "3".to_string()];
+        let options = TsOptions::default();
+        let enum_def = generate_enum_type("StatusCode", &values, &options);
+
+        assert!(
+            !enum_def.contains("  1 = \"1\""),
+            "a bare numeric literal is not a valid TS enum member name: {enum_def}"
+        );
+        assert!(enum_def.contains("Value1 = \"1\""), "{enum_def}");
+        assert!(enum_def.contains("Value2 = \"2\""), "{enum_def}");
+        assert!(enum_def.contains("Value3 = \"3\""), "{enum_def}");
+    }
+
+    #[test]
+    fn regression_enum_generation_symbol_values_produce_valid_identifiers() {
+        let values = vec!["A+B".to_string()];
+        let options = TsOptions::default();
+        let enum_def = generate_enum_type("Combo", &values, &options);
+
+        assert!(
+            !enum_def.contains("A+B = \"A+B\""),
+            "'+' is not valid in a bare TS identifier: {enum_def}"
+        );
+        assert!(enum_def.contains("A_B = \"A+B\""), "{enum_def}");
     }
 
     #[test]

@@ -426,7 +426,6 @@ impl ValidationReport {
 
     /// Serialize validation report to RDF format (Turtle, N-Triples, etc.)
     pub fn to_rdf(&self, format: &str) -> Result<String> {
-        // Basic implementation - in a full implementation this would convert to RDF using SHACL vocabulary
         let report_iri = "http://example.org/validation-report";
         let mut rdf_output = String::new();
 
@@ -454,16 +453,36 @@ impl ValidationReport {
                             violation.source_shape
                         ));
                         rdf_output.push_str(&format!(
-                            "        sh:resultSeverity sh:{}\n",
+                            "        sh:sourceConstraintComponent sh:{} ;\n",
+                            violation.source_constraint_component
+                        ));
+                        rdf_output.push_str(&format!(
+                            "        sh:resultSeverity sh:{} ;\n",
                             violation.result_severity
                         ));
+                        if let Some(path) = &violation.result_path {
+                            rdf_output.push_str(&format!(
+                                "        sh:resultPath {} ;\n",
+                                super::serializers::format_shacl_path_turtle(path)
+                            ));
+                        }
+                        if let Some(value) = &violation.value {
+                            rdf_output.push_str(&format!(
+                                "        sh:value {} ;\n",
+                                super::serializers::format_term_turtle(value)
+                            ));
+                        }
                         if let Some(message) = &violation.result_message {
                             rdf_output.push_str(&format!(
                                 "        sh:resultMessage \"{}\" ;\n",
-                                message.replace("\"", "\\\"")
+                                message.replace('\\', "\\\\").replace('"', "\\\"")
                             ));
                         }
-                        rdf_output.push_str("    ]");
+                        // Close with a syntactically valid predicate-object list:
+                        // `a sh:ValidationResult` re-stated with no trailing `;`
+                        // keeps this robust regardless of which optional fields
+                        // were emitted above (all of which end in ` ;`).
+                        rdf_output.push_str("        a sh:ValidationResult\n    ]");
                     }
                     rdf_output.push_str(" .\n");
                 } else {
@@ -471,8 +490,84 @@ impl ValidationReport {
                 }
             }
             "nt" | "ntriples" => {
-                rdf_output.push_str(&format!("<{report_iri}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationReport> .\n"));
-                rdf_output.push_str(&format!("<{}> <http://www.w3.org/ns/shacl#conforms> \"{}\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n", report_iri, self.conforms));
+                let sh = |local: &str| format!("<http://www.w3.org/ns/shacl#{local}>");
+                let rdf =
+                    |local: &str| format!("<http://www.w3.org/1999/02/22-rdf-syntax-ns#{local}>");
+
+                rdf_output.push_str(&format!(
+                    "<{report_iri}> {} {} .\n",
+                    rdf("type"),
+                    sh("ValidationReport")
+                ));
+                rdf_output.push_str(&format!(
+                    "<{report_iri}> {} \"{}\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
+                    sh("conforms"),
+                    self.conforms
+                ));
+
+                let mut bnode_counter = 0usize;
+                for violation in &self.violations {
+                    bnode_counter += 1;
+                    let result_node = format!("_:result{bnode_counter}");
+
+                    rdf_output.push_str(&format!(
+                        "<{report_iri}> {} {result_node} .\n",
+                        sh("result")
+                    ));
+                    rdf_output.push_str(&format!(
+                        "{result_node} {} {} .\n",
+                        rdf("type"),
+                        sh("ValidationResult")
+                    ));
+                    rdf_output.push_str(&format!(
+                        "{result_node} {} {} .\n",
+                        sh("focusNode"),
+                        super::serializers::format_term_turtle(&violation.focus_node)
+                    ));
+                    rdf_output.push_str(&format!(
+                        "{result_node} {} <{}> .\n",
+                        sh("sourceShape"),
+                        violation.source_shape
+                    ));
+                    let component_id: &str = &violation.source_constraint_component.0;
+                    let component_local = component_id.strip_prefix("sh:").unwrap_or(component_id);
+                    rdf_output.push_str(&format!(
+                        "{result_node} {} {} .\n",
+                        sh("sourceConstraintComponent"),
+                        sh(component_local)
+                    ));
+                    rdf_output.push_str(&format!(
+                        "{result_node} {} {} .\n",
+                        sh("resultSeverity"),
+                        sh(&violation.result_severity.to_string())
+                    ));
+                    if let Some(path) = &violation.result_path {
+                        let path_term =
+                            emit_path_ntriples(path, &mut rdf_output, &mut bnode_counter);
+                        rdf_output.push_str(&format!(
+                            "{result_node} {} {path_term} .\n",
+                            sh("resultPath")
+                        ));
+                    }
+                    if let Some(value) = &violation.value {
+                        rdf_output.push_str(&format!(
+                            "{result_node} {} {} .\n",
+                            sh("value"),
+                            super::serializers::format_term_turtle(value)
+                        ));
+                    }
+                    if let Some(message) = &violation.result_message {
+                        let escaped = message
+                            .replace('\\', "\\\\")
+                            .replace('"', "\\\"")
+                            .replace('\n', "\\n")
+                            .replace('\r', "\\r");
+                        rdf_output.push_str(&format!(
+                            "{result_node} {} \"{escaped}\" .\n",
+                            sh("resultMessage")
+                        ));
+                    }
+                }
             }
             _ => {
                 return Err(crate::ShaclError::ValidationEngine(format!(
@@ -483,6 +578,100 @@ impl ValidationReport {
 
         Ok(rdf_output)
     }
+}
+
+/// Emit an N-Triples representation of a SHACL property path, writing any
+/// blank-node describing triples (e.g. `sh:inversePath`, `rdf:first`/`rdf:rest`
+/// list cells for sequence paths) into `out`, and returning the N-Triples term
+/// (`<iri>` for a simple predicate path, or `_:pathN` for anything complex)
+/// that callers should use as the object of `sh:resultPath`.
+fn emit_path_ntriples(
+    path: &crate::PropertyPath,
+    out: &mut String,
+    bnode_counter: &mut usize,
+) -> String {
+    use crate::PropertyPath;
+
+    let sh = |local: &str| format!("<http://www.w3.org/ns/shacl#{local}>");
+    let rdf = |local: &str| format!("<http://www.w3.org/1999/02/22-rdf-syntax-ns#{local}>");
+    let fresh_bnode = |counter: &mut usize| {
+        *counter += 1;
+        format!("_:path{counter}")
+    };
+
+    match path {
+        PropertyPath::Predicate(iri) => format!("<{}>", iri.as_str()),
+        PropertyPath::Inverse(inner) => {
+            let inner_term = emit_path_ntriples(inner, out, bnode_counter);
+            let node = fresh_bnode(bnode_counter);
+            out.push_str(&format!("{node} {} {inner_term} .\n", sh("inversePath")));
+            node
+        }
+        PropertyPath::ZeroOrMore(inner) => {
+            let inner_term = emit_path_ntriples(inner, out, bnode_counter);
+            let node = fresh_bnode(bnode_counter);
+            out.push_str(&format!("{node} {} {inner_term} .\n", sh("zeroOrMorePath")));
+            node
+        }
+        PropertyPath::OneOrMore(inner) => {
+            let inner_term = emit_path_ntriples(inner, out, bnode_counter);
+            let node = fresh_bnode(bnode_counter);
+            out.push_str(&format!("{node} {} {inner_term} .\n", sh("oneOrMorePath")));
+            node
+        }
+        PropertyPath::ZeroOrOne(inner) => {
+            let inner_term = emit_path_ntriples(inner, out, bnode_counter);
+            let node = fresh_bnode(bnode_counter);
+            out.push_str(&format!("{node} {} {inner_term} .\n", sh("zeroOrOnePath")));
+            node
+        }
+        PropertyPath::Sequence(paths) => emit_list_ntriples(paths, out, bnode_counter, &rdf),
+        PropertyPath::Alternative(paths) => {
+            let list_head = emit_list_ntriples(paths, out, bnode_counter, &rdf);
+            let node = fresh_bnode(bnode_counter);
+            out.push_str(&format!("{node} {} {list_head} .\n", sh("alternativePath")));
+            node
+        }
+    }
+}
+
+/// Emit an RDF list (`rdf:first`/`rdf:rest`/`rdf:nil`) of property-path terms
+/// and return the N-Triples term for the list head.
+fn emit_list_ntriples(
+    paths: &[crate::PropertyPath],
+    out: &mut String,
+    bnode_counter: &mut usize,
+    rdf: &dyn Fn(&str) -> String,
+) -> String {
+    if paths.is_empty() {
+        return rdf("nil");
+    }
+
+    let cell_nodes: Vec<String> = paths
+        .iter()
+        .map(|_| {
+            *bnode_counter += 1;
+            format!("_:path{bnode_counter}")
+        })
+        .collect();
+
+    for (i, path) in paths.iter().enumerate() {
+        let item_term = emit_path_ntriples(path, out, bnode_counter);
+        let rest = if i + 1 < cell_nodes.len() {
+            cell_nodes[i + 1].clone()
+        } else {
+            rdf("nil")
+        };
+        out.push_str(&format!(
+            "{} {} {} .\n",
+            cell_nodes[i],
+            rdf("first"),
+            item_term
+        ));
+        out.push_str(&format!("{} {} {} .\n", cell_nodes[i], rdf("rest"), rest));
+    }
+
+    cell_nodes[0].clone()
 }
 
 impl Default for ValidationReport {

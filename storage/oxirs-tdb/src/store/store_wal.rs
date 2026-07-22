@@ -23,12 +23,18 @@
 //!    redo sidesteps this entirely: replaying the logical operation on top of
 //!    the reconstructed catalog rebuilds the in-memory indexes directly, so no
 //!    per-page catalog surgery is needed during recovery.
-//! 3. **Bounded WAL size and memory.** [`WriteAheadLog`] retains every appended
+//! 3. **Small per-record WAL size.** [`WriteAheadLog`] retains every appended
 //!    entry in an in-memory buffer, and [`crate::storage::FileManager`] fsyncs
 //!    on every page write. Full-page-image-per-commit logging of the existing
 //!    10k-triple round-trip workloads would produce ~gigabyte WALs and an
 //!    equally large in-memory buffer. Operation-level redo keeps each record at
-//!    ~100 bytes, so the WAL stays small and the suite stays fast.
+//!    ~100 bytes, so the WAL stays small and the suite stays fast. This bounds
+//!    per-record *size*, not the *count* of records between checkpoints: the
+//!    total WAL size (and in-memory buffer) is bounded by periodic
+//!    [`sync`](crate::store::TdbStore::sync) — explicit, or the automatic
+//!    checkpoint triggered every
+//!    [`TdbConfig::wal_checkpoint_op_threshold`](crate::store::TdbConfig) single
+//!    writes (see [`TdbStore::wal_log_op`]).
 //!
 //! Recovery is **redo-only** and transaction-atomic: each store operation is a
 //! complete, independently-committed transaction, so there is never a partial
@@ -138,6 +144,23 @@ impl TdbStore {
         wal.append(LogRecord::Commit { txn_id })?;
         if self.config.wal_sync_on_commit {
             wal.flush()?;
+        }
+
+        // Auto-checkpoint to bound WAL growth. Without this, a long-running
+        // process doing many single writes (which never checkpoint on their own)
+        // would grow both the WAL file and its in-memory log buffer without
+        // bound. When the number of single ops logged since the last checkpoint
+        // crosses the configured threshold, take a checkpoint (which fsyncs,
+        // writes the superblock, and truncates the WAL) and reset the counter.
+        let threshold = self.config.wal_checkpoint_op_threshold;
+        if threshold != 0 {
+            let n = self
+                .wal_ops_since_checkpoint
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                + 1;
+            if n >= threshold {
+                self.sync()?;
+            }
         }
         Ok(())
     }

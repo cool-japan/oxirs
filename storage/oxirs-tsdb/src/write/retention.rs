@@ -137,14 +137,14 @@ impl RetentionEnforcer {
         let mut bytes_freed = 0;
 
         for chunk_entry in chunks {
-            // Find applicable policy
+            // Find the most senior retention tier this chunk's age has
+            // actually exceeded (if any).
             let age = now - chunk_entry.end_time;
-            let age_secs = age.num_seconds() as u64;
             let policy = self.find_policy_for_age(age);
 
             match policy {
-                Some(policy) if age_secs > policy.duration.as_secs() => {
-                    // Data is older than retention period
+                Some(policy) => {
+                    // Data is older than this tier's retention period.
                     if let Some(downsampling) = &policy.downsampling {
                         // Downsample the chunk
                         let (success, saved) = self
@@ -161,11 +161,10 @@ impl RetentionEnforcer {
                         bytes_freed += freed;
                     }
                 }
-                Some(_) => {
-                    // Data is within retention period, keep it
-                }
                 None => {
-                    // No policy, keep data
+                    // No policy exceeded yet (or no policies configured at
+                    // all): the chunk is still within every configured
+                    // retention window, so keep it untouched.
                 }
             }
         }
@@ -173,13 +172,23 @@ impl RetentionEnforcer {
         Ok((deleted_count, downsampled_count, bytes_freed))
     }
 
-    /// Find the most specific policy for a given age
+    /// Find the retention tier whose duration this age has *exceeded*.
+    ///
+    /// Retention policies form a set of tiers keyed by how long data may
+    /// live before that tier's action (downsample or delete) applies. A
+    /// chunk that has outlived more than one tier's duration should be
+    /// enforced under the most senior (largest-duration) tier it has
+    /// exceeded — e.g. data that has outlived both a 7-day and a 30-day
+    /// tier is handled by the 30-day tier's action, not re-processed under
+    /// the 7-day tier. Returns `None` only when the age has not yet
+    /// exceeded any configured policy (including when no policies are
+    /// configured at all), in which case the data must be kept untouched.
     fn find_policy_for_age(&self, age: ChronoDuration) -> Option<&RetentionPolicy> {
-        let age_secs = age.num_seconds() as u64;
+        let age_secs = age.num_seconds().max(0) as u64;
         self.policies
             .iter()
-            .filter(|p| age_secs <= p.duration.as_secs())
-            .min_by_key(|p| p.duration.as_secs())
+            .filter(|p| age_secs > p.duration.as_secs())
+            .max_by_key(|p| p.duration.as_secs())
     }
 
     /// Downsample a chunk according to downsampling config
@@ -343,7 +352,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_find_policy_for_age() {
+    async fn regression_find_policy_for_age_selects_exceeded_tier() {
+        // find_policy_for_age must return the tier whose duration the age
+        // has *exceeded*, not one it still fits within (the original bug:
+        // filtering `age <= duration` made the enforcement guard
+        // unreachable). With two tiers (7 days, 30 days):
+        //   - age younger than every tier -> None (nothing exceeded yet)
+        //   - age between 7 and 30 days -> the 7-day tier is exceeded
+        //   - age older than both -> the most senior (30-day) exceeded
+        //     tier applies, not None.
         let policies = vec![
             RetentionPolicy {
                 name: "7days".to_string(),
@@ -361,17 +378,29 @@ mod tests {
 
         let age_5days = ChronoDuration::days(5);
         let policy = enforcer.find_policy_for_age(age_5days);
-        assert!(policy.is_some());
-        assert_eq!(policy.expect("operation should succeed").name, "7days");
+        assert!(
+            policy.is_none(),
+            "5-day-old data has not exceeded any tier yet"
+        );
 
         let age_20days = ChronoDuration::days(20);
         let policy = enforcer.find_policy_for_age(age_20days);
         assert!(policy.is_some());
-        assert_eq!(policy.expect("operation should succeed").name, "30days");
+        assert_eq!(
+            policy.expect("operation should succeed").name,
+            "7days",
+            "20-day-old data has exceeded only the 7-day tier"
+        );
 
         let age_40days = ChronoDuration::days(40);
         let policy = enforcer.find_policy_for_age(age_40days);
-        assert!(policy.is_none());
+        assert!(policy.is_some());
+        assert_eq!(
+            policy.expect("operation should succeed").name,
+            "30days",
+            "data exceeding every configured tier must be enforced under \
+             the most senior tier, never kept forever"
+        );
     }
 
     #[tokio::test]
@@ -439,6 +468,88 @@ mod tests {
         assert_eq!(stats.runs, 0);
         assert_eq!(stats.chunks_deleted, 0);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn regression_enforce_once_deletes_expired_chunk() -> TsdbResult<()> {
+        // End-to-end: write a chunk whose data is far older than the
+        // configured retention duration, run a real enforcement cycle
+        // against a real ColumnarStore, and confirm the chunk is actually
+        // deleted and stats reflect it. Prior to the fix, enforce_series's
+        // guard was unreachable and this chunk would never be removed.
+        let temp_dir = env::temp_dir().join("tsdb_retention_enforce_e2e_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let mut store = ColumnarStore::new(&temp_dir, ChronoDuration::hours(2), 100)?;
+        store.set_fsync(false);
+
+        // Chunk data is from 1970 (effectively infinitely old).
+        let chunk = create_test_chunk(200, 10_000, 50)?;
+        store.write_chunk(&chunk)?;
+        assert_eq!(store.index().chunk_count()?, 1);
+
+        // A single short retention tier with no downsampling -> delete.
+        let policy = RetentionPolicy {
+            name: "1hour".to_string(),
+            duration: std::time::Duration::from_secs(3600),
+            downsampling: None,
+        };
+        let enforcer = RetentionEnforcer::new(vec![policy]);
+
+        enforcer.enforce_once(&store).await?;
+
+        let stats = enforcer.stats()?;
+        assert_eq!(stats.runs, 1);
+        assert!(
+            stats.chunks_deleted > 0,
+            "expected at least one chunk to be deleted, got stats: {stats:?}"
+        );
+        assert!(stats.bytes_freed > 0);
+        assert_eq!(
+            store.index().chunk_count()?,
+            0,
+            "expired chunk must actually be removed from the index"
+        );
+
+        std::fs::remove_dir_all(&temp_dir)?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn regression_enforce_once_keeps_fresh_chunk() -> TsdbResult<()> {
+        // A chunk whose age is within every configured tier must survive
+        // an enforcement cycle untouched.
+        let temp_dir = env::temp_dir().join("tsdb_retention_enforce_keep_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let mut store = ColumnarStore::new(&temp_dir, ChronoDuration::hours(2), 100)?;
+        store.set_fsync(false);
+
+        let now_ts = Utc::now().timestamp();
+        let chunk = create_test_chunk(201, now_ts, 5)?;
+        store.write_chunk(&chunk)?;
+        assert_eq!(store.index().chunk_count()?, 1);
+
+        let policy = RetentionPolicy {
+            name: "30days".to_string(),
+            duration: std::time::Duration::from_secs(30 * 24 * 3600),
+            downsampling: None,
+        };
+        let enforcer = RetentionEnforcer::new(vec![policy]);
+
+        enforcer.enforce_once(&store).await?;
+
+        let stats = enforcer.stats()?;
+        assert_eq!(stats.chunks_deleted, 0);
+        assert_eq!(stats.chunks_downsampled, 0);
+        assert_eq!(
+            store.index().chunk_count()?,
+            1,
+            "fresh chunk within retention window must be kept"
+        );
+
+        std::fs::remove_dir_all(&temp_dir)?;
         Ok(())
     }
 

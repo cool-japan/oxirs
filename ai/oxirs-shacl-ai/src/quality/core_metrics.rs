@@ -3,7 +3,6 @@
 //! Quality metric computation, dimension scoring, and aggregation for the
 //! `QualityAssessor`.
 
-use scirs2_core::random::{Random, RngExt};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -35,6 +34,46 @@ pub struct QualityAssessor {
 
     /// Statistics
     pub(crate) stats: QualityStatistics,
+
+    /// Model learned by [`QualityAssessor::train_model`], if any.
+    ///
+    /// This is a genuine (small) linear regressor fit to the training examples,
+    /// not a placeholder — see [`TrainedQualityModel`].
+    pub(crate) quality_model: Option<TrainedQualityModel>,
+}
+
+/// A trained linear quality-prediction model.
+///
+/// Predicts a quality score from a graph feature vector using standardized
+/// ridge regression fit by gradient descent over the training examples. This is
+/// a real learned model: its weights are a deterministic function of the
+/// training data (given the fixed initialization), so its reported accuracy
+/// reflects how well the features actually explain the target scores.
+#[derive(Debug, Clone)]
+pub(crate) struct TrainedQualityModel {
+    /// Per-feature means used to standardize inputs.
+    feature_means: Vec<f64>,
+    /// Per-feature standard deviations used to standardize inputs (never zero).
+    feature_stds: Vec<f64>,
+    /// Regression weights over the standardized features.
+    weights: Vec<f64>,
+    /// Regression bias term (equals the mean target when there are no features).
+    bias: f64,
+}
+
+impl TrainedQualityModel {
+    /// Predict a quality score for a raw (un-standardized) feature vector,
+    /// clamped to the valid `[0, 1]` quality range.
+    pub(crate) fn predict(&self, features: &[f64]) -> f64 {
+        let mut acc = self.bias;
+        for (idx, &weight) in self.weights.iter().enumerate() {
+            let raw = features.get(idx).copied().unwrap_or(0.0);
+            let std = self.feature_stds[idx];
+            let standardized = (raw - self.feature_means[idx]) / std;
+            acc += weight * standardized;
+        }
+        acc.clamp(0.0, 1.0)
+    }
 }
 
 impl QualityAssessor {
@@ -49,6 +88,7 @@ impl QualityAssessor {
             config,
             assessment_cache: HashMap::new(),
             stats: QualityStatistics::default(),
+            quality_model: None,
         }
     }
 
@@ -62,49 +102,183 @@ impl QualityAssessor {
         &self.stats
     }
 
-    /// Train the quality assessment model
+    /// Train the quality assessment model.
+    ///
+    /// Fits a standardized ridge-regression model mapping each example's
+    /// `graph_features` to its `quality_score` via gradient descent, stores it
+    /// on the assessor, and reports the mean-absolute-error-based accuracy and
+    /// mean-squared-error loss of the fitted model **on the training data**.
+    ///
+    /// Unlike the previous placeholder, the reported metrics are a genuine
+    /// function of the training examples: a feature set that does not explain
+    /// the target scores yields a correspondingly lower accuracy. An empty
+    /// training set fails loudly with [`ShaclAiError::ModelTraining`].
     pub fn train_model(
         &mut self,
         training_data: &QualityTrainingData,
     ) -> Result<crate::ModelTrainingResult> {
         tracing::info!("Training quality assessment model");
 
-        let start_time = std::time::Instant::now();
-        let success = true;
-        let epochs_trained = training_data.quality_examples.len().min(100);
-
-        // Simulate training process
-        let mut total_accuracy = 0.0;
-        for example in &training_data.quality_examples {
-            // Simulate learning from quality example
-            let predicted_score = self.simulate_quality_prediction(&example.graph_features);
-            let actual_score = example.quality_score;
-            let accuracy = 1.0 - (predicted_score - actual_score).abs();
-            total_accuracy += accuracy;
+        let examples = &training_data.quality_examples;
+        if examples.is_empty() {
+            return Err(ShaclAiError::ModelTraining(
+                "cannot train quality model: no training examples provided".to_string(),
+            ));
         }
 
-        let accuracy = total_accuracy / training_data.quality_examples.len() as f64;
-        let loss = 1.0 - accuracy;
-        let training_time = start_time.elapsed();
+        let start_time = std::time::Instant::now();
 
-        tracing::info!("Quality model training completed: accuracy={:.3}", accuracy);
+        // Number of epochs is bounded so training is deterministic and quick.
+        let epochs_trained = examples.len().min(100).max(1);
+        let (model, epochs_run) = Self::fit_quality_model(examples, 500);
+
+        // Evaluate the fitted model on the training data.
+        let mut total_abs_error = 0.0;
+        let mut total_squared_error = 0.0;
+        for example in examples {
+            let predicted = model.predict(&example.graph_features);
+            let actual = example.quality_score;
+            let error = predicted - actual;
+            total_abs_error += error.abs();
+            total_squared_error += error * error;
+        }
+        let n = examples.len() as f64;
+        let mean_abs_error = total_abs_error / n;
+        let accuracy = (1.0 - mean_abs_error).clamp(0.0, 1.0);
+        let loss = total_squared_error / n;
+
+        tracing::info!(
+            "Quality model training completed: accuracy={:.3}, loss={:.4}",
+            accuracy,
+            loss
+        );
+
+        self.quality_model = Some(model);
 
         Ok(crate::ModelTrainingResult {
-            success,
+            success: true,
             accuracy,
             loss,
-            epochs_trained,
-            training_time,
+            epochs_trained: epochs_run.min(epochs_trained).max(1),
+            training_time: start_time.elapsed(),
         })
     }
 
-    /// Simulate quality prediction for training
-    fn simulate_quality_prediction(&self, _features: &[f64]) -> f64 {
-        // Simple simulation - return a reasonable quality score
-        0.7 + (({
-            let mut random = Random::default();
-            random.random::<f64>()
-        }) * 0.3)
+    /// Fit a standardized linear regressor to the training examples.
+    ///
+    /// Returns the fitted model and the number of gradient-descent epochs
+    /// actually run. Features are standardized per-column for numerical
+    /// stability; L2 regularization keeps weights bounded when features are
+    /// collinear or the sample is tiny.
+    fn fit_quality_model(
+        examples: &[super::core_types::QualityExample],
+        max_epochs: usize,
+    ) -> (TrainedQualityModel, usize) {
+        let n = examples.len();
+        let n_features = examples
+            .iter()
+            .map(|e| e.graph_features.len())
+            .max()
+            .unwrap_or(0);
+
+        let target_mean = examples.iter().map(|e| e.quality_score).sum::<f64>() / n as f64;
+
+        // No features: the best constant predictor is the mean target.
+        if n_features == 0 {
+            return (
+                TrainedQualityModel {
+                    feature_means: Vec::new(),
+                    feature_stds: Vec::new(),
+                    weights: Vec::new(),
+                    bias: target_mean.clamp(0.0, 1.0),
+                },
+                0,
+            );
+        }
+
+        // Compute per-feature mean and standard deviation (padding missing
+        // features with 0.0), guarding against zero variance.
+        let mut means = vec![0.0; n_features];
+        for example in examples {
+            for (j, mean) in means.iter_mut().enumerate() {
+                *mean += example.graph_features.get(j).copied().unwrap_or(0.0);
+            }
+        }
+        for mean in means.iter_mut() {
+            *mean /= n as f64;
+        }
+        let mut stds = vec![0.0; n_features];
+        for example in examples {
+            for (j, std) in stds.iter_mut().enumerate() {
+                let v = example.graph_features.get(j).copied().unwrap_or(0.0) - means[j];
+                *std += v * v;
+            }
+        }
+        for std in stds.iter_mut() {
+            *std = (*std / n as f64).sqrt();
+            if *std < 1e-9 {
+                *std = 1.0; // avoid divide-by-zero for constant features
+            }
+        }
+
+        // Pre-standardize the design matrix.
+        let standardized: Vec<Vec<f64>> = examples
+            .iter()
+            .map(|e| {
+                (0..n_features)
+                    .map(|j| (e.graph_features.get(j).copied().unwrap_or(0.0) - means[j]) / stds[j])
+                    .collect()
+            })
+            .collect();
+
+        // Gradient descent with L2 regularization.
+        let learning_rate = 0.1;
+        let l2 = 1e-3;
+        let mut weights = vec![0.0; n_features];
+        let mut bias = target_mean;
+        let mut epochs_run = 0;
+        let mut prev_loss = f64::INFINITY;
+
+        for _ in 0..max_epochs {
+            epochs_run += 1;
+            let mut grad_w = vec![0.0; n_features];
+            let mut grad_b = 0.0;
+            let mut sq_error = 0.0;
+            for (row, example) in standardized.iter().zip(examples.iter()) {
+                let mut pred = bias;
+                for (w, x) in weights.iter().zip(row.iter()) {
+                    pred += w * x;
+                }
+                let error = pred - example.quality_score;
+                sq_error += error * error;
+                for (g, x) in grad_w.iter_mut().zip(row.iter()) {
+                    *g += error * x;
+                }
+                grad_b += error;
+            }
+            let scale = 1.0 / n as f64;
+            for (w, g) in weights.iter_mut().zip(grad_w.iter()) {
+                *w -= learning_rate * (scale * g + l2 * *w);
+            }
+            bias -= learning_rate * scale * grad_b;
+
+            let loss = sq_error * scale;
+            // Early stop on convergence.
+            if (prev_loss - loss).abs() < 1e-9 {
+                break;
+            }
+            prev_loss = loss;
+        }
+
+        (
+            TrainedQualityModel {
+                feature_means: means,
+                feature_stds: stds,
+                weights,
+                bias,
+            },
+            epochs_run,
+        )
     }
 
     /// Assess comprehensive data quality
@@ -1188,5 +1362,96 @@ impl crate::multimodal_validation::traits::QualityAssessor for QualityAssessor {
 
     fn set_thresholds(&self, _thresholds: crate::multimodal_validation::traits::QualityThresholds) {
         // Implementation placeholder
+    }
+}
+
+#[cfg(test)]
+mod regression_tests {
+    use super::*;
+    use crate::quality::core_types::{
+        QualityExample, QualityScores, QualityTrainingData, QualityTrainingMetadata,
+    };
+
+    fn scores() -> QualityScores {
+        QualityScores {
+            completeness: 0.0,
+            consistency: 0.0,
+            accuracy: 0.0,
+            conformance: 0.0,
+            overall: 0.0,
+        }
+    }
+
+    fn training(examples: Vec<QualityExample>) -> QualityTrainingData {
+        QualityTrainingData {
+            metadata: QualityTrainingMetadata {
+                dataset_name: "regression".to_string(),
+                collection_date: chrono::Utc::now(),
+                total_examples: examples.len(),
+            },
+            quality_examples: examples,
+        }
+    }
+
+    /// Regression: training with no examples must fail loudly rather than
+    /// dividing by zero and returning a NaN "success".
+    #[test]
+    fn regression_train_model_empty_errors() {
+        let mut assessor = QualityAssessor::new();
+        let result = assessor.train_model(&training(vec![]));
+        assert!(result.is_err(), "empty training set must error");
+    }
+
+    /// Regression: `train_model` must fit a real model to the training data.
+    /// A perfectly linear target (quality = f(feature)) must yield high accuracy
+    /// — the old placeholder returned random noise uncorrelated with the data.
+    #[test]
+    fn regression_train_model_learns_linear_relationship() {
+        let mut examples = Vec::new();
+        for i in 0..40 {
+            let x = i as f64 / 39.0; // 0..1
+            examples.push(QualityExample {
+                graph_features: vec![x, 1.0 - x],
+                quality_metrics: scores(),
+                quality_score: x, // quality == first feature
+            });
+        }
+        let mut assessor = QualityAssessor::new();
+        let result = assessor
+            .train_model(&training(examples))
+            .expect("training should succeed");
+        assert!(
+            result.accuracy > 0.9,
+            "linear data should train to high accuracy, got {}",
+            result.accuracy
+        );
+        assert!(assessor.quality_model.is_some(), "model must be stored");
+    }
+
+    /// Regression: predictions must depend on the input features, not be a
+    /// random constant. Two distinct feature vectors from a monotonic model
+    /// must yield different predictions.
+    #[test]
+    fn regression_trained_model_predictions_depend_on_features() {
+        let mut examples = Vec::new();
+        for i in 0..40 {
+            let x = i as f64 / 39.0;
+            examples.push(QualityExample {
+                graph_features: vec![x],
+                quality_metrics: scores(),
+                quality_score: x,
+            });
+        }
+        let mut assessor = QualityAssessor::new();
+        assessor
+            .train_model(&training(examples))
+            .expect("training should succeed");
+        let model = assessor.quality_model.expect("model present");
+        let low = model.predict(&[0.0]);
+        let high = model.predict(&[1.0]);
+        assert!(
+            (high - low).abs() > 0.3,
+            "predictions must vary with features: low={low}, high={high}"
+        );
     }
 }
