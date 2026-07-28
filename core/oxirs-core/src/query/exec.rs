@@ -70,6 +70,23 @@ impl Solution {
     pub fn variables(&self) -> impl Iterator<Item = &Variable> {
         self.bindings.keys()
     }
+
+    /// Build a deterministic, order-independent key for this solution.
+    ///
+    /// The bindings live in a `HashMap` whose iteration order is not stable
+    /// between instances, so any key derived from raw iteration order (such as
+    /// the `Debug` string) is unreliable for equality/deduplication. Sorting the
+    /// `(variable, term)` pairs by their canonical string form yields a key that
+    /// is identical for any two solutions with identical bindings.
+    pub fn canonical_key(&self) -> Vec<(String, String)> {
+        let mut pairs: Vec<(String, String)> = self
+            .bindings
+            .iter()
+            .map(|(var, term)| (var.name().to_string(), term.to_string()))
+            .collect();
+        pairs.sort();
+        pairs
+    }
 }
 
 /// Query results
@@ -126,10 +143,19 @@ impl<'a> QueryExecutor<'a> {
     ) -> Result<Vec<Solution>, OxirsError> {
         let mut solutions = Vec::new();
 
-        // Get all triples from the store
-        let triples = self.store.triples()?;
+        // SPARQL default-graph semantics: a BGP outside a GRAPH clause must
+        // match ONLY the active (default) graph, never the union of the default
+        // graph and every named graph. Scanning `store.triples()` (which unions
+        // all graphs) would incorrectly surface triples that live exclusively in
+        // named graphs. Restrict the scan to the default graph.
+        let quads = self.store.default_graph_quads()?;
 
-        for triple in triples {
+        for quad in quads {
+            let triple = Triple::new(
+                quad.subject().clone(),
+                quad.predicate().clone(),
+                quad.object().clone(),
+            );
             if let Some(solution) = self.match_triple_pattern(&triple, pattern) {
                 solutions.push(solution);
             }
@@ -364,10 +390,63 @@ impl<'a> QueryExecutor<'a> {
     fn execute_sort(
         &self,
         input: &ExecutionPlan,
-        _order_by: &[OrderExpression],
+        order_by: &[OrderExpression],
     ) -> Result<Vec<Solution>, OxirsError> {
-        // Placeholder - would implement proper sorting
-        self.execute_plan(input)
+        let mut solutions = self.execute_plan(input)?;
+
+        // Stable sort so that equal keys preserve their relative input order.
+        solutions.sort_by(|a, b| {
+            for order in order_by {
+                let (expr, descending) = match order {
+                    OrderExpression::Asc(e) => (e, false),
+                    OrderExpression::Desc(e) => (e, true),
+                };
+                let ta = self.evaluate_expression_to_term(expr, a);
+                let tb = self.evaluate_expression_to_term(expr, b);
+                let mut ord = Self::order_compare(ta.as_ref(), tb.as_ref());
+                if descending {
+                    ord = ord.reverse();
+                }
+                if ord != std::cmp::Ordering::Equal {
+                    return ord;
+                }
+            }
+            std::cmp::Ordering::Equal
+        });
+
+        Ok(solutions)
+    }
+
+    /// Total ordering used by `ORDER BY`, following the SPARQL term ordering:
+    /// unbound values sort first, then blank nodes, IRIs, and literals; within a
+    /// kind, values are compared by their typed value (falling back to lexical
+    /// order for otherwise-incomparable literals so the sort stays total and
+    /// deterministic).
+    fn order_compare(a: Option<&Term>, b: Option<&Term>) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        match (a, b) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some(a), Some(b)) => {
+                if let Some(ord) = Self::compare_terms(a, b) {
+                    return ord;
+                }
+                Self::term_kind_rank(a)
+                    .cmp(&Self::term_kind_rank(b))
+                    .then_with(|| a.to_string().cmp(&b.to_string()))
+            }
+        }
+    }
+
+    /// Rank of an RDF term kind for the total ORDER BY ordering.
+    fn term_kind_rank(term: &Term) -> u8 {
+        match term {
+            Term::BlankNode(_) => 0,
+            Term::NamedNode(_) => 1,
+            Term::Literal(_) => 2,
+            _ => 3,
+        }
     }
 
     fn execute_limit(
@@ -397,7 +476,13 @@ impl<'a> QueryExecutor<'a> {
         let mut distinct_solutions = Vec::new();
 
         for solution in solutions {
-            if seen.insert(format!("{solution:?}")) {
+            // Build a canonical, order-independent key. `Solution` wraps a
+            // `HashMap`, whose `Debug` iteration order varies per instance (the
+            // hasher is seeded per map), so hashing `format!("{solution:?}")`
+            // could give two identical binding sets different keys and fail to
+            // deduplicate them. Sorting the (variable, term) pairs makes the key
+            // deterministic.
+            if seen.insert(solution.canonical_key()) {
                 distinct_solutions.push(solution);
             }
         }
@@ -470,18 +555,18 @@ impl<'a> QueryExecutor<'a> {
                 let right_term = self.evaluate_expression_to_term(right, solution)?;
                 Some(left_term != right_term)
             }
-            Expression::Less(left, right) => {
-                self.evaluate_numeric_comparison(left, right, solution, |a, b| a < b)
-            }
-            Expression::LessOrEqual(left, right) => {
-                self.evaluate_numeric_comparison(left, right, solution, |a, b| a <= b)
-            }
-            Expression::Greater(left, right) => {
-                self.evaluate_numeric_comparison(left, right, solution, |a, b| a > b)
-            }
-            Expression::GreaterOrEqual(left, right) => {
-                self.evaluate_numeric_comparison(left, right, solution, |a, b| a >= b)
-            }
+            Expression::Less(left, right) => self
+                .compare_terms_expr(left, right, solution)
+                .map(|ord| ord == std::cmp::Ordering::Less),
+            Expression::LessOrEqual(left, right) => self
+                .compare_terms_expr(left, right, solution)
+                .map(|ord| ord != std::cmp::Ordering::Greater),
+            Expression::Greater(left, right) => self
+                .compare_terms_expr(left, right, solution)
+                .map(|ord| ord == std::cmp::Ordering::Greater),
+            Expression::GreaterOrEqual(left, right) => self
+                .compare_terms_expr(left, right, solution)
+                .map(|ord| ord != std::cmp::Ordering::Less),
             Expression::Bound(var) => Some(solution.get(var).is_some()),
             Expression::IsIri(expr) => {
                 if let Some(term) = self.evaluate_expression_to_term(expr, solution) {
@@ -597,39 +682,98 @@ impl<'a> QueryExecutor<'a> {
         }
     }
 
-    /// Evaluate a numeric comparison
-    fn evaluate_numeric_comparison<F>(
+    /// Evaluate the ordered comparison of two expressions per the SPARQL
+    /// operator-mapping rules, returning the [`Ordering`](std::cmp::Ordering)
+    /// of the two operand values.
+    ///
+    /// Supports numeric (`xsd:integer`/`decimal`/`double`/`float`), `xsd:string`
+    /// (Unicode codepoint order), `xsd:boolean` (`false` < `true`), and
+    /// `xsd:date`/`xsd:dateTime` (timezone-aware temporal order) operands.
+    ///
+    /// Returns `None` for genuinely incomparable operand pairs (a SPARQL type
+    /// error). Per SPARQL semantics a type error in a FILTER excludes the
+    /// solution, so `None` is mapped to a dropped row by the caller — never a
+    /// silently over-broad result.
+    fn compare_terms_expr(
         &self,
         left: &Expression,
         right: &Expression,
         solution: &Solution,
-        comparator: F,
-    ) -> Option<bool>
-    where
-        F: Fn(f64, f64) -> bool,
-    {
-        let left_val = self.evaluate_expression_to_numeric(left, solution)?;
-        let right_val = self.evaluate_expression_to_numeric(right, solution)?;
-        Some(comparator(left_val, right_val))
+    ) -> Option<std::cmp::Ordering> {
+        let left_term = self.evaluate_expression_to_term(left, solution)?;
+        let right_term = self.evaluate_expression_to_term(right, solution)?;
+        Self::compare_terms(&left_term, &right_term)
     }
 
-    /// Evaluate an expression to a numeric value
-    fn evaluate_expression_to_numeric(
-        &self,
-        expr: &Expression,
-        solution: &Solution,
-    ) -> Option<f64> {
-        if let Some(Term::Literal(lit)) = self.evaluate_expression_to_term(expr, solution) {
-            let value = lit.as_str();
-            match lit.datatype().as_str() {
-                "http://www.w3.org/2001/XMLSchema#integer"
-                | "http://www.w3.org/2001/XMLSchema#decimal"
-                | "http://www.w3.org/2001/XMLSchema#double"
-                | "http://www.w3.org/2001/XMLSchema#float" => value.parse::<f64>().ok(),
-                _ => None,
+    /// Compare two RDF terms per the SPARQL/XPath operator mapping.
+    ///
+    /// Returns `None` when the operands are of incomparable kinds (a type
+    /// error under SPARQL semantics).
+    fn compare_terms(left: &Term, right: &Term) -> Option<std::cmp::Ordering> {
+        let (l, r) = match (left, right) {
+            (Term::Literal(l), Term::Literal(r)) => (l, r),
+            // Ordered comparison is only defined between literals.
+            _ => return None,
+        };
+
+        let l_dt = l.datatype().as_str().to_string();
+        let r_dt = r.datatype().as_str().to_string();
+
+        // Numeric comparison (mixed numeric datatypes promote to f64).
+        if let (Some(a), Some(b)) = (
+            Self::numeric_value(&l_dt, l.as_str()),
+            Self::numeric_value(&r_dt, r.as_str()),
+        ) {
+            return a.partial_cmp(&b);
+        }
+
+        // Both operands must share the same datatype family for the remaining
+        // comparisons.
+        if l_dt != r_dt {
+            return None;
+        }
+
+        match l_dt.as_str() {
+            "http://www.w3.org/2001/XMLSchema#string" => Some(l.as_str().cmp(r.as_str())),
+            "http://www.w3.org/2001/XMLSchema#boolean" => {
+                let a = Self::boolean_value(l.as_str())?;
+                let b = Self::boolean_value(r.as_str())?;
+                Some(a.cmp(&b))
             }
-        } else {
-            None
+            "http://www.w3.org/2001/XMLSchema#dateTime" => {
+                use std::str::FromStr;
+                let a = oxsdatatypes::DateTime::from_str(l.as_str()).ok()?;
+                let b = oxsdatatypes::DateTime::from_str(r.as_str()).ok()?;
+                a.partial_cmp(&b)
+            }
+            "http://www.w3.org/2001/XMLSchema#date" => {
+                use std::str::FromStr;
+                let a = oxsdatatypes::Date::from_str(l.as_str()).ok()?;
+                let b = oxsdatatypes::Date::from_str(r.as_str()).ok()?;
+                a.partial_cmp(&b)
+            }
+            _ => None,
+        }
+    }
+
+    /// Parse a numeric literal value into an `f64`, or `None` if the datatype is
+    /// not a recognised XSD numeric type.
+    fn numeric_value(datatype: &str, value: &str) -> Option<f64> {
+        match datatype {
+            "http://www.w3.org/2001/XMLSchema#integer"
+            | "http://www.w3.org/2001/XMLSchema#decimal"
+            | "http://www.w3.org/2001/XMLSchema#double"
+            | "http://www.w3.org/2001/XMLSchema#float" => value.parse::<f64>().ok(),
+            _ => None,
+        }
+    }
+
+    /// Parse an `xsd:boolean` lexical form (`true`/`1`, `false`/`0`).
+    fn boolean_value(value: &str) -> Option<bool> {
+        match value {
+            "true" | "1" => Some(true),
+            "false" | "0" => Some(false),
+            _ => None,
         }
     }
 }
@@ -637,5 +781,231 @@ impl<'a> QueryExecutor<'a> {
 impl Default for Solution {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::{GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject};
+    use crate::query::{QueryEngine, QueryResult};
+    use crate::rdf_store::RdfStore;
+    use crate::Store;
+
+    fn iri(s: &str) -> NamedNode {
+        NamedNode::new(s).expect("valid iri")
+    }
+
+    fn count_bindings(result: &QueryResult) -> usize {
+        match result {
+            QueryResult::Select { bindings, .. } => bindings.len(),
+            _ => panic!("expected SELECT result"),
+        }
+    }
+
+    /// P1: a BGP outside a GRAPH clause must match only the default graph, not
+    /// the union of the default graph and every named graph.
+    #[test]
+    fn regression_bgp_scans_default_graph_only() {
+        let store = RdfStore::new().expect("store");
+        // Default-graph triple.
+        store
+            .insert_quad(Quad::new(
+                Subject::NamedNode(iri("http://example.org/s1")),
+                Predicate::NamedNode(iri("http://example.org/p")),
+                Object::NamedNode(iri("http://example.org/o1")),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert default");
+        // Named-graph-only triple: must NOT be visible to a default-graph BGP.
+        store
+            .insert_quad(Quad::new(
+                Subject::NamedNode(iri("http://example.org/s2")),
+                Predicate::NamedNode(iri("http://example.org/p")),
+                Object::NamedNode(iri("http://example.org/o2")),
+                GraphName::NamedNode(iri("http://example.org/g")),
+            ))
+            .expect("insert named");
+
+        let engine = QueryEngine::new();
+        let result = engine
+            .query("SELECT * WHERE { ?s ?p ?o . }", &store)
+            .expect("query ok");
+        assert_eq!(
+            count_bindings(&result),
+            1,
+            "only the default-graph triple must match a default-graph BGP"
+        );
+    }
+
+    /// P2: DISTINCT must deduplicate multi-variable solutions reliably.
+    #[test]
+    fn regression_distinct_multi_variable_dedup() {
+        let store = RdfStore::new().expect("store");
+        let p = iri("http://example.org/p");
+        let o = iri("http://example.org/o");
+        // Two distinct subjects sharing identical (p, o) bindings.
+        for s in ["http://example.org/s1", "http://example.org/s2"] {
+            store
+                .insert_quad(Quad::new(
+                    Subject::NamedNode(iri(s)),
+                    Predicate::NamedNode(p.clone()),
+                    Object::NamedNode(o.clone()),
+                    GraphName::DefaultGraph,
+                ))
+                .expect("insert");
+        }
+
+        let engine = QueryEngine::new();
+        let result = engine
+            .query("SELECT DISTINCT ?p ?o WHERE { ?s ?p ?o . }", &store)
+            .expect("query ok");
+        assert_eq!(
+            count_bindings(&result),
+            1,
+            "identical (p, o) bindings must collapse to a single DISTINCT row"
+        );
+    }
+
+    /// P2: FILTER string comparison must perform a real ordered comparison, not
+    /// drop every row.
+    #[test]
+    fn regression_filter_string_comparison() {
+        let store = RdfStore::new().expect("store");
+        let p = iri("http://example.org/name");
+        for (s, name) in [
+            ("http://example.org/a", "apple"),
+            ("http://example.org/z", "zebra"),
+        ] {
+            store
+                .insert_quad(Quad::new(
+                    Subject::NamedNode(iri(s)),
+                    Predicate::NamedNode(p.clone()),
+                    Object::Literal(Literal::new(name)),
+                    GraphName::DefaultGraph,
+                ))
+                .expect("insert");
+        }
+
+        let engine = QueryEngine::new();
+        let result = engine
+            .query(
+                "SELECT ?name WHERE { ?s ?p ?name . FILTER(?name > \"m\") }",
+                &store,
+            )
+            .expect("query ok");
+        assert_eq!(
+            count_bindings(&result),
+            1,
+            "only 'zebra' is greater than 'm'"
+        );
+    }
+
+    /// P2: FILTER date comparison must compare temporal values, not drop rows.
+    #[test]
+    fn regression_filter_date_comparison() {
+        let store = RdfStore::new().expect("store");
+        let p = iri("http://example.org/born");
+        let date_dt = crate::vocab::xsd::DATE.clone();
+        for (s, d) in [
+            ("http://example.org/old", "1990-01-01"),
+            ("http://example.org/new", "2020-01-01"),
+        ] {
+            store
+                .insert_quad(Quad::new(
+                    Subject::NamedNode(iri(s)),
+                    Predicate::NamedNode(p.clone()),
+                    Object::Literal(Literal::new_typed(d, date_dt.clone())),
+                    GraphName::DefaultGraph,
+                ))
+                .expect("insert");
+        }
+
+        let engine = QueryEngine::new();
+        let result = engine
+            .query(
+                "SELECT ?d WHERE { ?s ?p ?d . FILTER(?d < \"2000-01-01\"^^<http://www.w3.org/2001/XMLSchema#date>) }",
+                &store,
+            )
+            .expect("query ok");
+        assert_eq!(
+            count_bindings(&result),
+            1,
+            "only the 1990 date is before 2000"
+        );
+    }
+
+    /// P1: ORDER BY must actually order the results.
+    #[test]
+    fn regression_order_by_sorts_results() {
+        let store = RdfStore::new().expect("store");
+        let p = iri("http://example.org/n");
+        let int_dt = crate::vocab::xsd::INTEGER.clone();
+        for (s, n) in [
+            ("http://example.org/b", "3"),
+            ("http://example.org/a", "1"),
+            ("http://example.org/c", "2"),
+        ] {
+            store
+                .insert_quad(Quad::new(
+                    Subject::NamedNode(iri(s)),
+                    Predicate::NamedNode(p.clone()),
+                    Object::Literal(Literal::new_typed(n, int_dt.clone())),
+                    GraphName::DefaultGraph,
+                ))
+                .expect("insert");
+        }
+
+        let engine = QueryEngine::new();
+        let result = engine
+            .query("SELECT ?n WHERE { ?s ?p ?n . } ORDER BY ?n", &store)
+            .expect("query ok");
+        let QueryResult::Select { bindings, .. } = result else {
+            panic!("expected SELECT");
+        };
+        let values: Vec<String> = bindings
+            .iter()
+            .filter_map(|b| b.get("n"))
+            .map(|t| t.to_string())
+            .collect();
+        let sorted_positions: Vec<&String> = values.iter().collect();
+        // Values must be in ascending numeric order: 1, 2, 3.
+        assert_eq!(values.len(), 3);
+        assert!(
+            sorted_positions[0].contains('1')
+                && sorted_positions[1].contains('2')
+                && sorted_positions[2].contains('3'),
+            "ORDER BY ?n should yield 1,2,3 — got {values:?}"
+        );
+    }
+
+    /// P1: LIMIT/OFFSET must bound the result set.
+    #[test]
+    fn regression_limit_offset_applied() {
+        let store = RdfStore::new().expect("store");
+        let p = iri("http://example.org/n");
+        let int_dt = crate::vocab::xsd::INTEGER.clone();
+        for n in 0..5 {
+            store
+                .insert_quad(Quad::new(
+                    Subject::NamedNode(iri(&format!("http://example.org/s{n}"))),
+                    Predicate::NamedNode(p.clone()),
+                    Object::Literal(Literal::new_typed(n.to_string(), int_dt.clone())),
+                    GraphName::DefaultGraph,
+                ))
+                .expect("insert");
+        }
+
+        let engine = QueryEngine::new();
+        let result = engine
+            .query(
+                "SELECT ?n WHERE { ?s ?p ?n . } ORDER BY ?n LIMIT 2 OFFSET 1",
+                &store,
+            )
+            .expect("query ok");
+        assert_eq!(
+            count_bindings(&result),
+            2,
+            "LIMIT 2 must cap the result set"
+        );
     }
 }

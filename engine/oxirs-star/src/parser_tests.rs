@@ -172,6 +172,52 @@ ex:frank ex:knows ex:grace .
     }
 
     #[test]
+    fn regression_annotation_shorthand_asserts_base_triple() {
+        // Per the RDF-star/Turtle-star spec, `{| |}` is syntactic sugar that
+        // expands to BOTH the base triple assertion AND the reification
+        // annotation triple(s) about it:
+        //   <s> <p> <o> .
+        //   <<s p o>> ap ao .
+        let parser = StarParser::new();
+        let data = r#"
+            @prefix ex: <http://example.org/> .
+
+            ex:a ex:p ex:o {| ex:ann ex:v |} .
+        "#;
+
+        let graph = parser.parse_str(data, StarFormat::TurtleStar).unwrap();
+
+        // Expect both the base triple and the annotation triple to be present.
+        assert_eq!(graph.len(), 2, "expected base triple + annotation triple");
+
+        let triples = graph.triples();
+
+        // The plain base triple `ex:a ex:p ex:o .` must be asserted.
+        let has_base_triple = triples.iter().any(|t| {
+            !t.subject.is_quoted_triple()
+                && t.subject.is_named_node()
+                && t.predicate.is_named_node()
+                && t.object.is_named_node()
+                && !t
+                    .predicate
+                    .as_named_node()
+                    .map(|n| n.iri.ends_with("ann"))
+                    .unwrap_or(false)
+        });
+        assert!(
+            has_base_triple,
+            "base triple `ex:a ex:p ex:o .` was not asserted into the graph; triples: {triples:?}"
+        );
+
+        // The annotation triple `<<ex:a ex:p ex:o>> ex:ann ex:v .` must also be present.
+        let has_annotation_triple = triples.iter().any(|t| t.subject.is_quoted_triple());
+        assert!(
+            has_annotation_triple,
+            "annotation triple over the quoted base triple was not asserted; triples: {triples:?}"
+        );
+    }
+
+    #[test]
     fn test_nquads_star_with_blank_nodes() {
         let parser = StarParser::new();
 

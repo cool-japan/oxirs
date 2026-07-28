@@ -683,40 +683,196 @@ impl FederatedQueryPlanner {
         // Analyze query patterns to determine required capabilities
         let required_capabilities = self.analyze_query_capabilities(query_info);
 
-        // Select the most appropriate service based on capabilities
-        let selected_service_id = self
-            .select_service_for_capabilities(&required_capabilities, service_registry)
-            .await?;
+        // Gather candidate services. Prefer services that satisfy every required
+        // capability; fall back to all registered services if the capability
+        // filter excludes everything (capability metadata may be incomplete).
+        let all_services = service_registry.get_all_services();
+        if all_services.is_empty() {
+            return Err(anyhow!("No services available in registry"));
+        }
+        let mut candidates: Vec<crate::FederatedService> = all_services
+            .iter()
+            .filter(|s| {
+                required_capabilities
+                    .iter()
+                    .all(|c| s.capabilities.contains(c))
+            })
+            .cloned()
+            .collect();
+        if candidates.is_empty() {
+            candidates = all_services;
+        }
 
-        // Create execution plan directly from SPARQL query info
-        let plan = ExecutionPlan {
-            query_id: context.query_id.clone(),
-            steps: vec![ExecutionStep {
-                step_id: "sparql_step_1".to_string(),
+        // Preserve PREFIX/BASE declarations so per-endpoint sub-queries remain
+        // resolvable.
+        let prologue = Self::extract_query_prologue(&query_info.original_query);
+
+        // Source selection: assign each triple pattern to the endpoint best able
+        // to answer it, based on the endpoint's declared data patterns.
+        let mut groups: std::collections::BTreeMap<
+            String,
+            (crate::FederatedService, Vec<TriplePattern>),
+        > = std::collections::BTreeMap::new();
+        for pattern in &query_info.patterns {
+            if let Some(service) = Self::assign_pattern_to_service(pattern, &candidates) {
+                groups
+                    .entry(service.id.clone())
+                    .or_insert_with(|| (service.clone(), Vec::new()))
+                    .1
+                    .push(pattern.clone());
+            }
+        }
+
+        let default_timeout = std::time::Duration::from_secs(self.config.default_timeout_seconds);
+        let retry = self.config.default_retry_config.clone();
+
+        let (steps, parallelizable_steps) = if groups.len() <= 1 {
+            // Only one endpoint owns the patterns (or the query has no
+            // decomposable patterns): route the whole query to the single owning
+            // service, or the first candidate when no pattern matched.
+            let service = groups
+                .into_values()
+                .next()
+                .map(|(s, _)| s)
+                .or_else(|| candidates.first().cloned())
+                .ok_or_else(|| anyhow!("No services available in registry"))?;
+            let step_id = "sparql_step_1".to_string();
+            let step = ExecutionStep {
+                step_id: step_id.clone(),
                 step_type: StepType::ServiceQuery,
-                service_id: Some(selected_service_id),
-                service_url: None,
+                service_id: Some(service.id.clone()),
+                service_url: Some(service.endpoint.clone()),
                 auth_config: None,
                 query_fragment: query_info.original_query.clone(),
                 dependencies: vec![],
                 estimated_cost: query_info.estimated_cost as f64,
-                timeout: std::time::Duration::from_secs(30),
-                retry_config: Some(types::RetryConfig {
-                    max_attempts: 3,
-                    initial_delay: std::time::Duration::from_millis(100),
-                    max_delay: std::time::Duration::from_secs(5),
-                    backoff_multiplier: 2.0,
-                }),
-            }],
+                timeout: default_timeout,
+                retry_config: retry.clone(),
+            };
+            (vec![step], vec![vec![step_id]])
+        } else {
+            // Genuine cross-service decomposition: emit one sub-query step per
+            // endpoint (executed in parallel), then a Join step that combines
+            // their results on shared variables.
+            let mut service_steps = Vec::new();
+            let mut service_step_ids = Vec::new();
+            for (idx, (service_id, (service, patterns))) in groups.iter().enumerate() {
+                let fragment = Self::build_service_subquery(&prologue, patterns);
+                let step_id = format!("sparql_service_{}", idx + 1);
+                service_step_ids.push(step_id.clone());
+                service_steps.push(ExecutionStep {
+                    step_id,
+                    step_type: StepType::ServiceQuery,
+                    service_id: Some(service_id.clone()),
+                    service_url: Some(service.endpoint.clone()),
+                    auth_config: None,
+                    query_fragment: fragment,
+                    dependencies: vec![],
+                    estimated_cost: patterns.len() as f64,
+                    timeout: default_timeout,
+                    retry_config: retry.clone(),
+                });
+            }
+
+            let join_step = ExecutionStep {
+                step_id: "sparql_join".to_string(),
+                step_type: StepType::Join,
+                service_id: None,
+                service_url: None,
+                auth_config: None,
+                query_fragment: query_info.original_query.clone(),
+                dependencies: service_step_ids.clone(),
+                estimated_cost: query_info.estimated_cost as f64,
+                timeout: default_timeout,
+                retry_config: None,
+            };
+
+            let parallelizable = vec![service_step_ids];
+            let mut steps = service_steps;
+            steps.push(join_step);
+            (steps, parallelizable)
+        };
+
+        let plan = ExecutionPlan {
+            query_id: context.query_id.clone(),
+            steps,
             estimated_total_cost: query_info.estimated_cost as f64,
-            max_parallelism: 4,
+            max_parallelism: self.config.max_parallel_steps,
             planning_time: start_time.elapsed(),
             cache_key: None,
             metadata: std::collections::HashMap::new(),
-            parallelizable_steps: vec![vec!["sparql_step_1".to_string()]],
+            parallelizable_steps,
         };
 
         Ok(plan)
+    }
+
+    /// Extract PREFIX / BASE declarations from a SPARQL query so they can be
+    /// prepended to decomposed per-endpoint sub-queries.
+    fn extract_query_prologue(query: &str) -> String {
+        query
+            .lines()
+            .filter(|l| {
+                let t = l.trim_start().to_uppercase();
+                t.starts_with("PREFIX") || t.starts_with("BASE")
+            })
+            .map(|l| l.trim().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Build a self-contained SPARQL sub-query for a single endpoint from the
+    /// triple patterns assigned to it.
+    fn build_service_subquery(prologue: &str, patterns: &[TriplePattern]) -> String {
+        let mut body = String::new();
+        for p in patterns {
+            let stmt = p.pattern_string.trim().trim_end_matches('.').trim();
+            if stmt.is_empty() {
+                continue;
+            }
+            body.push_str("  ");
+            body.push_str(stmt);
+            body.push_str(" .\n");
+        }
+        if prologue.is_empty() {
+            format!("SELECT * WHERE {{\n{body}}}")
+        } else {
+            format!("{prologue}\nSELECT * WHERE {{\n{body}}}")
+        }
+    }
+
+    /// Select the endpoint best able to answer a single triple pattern using the
+    /// endpoint's declared `data_patterns`. Prefers a specific (non-wildcard)
+    /// match, then a wildcard endpoint, then the first candidate.
+    fn assign_pattern_to_service<'a>(
+        pattern: &TriplePattern,
+        candidates: &'a [crate::FederatedService],
+    ) -> Option<&'a crate::FederatedService> {
+        let haystack = format!(
+            "{} {} {} {}",
+            pattern.subject.as_deref().unwrap_or(""),
+            pattern.predicate.as_deref().unwrap_or(""),
+            pattern.object.as_deref().unwrap_or(""),
+            pattern.pattern_string
+        );
+
+        // Specific data-pattern match wins.
+        for s in candidates {
+            if s.data_patterns
+                .iter()
+                .any(|dp| dp != "*" && !dp.is_empty() && haystack.contains(dp.as_str()))
+            {
+                return Some(s);
+            }
+        }
+        // Then any wildcard endpoint.
+        for s in candidates {
+            if s.data_patterns.iter().any(|dp| dp == "*") {
+                return Some(s);
+            }
+        }
+        // Otherwise the first candidate.
+        candidates.first()
     }
 
     /// Analyze a GraphQL query and extract query information
@@ -798,41 +954,6 @@ impl FederatedQueryPlanner {
         }
 
         capabilities
-    }
-
-    /// Select the most appropriate service based on required capabilities
-    async fn select_service_for_capabilities(
-        &self,
-        required_capabilities: &[crate::ServiceCapability],
-        service_registry: &ServiceRegistry,
-    ) -> Result<String> {
-        let services = service_registry.get_all_services();
-
-        // Find services that have all required capabilities
-        let mut suitable_services = Vec::new();
-
-        for service in services {
-            let has_all_capabilities = required_capabilities
-                .iter()
-                .all(|cap| service.capabilities.contains(cap));
-
-            if has_all_capabilities {
-                suitable_services.push(service);
-            }
-        }
-
-        // If no suitable services found, fall back to any available service
-        if suitable_services.is_empty() {
-            let all_services = service_registry.get_all_services();
-            if let Some(service) = all_services.into_iter().next() {
-                return Ok(service.id.clone());
-            } else {
-                return Err(anyhow!("No services available in registry"));
-            }
-        }
-
-        // Select the first suitable service (could be enhanced with more sophisticated selection)
-        Ok(suitable_services[0].id.clone())
     }
 }
 
@@ -1143,5 +1264,137 @@ mod tests {
         let parallelizable = planner.analyze_parallelizable_steps(&steps);
 
         assert!(parallelizable.is_empty());
+    }
+
+    fn make_pattern(subject: &str, predicate: &str, object: &str) -> TriplePattern {
+        TriplePattern {
+            subject: Some(subject.to_string()),
+            predicate: Some(predicate.to_string()),
+            object: Some(object.to_string()),
+            pattern_string: format!("{subject} {predicate} {object}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn regression_plan_sparql_decomposes_across_services() {
+        use crate::service_registry::ServiceRegistry;
+
+        let registry = ServiceRegistry::new();
+
+        // Two SPARQL endpoints, each owning a distinct predicate.
+        let mut svc_a = crate::FederatedService::new_sparql(
+            "svc_a".to_string(),
+            "Service A".to_string(),
+            "http://a.example.org/sparql".to_string(),
+        );
+        svc_a.data_patterns = vec!["http://example.org/name".to_string()];
+
+        let mut svc_b = crate::FederatedService::new_sparql(
+            "svc_b".to_string(),
+            "Service B".to_string(),
+            "http://b.example.org/sparql".to_string(),
+        );
+        svc_b.data_patterns = vec!["http://example.org/age".to_string()];
+
+        registry.register(svc_a).await.expect("register a");
+        registry.register(svc_b).await.expect("register b");
+
+        let query =
+            "SELECT * WHERE { ?s <http://example.org/name> ?n . ?s <http://example.org/age> ?a }";
+        let query_info = QueryInfo {
+            query_type: QueryType::Select,
+            original_query: query.to_string(),
+            patterns: vec![
+                make_pattern("?s", "<http://example.org/name>", "?n"),
+                make_pattern("?s", "<http://example.org/age>", "?a"),
+            ],
+            variables: std::collections::HashSet::new(),
+            filters: Vec::new(),
+            complexity: 1,
+            estimated_cost: 10,
+        };
+
+        let planner = FederatedQueryPlanner::new();
+        let plan = planner
+            .plan_sparql(&query_info, &registry)
+            .await
+            .expect("plan_sparql should succeed");
+
+        // Expect two per-endpoint ServiceQuery steps and one Join step.
+        let service_steps: Vec<_> = plan
+            .steps
+            .iter()
+            .filter(|s| s.step_type == StepType::ServiceQuery)
+            .collect();
+        let join_steps: Vec<_> = plan
+            .steps
+            .iter()
+            .filter(|s| s.step_type == StepType::Join)
+            .collect();
+
+        assert_eq!(
+            service_steps.len(),
+            2,
+            "query spanning two endpoints must produce two service steps"
+        );
+        assert_eq!(
+            join_steps.len(),
+            1,
+            "a join step must combine the sub-results"
+        );
+
+        // Every service step must carry a real endpoint URL (executor requires it)
+        // and only its own predicate's pattern (genuine decomposition, not the
+        // whole query routed to one endpoint).
+        for step in &service_steps {
+            let url = step.service_url.as_deref().unwrap_or("");
+            assert!(url.starts_with("http"), "service_url must be populated");
+            assert!(
+                step.query_fragment != query,
+                "sub-query must not be the whole original query"
+            );
+        }
+
+        // The join must depend on both service steps.
+        let join = join_steps[0];
+        assert_eq!(join.dependencies.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn regression_plan_sparql_single_service_routes_whole_query() {
+        use crate::service_registry::ServiceRegistry;
+
+        let registry = ServiceRegistry::new();
+        let svc = crate::FederatedService::new_sparql(
+            "only".to_string(),
+            "Only".to_string(),
+            "http://only.example.org/sparql".to_string(),
+        );
+        registry.register(svc).await.expect("register");
+
+        let query = "SELECT * WHERE { ?s ?p ?o }";
+        let query_info = QueryInfo {
+            query_type: QueryType::Select,
+            original_query: query.to_string(),
+            patterns: vec![make_pattern("?s", "?p", "?o")],
+            variables: std::collections::HashSet::new(),
+            filters: Vec::new(),
+            complexity: 1,
+            estimated_cost: 5,
+        };
+
+        let planner = FederatedQueryPlanner::new();
+        let plan = planner
+            .plan_sparql(&query_info, &registry)
+            .await
+            .expect("plan_sparql should succeed");
+
+        assert_eq!(plan.steps.len(), 1);
+        assert_eq!(plan.steps[0].step_type, StepType::ServiceQuery);
+        // service_url MUST be populated or the executor fails loudly.
+        assert_eq!(
+            plan.steps[0].service_url.as_deref(),
+            Some("http://only.example.org/sparql")
+        );
     }
 }

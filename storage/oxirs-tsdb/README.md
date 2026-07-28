@@ -8,7 +8,7 @@ Time-series optimizations for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.4.0, 2026-07-19) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.4.1, 2026-07-26) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 
@@ -29,11 +29,12 @@ Time-series optimizations for the OxiRS semantic web platform.
 - ✅ **Columnar storage** - Disk-backed binary format with LRU cache
 - ✅ **Series indexing** - Efficient time-based chunk lookups
 - ✅ **Sub-200ms queries** - 180ms p50 for 1M data points
-- ✅ **100% Pure Rust by default** - the former in-tree `duckdb` feature (C FFI via
-  `libduckdb-sys`) has been removed; the DuckDB ↔ TSDB chunk bridge now lives in the
-  separate, `publish = false` `oxirs-tsdb-adapter-duckdb` crate (depend on it directly
-  for embedded DuckDB SQL over TSDB chunks) — `oxirs-tsdb`'s own `--all-features` build
-  has no C dependencies
+- ✅ **100% Pure Rust** - the former in-tree `duckdb` feature (C FFI via
+  `libduckdb-sys`) has been removed entirely, first into a `publish = false` quarantine
+  crate and then dropped. There is no embedded DuckDB binding left: export chunks to
+  Parquet with the `arrow-export` feature and query them with an external DuckDB, using
+  the Pure-Rust `analytics::DuckDbQueryAdapter` to build the SQL. `oxirs-tsdb`'s
+  `--all-features` build has no C dependencies
 
 ## Quick Start
 
@@ -41,7 +42,7 @@ Time-series optimizations for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-tsdb = "0.3.2"
+oxirs-tsdb = "0.4.1"
 ```
 
 ### Basic Usage
@@ -227,7 +228,7 @@ See `/tmp/oxirs_cli_phase_d_guide.md` for complete CLI documentation.
 
 ## Production Status
 
-- ✅ **1,305 tests passing** - 100% success rate
+- ✅ **1,326 tests passing** - 100% success rate
 - ✅ **Zero warnings** - Strict code quality enforcement
 - ✅ **10 examples** - Complete usage documentation
 - ✅ **3 benchmarks** - Performance validation

@@ -101,7 +101,18 @@ impl SchemaGenerator {
     /// Generate GraphQL schema from RDF store containing ontology data
     pub fn generate_from_store(&self, store: &crate::RdfStore) -> Result<String> {
         let vocabulary = self.extract_vocabulary_from_store(store)?;
+        self.generate_sdl_from_vocabulary(vocabulary)
+    }
 
+    /// Render a GraphQL SDL from an explicitly-provided [`RdfVocabulary`].
+    ///
+    /// This is the vocabulary-in, SDL-out core that [`Self::generate_from_store`]
+    /// and [`Self::generate_from_ontology`] both funnel through. It is exposed
+    /// so callers that build (or infer) a vocabulary through some other route —
+    /// e.g. scanning a triple stream directly, or extracting via a richer SPARQL
+    /// engine than [`crate::RdfStore`]'s built-in one — can still render the SDL
+    /// without going through `generate_from_store`'s SPARQL-extraction path.
+    pub fn generate_sdl_from_vocabulary(&self, vocabulary: RdfVocabulary) -> Result<String> {
         let schema_with_vocab = Self::new()
             .with_config(self.config.clone())
             .with_vocabulary(vocabulary);

@@ -1,9 +1,9 @@
 //! # OxiRS Vector Search
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-vec/badge.svg)](https://docs.rs/oxirs-vec)
 //!
-//! **Status**: Production Release (v0.3.3) - **Production-Ready with Complete Documentation**
+//! **Status**: Production Release (v0.4.1) - **Production-Ready with Complete Documentation**
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing and 100 KB of documentation.
 //!
 //! Vector index abstractions for semantic similarity and AI-augmented SPARQL querying.
@@ -204,6 +204,8 @@ pub mod result_fusion;
 pub mod rta_aggregators;
 pub mod rta_engine;
 pub mod rta_tests;
+#[cfg(test)]
+mod score_contract_tests;
 pub mod similarity;
 pub mod sparql_integration;
 pub mod sparql_service_endpoint;

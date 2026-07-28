@@ -148,7 +148,7 @@ impl Parser<Triple> for N3Parser {
     /// iterator.
     ///
     /// Like [`crate::formats::trig::TriGParser::for_reader`], this still
-    /// parses the entire document eagerly via [`Self::parse_n3_content`]
+    /// parses the entire document eagerly via `parse_n3_content`
     /// before returning; it exists to satisfy the generic [`Parser`] trait
     /// uniformly across formats, not to provide bounded-memory streaming.
     fn for_reader<R: BufRead>(&self, reader: R) -> Box<dyn Iterator<Item = TurtleResult<Triple>>> {

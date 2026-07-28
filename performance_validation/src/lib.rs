@@ -5,6 +5,22 @@
 
 pub mod revolutionary_benchmarking_suite;
 
+/// GPU and network performance profiling primitives.
+///
+/// Only the standalone, self-contained profiler submodules are wired in
+/// here. `cpu_profiler`/`memory_profiler` and the orchestrating `mod.rs` in
+/// `src/profiling/` depend on a pre-`sysinfo`-0.30 API surface
+/// (`CpuExt`/`SystemExt`, since removed) and reference mismatched field
+/// names against each other; that breakage predates this change and is
+/// out of scope here. Only `gpu_profiler` and `network_profiler` -- which
+/// are self-contained -- are compiled and tested.
+pub mod profiling {
+    #[path = "gpu_profiler.rs"]
+    pub mod gpu_profiler;
+    #[path = "network_profiler.rs"]
+    pub mod network_profiler;
+}
+
 pub use revolutionary_benchmarking_suite::{
     AIReasoningMetrics, BenchmarkResultsAnalyzer, DistributedCoordinationMetrics,
     MemoryEfficiencyMetrics, QuantumOptimizationMetrics, QueryPerformanceMetrics,

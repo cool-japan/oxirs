@@ -5,15 +5,35 @@
 //!
 //! Reference: Balažević et al. "TuckER: Tensor Factorization for Knowledge Graph Completion" (2019)
 
+use crate::models::serialization::{BaseModelSnapshot, MatrixF64, Tensor3F64};
 use crate::models::{common::*, BaseModel};
 use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use scirs2_core::ndarray_ext::{Array2, Array3};
 use scirs2_core::random::{Random, Rng, RngExt, SliceRandom};
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;
+
+/// Serializable representation of a TuckER model for persistence.
+#[derive(Debug, Serialize, Deserialize)]
+struct TuckERSerializable {
+    base: BaseModelSnapshot,
+    entity_embeddings: MatrixF64,
+    relation_embeddings: MatrixF64,
+    core_tensor: Tensor3F64,
+    embeddings_initialized: bool,
+    entity_dim: usize,
+    relation_dim: usize,
+    core_dims: (usize, usize, usize),
+    dropout_rate: f64,
+    batch_norm: bool,
+}
 
 /// TuckER embedding model
 #[derive(Debug)]
@@ -611,11 +631,56 @@ impl EmbeddingModel for TuckER {
 
     fn save(&self, path: &str) -> Result<()> {
         info!("Saving TuckER model to {}", path);
+
+        let serializable = TuckERSerializable {
+            base: BaseModelSnapshot::capture(&self.base),
+            entity_embeddings: MatrixF64::from_array(&self.entity_embeddings),
+            relation_embeddings: MatrixF64::from_array(&self.relation_embeddings),
+            core_tensor: Tensor3F64::from_array(&self.core_tensor),
+            embeddings_initialized: self.embeddings_initialized,
+            entity_dim: self.entity_dim,
+            relation_dim: self.relation_dim,
+            core_dims: self.core_dims,
+            dropout_rate: self.dropout_rate,
+            batch_norm: self.batch_norm,
+        };
+
+        let file = File::create(path)
+            .map_err(|e| anyhow!("Failed to create model file {}: {}", path, e))?;
+        let writer = BufWriter::new(file);
+        oxicode::serde::encode_into_std_write(&serializable, writer, oxicode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize TuckER model: {}", e))?;
+
+        info!("TuckER model saved successfully");
         Ok(())
     }
 
     fn load(&mut self, path: &str) -> Result<()> {
         info!("Loading TuckER model from {}", path);
+
+        if !Path::new(path).exists() {
+            return Err(anyhow!("Model file not found: {}", path));
+        }
+
+        let file =
+            File::open(path).map_err(|e| anyhow!("Failed to open model file {}: {}", path, e))?;
+        let reader = BufReader::new(file);
+        let (serializable, _): (TuckERSerializable, _) =
+            oxicode::serde::decode_from_std_read(reader, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize TuckER model: {}", e))?;
+
+        self.entity_embeddings = serializable.entity_embeddings.to_array()?;
+        self.relation_embeddings = serializable.relation_embeddings.to_array()?;
+        self.core_tensor = serializable.core_tensor.to_array()?;
+        self.embeddings_initialized = serializable.embeddings_initialized;
+        self.entity_dim = serializable.entity_dim;
+        self.relation_dim = serializable.relation_dim;
+        self.core_dims = serializable.core_dims;
+        self.dropout_rate = serializable.dropout_rate;
+        self.batch_norm = serializable.batch_norm;
+        serializable.base.restore_into(&mut self.base);
+
+        info!("TuckER model loaded successfully");
         Ok(())
     }
 

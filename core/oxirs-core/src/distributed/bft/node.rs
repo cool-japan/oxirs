@@ -139,7 +139,7 @@ impl BftNode {
     /// Broadcast message to all other nodes
     async fn broadcast_message(&self, message: BftMessage) -> Result<()> {
         let nodes = self.nodes.read();
-        for (&node_id, _) in nodes.iter() {
+        for &node_id in nodes.keys() {
             if node_id != self.node_id {
                 self.message_tx
                     .send((node_id, message.clone()))

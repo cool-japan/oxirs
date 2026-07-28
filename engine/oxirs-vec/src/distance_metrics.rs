@@ -461,10 +461,20 @@ impl ExtendedDistanceMetric {
 
     // Advanced distance metrics
 
-    fn mahalanobis_distance(a: &[f32], b: &[f32]) -> Result<f32> {
-        // Simplified Mahalanobis distance (assuming identity covariance)
-        // Full implementation would require covariance matrix
-        Self::euclidean_distance(a, b)
+    fn mahalanobis_distance(_a: &[f32], _b: &[f32]) -> Result<f32> {
+        // Mahalanobis distance is defined as sqrt((a-b)^T · Σ⁻¹ · (a-b)) and is
+        // meaningless without a covariance matrix Σ. This stateless metric API
+        // carries no covariance, so we must NOT silently substitute Euclidean
+        // distance (which is Mahalanobis only for Σ = I) and mislabel it — fail
+        // loudly instead. Callers that need real Mahalanobis must use
+        // `crate::similarity::SemanticSimilarity::set_covariance_matrix` +
+        // `mahalanobis_similarity`.
+        Err(anyhow::anyhow!(
+            "Mahalanobis distance requires a covariance matrix, which the stateless \
+             ExtendedDistanceMetric API does not carry; use \
+             SemanticSimilarity::set_covariance_matrix() instead of \
+             ExtendedDistanceMetric::Mahalanobis"
+        ))
     }
 
     fn bray_curtis_distance(a: &[f32], b: &[f32]) -> Result<f32> {

@@ -575,3 +575,122 @@ fn test_openapi31_ref_optional_uses_one_of() {
         entity_prop
     );
 }
+
+// ─── Constraint propagation regression tests ───────────────────────────────
+
+fn percentage_aspect(
+    lower: crate::metamodel::BoundDefinition,
+    upper: crate::metamodel::BoundDefinition,
+) -> Aspect {
+    use crate::metamodel::Constraint;
+
+    let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#Reading".to_string());
+    let char = Characteristic::new(
+        "urn:samm:org.example:1.0.0#PercentageChar".to_string(),
+        CharacteristicKind::Trait,
+    )
+    .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string())
+    .with_constraint(Constraint::RangeConstraint {
+        min_value: Some("0".to_string()),
+        max_value: Some("100".to_string()),
+        lower_bound_definition: lower,
+        upper_bound_definition: upper,
+    })
+    .with_constraint(Constraint::RegularExpressionConstraint {
+        pattern: "^[0-9]+(\\.[0-9]+)?$".to_string(),
+    });
+    let prop = Property::new("urn:samm:org.example:1.0.0#percentage".to_string())
+        .with_characteristic(char);
+    aspect.add_property(prop);
+    aspect
+}
+
+#[test]
+fn regression_openapi30_range_and_pattern_constraints_are_emitted() {
+    use crate::metamodel::BoundDefinition;
+
+    let aspect = percentage_aspect(BoundDefinition::AtLeast, BoundDefinition::AtLeast);
+    let gen = OpenApiGenerator::new("1.0.0", "/api/v1/aspects");
+    let schemas = gen.build_schemas(&aspect).expect("build_schemas");
+    let prop_schema = &schemas["Reading"]["properties"]["percentage"];
+
+    assert_eq!(prop_schema["minimum"], Value::from(0.0));
+    assert_eq!(prop_schema["maximum"], Value::from(100.0));
+    assert_eq!(prop_schema["pattern"], "^[0-9]+(\\.[0-9]+)?$");
+}
+
+#[test]
+fn regression_openapi31_range_and_pattern_constraints_are_emitted() {
+    use crate::metamodel::BoundDefinition;
+
+    let aspect = percentage_aspect(BoundDefinition::AtLeast, BoundDefinition::AtLeast);
+    let gen = v31_gen();
+    let schemas = gen
+        .build_schemas_v31(&aspect)
+        .expect("build_schemas_v31 should succeed");
+    let prop_schema = &schemas["Reading"]["properties"]["percentage"];
+
+    assert_eq!(prop_schema["minimum"], Value::from(0.0));
+    assert_eq!(prop_schema["maximum"], Value::from(100.0));
+    assert_eq!(prop_schema["pattern"], "^[0-9]+(\\.[0-9]+)?$");
+}
+
+#[test]
+fn regression_openapi31_open_bound_uses_numeric_exclusive_minimum() {
+    use crate::metamodel::BoundDefinition;
+
+    let aspect = percentage_aspect(BoundDefinition::Open, BoundDefinition::LessThan);
+    let gen = v31_gen();
+    let schemas = gen
+        .build_schemas_v31(&aspect)
+        .expect("build_schemas_v31 should succeed");
+    let prop_schema = &schemas["Reading"]["properties"]["percentage"];
+
+    assert_eq!(prop_schema["exclusiveMinimum"], Value::from(0.0));
+    assert!(
+        prop_schema.get("minimum").is_none(),
+        "an open lower bound must not also be emitted as inclusive minimum"
+    );
+    assert_eq!(prop_schema["exclusiveMaximum"], Value::from(100.0));
+    assert!(prop_schema.get("maximum").is_none());
+}
+
+#[test]
+fn regression_openapi30_open_bound_uses_boolean_exclusive_pair() {
+    use crate::metamodel::BoundDefinition;
+
+    let aspect = percentage_aspect(BoundDefinition::GreaterThan, BoundDefinition::AtLeast);
+    let gen = OpenApiGenerator::new("1.0.0", "/api/v1/aspects");
+    let schemas = gen.build_schemas(&aspect).expect("build_schemas");
+    let prop_schema = &schemas["Reading"]["properties"]["percentage"];
+
+    assert_eq!(prop_schema["minimum"], Value::from(0.0));
+    assert_eq!(prop_schema["exclusiveMinimum"], Value::from(true));
+    assert_eq!(prop_schema["maximum"], Value::from(100.0));
+    assert!(prop_schema.get("exclusiveMaximum").is_none());
+}
+
+#[test]
+fn regression_openapi30_length_constraint_is_emitted() {
+    use crate::metamodel::Constraint;
+
+    let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#IdModel".to_string());
+    let char = Characteristic::new(
+        "urn:samm:org.example:1.0.0#IdChar".to_string(),
+        CharacteristicKind::Trait,
+    )
+    .with_data_type("http://www.w3.org/2001/XMLSchema#string".to_string())
+    .with_constraint(Constraint::LengthConstraint {
+        min_value: Some(3),
+        max_value: Some(10),
+    });
+    let prop = Property::new("urn:samm:org.example:1.0.0#id".to_string()).with_characteristic(char);
+    aspect.add_property(prop);
+
+    let gen = OpenApiGenerator::new("1.0.0", "/api/v1/aspects");
+    let schemas = gen.build_schemas(&aspect).expect("build_schemas");
+    let prop_schema = &schemas["IdModel"]["properties"]["id"];
+
+    assert_eq!(prop_schema["minLength"], Value::from(3));
+    assert_eq!(prop_schema["maxLength"], Value::from(10));
+}

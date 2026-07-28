@@ -15,9 +15,6 @@ pub use crate::functions::geometric_ops_set::{
     convex_hull, difference, envelope, intersection, sym_difference, union,
 };
 
-#[cfg(feature = "rust-buffer")]
-pub use crate::functions::geometric_ops_buffer::buffer_rust;
-
 /// Calculate the distance between two geometries (2D only)
 ///
 /// For 3D distance calculations that include Z coordinates, use `distance_3d()`.

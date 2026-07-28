@@ -1,9 +1,9 @@
 //! # OxiRS Stream - Ultra-High Performance RDF Streaming Platform
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-stream/badge.svg)](https://docs.rs/oxirs-stream)
 //!
-//! **Status**: Production Release (v0.3.3)
+//! **Status**: Production Release (v0.4.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Real-time streaming support with Kafka/NATS/Redis I/O, RDF Patch, SPARQL Update delta,
@@ -245,9 +245,14 @@ pub use transactional_processing::{
     TransactionalProcessor, TransactionalStats,
 };
 pub use zero_copy::{
-    MemoryMappedBuffer, SharedRefBuffer, SimdBatchProcessor, SimdOperation, SplicedBuffer,
-    ZeroCopyBuffer, ZeroCopyConfig, ZeroCopyManager, ZeroCopyStats,
+    SharedRefBuffer, SimdBatchProcessor, SimdOperation, SplicedBuffer, ZeroCopyBuffer,
+    ZeroCopyConfig, ZeroCopyManager, ZeroCopyStats,
 };
+// `MemoryMappedBuffer` is mmap-backed and therefore `#[cfg(unix)]` in
+// `zero_copy`; the re-export has to carry the same gate or it fails to resolve
+// on Windows.
+#[cfg(unix)]
+pub use zero_copy::MemoryMappedBuffer;
 
 // New v0.3.0 exports for developer experience and performance
 pub use numa_processing::{
@@ -385,6 +390,10 @@ pub mod biological_computing;
 pub mod bridge;
 pub mod circuit_breaker;
 pub mod config;
+/// REST client for an external Confluent-compatible Schema Registry. Pure Rust
+/// (reqwest/rustls) and independent of any broker — it outlived the removed
+/// rdkafka-backed Kafka backend for that reason.
+pub mod confluent_registry;
 pub mod connection_pool;
 pub mod connection_pool_health;
 pub mod connection_pool_manager;

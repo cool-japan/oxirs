@@ -44,6 +44,25 @@ pub use transaction::{
 /// Core MVCC manager
 ///
 /// Thread-safe; clone the `Arc<MvccManager>` to share across tasks/threads.
+///
+/// # Lock ordering (deadlock avoidance)
+///
+/// `MvccManager` holds three `std::sync::RwLock`s that are sometimes acquired
+/// together. `std::sync::RwLock` read locks are NOT deadlock-immune once a writer
+/// is queued, so every site that takes more than one of these locks at once MUST
+/// acquire them in this fixed, total order:
+///
+/// 1. `active_txns`
+/// 2. `committed_txns`
+/// 3. `version_store`
+///
+/// (No site takes `active_txns` and `committed_txns` together, so their relative
+/// order is only nominal; the load-bearing invariant is that `version_store` is
+/// always acquired LAST.) Acquiring in a different order between two sites — as
+/// `check_write_conflict` once did versus `stats` — allows an AB-BA deadlock and
+/// is a bug. `terminate_transaction` never holds `version_store` and
+/// `active_txns` simultaneously (it drops the former before taking the latter),
+/// so it does not participate in this ordering.
 pub struct MvccManager {
     /// Global transaction counter (next TxId to hand out)
     next_tx_id: AtomicU64,
@@ -405,9 +424,14 @@ impl MvccManager {
     }
 
     /// Check for write-write conflict: another ACTIVE transaction wrote `key`.
+    ///
+    /// Acquires `active_txns` before `version_store` to honor the canonical lock
+    /// order (see the module note on lock ordering); acquiring them in the
+    /// opposite order here (as this function previously did) created an AB-BA
+    /// deadlock risk against [`Self::stats`], which takes them in canonical order.
     fn check_write_conflict(&self, our_tx_id: TxId, key: &[u8]) -> Result<()> {
-        let store = self.version_store.read().expect("version_store read lock");
         let active = self.active_txns.read().expect("active_txns read lock");
+        let store = self.version_store.read().expect("version_store read lock");
 
         if let Some(versions) = store.get(key) {
             for entry in versions.iter() {

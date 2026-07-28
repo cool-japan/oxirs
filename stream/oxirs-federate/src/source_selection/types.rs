@@ -6,7 +6,7 @@
 //! - Configuration and results
 
 #[cfg(feature = "caching")]
-use bloom::BloomFilter;
+use fastbloom::BloomFilter;
 
 #[cfg(not(feature = "caching"))]
 mod cache_stubs {
@@ -166,12 +166,12 @@ impl std::fmt::Debug for ServiceBloomFilters {
 
 impl Clone for ServiceBloomFilters {
     fn clone(&self) -> Self {
-        let capacity = self.estimated_elements.max(1000) as u32;
+        let capacity = self.estimated_elements.max(1000);
         Self {
-            predicate_filter: BloomFilter::with_rate(0.01, capacity),
-            subject_filter: BloomFilter::with_rate(0.01, capacity),
-            object_filter: BloomFilter::with_rate(0.01, capacity),
-            type_filter: BloomFilter::with_rate(0.01, capacity),
+            predicate_filter: BloomFilter::with_false_pos(0.01).expected_items(capacity),
+            subject_filter: BloomFilter::with_false_pos(0.01).expected_items(capacity),
+            object_filter: BloomFilter::with_false_pos(0.01).expected_items(capacity),
+            type_filter: BloomFilter::with_false_pos(0.01).expected_items(capacity),
             last_updated: self.last_updated,
             estimated_elements: self.estimated_elements,
         }

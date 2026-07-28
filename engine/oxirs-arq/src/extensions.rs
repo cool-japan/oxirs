@@ -364,6 +364,21 @@ pub struct ExecutionContext {
     pub time_limit: Option<std::time::Duration>,
 }
 
+impl Default for ExecutionContext {
+    fn default() -> Self {
+        Self {
+            variables: HashMap::new(),
+            namespaces: HashMap::new(),
+            base_iri: None,
+            dataset_context: None,
+            query_time: chrono::Utc::now(),
+            optimization_level: OptimizationLevel::None,
+            memory_limit: None,
+            time_limit: None,
+        }
+    }
+}
+
 /// Optimization levels
 #[derive(Debug, Clone, PartialEq)]
 pub enum OptimizationLevel {

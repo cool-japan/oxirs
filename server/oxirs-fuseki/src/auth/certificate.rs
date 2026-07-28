@@ -44,6 +44,14 @@ impl CertificateAuthService {
             return Ok(AuthResult::CertificateInvalid);
         }
 
+        // Revocation checking (CRL/OCSP), gated on the configured flags. A cert
+        // that is revoked — or that cannot be revocation-checked when checking is
+        // required — must NOT authenticate (fail closed). See `check_revocation`.
+        if !self.check_revocation(&cert).await? {
+            warn!("Certificate rejected by revocation check");
+            return Ok(AuthResult::CertificateInvalid);
+        }
+
         // Extract certificate information
         let cert_auth = self.extract_certificate_info(&cert)?;
 
@@ -55,6 +63,89 @@ impl CertificateAuthService {
             user.username
         );
         Ok(AuthResult::Authenticated(user))
+    }
+
+    /// Validate that the configured revocation policy is one this build can
+    /// actually honour, failing loud otherwise (so `check_ocsp` / `check_crl`
+    /// never give a false sense of security). Cert-independent, so it is unit
+    /// testable without a certificate fixture.
+    fn revocation_config_check(&self) -> FusekiResult<()> {
+        let Some(cert_cfg) = self.config.certificate.as_ref() else {
+            return Ok(());
+        };
+        if cert_cfg.check_ocsp {
+            return Err(FusekiError::configuration(
+                "certificate.check_ocsp is enabled but OCSP revocation checking is not implemented; \
+                 disable check_ocsp or use CRL checking. Failing closed to avoid a false sense of \
+                 revocation security.",
+            ));
+        }
+        if cert_cfg.check_crl {
+            if cert_cfg.crl_sources.is_empty() {
+                return Err(FusekiError::configuration(
+                    "certificate.check_crl is enabled but no certificate.crl_sources are \
+                     configured; cannot verify revocation. Failing closed.",
+                ));
+            }
+            for source in &cert_cfg.crl_sources {
+                if source.starts_with("http://") || source.starts_with("https://") {
+                    return Err(FusekiError::configuration(format!(
+                        "certificate.crl_sources entry '{source}' is a URL, but network CRL \
+                         fetching is not implemented; use a local CRL file path. Failing closed."
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Perform configured revocation checking for `cert`.
+    ///
+    /// Honours the previously-ignored `check_crl` / `check_ocsp` flags and fails
+    /// **closed**:
+    /// - `check_ocsp = true` → OCSP requires a network responder this build does
+    ///   not implement, so rather than silently skipping revocation (a false sense
+    ///   of security) it returns an error and authentication fails.
+    /// - `check_crl = true` → each `crl_sources` entry is loaded and parsed. A
+    ///   local file path is read and checked; a `http(s)://` URL cannot be fetched
+    ///   (no network CRL fetch implemented) so it fails closed. If the cert's
+    ///   serial appears in any CRL, the certificate is revoked (`Ok(false)`).
+    /// - both flags off → no revocation checking is required, returns `Ok(true)`.
+    async fn check_revocation(&self, cert: &X509Certificate<'_>) -> FusekiResult<bool> {
+        let Some(cert_cfg) = self.config.certificate.as_ref() else {
+            return Ok(true);
+        };
+
+        // Config-level fail-loud policy (OCSP unimplemented, CRL misconfig).
+        self.revocation_config_check()?;
+
+        if !cert_cfg.check_crl {
+            return Ok(true);
+        }
+
+        let cert_serial = cert.raw_serial().to_vec();
+        for source in &cert_cfg.crl_sources {
+            let data = tokio::fs::read(source).await.map_err(|e| {
+                FusekiError::configuration(format!("failed to read CRL source '{source}': {e}"))
+            })?;
+            // Accept PEM- or DER-encoded CRLs.
+            let der: Vec<u8> = if let Ok((_, pem)) = pem::parse_x509_pem(&data) {
+                pem.contents.to_vec()
+            } else {
+                data
+            };
+            let (_, crl) = CertificateRevocationList::from_der(&der).map_err(|e| {
+                FusekiError::configuration(format!("failed to parse CRL '{source}': {e}"))
+            })?;
+            for revoked in crl.iter_revoked_certificates() {
+                if revoked.raw_serial() == cert_serial.as_slice() {
+                    warn!("Certificate serial is present in CRL '{source}' (revoked)");
+                    return Ok(false);
+                }
+            }
+        }
+
+        Ok(true)
     }
 
     /// Validate certificate against trust store
@@ -196,20 +287,20 @@ impl CertificateAuthService {
         }
     }
 
-    /// Verify certificate signature against CA certificate
+    /// Verify that `cert` was cryptographically signed by `ca_cert`.
+    ///
+    /// This performs a real public-key signature verification of the leaf's
+    /// `TBSCertificate` against the CA's public key (see
+    /// [`super::cert_verify`]). It is NOT a DN-string comparison: an attacker
+    /// cannot pass this check merely by copying a trusted CA's Subject DN into
+    /// the Issuer field of a self-signed certificate, because the signature
+    /// would not verify against the CA's key.
     fn verify_certificate_signature(
         &self,
         cert: &X509Certificate,
         ca_cert: &X509Certificate,
     ) -> FusekiResult<bool> {
-        // This is a simplified implementation
-        // In production, you would use a proper X.509 verification library
-
-        // Check if cert is issued by ca_cert (simplified)
-        let cert_issuer = cert.issuer().to_string();
-        let ca_subject = ca_cert.subject().to_string();
-
-        Ok(cert_issuer == ca_subject)
+        super::cert_verify::verify_certificate_signed_by(cert, ca_cert)
     }
 
     /// Extract certificate information
@@ -326,6 +417,65 @@ impl CertificateAuthService {
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    fn cert_config(check_crl: bool, check_ocsp: bool, sources: Vec<String>) -> SecurityConfig {
+        use crate::config::config_security::{
+            CertificateConfig, CertificateUserMapping, CertificateUsernameSource,
+            CertificateValidationLevel,
+        };
+        SecurityConfig {
+            certificate: Some(CertificateConfig {
+                enabled: true,
+                require_client_cert: true,
+                trust_store: vec![],
+                crl_sources: sources,
+                check_crl,
+                check_ocsp,
+                allow_self_signed: false,
+                user_mapping: CertificateUserMapping {
+                    username_source: CertificateUsernameSource::CommonName,
+                    dn_mapping_rules: vec![],
+                    default_roles: vec![],
+                    ou_role_mapping: std::collections::HashMap::new(),
+                },
+                max_chain_length: 5,
+                validation_level: CertificateValidationLevel::Strict,
+                trusted_issuers: None,
+            }),
+            ..SecurityConfig::default()
+        }
+    }
+
+    #[test]
+    fn regression_revocation_config_fails_loud() {
+        // OCSP enabled → fail loud (unimplemented).
+        let svc = CertificateAuthService::new(Arc::new(cert_config(false, true, vec![])));
+        assert!(svc.revocation_config_check().is_err());
+
+        // CRL enabled with no sources → fail loud.
+        let svc = CertificateAuthService::new(Arc::new(cert_config(true, false, vec![])));
+        assert!(svc.revocation_config_check().is_err());
+
+        // CRL enabled with a URL source → fail loud (no network fetch).
+        let svc = CertificateAuthService::new(Arc::new(cert_config(
+            true,
+            false,
+            vec!["https://example.org/crl.pem".to_string()],
+        )));
+        assert!(svc.revocation_config_check().is_err());
+
+        // CRL enabled with a local file path → config accepted.
+        let svc = CertificateAuthService::new(Arc::new(cert_config(
+            true,
+            false,
+            vec!["/etc/oxirs/revoked.crl".to_string()],
+        )));
+        assert!(svc.revocation_config_check().is_ok());
+
+        // No revocation checking → accepted.
+        let svc = CertificateAuthService::new(Arc::new(cert_config(false, false, vec![])));
+        assert!(svc.revocation_config_check().is_ok());
+    }
 
     #[test]
     fn test_match_issuer_pattern_exact() {

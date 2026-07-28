@@ -414,7 +414,7 @@ impl CiCdEngine {
     }
 
     /// Write the current report's violations to `path` as a JSON baseline that a
-    /// later run can diff against via [`Self::analyze_regression`].
+    /// later run can diff against via `analyze_regression`.
     pub fn write_baseline(
         report: &ValidationReport,
         path: &std::path::Path,

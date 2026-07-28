@@ -37,6 +37,16 @@ impl PatchNormalizer {
         self
     }
 
+    /// Enable or disable sorting triple operations by subject.
+    ///
+    /// Sorting is applied only *within* contiguous runs of triple operations so
+    /// that transaction boundaries and other structural operations are never
+    /// reordered.
+    pub fn with_subject_sort(mut self, enabled: bool) -> Self {
+        self.sort_by_subject = enabled;
+        self
+    }
+
     /// Normalize a patch according to configured rules
     pub fn normalize(&self, patch: &RdfPatch) -> Result<RdfPatch> {
         let mut normalized = patch.clone();
@@ -180,22 +190,60 @@ impl PatchNormalizer {
     }
 
     fn sort_operations_by_subject(&self, mut patch: RdfPatch) -> Result<RdfPatch> {
-        // Sort triple operations by subject
-        patch.operations.sort_by(|a, b| {
-            let subject_a = self.extract_subject(a);
-            let subject_b = self.extract_subject(b);
-            subject_a.cmp(&subject_b)
-        });
+        // Sort triple (Add/Delete) operations by subject, but ONLY within
+        // contiguous runs of triple operations. A single global `sort_by` would
+        // move structural operations such as TransactionCommit/TransactionAbort
+        // (whose `extract_subject` is the empty string, which sorts before any
+        // URI) ahead of the very operations they are meant to enclose. Sorting
+        // within runs preserves the canonical grouping and all transaction
+        // boundaries produced by `apply_canonical_ordering`.
+        let ops = &mut patch.operations;
+        let mut i = 0;
+        while i < ops.len() {
+            if Self::is_triple_operation(&ops[i]) {
+                let run_start = i;
+                while i < ops.len() && Self::is_triple_operation(&ops[i]) {
+                    i += 1;
+                }
+                // Sort the contiguous run [run_start, i). Keep deletes before
+                // adds (matching canonical ordering), then order by subject.
+                ops[run_start..i].sort_by(|a, b| {
+                    let key_a = (Self::triple_kind_order(a), Self::extract_subject(a));
+                    let key_b = (Self::triple_kind_order(b), Self::extract_subject(b));
+                    key_a.cmp(&key_b)
+                });
+            } else {
+                i += 1;
+            }
+        }
 
         Ok(patch)
     }
 
-    fn extract_subject(&self, operation: &PatchOperation) -> String {
+    /// Whether an operation is a triple-level Add/Delete (the only operations
+    /// that participate in subject sorting).
+    fn is_triple_operation(operation: &PatchOperation) -> bool {
+        matches!(
+            operation,
+            PatchOperation::Add { .. } | PatchOperation::Delete { .. }
+        )
+    }
+
+    /// Ordering key that keeps deletes before adds within a run.
+    fn triple_kind_order(operation: &PatchOperation) -> u8 {
+        match operation {
+            PatchOperation::Delete { .. } => 0,
+            PatchOperation::Add { .. } => 1,
+            _ => 2,
+        }
+    }
+
+    fn extract_subject(operation: &PatchOperation) -> String {
         match operation {
             PatchOperation::Add { subject, .. } | PatchOperation::Delete { subject, .. } => {
                 subject.clone()
             }
-            _ => String::new(), // Non-triple operations sort first
+            _ => String::new(),
         }
     }
 }
@@ -203,5 +251,80 @@ impl PatchNormalizer {
 impl Default for PatchNormalizer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn regression_normalize_keeps_transaction_commit_last() {
+        let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::TransactionBegin {
+            transaction_id: Some("tx-1".to_string()),
+        });
+        patch.add_operation(PatchOperation::Add {
+            subject: "http://example.org/s1".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        });
+        patch.add_operation(PatchOperation::TransactionCommit);
+
+        let normalizer = PatchNormalizer::new();
+        let normalized = normalizer.normalize(&patch).unwrap();
+
+        // TransactionBegin must come first, TransactionCommit must come last,
+        // and the Add must sit strictly between them (never before the begin or
+        // after the commit).
+        let ops = &normalized.operations;
+        assert!(matches!(
+            ops.first(),
+            Some(PatchOperation::TransactionBegin { .. })
+        ));
+        assert!(matches!(
+            ops.last(),
+            Some(PatchOperation::TransactionCommit)
+        ));
+        let add_pos = ops
+            .iter()
+            .position(|op| matches!(op, PatchOperation::Add { .. }))
+            .expect("Add operation should be present");
+        assert!(add_pos > 0 && add_pos < ops.len() - 1);
+    }
+
+    #[test]
+    fn regression_subject_sort_within_run() {
+        let mut patch = RdfPatch::new();
+        for subject in [
+            "http://example.org/s3",
+            "http://example.org/s1",
+            "http://example.org/s2",
+        ] {
+            patch.add_operation(PatchOperation::Add {
+                subject: subject.to_string(),
+                predicate: "http://example.org/p".to_string(),
+                object: "http://example.org/o".to_string(),
+            });
+        }
+
+        let normalized = PatchNormalizer::new().normalize(&patch).unwrap();
+        let subjects: Vec<String> = normalized
+            .operations
+            .iter()
+            .filter_map(|op| match op {
+                PatchOperation::Add { subject, .. } => Some(subject.clone()),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(
+            subjects,
+            vec![
+                "http://example.org/s1".to_string(),
+                "http://example.org/s2".to_string(),
+                "http://example.org/s3".to_string(),
+            ]
+        );
     }
 }

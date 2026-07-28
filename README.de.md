@@ -257,7 +257,7 @@ oxirs/                  # Cargo Workspace Root
 │  ├─ oxirs-cluster     # Raft-basiertes verteiltes Dataset
 │  └─ oxirs-tsdb        # Zeitreihendatenbank
 ├─ stream/              # Echtzeit und Föderation
-│  ├─ oxirs-stream      # Kafka/NATS I/O, RDF Patch
+│  ├─ oxirs-stream      # NATS/Redis/MQTT I/O, RDF Patch
 │  ├─ oxirs-federate    # SERVICE-Planer, GraphQL-Stitching
 │  ├─ oxirs-modbus      # Modbus TCP/RTU-Protokoll
 │  └─ oxirs-canbus      # CANbus/J1939-Protokoll
@@ -296,7 +296,7 @@ oxirs/                  # Cargo Workspace Root
 | SPARQL-Föderation (SERVICE) | `oxirs-federate` | ✅ Stabil (1.148 Tests, 2PC) | ✅ |
 | Föderierte Authentifizierung | `oxirs-federate` | ✅ Stabil (OAuth2/SAML/JWT) | 🔸 |
 | **Echtzeit & Streaming** | | | |
-| Stream-Verarbeitung (Kafka/NATS) | `oxirs-stream` | ✅ Stabil (1.191 Tests, SIMD) | 🔸 |
+| Stream-Verarbeitung (NATS/Redis/MQTT) | `oxirs-stream` | ✅ Stabil (1.191 Tests, SIMD) | 🔸 |
 | RDF Patch & SPARQL Update Delta | `oxirs-stream` | ✅ Stabil | 🔸 |
 | **Suche & Geo** | | | |
 | Volltextsuche (`text:`) | `oxirs-textsearch` | ⏳ Geplant | ✅ |

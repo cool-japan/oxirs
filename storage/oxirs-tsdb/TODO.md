@@ -1,6 +1,6 @@
 # OxiRS TSDB - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
@@ -38,7 +38,7 @@
 - **Query Router** - Automatic backend routing
 
 ### Test Coverage
-- **1285 tests passing** with comprehensive coverage
+- **1326 tests passing** with comprehensive coverage
 - Integration, SPARQL, storage, query, and write path tests
 
 ## Roadmap
@@ -90,7 +90,7 @@
   - **Tests:** 40 unit tests + 20 integration tests in `tests/multi_region.rs` (3-region simulator with kill/recover cycle, routing rule priority, LWW resolution, failover chain). All pass.
   - **Risk:** cross-region split-brain. Mitigation: per-region Raft groups isolated; cross-region async with deterministic LWW conflict resolution.
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 26, 2026)
 - [x] DuckDB C-FFI quarantine (completed 2026-06-29, per COOLJAPAN Pure Rust Policy v2)
   - **Goal:** Remove the last in-tree C dependency (`libduckdb-sys` via the `duckdb` crate) from
     `oxirs-tsdb`'s `--all-features` closure while keeping the DuckDB↔TSDB bridge available.
@@ -105,6 +105,11 @@
     (new crate)
   - **Result:** `oxirs-tsdb`'s own `--all-features` build has zero C dependencies; DuckDB SQL
     access to TSDB chunks requires depending on `oxirs-tsdb-adapter-duckdb` directly
+  - **SUPERSEDED (2026-07-27):** the quarantine crate itself has been deleted. There is no
+    embedded DuckDB binding anywhere in the workspace now, and no `tsdb-duckdb` CLI feature
+    or `oxirs tsdb duckdb` subcommand. Export to Parquet with `arrow-export` and query it
+    with an external DuckDB; the Pure-Rust `analytics::DuckDbQueryAdapter` (a SQL text
+    builder, no C FFI) remains for generating those queries.
   - Doc-comment / rustdoc intra-link fixes across `analytics/kalman_forecasting.rs`,
     `multi_region/mod.rs`, `multi_region/replication.rs`, `replication/wal_replicator.rs`
     (no functional changes)
@@ -129,4 +134,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TSDB v0.3.2 - Time-series database for IoT-scale workloads*
+*OxiRS TSDB v0.4.1 - Time-series database for IoT-scale workloads*

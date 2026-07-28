@@ -17,7 +17,6 @@ use std::time::{Duration, Instant};
 
 // SciRS2 imports for performance analysis
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Random, RngExt};
 
 /// Performance optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,7 +96,6 @@ pub struct PerformanceMetrics {
 /// Performance optimizer using SciRS2
 pub struct PerformanceOptimizer {
     config: PerformanceConfig,
-    rng: Random,
     history: Arc<dashmap::DashMap<String, Vec<PerformanceMetrics>>>,
     cache_sizes: Arc<dashmap::DashMap<String, usize>>,
     last_adjustment: Arc<Mutex<Instant>>,
@@ -108,7 +106,6 @@ impl PerformanceOptimizer {
     pub fn new(config: PerformanceConfig) -> Self {
         Self {
             config,
-            rng: Random::default(),
             history: Arc::new(dashmap::DashMap::new()),
             cache_sizes: Arc::new(dashmap::DashMap::new()),
             last_adjustment: Arc::new(Mutex::new(Instant::now())),
@@ -163,11 +160,14 @@ impl PerformanceOptimizer {
             (history_vec, sample_size, confidence)
         };
 
-        // Extract features using SciRS2
+        // Extract predictor features (request_size, cache_hit_rate) and the
+        // aligned latency targets from history.
         let features = self.extract_features(&history_data, request_size);
+        let targets = self.extract_targets(&history_data);
 
-        // Simple linear regression using SciRS2
-        let prediction = self.predict_using_regression(&features)?;
+        // Ordinary least squares regression on the historical features to
+        // predict latency for the requested request_size.
+        let prediction = self.predict_using_regression(&features, &targets, request_size)?;
 
         Some(LatencyPrediction {
             predicted_latency_ms: prediction,
@@ -431,27 +431,68 @@ impl PerformanceOptimizer {
         })
     }
 
-    fn predict_using_regression(&mut self, features: &Array2<f64>) -> Option<f64> {
-        // Simple prediction using mean and variance
-        // In a real implementation, this would use a trained model
+    /// Extract the latency targets aligned with [`Self::extract_features`].
+    fn extract_targets(&self, history: &[PerformanceMetrics]) -> Vec<f64> {
+        let n_samples = history.len().min(100);
+        history[history.len() - n_samples..]
+            .iter()
+            .map(|m| m.latency_ms)
+            .collect()
+    }
 
-        if features.nrows() == 0 {
+    /// Predict latency using an ordinary-least-squares linear regression over
+    /// the historical features `[request_size, cache_hit_rate]` against the
+    /// observed latencies, evaluated at `query_request_size` (and the mean
+    /// historical cache-hit-rate). This is a genuine computed estimate — never a
+    /// random number.
+    ///
+    /// Returns `None` when there is insufficient or degenerate data to fit a
+    /// model, so callers can treat the prediction as unavailable rather than
+    /// acting on noise.
+    fn predict_using_regression(
+        &self,
+        features: &Array2<f64>,
+        targets: &[f64],
+        query_request_size: usize,
+    ) -> Option<f64> {
+        let n = features.nrows();
+        if n == 0 || n != targets.len() {
             return None;
         }
 
-        // Calculate mean latency weighted by cache hit rate
-        let weights: Vec<f64> = (0..features.nrows())
-            .map(|i| features[[i, 1]]) // cache_hit_rate
-            .collect();
+        // Design matrix columns: [1, request_size, cache_hit_rate].
+        // Solve the 3x3 normal equations (XᵀX)·β = Xᵀy via Gaussian elimination.
+        let mut xtx = [[0.0f64; 3]; 3];
+        let mut xty = [0.0f64; 3];
+        let mut mean_hit_rate = 0.0f64;
 
-        let weighted_sum: f64 = weights.iter().sum();
-        let mean_prediction = if weighted_sum > 0.0 {
-            100.0 + self.rng.random::<f64>() * 500.0 // Simplified prediction
-        } else {
-            200.0
+        for i in 0..n {
+            let x = [1.0, features[[i, 0]], features[[i, 1]]];
+            mean_hit_rate += features[[i, 1]];
+            let y = targets[i];
+            for (r, xr) in x.iter().enumerate() {
+                xty[r] += xr * y;
+                for (c, xc) in x.iter().enumerate() {
+                    xtx[r][c] += xr * xc;
+                }
+            }
+        }
+        mean_hit_rate /= n as f64;
+
+        let beta = match solve_3x3(xtx, xty) {
+            Some(b) => b,
+            None => {
+                // Singular system (e.g. constant predictors): fall back to the
+                // mean observed latency — still a computed value, not noise.
+                let mean_latency = targets.iter().sum::<f64>() / n as f64;
+                return Some(mean_latency.max(0.0));
+            }
         };
 
-        Some(mean_prediction)
+        let prediction = beta[0] + beta[1] * (query_request_size as f64) + beta[2] * mean_hit_rate;
+
+        // Latency cannot be negative; clamp to a small positive floor.
+        Some(prediction.max(0.0))
     }
 
     fn calculate_prediction_confidence(&self, history: &[PerformanceMetrics]) -> f64 {
@@ -473,6 +514,52 @@ impl PerformanceOptimizer {
 
         // Combine confidences
         (data_confidence + consistency_confidence) / 2.0
+    }
+}
+
+/// Solve a 3x3 linear system `A·x = b` via Gaussian elimination with partial
+/// pivoting. Returns `None` if the matrix is singular (no unique solution).
+fn solve_3x3(mut a: [[f64; 3]; 3], mut b: [f64; 3]) -> Option<[f64; 3]> {
+    for col in 0..3 {
+        // Partial pivot: find the row with the largest absolute value in `col`.
+        let mut pivot = col;
+        for row in (col + 1)..3 {
+            if a[row][col].abs() > a[pivot][col].abs() {
+                pivot = row;
+            }
+        }
+        if a[pivot][col].abs() < 1e-12 {
+            return None; // singular
+        }
+        a.swap(col, pivot);
+        b.swap(col, pivot);
+
+        // Eliminate below.
+        let pivot_row = a[col];
+        let pivot_b = b[col];
+        for row in (col + 1)..3 {
+            let factor = a[row][col] / pivot_row[col];
+            for (c, cell) in a[row].iter_mut().enumerate().skip(col) {
+                *cell -= factor * pivot_row[c];
+            }
+            b[row] -= factor * pivot_b;
+        }
+    }
+
+    // Back-substitution.
+    let mut x = [0.0f64; 3];
+    for row in (0..3).rev() {
+        let mut sum = b[row];
+        for c in (row + 1)..3 {
+            sum -= a[row][c] * x[c];
+        }
+        x[row] = sum / a[row][row];
+    }
+
+    if x.iter().all(|v| v.is_finite()) {
+        Some(x)
+    } else {
+        None
     }
 }
 
@@ -627,5 +714,54 @@ mod tests {
         let prediction = optimizer.predict_latency("test_op", 100);
 
         assert!(prediction.is_none()); // Not enough data
+    }
+
+    #[test]
+    fn regression_latency_prediction_is_deterministic_and_computed() {
+        // Feed a clean linear relationship latency = 10 + 2 * request_size at a
+        // fixed cache_hit_rate. A real regression must (a) be deterministic
+        // across calls (no randomness) and (b) recover the underlying model.
+        let mut optimizer = PerformanceOptimizer::new(PerformanceConfig::default());
+        for i in 1..=20 {
+            let request_size = i * 10;
+            // Vary cache_hit_rate (mean 0.5) so the design matrix is well-posed;
+            // latency depends only on request_size, so its coefficient is ~0.
+            let cache_hit_rate = if i % 2 == 0 { 0.6 } else { 0.4 };
+            optimizer.record_metrics(PerformanceMetrics {
+                operation_type: "op".to_string(),
+                latency_ms: 10.0 + 2.0 * request_size as f64,
+                cache_hit_rate,
+                cpu_usage: 0.0,
+                memory_usage: 0,
+                timestamp: chrono::Utc::now(),
+                request_size,
+                result_size: 0,
+            });
+        }
+
+        let p1 = optimizer.predict_latency("op", 100).expect("prediction");
+        let p2 = optimizer.predict_latency("op", 100).expect("prediction");
+        // Determinism: identical inputs -> identical output (would fail if random).
+        assert_eq!(p1.predicted_latency_ms, p2.predicted_latency_ms);
+        // Recover latency ~= 10 + 2*100 = 210 within tolerance.
+        assert!(
+            (p1.predicted_latency_ms - 210.0).abs() < 5.0,
+            "expected ~210, got {}",
+            p1.predicted_latency_ms
+        );
+    }
+
+    #[test]
+    fn regression_solve_3x3_identity() {
+        // Sanity check the linear solver used by the regression.
+        let a = [[2.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 4.0]];
+        let b = [4.0, 9.0, 8.0];
+        let x = solve_3x3(a, b).expect("solvable");
+        assert!((x[0] - 2.0).abs() < 1e-9);
+        assert!((x[1] - 3.0).abs() < 1e-9);
+        assert!((x[2] - 2.0).abs() < 1e-9);
+        // Singular matrix returns None.
+        let singular = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]];
+        assert!(solve_3x3(singular, [1.0, 2.0, 3.0]).is_none());
     }
 }

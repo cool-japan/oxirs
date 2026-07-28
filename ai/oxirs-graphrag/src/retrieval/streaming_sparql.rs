@@ -237,41 +237,55 @@ impl<S: SparqlEngineTrait + 'static> StreamingSparqlRetriever<S> {
     }
 }
 
-/// Build a paginated SPARQL CONSTRUCT query for a single seed entity
+/// Build a paginated SPARQL CONSTRUCT query for a single seed entity.
+///
+/// Produces a conservative CONSTRUCT with the seed's direct outgoing and
+/// incoming triples, plus the outgoing triples of every node reachable from
+/// the seed within `1..=hops` forward steps.
+///
+/// This deliberately does **not** use a SPARQL property path (the previous
+/// `(:|!:){1,hops}` referenced the undeclared empty prefix `:`/`!:` and — on
+/// top of that — spliced a path expression directly into the CONSTRUCT
+/// template, which is not legal SPARQL: `ConstructTriples` only allows
+/// `VarOrIri` / `a` as a predicate, never a `PropertyPathExpression`). See
+/// `crate::sparql::hop_pattern` for the path-free replacement used here,
+/// which only ever appears in the WHERE clause.
+///
+/// Two formatting quirks below are load-bearing, not stylistic (both
+/// verified against the real `oxirs-arq` parser — see the round-trip
+/// regression tests):
+///
+/// - `CONSTRUCT { ... }` is kept on a single physical line, immediately
+///   followed by `WHERE {` on that *same* line: the parser does not skip a
+///   bare newline between the template's closing `}` and the `WHERE`
+///   keyword, and fails with "Expected LeftBrace, found Some(Newline)" if
+///   one is present.
+/// - The `WHERE` clause's closing `}` is immediately followed by `LIMIT`
+///   and `OFFSET` on the same line, for the same reason ("Unexpected
+///   trailing tokens after query: Some(Limit)" otherwise).
+///
+/// The `WHERE` clause body itself has no such restriction and stays
+/// multi-line for readability.
 fn build_expansion_query(seed_uri: &str, hops: usize, limit: usize, offset: usize) -> String {
-    // We produce a conservative CONSTRUCT with outgoing and incoming triples
-    // for up to `hops` levels via SPARQL property paths.
-    let path = if hops <= 1 {
-        "?p".to_string()
-    } else {
-        // SPARQL 1.1 property path: 1 to `hops` arbitrary steps
-        format!("(:|!:){{1,{}}}", hops)
-    };
+    let seed_term = format!("<{seed_uri}>");
+    let hop_pattern = crate::sparql::hop_pattern::build_forward_hop_pattern(
+        &seed_term, "?hopnode", hops, "hp", "hn",
+    );
 
     format!(
         r#"
-CONSTRUCT {{
-    <{seed}> ?p1 ?o1 .
-    ?s1 ?p2 <{seed}> .
-    ?o1 {path} ?o2 .
-}}
-WHERE {{
+CONSTRUCT {{ <{seed}> ?p1 ?o1 . ?s1 ?p2 <{seed}> . ?hopnode ?p3 ?o2 . }} WHERE {{
     {{
         <{seed}> ?p1 ?o1 .
     }} UNION {{
         ?s1 ?p2 <{seed}> .
     }} UNION {{
-        <{seed}> ?p_mid ?mid .
-        ?mid {path} ?o2 .
+        {hop_pattern}
+        ?hopnode ?p3 ?o2 .
     }}
-}}
-LIMIT {limit}
-OFFSET {offset}
+}} LIMIT {limit} OFFSET {offset}
 "#,
         seed = seed_uri,
-        path = path,
-        limit = limit,
-        offset = offset,
     )
 }
 
@@ -311,20 +325,23 @@ mod tests {
         async fn construct(&self, query: &str) -> GraphRAGResult<Vec<Triple>> {
             self.page_call_count.fetch_add(1, Ordering::Relaxed);
 
-            // Parse OFFSET from the query to simulate pagination
-            let offset: usize = query
-                .lines()
-                .find(|l| l.trim_start().starts_with("OFFSET"))
-                .and_then(|l| l.split_whitespace().nth(1))
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-
-            let limit: usize = query
-                .lines()
-                .find(|l| l.trim_start().starts_with("LIMIT"))
-                .and_then(|l| l.split_whitespace().nth(1))
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1000);
+            // Parse OFFSET/LIMIT to simulate pagination. Token-based (not
+            // line-based): the real query builder puts `LIMIT`/`OFFSET`
+            // immediately after the WHERE clause's closing `}` on the same
+            // physical line (required by the real oxirs-arq parser — see
+            // `build_expansion_query`'s doc comment), so a
+            // "keyword must start its own line" check would silently miss
+            // them and always fall back to the defaults below.
+            let tokens: Vec<&str> = query.split_whitespace().collect();
+            let value_after = |keyword: &str| -> Option<usize> {
+                tokens
+                    .iter()
+                    .position(|&t| t == keyword)
+                    .and_then(|i| tokens.get(i + 1))
+                    .and_then(|s| s.parse().ok())
+            };
+            let offset: usize = value_after("OFFSET").unwrap_or(0);
+            let limit: usize = value_after("LIMIT").unwrap_or(1000);
 
             let slice: Vec<Triple> = self
                 .triples
@@ -585,7 +602,11 @@ mod tests {
         let q = build_expansion_query("http://example.org/e", 3, 500, 1000);
         assert!(q.contains("LIMIT 500"));
         assert!(q.contains("OFFSET 1000"));
-        assert!(q.contains("{1,3}"));
+        // 3 hops => branches for 1-, 2-, and 3-step chains (2 UNION joins).
+        assert!(q.contains("?hp1"));
+        assert!(q.contains("?hp2"));
+        assert!(q.contains("?hp3"));
+        assert!(!q.contains(":|!:"));
     }
 
     #[test]
@@ -632,18 +653,19 @@ mod additional_tests {
         }
         async fn construct(&self, query: &str) -> GraphRAGResult<Vec<Triple>> {
             self.page_call_count.fetch_add(1, Ordering::Relaxed);
-            let offset: usize = query
-                .lines()
-                .find(|l| l.trim_start().starts_with("OFFSET"))
-                .and_then(|l| l.split_whitespace().nth(1))
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-            let limit: usize = query
-                .lines()
-                .find(|l| l.trim_start().starts_with("LIMIT"))
-                .and_then(|l| l.split_whitespace().nth(1))
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1000);
+            // Token-based (not line-based) — see the sibling mock's comment
+            // above for why: `LIMIT`/`OFFSET` share a line with the WHERE
+            // clause's closing `}` in the real query builder's output.
+            let tokens: Vec<&str> = query.split_whitespace().collect();
+            let value_after = |keyword: &str| -> Option<usize> {
+                tokens
+                    .iter()
+                    .position(|&t| t == keyword)
+                    .and_then(|i| tokens.get(i + 1))
+                    .and_then(|s| s.parse().ok())
+            };
+            let offset: usize = value_after("OFFSET").unwrap_or(0);
+            let limit: usize = value_after("LIMIT").unwrap_or(1000);
             Ok(self
                 .triples
                 .iter()
@@ -708,14 +730,39 @@ mod additional_tests {
         let q = build_expansion_query("http://example.org/e", 2, 200, 400);
         assert!(q.contains("LIMIT 200"));
         assert!(q.contains("OFFSET 400"));
-        assert!(q.contains("{1,2}"));
+        assert!(q.contains("?hp1"));
+        assert!(q.contains("?hp2"));
     }
 
     #[test]
     fn test_build_expansion_query_hop1_uses_p() {
         let q = build_expansion_query("http://example.org/e", 1, 50, 0);
-        // For 1 hop, path is just ?p
+        // For 1 hop, path is just ?p1 (the direct-neighbor CONSTRUCT branch)
         assert!(q.contains("?p"));
+    }
+
+    // ── Regression: no bogus empty-prefix property path (P0 duplicate) ─────
+
+    #[test]
+    fn regression_build_expansion_query_never_emits_empty_prefix_hack() {
+        for hops in [1usize, 2, 3, 5] {
+            let q = build_expansion_query("http://example.org/e", hops, 100, 0);
+            assert!(
+                !q.contains(":|!:"),
+                "hops={hops}: must not reference the undeclared empty prefix\n{q}"
+            );
+        }
+    }
+
+    #[test]
+    fn regression_build_expansion_query_round_trips_through_real_arq_parser() {
+        for hops in [1usize, 2, 3, 5] {
+            let q = build_expansion_query("http://example.org/e", hops, 100, 0);
+            let mut parser = oxirs_arq::query::QueryParser::new();
+            parser
+                .parse(&q)
+                .unwrap_or_else(|e| panic!("hops={hops} query failed to parse: {e}\n{q}"));
+        }
     }
 
     #[test]

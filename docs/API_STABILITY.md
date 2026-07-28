@@ -343,7 +343,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 | API Surface | Stability | Notes |
 |-------------|-----------|-------|
-| `StreamProcessor` | 🟡 Unstable | Kafka/NATS integration may change |
+| `StreamProcessor` | 🟡 Unstable | NATS/Redis/MQTT integration may change |
 | `EventStream` | 🟡 Unstable | Event format may evolve |
 | Watermark handling | 🟡 Unstable | Watermark strategy may change |
 

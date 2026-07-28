@@ -524,8 +524,13 @@ mod tests {
         assert_eq!(params.quadrant_segments, 16);
     }
 
-    // (test_buffer_3d_point / test_buffer_3d_with_params buffered a Point Z, whose 2D
-    // step needs GEOS; that capability is quarantined into oxirs-geosparql-adapter-geos.)
+    #[test]
+    fn test_buffer_3d_point() {
+        // The 2D step of a Point Z buffer used to need GEOS; it is Pure Rust now.
+        let geom = Geometry::from_wkt("POINT Z (1 2 3)").expect("valid 3D point");
+        let buffered = buffer_3d(&geom, 1.0).expect("3D point buffer should succeed");
+        assert_eq!(buffered.geometry_type(), "MultiPolygon");
+    }
 
     #[test]
     fn test_buffer_3d_requires_3d_geometry() {

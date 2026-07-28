@@ -59,7 +59,18 @@ impl QuotedTriple {
 
 impl fmt::Display for QuotedTriple {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<< {} >>", self.inner)
+        // `Triple`'s own `Display` appends a trailing " ." (it formats a
+        // top-level Turtle statement), which is not valid inside `<< ... >>`
+        // -- `<< s p o . >>` fails to re-parse ("expected exactly 3 terms").
+        // Format the s/p/o components directly instead, matching
+        // `serialize_quoted_triple` below.
+        write!(
+            f,
+            "<< {} {} {} >>",
+            self.inner.subject(),
+            self.inner.predicate(),
+            self.inner.object()
+        )
     }
 }
 
@@ -125,7 +136,15 @@ impl<'a> QuotedTripleRef<'a> {
 
 impl<'a> fmt::Display for QuotedTripleRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<< {} >>", self.inner)
+        // See `QuotedTriple`'s `Display` impl: avoid `Triple`'s trailing
+        // " ." statement terminator, which is invalid inside `<< ... >>`.
+        write!(
+            f,
+            "<< {} {} {} >>",
+            self.inner.subject(),
+            self.inner.predicate(),
+            self.inner.object()
+        )
     }
 }
 
@@ -435,6 +454,40 @@ pub mod serialization {
             }
         }
 
+        /// Consume exactly `digits` hex characters from `chars` and return the
+        /// decoded `u32` codepoint. Used for `\uXXXX` (4 hex digits) and
+        /// `\UXXXXXXXX` (8 hex digits) escapes.
+        fn read_hex_escape(
+            chars: &mut std::str::Chars<'_>,
+            digits: usize,
+            kind: char,
+        ) -> Result<u32, OxirsError> {
+            let mut value: u32 = 0;
+            for _ in 0..digits {
+                let c = chars.next().ok_or_else(|| {
+                    OxirsError::Parse(format!(
+                        "Truncated \\{kind} escape in quoted triple literal: expected {digits} hex digits"
+                    ))
+                })?;
+                let digit = c.to_digit(16).ok_or_else(|| {
+                    OxirsError::Parse(format!(
+                        "Invalid hex digit '{c}' in \\{kind} escape in quoted triple literal"
+                    ))
+                })?;
+                value = (value << 4) | digit;
+            }
+            Ok(value)
+        }
+
+        /// Unescape a quoted-triple literal's lexical body.
+        ///
+        /// Mirrors the N-Triples/Turtle `ECHAR`/`UCHAR` grammar used by this
+        /// module's own serializer ([`crate::model::literal::print_quoted_str`]):
+        /// `\t \b \n \r \f \" \' \\` plus `\uXXXX` (4 hex digits) and
+        /// `\UXXXXXXXX` (8 hex digits) Unicode escapes. Without `\b`/`\f`/
+        /// `\u`/`\U` support, a quoted-triple literal containing a control
+        /// character or non-ASCII-escaped codepoint would serialize
+        /// correctly but fail to re-parse.
         fn unescape_star_string(raw: &str) -> Result<String, OxirsError> {
             let mut result = String::with_capacity(raw.len());
             let mut chars = raw.chars();
@@ -447,8 +500,29 @@ pub mod serialization {
                     Some('n') => result.push('\n'),
                     Some('t') => result.push('\t'),
                     Some('r') => result.push('\r'),
+                    Some('b') => result.push('\u{08}'),
+                    Some('f') => result.push('\u{0C}'),
                     Some('"') => result.push('"'),
+                    Some('\'') => result.push('\''),
                     Some('\\') => result.push('\\'),
+                    Some('u') => {
+                        let codepoint = read_hex_escape(&mut chars, 4, 'u')?;
+                        let c = char::from_u32(codepoint).ok_or_else(|| {
+                            OxirsError::Parse(format!(
+                                "Invalid Unicode codepoint U+{codepoint:04X} in \\u escape in quoted triple literal"
+                            ))
+                        })?;
+                        result.push(c);
+                    }
+                    Some('U') => {
+                        let codepoint = read_hex_escape(&mut chars, 8, 'U')?;
+                        let c = char::from_u32(codepoint).ok_or_else(|| {
+                            OxirsError::Parse(format!(
+                                "Invalid Unicode codepoint U+{codepoint:08X} in \\U escape in quoted triple literal"
+                            ))
+                        })?;
+                        result.push(c);
+                    }
                     Some(other) => {
                         return Err(OxirsError::Parse(format!(
                             "Unsupported escape sequence '\\{other}' in quoted triple literal"
@@ -557,10 +631,46 @@ mod tests {
         let quoted = QuotedTriple::new(triple.clone());
 
         assert_eq!(quoted.inner(), &triple);
+        // No trailing " ." before the closing ">>": that form is not valid
+        // RDF-star/Turtle-star syntax and doesn't round-trip through
+        // `parse_quoted_triple` (see regression test below).
         assert_eq!(
             format!("{quoted}"),
-            "<< <http://example.org/alice> <http://example.org/says> \"Hello\" . >>"
+            "<< <http://example.org/alice> <http://example.org/says> \"Hello\" >>"
         );
+    }
+
+    /// Regression test: `Display` output for `QuotedTriple`/`QuotedTripleRef`
+    /// must be valid RDF-star syntax that round-trips through
+    /// `parse_quoted_triple`, matching the hand-rolled `serialize_quoted_triple`
+    /// exactly (both formatters must agree).
+    #[test]
+    fn regression_quoted_triple_display_round_trips() {
+        use serialization::turtle_star::{parse_quoted_triple, serialize_quoted_triple};
+
+        let subject = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/says").expect("valid IRI");
+        let object = Object::Literal(Literal::new("Hello"));
+        let triple = Triple::new(subject, predicate, object);
+        let quoted = QuotedTriple::new(triple);
+
+        let displayed = format!("{quoted}");
+        assert!(
+            !displayed.contains(". >>"),
+            "Display output must not contain a trailing statement terminator: {displayed}"
+        );
+
+        // `Display` and the hand-rolled serializer must agree.
+        assert_eq!(displayed, serialize_quoted_triple(&quoted));
+
+        // And the result must actually re-parse back to the same triple.
+        let reparsed = parse_quoted_triple(&displayed).expect("Display output must re-parse");
+        assert_eq!(reparsed, quoted);
+
+        // `QuotedTripleRef`'s `Display` must match too.
+        let triple_ref = quoted.inner().clone();
+        let quoted_ref = QuotedTripleRef::new(&triple_ref);
+        assert_eq!(format!("{quoted_ref}"), displayed);
     }
 
     #[test]
@@ -639,5 +749,68 @@ mod tests {
         assert!(
             parse_quoted_triple("<< <http://example.org/a> <http://example.org/b> >>").is_err()
         );
+    }
+
+    /// Regression test: a quoted-triple literal containing control
+    /// characters that `print_quoted_str` escapes as `\b`, `\f`, or
+    /// `\uXXXX` must round-trip through serialize -> parse, not fail with
+    /// "Unsupported escape sequence".
+    #[test]
+    fn regression_unescape_star_string_supports_full_echar_uchar_grammar() {
+        use serialization::turtle_star::{parse_quoted_triple, serialize_quoted_triple};
+
+        // 0x08 (backspace, -> \b), 0x0C (form feed, -> \f), and 0x07 (bell,
+        // control char without a short escape, -> ) per
+        // `print_quoted_str`.
+        let value = "back\u{08}space form\u{0C}feed bell\u{07}end";
+        let subject = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/note").expect("valid IRI");
+        let original = QuotedTriple::new(Triple::new(
+            subject,
+            predicate,
+            Object::Literal(Literal::new(value)),
+        ));
+
+        let text = serialize_quoted_triple(&original);
+        assert!(text.contains("\\b"), "expected a \\b escape in: {text}");
+        assert!(text.contains("\\f"), "expected a \\f escape in: {text}");
+        assert!(
+            text.contains("\\u0007"),
+            "expected a \\u0007 escape in: {text}"
+        );
+
+        let parsed = parse_quoted_triple(&text).expect("must re-parse its own serialized form");
+        assert_eq!(parsed, original);
+        assert_eq!(parsed.object(), &Object::Literal(Literal::new(value)));
+    }
+
+    /// Regression test: `\uXXXX` (4 hex digits) and `\UXXXXXXXX` (8 hex
+    /// digits) Unicode escapes are both accepted, including a codepoint
+    /// outside the Basic Multilingual Plane that only `\U` can express.
+    #[test]
+    fn regression_unescape_star_string_handles_u_and_big_u_escapes() {
+        use serialization::turtle_star::parse_quoted_triple;
+
+        // A == 'A'; \U0001F600 == the grinning-face emoji.
+        let input = "<< <http://example.org/s> <http://example.org/p> \"\\u0041-\\U0001F600\" >>";
+        let parsed = parse_quoted_triple(input).expect("valid \\u/\\U escapes must parse");
+        assert_eq!(
+            parsed.object(),
+            &Object::Literal(Literal::new("A-\u{1F600}"))
+        );
+    }
+
+    /// Regression test: a malformed `\u`/`\U` escape (too few hex digits, or
+    /// a non-hex character) must be rejected with an explicit parse error,
+    /// never silently accepted or truncated.
+    #[test]
+    fn regression_unescape_star_string_rejects_truncated_unicode_escape() {
+        use serialization::turtle_star::parse_quoted_triple;
+
+        let truncated = "<< <http://example.org/s> <http://example.org/p> \"\\u12\" >>";
+        assert!(parse_quoted_triple(truncated).is_err());
+
+        let bad_digit = "<< <http://example.org/s> <http://example.org/p> \"\\u12ZZ\" >>";
+        assert!(parse_quoted_triple(bad_digit).is_err());
     }
 }

@@ -68,6 +68,32 @@ pub struct BftMessage {
     pub proof_of_work: Option<ProofOfWork>,
 }
 
+/// A generic Ed25519-signed, replay-protected envelope around an arbitrary
+/// pre-serialized payload.
+///
+/// [`BftMessage`] is hard-typed to [`RpcMessage`] (the in-process,
+/// non-networked `raft.rs` RPC enum). Real inter-node traffic instead flows
+/// through [`crate::clustering::node::TcpNodeCommunication`], whose
+/// `NodeMessage` enum has a different shape (`Heartbeat`/`JoinRequest`/
+/// `LeaderElection`/...). `SignedPayload` carries the same cryptographic
+/// authentication (Ed25519 signature over a SHA-256 digest of the payload +
+/// timestamp + nonce) and the same replay/expiry protection as `BftMessage`,
+/// but over an opaque byte payload so it can wrap any serializable message
+/// type. See [`BftNodeState::sign_payload`] / [`BftNodeState::verify_payload`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedPayload {
+    /// The serialized message being authenticated (opaque to this layer).
+    pub payload: Vec<u8>,
+    /// Cryptographic signature over the payload/timestamp/nonce digest.
+    pub signature: Vec<u8>,
+    /// Sender's public key identifier (matches `BftNodeState::identity.node_id`).
+    pub sender_key_id: String,
+    /// Message timestamp (for replay protection).
+    pub timestamp: DateTime<Utc>,
+    /// Nonce for uniqueness.
+    pub nonce: Vec<u8>,
+}
+
 /// Proof-of-work for Byzantine-resistant leader election
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofOfWork {
@@ -296,6 +322,129 @@ impl BftNodeState {
             Err(_) => {
                 self.record_byzantine_behavior(
                     &bft_message.sender_key_id,
+                    ByzantineBehavior::InvalidSignature,
+                    b"Signature verification failed".to_vec(),
+                );
+                Ok(false)
+            }
+        }
+    }
+
+    /// This node's raw 32-byte Ed25519 public key, for distributing to peers
+    /// (e.g. at cluster join time) so they can [`add_public_key`](Self::add_public_key)
+    /// and subsequently [`verify_payload`](Self::verify_payload) messages from
+    /// this node.
+    pub fn public_key(&self) -> &[u8] {
+        &self.identity.public_key
+    }
+
+    /// Sign an arbitrary pre-serialized payload, producing a [`SignedPayload`]
+    /// with the same Ed25519-over-SHA256(payload‖timestamp‖nonce) scheme as
+    /// [`sign_message`](Self::sign_message), for use by transports (e.g.
+    /// [`crate::clustering::node::TcpNodeCommunication`]) whose message type
+    /// is not [`RpcMessage`].
+    pub fn sign_payload(&self, payload: &[u8]) -> FusekiResult<SignedPayload> {
+        let timestamp = Utc::now();
+
+        let nonce = oxicrypto_rand::random_nonce::<16>()
+            .map_err(|e| FusekiError::internal(format!("Failed to generate nonce: {e:?}")))?;
+
+        let timestamp_bytes = timestamp.timestamp().to_le_bytes();
+        let digest = sha256_segments(&[payload, &timestamp_bytes, &nonce]);
+        let signature = self.identity.key_pair.sign(&digest);
+
+        Ok(SignedPayload {
+            payload: payload.to_vec(),
+            signature: signature.to_bytes().to_vec(),
+            sender_key_id: self.identity.node_id.clone(),
+            timestamp,
+            nonce: nonce.to_vec(),
+        })
+    }
+
+    /// Verify a [`SignedPayload`]: rejects expired (replay-window), replayed
+    /// (duplicate nonce/signature), unknown-sender, or badly-signed payloads,
+    /// recording Byzantine evidence (and blacklisting on repeated offenses)
+    /// exactly like [`verify_message`](Self::verify_message). Returns
+    /// `Ok(true)` only when the payload is freshly signed by a known,
+    /// non-blacklisted peer.
+    pub fn verify_payload(&mut self, signed: &SignedPayload) -> FusekiResult<bool> {
+        if self.blacklisted_nodes.contains(&signed.sender_key_id) {
+            return Ok(false);
+        }
+
+        let age = Utc::now() - signed.timestamp;
+        if age
+            > chrono::Duration::from_std(MESSAGE_TTL).expect("MESSAGE_TTL should be valid duration")
+        {
+            self.record_byzantine_behavior(
+                &signed.sender_key_id,
+                ByzantineBehavior::ReplayAttack,
+                format!("Signed payload too old: {} seconds", age.num_seconds()).into_bytes(),
+            );
+            return Ok(false);
+        }
+
+        let message_id = hex::encode(sha256_segments(&[
+            &signed.signature,
+            signed.sender_key_id.as_bytes(),
+            &signed.timestamp.timestamp().to_le_bytes(),
+            &signed.nonce,
+        ]));
+        if self.seen_messages.contains_key(&message_id) {
+            self.record_byzantine_behavior(
+                &signed.sender_key_id,
+                ByzantineBehavior::ReplayAttack,
+                format!("Duplicate signed payload: {message_id}").into_bytes(),
+            );
+            return Ok(false);
+        }
+
+        let Some(public_key_bytes) = self.known_public_keys.get(&signed.sender_key_id) else {
+            return Err(FusekiError::authentication(format!(
+                "Unknown sender: {}",
+                signed.sender_key_id
+            )));
+        };
+
+        let public_key = match <[u8; 32]>::try_from(public_key_bytes.as_slice())
+            .ok()
+            .and_then(|pk| VerifyingKey::from_bytes(&pk).ok())
+        {
+            Some(pk) => pk,
+            None => {
+                self.record_byzantine_behavior(
+                    &signed.sender_key_id,
+                    ByzantineBehavior::InvalidSignature,
+                    b"Invalid sender public key".to_vec(),
+                );
+                return Ok(false);
+            }
+        };
+
+        let signature = match <[u8; 64]>::try_from(signed.signature.as_slice()) {
+            Ok(sig_bytes) => ed25519_dalek::Signature::from_bytes(&sig_bytes),
+            Err(_) => {
+                self.record_byzantine_behavior(
+                    &signed.sender_key_id,
+                    ByzantineBehavior::InvalidSignature,
+                    b"Malformed signature".to_vec(),
+                );
+                return Ok(false);
+            }
+        };
+
+        let timestamp_bytes = signed.timestamp.timestamp().to_le_bytes();
+        let digest = sha256_segments(&[&signed.payload, &timestamp_bytes, &signed.nonce]);
+
+        match public_key.verify(&digest, &signature) {
+            Ok(()) => {
+                self.seen_messages.insert(message_id, signed.timestamp);
+                Ok(true)
+            }
+            Err(_) => {
+                self.record_byzantine_behavior(
+                    &signed.sender_key_id,
                     ByzantineBehavior::InvalidSignature,
                     b"Signature verification failed".to_vec(),
                 );
@@ -663,5 +812,75 @@ mod tests {
         assert_eq!(count_leading_zeros(&[0x80, 0xFF]), 0); // 0x80 = 10000000 = 0 leading zeros
         assert_eq!(count_leading_zeros(&[0x40, 0xFF]), 1); // 0x40 = 01000000 = 1 leading zero
         assert_eq!(count_leading_zeros(&[0x20, 0xFF]), 2); // 0x20 = 00100000 = 2 leading zeros
+    }
+
+    /// Regression test for the "BFT layer never wired to any RPC path"
+    /// finding: `sign_payload`/`verify_payload` (the generic envelope used by
+    /// `TcpNodeCommunication`) must authenticate arbitrary payloads with the
+    /// same guarantees as the `RpcMessage`-specific `sign_message`/
+    /// `verify_message` pair.
+    #[tokio::test]
+    async fn regression_sign_and_verify_payload_roundtrip() {
+        let node1 = BftNodeState::new("node1".to_string()).unwrap();
+        let mut node2 = BftNodeState::new("node2".to_string()).unwrap();
+        node2.add_public_key("node1".to_string(), node1.public_key().to_vec());
+
+        let payload = b"arbitrary NodeMessage bytes".to_vec();
+        let signed = node1.sign_payload(&payload).unwrap();
+        assert_eq!(signed.payload, payload);
+        assert_eq!(signed.sender_key_id, "node1");
+
+        assert!(node2.verify_payload(&signed).unwrap());
+    }
+
+    /// A payload signed by an unknown sender (no registered public key) must
+    /// fail loud (`Err`), not silently pass or silently fail.
+    #[tokio::test]
+    async fn regression_verify_payload_unknown_sender_fails_loud() {
+        let node1 = BftNodeState::new("node1".to_string()).unwrap();
+        let mut node2 = BftNodeState::new("node2".to_string()).unwrap();
+        // node2 never learns node1's public key.
+
+        let signed = node1.sign_payload(b"hello").unwrap();
+        assert!(node2.verify_payload(&signed).is_err());
+    }
+
+    /// A tampered payload (signature no longer matches) must be rejected.
+    #[tokio::test]
+    async fn regression_verify_payload_tampered_rejected() {
+        let node1 = BftNodeState::new("node1".to_string()).unwrap();
+        let mut node2 = BftNodeState::new("node2".to_string()).unwrap();
+        node2.add_public_key("node1".to_string(), node1.public_key().to_vec());
+
+        let mut signed = node1.sign_payload(b"original payload").unwrap();
+        signed.payload = b"tampered payload".to_vec();
+
+        assert!(!node2.verify_payload(&signed).unwrap());
+    }
+
+    /// A replayed (identical) signed payload must be rejected the second time.
+    #[tokio::test]
+    async fn regression_verify_payload_replay_rejected() {
+        let node1 = BftNodeState::new("node1".to_string()).unwrap();
+        let mut node2 = BftNodeState::new("node2".to_string()).unwrap();
+        node2.add_public_key("node1".to_string(), node1.public_key().to_vec());
+
+        let signed = node1.sign_payload(b"do the thing once").unwrap();
+        assert!(node2.verify_payload(&signed).unwrap());
+        // Replaying the exact same signed envelope must now be rejected.
+        assert!(!node2.verify_payload(&signed).unwrap());
+    }
+
+    /// Once a node is blacklisted, its signed payloads are rejected outright
+    /// even if the signature itself would otherwise verify.
+    #[tokio::test]
+    async fn regression_verify_payload_blacklisted_sender_rejected() {
+        let node1 = BftNodeState::new("node1".to_string()).unwrap();
+        let mut node2 = BftNodeState::new("node2".to_string()).unwrap();
+        node2.add_public_key("node1".to_string(), node1.public_key().to_vec());
+        node2.blacklisted_nodes.insert("node1".to_string());
+
+        let signed = node1.sign_payload(b"hello").unwrap();
+        assert!(!node2.verify_payload(&signed).unwrap());
     }
 }

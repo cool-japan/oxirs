@@ -299,7 +299,12 @@ mod tests {
         }
     }
 
-    fn make_vc_with_expiry(id: &str, issuer: &str, subject_id: &str, expiry: &str) -> VerifiableCredential {
+    fn make_vc_with_expiry(
+        id: &str,
+        issuer: &str,
+        subject_id: &str,
+        expiry: &str,
+    ) -> VerifiableCredential {
         let mut vc = make_vc(id, issuer, subject_id);
         vc.expiration_date = Some(expiry.to_string());
         vc

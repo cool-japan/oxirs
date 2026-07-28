@@ -775,13 +775,16 @@ mod tests {
     #[test]
     fn test_language_literal_zh_hans() {
         let l = DataFactory::language_literal("你好", "zh-Hans").expect("valid language literal");
-        assert_eq!(l.language(), Some("zh-hans"));
+        // Language tags are compared case-insensitively per RDF 1.1, but the
+        // lexical form is preserved as authored (round-trip fidelity) rather
+        // than destructively lowercased.
+        assert_eq!(l.language(), Some("zh-Hans"));
     }
 
     #[test]
     fn test_language_literal_en_us() {
         let l = DataFactory::language_literal("Color", "en-US").expect("valid language literal");
-        assert_eq!(l.language(), Some("en-us"));
+        assert_eq!(l.language(), Some("en-US"));
     }
 
     #[test]

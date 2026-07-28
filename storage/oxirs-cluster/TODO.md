@@ -1,13 +1,13 @@
 # OxiRS Cluster - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
 **oxirs-cluster** provides distributed RDF storage with Raft consensus, advanced fault tolerance, ML optimization, multi-tenant isolation, and cloud-native deployment capabilities.
 
 ### Quality Metrics
-- **Test Status**: 1831 tests passing (100% success rate)
+- **Test Status**: 1875 tests passing (100% success rate)
 - **Code Quality**: Zero warnings, zero TODO comments
 - **Code Size**: ~76,000 lines (219 Rust files under `src/`)
 - **Documentation**: Comprehensive guides (67KB total)
@@ -174,7 +174,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Cluster v0.3.2 - Distributed RDF storage with multi-tenant isolation*
+*OxiRS Cluster v0.4.1 - Distributed RDF storage with multi-tenant isolation*
 
 ## Proposed follow-ups
 

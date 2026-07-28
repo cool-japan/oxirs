@@ -1,10 +1,10 @@
 # OxiRS Tauri Desktop App
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Desktop GUI for OxiRS: chat interface, visual SPARQL query builder, and CAN bus monitor**
 
-**Status**: v0.4.0 — in development on branch `0.4.0`, last verified 2026-07-19
+**Status**: v0.4.1 — in development on branch `0.4.1`, last verified 2026-07-28
 
 **Tests**: 61 passed, 0 failed (`cargo nextest run -p oxirs-tauri`)
 
@@ -70,11 +70,31 @@ desktop/oxirs-tauri/
 │   ├── query_builder.html
 │   └── canbus.html
 ├── capabilities/          # Tauri 2 capability/permission manifest (default.json)
-├── icons/                 # App bundle icons
+├── icons/                 # App icons + the script that generates them (see Icons)
 ├── gen/                   # Tauri-generated schema files
 ├── build.rs               # tauri-build codegen
 └── tauri.conf.json        # Window (1200x800 "OxiRS Desktop"), bundle, and CSP configuration
 ```
+
+## Icons
+
+`build.rs` runs `tauri-build`, which on Windows **requires `icons/icon.ico`** to emit
+the Windows Resource file — without it the crate fails to build, which in turn broke
+`cargo check --all-features` for the whole workspace on Windows.
+
+Both icons are generated from a single description by
+[`icons/generate_icons.py`](icons/generate_icons.py) so they cannot drift apart:
+
+```bash
+python icons/generate_icons.py   # rewrites icon.ico (16-256px) and icon.png (512px)
+```
+
+The mark is an RDF triple — three nodes, three edges — drawn in the palette
+`ui/styles.css` already defines (`--bg-primary`, `--accent`, `--text`). Each ICO frame
+is rendered at its own size and supersampled rather than downscaled from one large
+render, which is what keeps the 16px and 24px variants legible in Explorer and the
+taskbar. Editing the script and re-running it is the supported way to change the icon;
+editing the binaries directly will be overwritten on the next run.
 
 ## Testing
 
@@ -111,4 +131,4 @@ Licensed under:
 
 ---
 
-**OxiRS Tauri Desktop App v0.3.2** — chat UI, visual SPARQL query builder, and CAN bus monitor shell
+**OxiRS Tauri Desktop App v0.4.1** — chat UI, visual SPARQL query builder, and CAN bus monitor shell

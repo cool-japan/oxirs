@@ -272,7 +272,7 @@ impl EntityLinker {
 
     /// Generate entity candidates matching the mention by string similarity.
     ///
-    /// Uses [`first_char_index`](Self::first_char_index) as a blocking step:
+    /// Uses `first_char_index` as a blocking step:
     /// only knowledge-base entries sharing the mention's first character are
     /// scored with Jaro-Winkler, instead of the entire knowledge base. This
     /// is a standard record-linkage optimization (Jaro-Winkler's own prefix

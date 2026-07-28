@@ -108,7 +108,6 @@ fn demo_operations_profiling(profiler: &mut Profiler) -> Result<()> {
     let _diff = difference(&poly1, &poly2)?;
     profiler.stop("difference");
 
-    #[cfg(feature = "rust-buffer")]
     {
         profiler.start("buffer");
         let _buffer_geom = buffer(&poly1, 1.0)?;

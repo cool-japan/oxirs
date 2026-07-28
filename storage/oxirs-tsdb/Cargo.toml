@@ -36,12 +36,16 @@ crc32fast = { workspace = true }
 bit-vec.workspace = true
 lru.workspace = true
 humantime-serde.workspace = true
+oxiarc-snappy.workspace = true
+oxiarc-deflate.workspace = true
+reqwest.workspace = true
 
 thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+wiremock.workspace = true
 
 [features]
 default = ["compression"]
@@ -52,9 +56,11 @@ arrow-export = ["arrow", "parquet"]
 # hardware; otherwise every call falls back silently to the CPU path.
 gpu = ["scirs2-core/gpu"]
 # NOTE: The former `duckdb` feature (which pulled the C `libduckdb-sys` via the
-# `duckdb` crate) has been removed per COOLJAPAN Pure Rust Policy v2. The DuckDB
-# ↔ TSDB bridge now lives in the `publish = false` crate
-# `oxirs-tsdb-adapter-duckdb`; depend on it directly to use embedded DuckDB SQL.
+# `duckdb` crate) was removed per COOLJAPAN Pure Rust Policy v2, first into a
+# `publish = false` quarantine crate and now entirely. There is no embedded
+# DuckDB binding left; `arrow-export` writes Parquet, and the Pure-Rust
+# `DuckDbQueryAdapter` emits DuckDB SQL text for querying those files with an
+# external DuckDB if you want one.
 
 [[bench]]
 name = "write_throughput"

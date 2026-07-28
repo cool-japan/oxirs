@@ -317,7 +317,7 @@ impl LineEnding {
 
 /// A [`Write`] adapter that buffers all output in memory so it can be
 /// re-sorted (line-wise) and/or re-terminated with a custom line ending
-/// before being flushed to the wrapped writer on [`finalize`](Self::finalize).
+/// before being flushed to the wrapped writer on `finalize`.
 pub struct PostProcessingWriter<W: Write> {
     inner: W,
     buffer: Vec<u8>,

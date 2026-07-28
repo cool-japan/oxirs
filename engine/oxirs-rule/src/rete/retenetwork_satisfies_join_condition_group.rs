@@ -5,7 +5,7 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use crate::Term;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use super::types::{JoinCondition, Token};
 
@@ -48,13 +48,31 @@ impl ReteNetwork {
             _ => false,
         }
     }
-    /// Apply a filter condition
+    /// Apply a filter condition on the fallback (non-enhanced) beta-join path.
+    ///
+    /// The only filter tags `analyze_join_conditions` ever emits into
+    /// `JoinCondition::filters` are the structural `type_constraint` and
+    /// `domain_range_constraint` markers. Their real semantics (the subject
+    /// actually bears the asserted type / the property's domain-range triple was
+    /// matched) is already enforced upstream: the alpha nodes only fire for
+    /// facts structurally matching the pattern, and the shared join constraints
+    /// force agreement. They therefore hold by construction here.
+    ///
+    /// Any other filter string is a compiled comparison the fallback path cannot
+    /// evaluate; rather than silently return `true` (which would drop the
+    /// constraint and produce over-broad joins) we fail loud so the caller sees
+    /// an explicit error instead of a wrong result.
     pub(super) fn apply_filter(
         &self,
-        _filter: &str,
+        filter: &str,
         _left_token: &Token,
         _right_token: &Token,
     ) -> Result<bool> {
-        Ok(true)
+        match filter {
+            "type_constraint" | "domain_range_constraint" => Ok(true),
+            other => Err(anyhow!(
+                "RETE fallback beta join cannot evaluate compiled filter '{other}'"
+            )),
+        }
     }
 }

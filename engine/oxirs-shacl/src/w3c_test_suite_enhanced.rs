@@ -736,13 +736,9 @@ impl EnhancedW3cTestSuiteRunner {
         }
         let current_hash = hasher.finish();
 
-        self._result_cache.get(&test_entry.id).and_then(|cached| {
-            if cached.data_hash == current_hash {
-                Some(cached)
-            } else {
-                None // Cache stale — test data changed
-            }
-        })
+        self._result_cache
+            .get(&test_entry.id)
+            .filter(|&cached| cached.data_hash == current_hash)
     }
 
     /// Check if test should be skipped

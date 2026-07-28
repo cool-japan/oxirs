@@ -4,13 +4,15 @@ use crate::auth::{
     permissions::PermissionChecker,
     policy_engine::{AuthorizationContext, UnifiedPolicyEngine},
     types::{Permission, User},
+    AuthService,
 };
 use crate::security_audit::{
     AuditEventType, AuditLogEntry, AuditResult, SecurityAuditManager, Severity,
 };
+use crate::server::AppState;
 use axum::{
-    extract::Request,
-    http::{header, HeaderValue, Method, StatusCode},
+    extract::{Request, State},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -293,6 +295,94 @@ pub async fn rbac_check(
     }
 }
 
+/// Authentication middleware.
+///
+/// Runs on every request (outer than [`route_based_rbac`]) and, if the caller
+/// presents a credential that validates, inserts an [`AuthenticatedUser`] into
+/// the request extensions so downstream RBAC/ReBAC layers and the `AuthUser`
+/// extractor can see the authenticated identity.
+///
+/// Supported credentials:
+/// - `Authorization: Bearer <jwt>` — validated as a JWT via the configured JWT
+///   manager.
+/// - `Authorization: Bearer <session-id>` — validated as a server-side session
+///   (the login handler returns a session id as the bearer token when JWT is
+///   not configured).
+/// - `Cookie: session_id=<session-id>` — validated as a server-side session.
+///
+/// This layer is deliberately **non-rejecting**: an absent or invalid
+/// credential simply leaves the request unauthenticated. Enforcement is the job
+/// of [`route_based_rbac`] (fail-closed when authentication is required) and of
+/// handlers that self-check (e.g. the SPARQL update handler returns 401 without
+/// a user). Keeping authentication and authorization separate lets public
+/// endpoints (health, metrics) stay reachable even when a stray/expired token
+/// is present.
+pub async fn authenticate(
+    State(state): State<Arc<AppState>>,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    // Already resolved by an earlier layer — nothing to do.
+    if request.extensions().get::<AuthenticatedUser>().is_some() {
+        return next.run(request).await;
+    }
+
+    if let Some(auth_service) = state.auth_service.as_ref() {
+        if let Some(user) = resolve_authenticated_user(auth_service, request.headers()).await {
+            debug!(user = %user.username, "Request authenticated");
+            request
+                .extensions_mut()
+                .insert(AuthenticatedUser(Arc::new(user)));
+        }
+    }
+
+    next.run(request).await
+}
+
+/// Resolve an authenticated [`User`] from the credentials in `headers`, or
+/// `None` if no valid credential is present.
+///
+/// Errors from individual validation attempts are intentionally not propagated:
+/// a failed JWT parse falls through to a session-id lookup, and an unknown
+/// session simply yields `None`. The *request* still fails loud downstream —
+/// `route_based_rbac` returns 401 for protected routes when this returns `None`.
+async fn resolve_authenticated_user(
+    auth_service: &AuthService,
+    headers: &HeaderMap,
+) -> Option<User> {
+    // Bearer token: try JWT first, then treat it as an opaque session id.
+    if let Some(bearer) = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if let Ok(validation) = auth_service.validate_jwt_token(bearer) {
+            return Some(validation.user);
+        }
+        if let Ok(Some(user)) = auth_service.validate_session(bearer).await {
+            return Some(user);
+        }
+    }
+
+    // Session cookie.
+    if let Some(cookie_header) = headers.get(header::COOKIE).and_then(|v| v.to_str().ok()) {
+        for part in cookie_header.split(';') {
+            if let Some(session_id) = part.trim().strip_prefix("session_id=") {
+                let session_id = session_id.trim();
+                if !session_id.is_empty() {
+                    if let Ok(Some(user)) = auth_service.validate_session(session_id).await {
+                        return Some(user);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Route-specific RBAC middleware with automatic permission mapping
 ///
 /// Maps HTTP methods and routes to required permissions:
@@ -323,9 +413,20 @@ pub async fn route_based_rbac(request: Request, next: Next) -> Response {
     let user_arc = match user {
         Some(AuthenticatedUser(user)) => user,
         None => {
-            // No authentication required for now - can be made strict later
-            debug!(path = %path, "No authentication present, allowing request");
-            return next.run(request).await;
+            // Fail closed: this layer is only wired into the router when
+            // `security.auth_required` is set (see
+            // `Runtime::apply_middleware_stack`), so reaching it without an
+            // authenticated identity means a protected route was hit
+            // anonymously (or with an invalid/expired credential the
+            // `authenticate` layer could not resolve). Reject with 401 rather
+            // than letting the request through — the previous behaviour was a
+            // full authorization bypass on every mutating endpoint.
+            warn!(
+                path = %path,
+                method = %request.method(),
+                "Authentication required but no authenticated user present"
+            );
+            return (StatusCode::UNAUTHORIZED, "Authentication required").into_response();
         }
     };
 
@@ -747,5 +848,158 @@ mod tests {
         let version = response.headers().get("x-api-version");
         assert!(version.is_some());
         assert_eq!(version.unwrap(), env!("CARGO_PKG_VERSION"));
+    }
+
+    // ── Authentication / RBAC regression tests ──────────────────────────────
+
+    use axum::routing::post;
+
+    fn user_with_roles(username: &str, roles: &[&str]) -> User {
+        User {
+            username: username.to_string(),
+            roles: roles.iter().map(|r| r.to_string()).collect(),
+            email: None,
+            full_name: None,
+            last_login: None,
+            permissions: Vec::new(),
+        }
+    }
+
+    /// Apply a layer to `router` that injects an `AuthenticatedUser` into
+    /// request extensions, standing in for the real `authenticate` middleware.
+    fn with_injected_user(router: Router, user: User) -> Router {
+        let user = Arc::new(user);
+        router.layer(axum::middleware::from_fn(
+            move |mut request: axum::extract::Request, next: Next| {
+                let user = user.clone();
+                async move {
+                    request.extensions_mut().insert(AuthenticatedUser(user));
+                    next.run(request).await
+                }
+            },
+        ))
+    }
+
+    /// Regression (P0): `route_based_rbac` must FAIL CLOSED. With the layer
+    /// wired (i.e. authentication required) an anonymous request to a mutating
+    /// endpoint must be rejected with 401, not allowed through. Previously the
+    /// `None` branch ran `next.run(...)`, a full authorization bypass on every
+    /// mutating endpoint.
+    #[tokio::test]
+    async fn regression_route_based_rbac_rejects_unauthenticated_update() {
+        let app = Router::new()
+            .route("/update", post(|| async { "should not reach handler" }))
+            .layer(axum::middleware::from_fn(route_based_rbac));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/update")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// Regression (P0): with an authenticated user that HAS the required
+    /// permission, `route_based_rbac` allows the request through to the handler.
+    #[tokio::test]
+    async fn regression_route_based_rbac_allows_authorized_update() {
+        let app = with_injected_user(
+            Router::new()
+                .route("/update", post(|| async { "ok" }))
+                .layer(axum::middleware::from_fn(route_based_rbac)),
+            user_with_roles("admin", &["admin"]),
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/update")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    /// Regression (P0): an authenticated user LACKING the required permission is
+    /// rejected with 403 (not allowed through, not 401).
+    #[tokio::test]
+    async fn regression_route_based_rbac_forbids_insufficient_permission() {
+        // "user" role has QueryExecute/Read but not UpdateExecute.
+        let app = with_injected_user(
+            Router::new()
+                .route("/update", post(|| async { "should not reach handler" }))
+                .layer(axum::middleware::from_fn(route_based_rbac)),
+            user_with_roles("reader", &["user"]),
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/update")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    /// Regression (P0): the `AuthUser` extractor resolves the identity that the
+    /// authentication middleware placed in request extensions, and rejects with
+    /// 401 when no identity is present. Previously the extractor unconditionally
+    /// returned 401 even for valid credentials, making every authenticated
+    /// handler unreachable.
+    #[tokio::test]
+    async fn regression_authuser_extractor_reads_populated_identity() {
+        use crate::auth::AuthUser;
+
+        async fn whoami(user: AuthUser) -> String {
+            user.0.username
+        }
+
+        // No identity injected → 401.
+        let app_anon = Router::new().route("/whoami", get(whoami));
+        let anon = app_anon
+            .oneshot(
+                Request::builder()
+                    .uri("/whoami")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(anon.status(), StatusCode::UNAUTHORIZED);
+
+        // Identity injected → 200 with the username.
+        let app_auth = with_injected_user(
+            Router::new().route("/whoami", get(whoami)),
+            user_with_roles("alice", &["user"]),
+        );
+        let authed = app_auth
+            .oneshot(
+                Request::builder()
+                    .uri("/whoami")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(authed.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(authed.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(&body[..], b"alice");
     }
 }

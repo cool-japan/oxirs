@@ -305,7 +305,7 @@ impl ThreePhaseCoordinator {
     ) -> Result<HashMap<String, CanCommitResponse>> {
         let mut responses = HashMap::new();
 
-        for (node_id, _state) in participants.iter() {
+        for node_id in participants.keys() {
             let response = self.request_can_commit(node_id).await?;
             responses.insert(node_id.clone(), response);
 
@@ -346,7 +346,7 @@ impl ThreePhaseCoordinator {
         &self,
         participants: &HashMap<String, ParticipantState>,
     ) -> Result<()> {
-        for (node_id, _state) in participants.iter() {
+        for node_id in participants.keys() {
             self.send_pre_commit_message(node_id).await?;
 
             // Update participant state
@@ -386,7 +386,7 @@ impl ThreePhaseCoordinator {
         &self,
         participants: &HashMap<String, ParticipantState>,
     ) -> Result<()> {
-        for (node_id, _state) in participants.iter() {
+        for node_id in participants.keys() {
             self.send_do_commit_message(node_id).await?;
 
             // Update participant state
@@ -426,7 +426,7 @@ impl ThreePhaseCoordinator {
         &self,
         participants: &HashMap<String, ParticipantState>,
     ) -> Result<()> {
-        for (node_id, _state) in participants.iter() {
+        for node_id in participants.keys() {
             self.send_abort_message(node_id).await?;
         }
 

@@ -583,19 +583,16 @@ impl ConfigManager {
         // Backend selection
         if let Ok(backend) = std::env::var(format!("{prefix}_BACKEND")) {
             config.backend = match backend.as_str() {
+                // `kafka` was accepted here until 0.4.1. The backend is gone, so the
+                // value is rejected loudly rather than silently falling through to the
+                // previous backend and connecting somewhere the operator did not intend.
                 "kafka" => {
-                    // The Kafka *config selector* stays in oxirs-stream (pure data); the
-                    // rdkafka-backed runtime lives in the publish=false adapter crate.
-                    let brokers: Vec<String> = std::env::var(format!("{prefix}_KAFKA_BROKERS"))
-                        .unwrap_or_else(|_| "localhost:9092".to_string())
-                        .split(',')
-                        .map(|s| s.to_string())
-                        .collect();
-                    StreamBackendType::Kafka {
-                        brokers,
-                        security_protocol: std::env::var(format!("{prefix}_KAFKA_SECURITY")).ok(),
-                        sasl_config: None,
-                    }
+                    return Err(anyhow!(
+                        "{prefix}_BACKEND=kafka is no longer supported: the rdkafka-backed \
+                         Kafka backend was removed in 0.4.1 (it required a C toolchain and \
+                         was never published). Use `nats`, `redis`, or `memory`. The Confluent \
+                         Schema Registry client is unaffected — see `oxirs_stream::confluent_registry`."
+                    ));
                 }
                 "memory" => StreamBackendType::Memory {
                     max_size: Some(10000),
@@ -629,31 +626,9 @@ impl ConfigManager {
 
     /// Apply secrets to configuration
     async fn apply_secrets(&self, mut config: StreamConfig) -> Result<StreamConfig> {
-        // Apply SASL password if using Kafka
-        if let StreamBackendType::Kafka {
-            brokers,
-            security_protocol,
-            sasl_config: _,
-        } = &config.backend
-        {
-            if security_protocol.as_deref() == Some("SASL_SSL") {
-                if let Ok(username) = self.secret_manager.get_secret("kafka_username").await {
-                    if let Ok(password) = self.secret_manager.get_secret("kafka_password").await {
-                        {
-                            config.backend = StreamBackendType::Kafka {
-                                brokers: brokers.clone(),
-                                security_protocol: security_protocol.clone(),
-                                sasl_config: Some(crate::SaslConfig {
-                                    mechanism: crate::SaslMechanism::ScramSha256,
-                                    username,
-                                    password,
-                                }),
-                            };
-                        }
-                    }
-                }
-            }
-        }
+        // The SASL secret injection that lived here applied only to the Kafka backend,
+        // which was removed in 0.4.1. Generic SASL credentials still ride on
+        // `config.security.sasl_config` for backends that use them.
 
         // Apply TLS certificates
         if config.security.enable_tls {
@@ -714,14 +689,6 @@ impl ConfigManager {
         // Validate topic name
         if config.topic.is_empty() {
             return Err(anyhow!("topic name cannot be empty"));
-        }
-
-        // Backend-specific validation
-        match &config.backend {
-            StreamBackendType::Kafka { brokers, .. } if brokers.is_empty() => {
-                return Err(anyhow!("Kafka brokers list cannot be empty"));
-            }
-            _ => {}
         }
 
         Ok(())

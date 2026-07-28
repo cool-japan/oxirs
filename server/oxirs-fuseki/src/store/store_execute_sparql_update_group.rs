@@ -94,9 +94,19 @@ impl Store {
         match update {
             SparqlUpdate::InsertData(_) => self.execute_insert_data_operation(store, stmt),
             SparqlUpdate::DeleteData(_) => self.execute_delete_data_operation(store, stmt),
-            SparqlUpdate::InsertWhere { .. } => self.execute_insert_operation(store, stmt),
-            SparqlUpdate::DeleteWhere { .. } => self.execute_delete_where_operation(store, stmt),
-            SparqlUpdate::Modify { .. } => self.execute_delete_insert_operation(store, stmt),
+            SparqlUpdate::InsertWhere {
+                template,
+                where_clause,
+            } => self.execute_insert_where(store, template, where_clause),
+            SparqlUpdate::DeleteWhere {
+                template,
+                where_clause,
+            } => self.execute_delete_where_pattern(store, template, where_clause),
+            SparqlUpdate::Modify {
+                delete,
+                insert,
+                where_clause,
+            } => self.execute_modify_where(store, delete, insert, where_clause),
             SparqlUpdate::CreateGraph { .. } => self.execute_create_operation(store, stmt),
             SparqlUpdate::DropGraph { .. } => self.execute_drop_operation(store, stmt),
             SparqlUpdate::ClearGraph {
@@ -375,12 +385,25 @@ impl Store {
         }
         Ok(("DELETE DATA", 0, deleted_count, affected_graphs))
     }
-    /// Execute simple INSERT operation
+    /// Execute simple INSERT operation (anchored-keyword fallback path).
+    ///
+    /// Only reached when the AST parser rejected the statement. A pattern-based
+    /// `INSERT { template } WHERE { … }` whose `WHERE` this simplified path
+    /// cannot evaluate fails loud instead of inserting the template as literal
+    /// data while discarding the `WHERE` clause.
     fn execute_insert_operation(
         &self,
         store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
+        if Self::statement_has_where_keyword(sparql) {
+            return Err(FusekiError::bad_request(
+                "Unsupported INSERT ... WHERE update: this statement uses SPARQL constructs the \
+                 update executor cannot evaluate (e.g. GRAPH/FILTER/OPTIONAL in the WHERE \
+                 clause). Refusing to execute rather than ignore the WHERE clause."
+                    .to_string(),
+            ));
+        }
         let data_block = self.extract_data_block(sparql, "INSERT")?;
         let quads = self.parse_data_block(&data_block)?;
         let affected_graphs = self.extract_graph_names(&quads);

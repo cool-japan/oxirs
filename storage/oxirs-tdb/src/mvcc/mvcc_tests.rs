@@ -1074,4 +1074,48 @@ mod tests {
             "No active transactions should remain"
         );
     }
+
+    // -----------------------------------------------------------------------
+    // 36. Concurrent stats() vs write() must not AB-BA deadlock
+    // -----------------------------------------------------------------------
+
+    /// Regression: `stats()` acquires `active_txns` then `version_store`, while
+    /// `write()`'s conflict check used to acquire them in the opposite order.
+    /// Hammering both paths concurrently must complete (no deadlock) now that all
+    /// multi-lock sites acquire `version_store` last.
+    #[test]
+    fn regression_no_abba_deadlock_between_stats_and_write() {
+        use std::thread;
+
+        let m = mgr();
+        let mut handles = Vec::new();
+
+        // Writer/committer threads exercise check_write_conflict (active -> version).
+        for w in 0..4u64 {
+            let m = Arc::clone(&m);
+            handles.push(thread::spawn(move || {
+                for i in 0..500u64 {
+                    let tx = m.begin_transaction(IsolationLevel::RepeatableRead);
+                    let key = format!("k{}-{}", w, i % 8);
+                    // Ignore write conflicts; the point is lock-ordering liveness.
+                    let _ = m.write(tx, key.as_bytes(), b"v");
+                    let _ = m.commit(tx);
+                }
+            }));
+        }
+
+        // Reader threads hammer stats() (active -> version).
+        for _ in 0..4 {
+            let m = Arc::clone(&m);
+            handles.push(thread::spawn(move || {
+                for _ in 0..1000 {
+                    let _ = m.stats();
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().expect("thread panicked or deadlocked");
+        }
+    }
 }

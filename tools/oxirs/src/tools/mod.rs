@@ -32,10 +32,6 @@ pub mod tdbquery;
 pub mod tdbstats;
 pub mod tdbupdate;
 
-/// TSDB ↔ DuckDB SQL bridge (feature-gated `tsdb-duckdb`).
-#[cfg(feature = "tsdb-duckdb")]
-pub mod tsdb_duckdb;
-
 // === Validation Tools ===
 pub mod infer;
 pub mod schemagen;

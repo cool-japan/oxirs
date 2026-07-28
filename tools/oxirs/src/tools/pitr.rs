@@ -129,7 +129,7 @@ impl TransactionLog {
     /// markers are no-ops. A transaction whose payload cannot be decoded as
     /// N-Quads text (i.e. was not written via [`Self::append_quads`]) fails
     /// the whole recovery loudly rather than being silently counted as
-    /// "applied" — see [`Self::parse_entry_quads`].
+    /// "applied" — see `parse_entry_quads`.
     pub fn recover_to_timestamp(
         &self,
         target_timestamp: DateTime<Utc>,

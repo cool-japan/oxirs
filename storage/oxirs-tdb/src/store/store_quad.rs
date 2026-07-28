@@ -9,7 +9,7 @@
 //!   default-graph quad API operate on the same data and both round-trip
 //!   through reopen exactly as before.
 //! - **Named graphs** are stored in the GSPO/GPOS/GOSP quad indexes
-//!   ([`QuadIndexes`](crate::index::QuadIndexes)); the graph name is interned in
+//!   ([`QuadIndexes`]); the graph name is interned in
 //!   the shared dictionary just like any subject/predicate/object term (this is
 //!   the "graph column" — a [`Term`] is a [`Term`], so no separate dictionary is
 //!   needed).

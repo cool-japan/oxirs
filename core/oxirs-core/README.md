@@ -1,11 +1,11 @@
 # OxiRS Core
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 
 **Foundational, Rust-native RDF data model and SPARQL engine for the OxiRS semantic web platform**
 
-**Status**: v0.4.0 - Released 2026-07-19
+**Status**: v0.4.1 - Released 2026-07-26
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -75,10 +75,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.3.2"
+oxirs-core = "0.4.1"
 
 # Optional: enable async streaming support
-oxirs-core = { version = "0.3.2", features = ["async"] }
+oxirs-core = { version = "0.4.1", features = ["async"] }
 ```
 
 ### Feature Flags
@@ -312,7 +312,7 @@ Every other crate in the workspace builds on `oxirs-core`:
 ```bash
 cd core/oxirs-core
 cargo nextest run --all-features
-# Current status: 2670 tests passing
+# Current status: 2764 tests passing
 ```
 
 ### Benchmarks
@@ -347,7 +347,7 @@ Licensed under the Apache License, Version 2.0 ([LICENSE](../../LICENSE) or http
 
 ## Status
 
-🚀 **Production Release (v0.4.0)** — 2,670 tests passing, zero `clippy` warnings, zero rustdoc errors.
+🚀 **Production Release (v0.4.1)** — 2,764 tests passing, zero `clippy` warnings, zero rustdoc errors.
 
 ### Current Highlights
 - **RDF/SPARQL core**: RDF 1.2 data model, SPARQL 1.1/1.2 query and update, federation via `SERVICE`

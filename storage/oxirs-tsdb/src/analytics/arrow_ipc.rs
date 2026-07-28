@@ -1,12 +1,31 @@
-//! Pure-Rust Apache Arrow IPC format export (simulation).
+//! OxiRS-native binary time-series IPC export format.
 //!
-//! Implements a faithful simulation of the Apache Arrow IPC stream format
-//! (see Arrow spec §IPC) in pure Rust without the `arrow` crate.
+//! # This is NOT Apache Arrow IPC
 //!
-//! ## Wire Format (simplified)
+//! The wire format implemented by this module is loosely *inspired* by the
+//! layout of the Apache Arrow IPC stream format (schema message, then
+//! record-batch messages, then an EOS marker) but its metadata encoding is
+//! a simplified, crate-private scheme — **not** the real Arrow flatbuffers
+//! schema. Bytes produced by [`OxirsIpcWriter`] can only be parsed by
+//! [`OxirsIpcReader`] in this same crate; they are **not** readable by
+//! `pyarrow`, `arrow-rs`, DuckDB, Polars, or any other genuine Arrow IPC
+//! consumer. Do not hand this output to external analytics tooling expecting
+//! Arrow compatibility.
+//!
+//! For genuine, spec-conformant Apache Arrow / Parquet interoperability
+//! (readable by real Arrow/Parquet tooling), use [`crate::ArrowExporter`] /
+//! [`crate::ParquetExporter`] instead, which wrap the real `arrow` and
+//! `parquet` crates and are enabled by the `arrow-export` Cargo feature.
+//!
+//! This module exists as a lightweight, always-available (no extra
+//! dependency), fast internal serialization format for OxiRS-to-OxiRS data
+//! interchange (e.g. streaming chunk export/import between OxiRS nodes)
+//! where true Arrow interoperability is not required.
+//!
+//! ## Wire Format (OxiRS-native, simplified)
 //!
 //! ```text
-//! [MAGIC: 6 bytes "ARROW1"] [padding: 2 bytes]
+//! [MAGIC: 6 bytes "OXIPC1"] [padding: 2 bytes]
 //! [schema message]
 //! [record batch messages ...]
 //! [EOS marker: 4 bytes 0xFFFFFFFF + 4 bytes 0x00000000]
@@ -16,7 +35,7 @@
 //! ```text
 //! [continuation: 4 bytes 0xFFFFFFFF]
 //! [metadata_size: i32 LE]
-//! [metadata: metadata_size bytes (flatbuffer-style but simplified)]
+//! [metadata: metadata_size bytes (OxiRS-private encoding, NOT flatbuffers)]
 //! [body: aligned to 8 bytes]
 //! ```
 
@@ -28,20 +47,20 @@ use std::collections::HashMap;
 // Constants
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Magic bytes for Arrow IPC stream.
-const ARROW_MAGIC: &[u8] = b"ARROW1";
+/// Magic bytes for the OxiRS-native IPC stream (not Arrow-compatible).
+const OXIPC_MAGIC: &[u8] = b"OXIPC1";
 /// Padding after magic to align to 8 bytes.
-const ARROW_MAGIC_PADDING: &[u8] = &[0u8, 0u8];
+const OXIPC_MAGIC_PADDING: &[u8] = &[0u8, 0u8];
 /// Continuation marker (used in IPC stream format before each message).
 const CONTINUATION_MARKER: u32 = 0xFFFF_FFFF;
 
 // ──────────────────────────────────────────────────────────────────────────────
-// TimeUnit
+// OxirsIpcTimeUnit
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Timestamp resolution unit for Arrow Timestamp type.
+/// Timestamp resolution unit for the OxiRS-native Timestamp type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TimeUnit {
+pub enum OxirsIpcTimeUnit {
     /// 1-second resolution.
     Second,
     /// 1-millisecond resolution.
@@ -52,34 +71,34 @@ pub enum TimeUnit {
     Nanosecond,
 }
 
-impl TimeUnit {
+impl OxirsIpcTimeUnit {
     fn code(&self) -> u8 {
         match self {
-            TimeUnit::Second => 0,
-            TimeUnit::Millisecond => 1,
-            TimeUnit::Microsecond => 2,
-            TimeUnit::Nanosecond => 3,
+            OxirsIpcTimeUnit::Second => 0,
+            OxirsIpcTimeUnit::Millisecond => 1,
+            OxirsIpcTimeUnit::Microsecond => 2,
+            OxirsIpcTimeUnit::Nanosecond => 3,
         }
     }
 
     fn from_code(c: u8) -> Option<Self> {
         match c {
-            0 => Some(TimeUnit::Second),
-            1 => Some(TimeUnit::Millisecond),
-            2 => Some(TimeUnit::Microsecond),
-            3 => Some(TimeUnit::Nanosecond),
+            0 => Some(OxirsIpcTimeUnit::Second),
+            1 => Some(OxirsIpcTimeUnit::Millisecond),
+            2 => Some(OxirsIpcTimeUnit::Microsecond),
+            3 => Some(OxirsIpcTimeUnit::Nanosecond),
             _ => None,
         }
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ArrowDataType
+// OxirsIpcDataType
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Subset of Arrow data types supported by this exporter.
+/// Subset of scalar data types supported by the OxiRS-native IPC format (modeled loosely on Arrow's type system, but not wire-compatible with it).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ArrowDataType {
+pub enum OxirsIpcDataType {
     /// 64-bit signed integer.
     Int64,
     /// 64-bit IEEE 754 float.
@@ -87,53 +106,53 @@ pub enum ArrowDataType {
     /// UTF-8 variable-length string.
     Utf8,
     /// 64-bit timestamp with a given time unit.
-    Timestamp(TimeUnit),
-    /// Boolean (bit-packed in Arrow; stored as bytes here for simplicity).
+    Timestamp(OxirsIpcTimeUnit),
+    /// Boolean (bit-packed in real Arrow; stored as one byte per value here for simplicity).
     Boolean,
 }
 
-impl ArrowDataType {
+impl OxirsIpcDataType {
     /// Numeric type tag embedded in the wire format.
     fn type_tag(&self) -> u8 {
         match self {
-            ArrowDataType::Int64 => 1,
-            ArrowDataType::Float64 => 2,
-            ArrowDataType::Utf8 => 3,
-            ArrowDataType::Timestamp(_) => 4,
-            ArrowDataType::Boolean => 5,
+            OxirsIpcDataType::Int64 => 1,
+            OxirsIpcDataType::Float64 => 2,
+            OxirsIpcDataType::Utf8 => 3,
+            OxirsIpcDataType::Timestamp(_) => 4,
+            OxirsIpcDataType::Boolean => 5,
         }
     }
 
     fn from_tag(tag: u8, time_unit: u8) -> Option<Self> {
         match tag {
-            1 => Some(ArrowDataType::Int64),
-            2 => Some(ArrowDataType::Float64),
-            3 => Some(ArrowDataType::Utf8),
-            4 => TimeUnit::from_code(time_unit).map(ArrowDataType::Timestamp),
-            5 => Some(ArrowDataType::Boolean),
+            1 => Some(OxirsIpcDataType::Int64),
+            2 => Some(OxirsIpcDataType::Float64),
+            3 => Some(OxirsIpcDataType::Utf8),
+            4 => OxirsIpcTimeUnit::from_code(time_unit).map(OxirsIpcDataType::Timestamp),
+            5 => Some(OxirsIpcDataType::Boolean),
             _ => None,
         }
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ArrowField
+// OxirsIpcField
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// A single column descriptor in an [`ArrowSchema`].
+/// A single column descriptor in an [`OxirsIpcSchema`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ArrowField {
+pub struct OxirsIpcField {
     /// Column name.
     pub name: String,
     /// Column data type.
-    pub data_type: ArrowDataType,
+    pub data_type: OxirsIpcDataType,
     /// Whether the column may contain nulls.
     pub nullable: bool,
 }
 
-impl ArrowField {
+impl OxirsIpcField {
     /// Convenience constructor.
-    pub fn new(name: impl Into<String>, data_type: ArrowDataType, nullable: bool) -> Self {
+    pub fn new(name: impl Into<String>, data_type: OxirsIpcDataType, nullable: bool) -> Self {
         Self {
             name: name.into(),
             data_type,
@@ -143,19 +162,19 @@ impl ArrowField {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ArrowSchema
+// OxirsIpcSchema
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Schema describing the columns of an Arrow record batch.
+/// Schema describing the columns of an [`OxirsIpcRecordBatch`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ArrowSchema {
+pub struct OxirsIpcSchema {
     /// Ordered list of fields.
-    pub fields: Vec<ArrowField>,
+    pub fields: Vec<OxirsIpcField>,
 }
 
-impl ArrowSchema {
+impl OxirsIpcSchema {
     /// Create a new schema from a list of fields.
-    pub fn new(fields: Vec<ArrowField>) -> Self {
+    pub fn new(fields: Vec<OxirsIpcField>) -> Self {
         Self { fields }
     }
 
@@ -178,7 +197,7 @@ impl ArrowSchema {
             buf.extend_from_slice(name_bytes);
             let tag = field.data_type.type_tag();
             let tu = match &field.data_type {
-                ArrowDataType::Timestamp(u) => u.code(),
+                OxirsIpcDataType::Timestamp(u) => u.code(),
                 _ => 0,
             };
             buf.push(tag);
@@ -193,65 +212,67 @@ impl ArrowSchema {
     fn from_bytes(src: &[u8]) -> TsdbResult<Self> {
         if src.len() < 4 {
             return Err(TsdbError::Arrow(
-                "ArrowSchema: buffer too short for field count".into(),
+                "OxirsIpcSchema: buffer too short for field count".into(),
             ));
         }
         let n_fields = u32::from_le_bytes(
             src[0..4]
                 .try_into()
-                .map_err(|_| TsdbError::Arrow("ArrowSchema: cannot read field count".into()))?,
+                .map_err(|_| TsdbError::Arrow("OxirsIpcSchema: cannot read field count".into()))?,
         ) as usize;
         let mut fields = Vec::with_capacity(n_fields);
         let mut pos = 4usize;
         for _ in 0..n_fields {
             if pos + 4 > src.len() {
                 return Err(TsdbError::Arrow(
-                    "ArrowSchema: buffer truncated reading name length".into(),
+                    "OxirsIpcSchema: buffer truncated reading name length".into(),
                 ));
             }
-            let name_len = u32::from_le_bytes(
-                src[pos..pos + 4]
-                    .try_into()
-                    .map_err(|_| TsdbError::Arrow("ArrowSchema: cannot read name length".into()))?,
-            ) as usize;
+            let name_len =
+                u32::from_le_bytes(src[pos..pos + 4].try_into().map_err(|_| {
+                    TsdbError::Arrow("OxirsIpcSchema: cannot read name length".into())
+                })?) as usize;
             pos += 4;
             if pos + name_len > src.len() {
                 return Err(TsdbError::Arrow(
-                    "ArrowSchema: buffer truncated reading name".into(),
+                    "OxirsIpcSchema: buffer truncated reading name".into(),
                 ));
             }
             let name = std::str::from_utf8(&src[pos..pos + name_len])
-                .map_err(|e| TsdbError::Arrow(format!("ArrowSchema: invalid UTF-8 in name: {e}")))?
+                .map_err(|e| {
+                    TsdbError::Arrow(format!("OxirsIpcSchema: invalid UTF-8 in name: {e}"))
+                })?
                 .to_owned();
             pos += name_len;
             if pos + 4 > src.len() {
                 return Err(TsdbError::Arrow(
-                    "ArrowSchema: buffer truncated reading type tag".into(),
+                    "OxirsIpcSchema: buffer truncated reading type tag".into(),
                 ));
             }
             let tag = src[pos];
             let tu = src[pos + 1];
             let nullable = src[pos + 2] != 0;
             pos += 4;
-            let data_type = ArrowDataType::from_tag(tag, tu)
-                .ok_or_else(|| TsdbError::Arrow(format!("ArrowSchema: unknown type tag {tag}")))?;
-            fields.push(ArrowField {
+            let data_type = OxirsIpcDataType::from_tag(tag, tu).ok_or_else(|| {
+                TsdbError::Arrow(format!("OxirsIpcSchema: unknown type tag {tag}"))
+            })?;
+            fields.push(OxirsIpcField {
                 name,
                 data_type,
                 nullable,
             });
         }
-        Ok(ArrowSchema { fields })
+        Ok(OxirsIpcSchema { fields })
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ArrowColumn
+// OxirsIpcColumn
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// A typed column in an Arrow record batch.
+/// A typed column in an [`OxirsIpcRecordBatch`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ArrowColumn {
+pub enum OxirsIpcColumn {
     /// Array of 64-bit signed integers.
     Int64(Vec<i64>),
     /// Array of 64-bit floats.
@@ -259,20 +280,20 @@ pub enum ArrowColumn {
     /// Array of UTF-8 strings.
     Utf8(Vec<String>),
     /// Array of 64-bit timestamps with a time unit.
-    Timestamp(Vec<i64>, TimeUnit),
+    Timestamp(Vec<i64>, OxirsIpcTimeUnit),
     /// Array of booleans.
     Boolean(Vec<bool>),
 }
 
-impl ArrowColumn {
+impl OxirsIpcColumn {
     /// Number of elements in this column.
     pub fn len(&self) -> usize {
         match self {
-            ArrowColumn::Int64(v) => v.len(),
-            ArrowColumn::Float64(v) => v.len(),
-            ArrowColumn::Utf8(v) => v.len(),
-            ArrowColumn::Timestamp(v, _) => v.len(),
-            ArrowColumn::Boolean(v) => v.len(),
+            OxirsIpcColumn::Int64(v) => v.len(),
+            OxirsIpcColumn::Float64(v) => v.len(),
+            OxirsIpcColumn::Utf8(v) => v.len(),
+            OxirsIpcColumn::Timestamp(v, _) => v.len(),
+            OxirsIpcColumn::Boolean(v) => v.len(),
         }
     }
 
@@ -290,11 +311,11 @@ impl ArrowColumn {
     /// - Utf8: [total_data_len: u32 LE] [offsets: (n+1)*u32 LE] [data bytes]
     fn body_bytes(&self) -> Vec<u8> {
         match self {
-            ArrowColumn::Int64(v) => v.iter().flat_map(|&x| x.to_le_bytes()).collect(),
-            ArrowColumn::Float64(v) => v.iter().flat_map(|&x| x.to_le_bytes()).collect(),
-            ArrowColumn::Timestamp(v, _) => v.iter().flat_map(|&x| x.to_le_bytes()).collect(),
-            ArrowColumn::Boolean(v) => v.iter().map(|&b| b as u8).collect(),
-            ArrowColumn::Utf8(v) => {
+            OxirsIpcColumn::Int64(v) => v.iter().flat_map(|&x| x.to_le_bytes()).collect(),
+            OxirsIpcColumn::Float64(v) => v.iter().flat_map(|&x| x.to_le_bytes()).collect(),
+            OxirsIpcColumn::Timestamp(v, _) => v.iter().flat_map(|&x| x.to_le_bytes()).collect(),
+            OxirsIpcColumn::Boolean(v) => v.iter().map(|&b| b as u8).collect(),
+            OxirsIpcColumn::Utf8(v) => {
                 // Offsets array (n+1 entries, each u32).
                 let mut offsets: Vec<u32> = Vec::with_capacity(v.len() + 1);
                 let mut data: Vec<u8> = Vec::new();
@@ -319,11 +340,11 @@ impl ArrowColumn {
     /// Deserialise a column from raw bytes given a type descriptor.
     fn from_bytes(
         bytes: &[u8],
-        data_type: &ArrowDataType,
+        data_type: &OxirsIpcDataType,
         n_rows: usize,
-    ) -> TsdbResult<ArrowColumn> {
+    ) -> TsdbResult<OxirsIpcColumn> {
         match data_type {
-            ArrowDataType::Int64 => {
+            OxirsIpcDataType::Int64 => {
                 if bytes.len() < n_rows * 8 {
                     return Err(TsdbError::Arrow("Int64 column: buffer too short".into()));
                 }
@@ -332,9 +353,9 @@ impl ArrowColumn {
                         i64::from_le_bytes(bytes[i * 8..(i + 1) * 8].try_into().unwrap_or_default())
                     })
                     .collect();
-                Ok(ArrowColumn::Int64(values))
+                Ok(OxirsIpcColumn::Int64(values))
             }
-            ArrowDataType::Float64 => {
+            OxirsIpcDataType::Float64 => {
                 if bytes.len() < n_rows * 8 {
                     return Err(TsdbError::Arrow("Float64 column: buffer too short".into()));
                 }
@@ -343,9 +364,9 @@ impl ArrowColumn {
                         f64::from_le_bytes(bytes[i * 8..(i + 1) * 8].try_into().unwrap_or_default())
                     })
                     .collect();
-                Ok(ArrowColumn::Float64(values))
+                Ok(OxirsIpcColumn::Float64(values))
             }
-            ArrowDataType::Timestamp(unit) => {
+            OxirsIpcDataType::Timestamp(unit) => {
                 if bytes.len() < n_rows * 8 {
                     return Err(TsdbError::Arrow(
                         "Timestamp column: buffer too short".into(),
@@ -356,16 +377,16 @@ impl ArrowColumn {
                         i64::from_le_bytes(bytes[i * 8..(i + 1) * 8].try_into().unwrap_or_default())
                     })
                     .collect();
-                Ok(ArrowColumn::Timestamp(values, *unit))
+                Ok(OxirsIpcColumn::Timestamp(values, *unit))
             }
-            ArrowDataType::Boolean => {
+            OxirsIpcDataType::Boolean => {
                 if bytes.len() < n_rows {
                     return Err(TsdbError::Arrow("Boolean column: buffer too short".into()));
                 }
                 let values: Vec<bool> = bytes[..n_rows].iter().map(|&b| b != 0).collect();
-                Ok(ArrowColumn::Boolean(values))
+                Ok(OxirsIpcColumn::Boolean(values))
             }
-            ArrowDataType::Utf8 => {
+            OxirsIpcDataType::Utf8 => {
                 if bytes.len() < 4 {
                     return Err(TsdbError::Arrow("Utf8 column: missing total_len".into()));
                 }
@@ -397,28 +418,28 @@ impl ArrowColumn {
                     })?;
                     strings.push(s.to_owned());
                 }
-                Ok(ArrowColumn::Utf8(strings))
+                Ok(OxirsIpcColumn::Utf8(strings))
             }
         }
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ArrowRecordBatch
+// OxirsIpcRecordBatch
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// A collection of columnar arrays with a shared schema and equal row counts.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ArrowRecordBatch {
+pub struct OxirsIpcRecordBatch {
     /// Schema describing all columns.
-    pub schema: ArrowSchema,
+    pub schema: OxirsIpcSchema,
     /// Parallel array of columns; must have the same number of elements.
-    pub columns: Vec<ArrowColumn>,
+    pub columns: Vec<OxirsIpcColumn>,
 }
 
-impl ArrowRecordBatch {
+impl OxirsIpcRecordBatch {
     /// Create a new record batch after validating schema/column alignment.
-    pub fn new(schema: ArrowSchema, columns: Vec<ArrowColumn>) -> TsdbResult<Self> {
+    pub fn new(schema: OxirsIpcSchema, columns: Vec<OxirsIpcColumn>) -> TsdbResult<Self> {
         if schema.fields.len() != columns.len() {
             return Err(TsdbError::Arrow(format!(
                 "RecordBatch: schema has {} fields but {} columns provided",
@@ -447,22 +468,22 @@ impl ArrowRecordBatch {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ArrowIpcWriter
+// OxirsIpcWriter
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Writer for the Arrow IPC stream format.
+/// Writer for the OxiRS-native IPC stream format (see module docs — this is NOT Apache Arrow IPC).
 ///
 /// Maintains state across `write_schema` / `write_batch` / `write_footer` calls
 /// so that the caller can stream batches incrementally.
 #[derive(Debug, Default)]
-pub struct ArrowIpcWriter {
+pub struct OxirsIpcWriter {
     /// Whether the schema has already been written.
     schema_written: bool,
     /// Number of batches written.
     batches_written: usize,
 }
 
-impl ArrowIpcWriter {
+impl OxirsIpcWriter {
     /// Create a fresh writer.
     pub fn new() -> Self {
         Self::default()
@@ -471,16 +492,16 @@ impl ArrowIpcWriter {
     /// Emit the IPC stream header (magic + schema message).
     ///
     /// Must be called exactly once before `write_batch`.
-    pub fn write_schema(&mut self, schema: &ArrowSchema) -> TsdbResult<Vec<u8>> {
+    pub fn write_schema(&mut self, schema: &OxirsIpcSchema) -> TsdbResult<Vec<u8>> {
         if self.schema_written {
             return Err(TsdbError::Arrow(
-                "ArrowIpcWriter: schema already written".into(),
+                "OxirsIpcWriter: schema already written".into(),
             ));
         }
         let mut buf = Vec::new();
         // Magic
-        buf.extend_from_slice(ARROW_MAGIC);
-        buf.extend_from_slice(ARROW_MAGIC_PADDING);
+        buf.extend_from_slice(OXIPC_MAGIC);
+        buf.extend_from_slice(OXIPC_MAGIC_PADDING);
         // Schema message
         let schema_bytes = schema.to_bytes();
         // Message type tag: 0x01 = Schema
@@ -493,10 +514,10 @@ impl ArrowIpcWriter {
     /// Emit a record batch message.
     ///
     /// `write_schema` must be called first.
-    pub fn write_batch(&mut self, batch: &ArrowRecordBatch) -> TsdbResult<Vec<u8>> {
+    pub fn write_batch(&mut self, batch: &OxirsIpcRecordBatch) -> TsdbResult<Vec<u8>> {
         if !self.schema_written {
             return Err(TsdbError::Arrow(
-                "ArrowIpcWriter: schema not yet written".into(),
+                "OxirsIpcWriter: schema not yet written".into(),
             ));
         }
         let mut buf = Vec::new();
@@ -539,34 +560,34 @@ impl ArrowIpcWriter {
         Ok(buf)
     }
 
-    /// Convert a slice of `DataPoint`s into an [`ArrowRecordBatch`].
+    /// Convert a slice of `DataPoint`s into an [`OxirsIpcRecordBatch`].
     ///
     /// Produces two columns:
     /// - `timestamp` : Timestamp(Millisecond)
     /// - `value`     : Float64
     ///
     /// Tags are not included (use [`time_series_with_tags_to_batch`] for that).
-    pub fn time_series_to_batch(series: &[crate::series::DataPoint]) -> ArrowRecordBatch {
+    pub fn time_series_to_batch(series: &[crate::series::DataPoint]) -> OxirsIpcRecordBatch {
         let timestamps: Vec<i64> = series
             .iter()
             .map(|p| p.timestamp.timestamp_millis())
             .collect();
         let values: Vec<f64> = series.iter().map(|p| p.value).collect();
 
-        let schema = ArrowSchema::new(vec![
-            ArrowField::new(
+        let schema = OxirsIpcSchema::new(vec![
+            OxirsIpcField::new(
                 "timestamp",
-                ArrowDataType::Timestamp(TimeUnit::Millisecond),
+                OxirsIpcDataType::Timestamp(OxirsIpcTimeUnit::Millisecond),
                 false,
             ),
-            ArrowField::new("value", ArrowDataType::Float64, false),
+            OxirsIpcField::new("value", OxirsIpcDataType::Float64, false),
         ]);
 
-        ArrowRecordBatch {
+        OxirsIpcRecordBatch {
             schema,
             columns: vec![
-                ArrowColumn::Timestamp(timestamps, TimeUnit::Millisecond),
-                ArrowColumn::Float64(values),
+                OxirsIpcColumn::Timestamp(timestamps, OxirsIpcTimeUnit::Millisecond),
+                OxirsIpcColumn::Float64(values),
             ],
         }
     }
@@ -599,7 +620,9 @@ impl TaggedDataPoint {
 }
 
 /// Convert tagged data points into a record batch with a `tags_json` column.
-pub fn time_series_with_tags_to_batch(series: &[TaggedDataPoint]) -> TsdbResult<ArrowRecordBatch> {
+pub fn time_series_with_tags_to_batch(
+    series: &[TaggedDataPoint],
+) -> TsdbResult<OxirsIpcRecordBatch> {
     let timestamps: Vec<i64> = series.iter().map(|p| p.timestamp).collect();
     let values: Vec<f64> = series.iter().map(|p| p.value).collect();
     let tags_json: Vec<String> = series
@@ -607,48 +630,48 @@ pub fn time_series_with_tags_to_batch(series: &[TaggedDataPoint]) -> TsdbResult<
         .map(|p| serde_json::to_string(&p.tags).unwrap_or_else(|_| "{}".to_owned()))
         .collect();
 
-    let schema = ArrowSchema::new(vec![
-        ArrowField::new(
+    let schema = OxirsIpcSchema::new(vec![
+        OxirsIpcField::new(
             "timestamp",
-            ArrowDataType::Timestamp(TimeUnit::Millisecond),
+            OxirsIpcDataType::Timestamp(OxirsIpcTimeUnit::Millisecond),
             false,
         ),
-        ArrowField::new("value", ArrowDataType::Float64, false),
-        ArrowField::new("tags_json", ArrowDataType::Utf8, true),
+        OxirsIpcField::new("value", OxirsIpcDataType::Float64, false),
+        OxirsIpcField::new("tags_json", OxirsIpcDataType::Utf8, true),
     ]);
 
-    ArrowRecordBatch::new(
+    OxirsIpcRecordBatch::new(
         schema,
         vec![
-            ArrowColumn::Timestamp(timestamps, TimeUnit::Millisecond),
-            ArrowColumn::Float64(values),
-            ArrowColumn::Utf8(tags_json),
+            OxirsIpcColumn::Timestamp(timestamps, OxirsIpcTimeUnit::Millisecond),
+            OxirsIpcColumn::Float64(values),
+            OxirsIpcColumn::Utf8(tags_json),
         ],
     )
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ArrowIpcReader
+// OxirsIpcReader
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Reader for Arrow IPC stream bytes produced by [`ArrowIpcWriter`].
+/// Reader for OxiRS-native IPC stream bytes produced by [`OxirsIpcWriter`] (NOT a general-purpose Apache Arrow IPC reader).
 #[derive(Debug, Default)]
-pub struct ArrowIpcReader;
+pub struct OxirsIpcReader;
 
-impl ArrowIpcReader {
+impl OxirsIpcReader {
     /// Parse all record batches from an IPC byte stream.
     ///
     /// The stream must start with the 8-byte magic, followed by a schema
     /// message, then zero or more record-batch messages, and finally an EOS
     /// marker.
-    pub fn read_batches(data: &[u8]) -> TsdbResult<Vec<ArrowRecordBatch>> {
+    pub fn read_batches(data: &[u8]) -> TsdbResult<Vec<OxirsIpcRecordBatch>> {
         let mut pos = 0usize;
 
         // 1. Validate magic.
         if data.len() < 8 {
             return Err(TsdbError::Arrow("IPC stream too short for magic".into()));
         }
-        if &data[pos..pos + 6] != ARROW_MAGIC {
+        if &data[pos..pos + 6] != OXIPC_MAGIC {
             return Err(TsdbError::Arrow("IPC stream: invalid magic".into()));
         }
         pos += 8; // magic + padding
@@ -660,7 +683,7 @@ impl ArrowIpcReader {
                 "IPC stream: expected schema message (type=1), got type={msg_type}"
             )));
         }
-        let schema = ArrowSchema::from_bytes(&schema_bytes)?;
+        let schema = OxirsIpcSchema::from_bytes(&schema_bytes)?;
         pos += consumed;
 
         // 3. Parse record batch messages until EOS.
@@ -730,15 +753,18 @@ impl ArrowIpcReader {
                         "RecordBatch: column {i} has no matching field in schema"
                     ))
                 })?;
-                let col =
-                    ArrowColumn::from_bytes(&data[pos..pos + col_len], &field.data_type, n_rows)?;
+                let col = OxirsIpcColumn::from_bytes(
+                    &data[pos..pos + col_len],
+                    &field.data_type,
+                    n_rows,
+                )?;
                 columns.push(col);
                 // Advance past column body + 8-byte alignment padding.
                 let aligned = col_len + (8 - col_len % 8) % 8;
                 pos += aligned;
             }
 
-            let batch = ArrowRecordBatch {
+            let batch = OxirsIpcRecordBatch {
                 schema: schema.clone(),
                 columns,
             };
@@ -750,19 +776,19 @@ impl ArrowIpcReader {
 
     /// Convert a record batch (with `timestamp` and `value` columns) back to
     /// `DataPoint`s.
-    pub fn batch_to_time_series(batch: &ArrowRecordBatch) -> Vec<crate::series::DataPoint> {
+    pub fn batch_to_time_series(batch: &OxirsIpcRecordBatch) -> Vec<crate::series::DataPoint> {
         use chrono::{TimeZone, Utc};
 
         // Find timestamp and value columns by position (schema order).
         let timestamps = batch.columns.first().and_then(|c| {
-            if let ArrowColumn::Timestamp(v, _) = c {
+            if let OxirsIpcColumn::Timestamp(v, _) = c {
                 Some(v.as_slice())
             } else {
                 None
             }
         });
         let values = batch.columns.get(1).and_then(|c| {
-            if let ArrowColumn::Float64(v) = c {
+            if let OxirsIpcColumn::Float64(v) = c {
                 Some(v.as_slice())
             } else {
                 None
@@ -845,41 +871,45 @@ mod tests {
 
     #[test]
     fn test_schema_roundtrip_single_field() {
-        let schema = ArrowSchema::new(vec![ArrowField::new(
+        let schema = OxirsIpcSchema::new(vec![OxirsIpcField::new(
             "value",
-            ArrowDataType::Float64,
+            OxirsIpcDataType::Float64,
             false,
         )]);
         let bytes = schema.to_bytes();
-        let decoded = ArrowSchema::from_bytes(&bytes).expect("roundtrip");
+        let decoded = OxirsIpcSchema::from_bytes(&bytes).expect("roundtrip");
         assert_eq!(schema, decoded);
     }
 
     #[test]
     fn test_schema_roundtrip_multiple_fields() {
-        let schema = ArrowSchema::new(vec![
-            ArrowField::new("ts", ArrowDataType::Timestamp(TimeUnit::Millisecond), false),
-            ArrowField::new("value", ArrowDataType::Float64, false),
-            ArrowField::new("label", ArrowDataType::Utf8, true),
-            ArrowField::new("active", ArrowDataType::Boolean, false),
-            ArrowField::new("count", ArrowDataType::Int64, false),
+        let schema = OxirsIpcSchema::new(vec![
+            OxirsIpcField::new(
+                "ts",
+                OxirsIpcDataType::Timestamp(OxirsIpcTimeUnit::Millisecond),
+                false,
+            ),
+            OxirsIpcField::new("value", OxirsIpcDataType::Float64, false),
+            OxirsIpcField::new("label", OxirsIpcDataType::Utf8, true),
+            OxirsIpcField::new("active", OxirsIpcDataType::Boolean, false),
+            OxirsIpcField::new("count", OxirsIpcDataType::Int64, false),
         ]);
         let bytes = schema.to_bytes();
-        let decoded = ArrowSchema::from_bytes(&bytes).expect("roundtrip");
+        let decoded = OxirsIpcSchema::from_bytes(&bytes).expect("roundtrip");
         assert_eq!(schema, decoded);
     }
 
     #[test]
     fn test_schema_empty_fields() {
-        let schema = ArrowSchema::new(vec![]);
+        let schema = OxirsIpcSchema::new(vec![]);
         let bytes = schema.to_bytes();
-        let decoded = ArrowSchema::from_bytes(&bytes).expect("roundtrip");
+        let decoded = OxirsIpcSchema::from_bytes(&bytes).expect("roundtrip");
         assert!(decoded.fields.is_empty());
     }
 
     #[test]
     fn test_schema_from_bytes_truncated_error() {
-        let result = ArrowSchema::from_bytes(&[0u8; 2]);
+        let result = OxirsIpcSchema::from_bytes(&[0u8; 2]);
         assert!(result.is_err());
     }
 
@@ -887,21 +917,22 @@ mod tests {
 
     #[test]
     fn test_int64_column_roundtrip() {
-        let col = ArrowColumn::Int64(vec![1, -2, 1_000_000, i64::MAX]);
+        let col = OxirsIpcColumn::Int64(vec![1, -2, 1_000_000, i64::MAX]);
         let bytes = col.body_bytes();
-        let decoded =
-            ArrowColumn::from_bytes(&bytes, &ArrowDataType::Int64, 4).expect("should succeed");
+        let decoded = OxirsIpcColumn::from_bytes(&bytes, &OxirsIpcDataType::Int64, 4)
+            .expect("should succeed");
         assert_eq!(col, decoded);
     }
 
     #[test]
     fn test_float64_column_roundtrip() {
-        let col = ArrowColumn::Float64(vec![1.5, -std::f64::consts::PI, f64::NAN, f64::INFINITY]);
+        let col =
+            OxirsIpcColumn::Float64(vec![1.5, -std::f64::consts::PI, f64::NAN, f64::INFINITY]);
         let bytes = col.body_bytes();
-        let decoded =
-            ArrowColumn::from_bytes(&bytes, &ArrowDataType::Float64, 4).expect("should succeed");
+        let decoded = OxirsIpcColumn::from_bytes(&bytes, &OxirsIpcDataType::Float64, 4)
+            .expect("should succeed");
         // NaN != NaN so compare element-by-element.
-        if let (ArrowColumn::Float64(orig), ArrowColumn::Float64(dec)) = (&col, &decoded) {
+        if let (OxirsIpcColumn::Float64(orig), OxirsIpcColumn::Float64(dec)) = (&col, &decoded) {
             assert_eq!(orig.len(), dec.len());
             assert_eq!(dec[0], 1.5);
             assert!(dec[2].is_nan());
@@ -912,44 +943,51 @@ mod tests {
 
     #[test]
     fn test_utf8_column_roundtrip() {
-        let col = ArrowColumn::Utf8(vec!["hello".into(), "world".into(), "".into()]);
+        let col = OxirsIpcColumn::Utf8(vec!["hello".into(), "world".into(), "".into()]);
         let bytes = col.body_bytes();
         let decoded =
-            ArrowColumn::from_bytes(&bytes, &ArrowDataType::Utf8, 3).expect("should succeed");
+            OxirsIpcColumn::from_bytes(&bytes, &OxirsIpcDataType::Utf8, 3).expect("should succeed");
         assert_eq!(col, decoded);
     }
 
     #[test]
     fn test_timestamp_column_roundtrip() {
-        let col = ArrowColumn::Timestamp(vec![0, 1_000, -500], TimeUnit::Millisecond);
+        let col = OxirsIpcColumn::Timestamp(vec![0, 1_000, -500], OxirsIpcTimeUnit::Millisecond);
         let bytes = col.body_bytes();
-        let decoded =
-            ArrowColumn::from_bytes(&bytes, &ArrowDataType::Timestamp(TimeUnit::Millisecond), 3)
-                .expect("should succeed");
+        let decoded = OxirsIpcColumn::from_bytes(
+            &bytes,
+            &OxirsIpcDataType::Timestamp(OxirsIpcTimeUnit::Millisecond),
+            3,
+        )
+        .expect("should succeed");
         assert_eq!(col, decoded);
     }
 
     #[test]
     fn test_boolean_column_roundtrip() {
-        let col = ArrowColumn::Boolean(vec![true, false, true, true, false]);
+        let col = OxirsIpcColumn::Boolean(vec![true, false, true, true, false]);
         let bytes = col.body_bytes();
-        let decoded =
-            ArrowColumn::from_bytes(&bytes, &ArrowDataType::Boolean, 5).expect("should succeed");
+        let decoded = OxirsIpcColumn::from_bytes(&bytes, &OxirsIpcDataType::Boolean, 5)
+            .expect("should succeed");
         assert_eq!(col, decoded);
     }
 
-    // ── ArrowIpcWriter / ArrowIpcReader ───────────────────────────────────────
+    // ── OxirsIpcWriter / OxirsIpcReader ───────────────────────────────────────
 
-    fn make_batch() -> ArrowRecordBatch {
-        let schema = ArrowSchema::new(vec![
-            ArrowField::new("ts", ArrowDataType::Timestamp(TimeUnit::Millisecond), false),
-            ArrowField::new("val", ArrowDataType::Float64, false),
+    fn make_batch() -> OxirsIpcRecordBatch {
+        let schema = OxirsIpcSchema::new(vec![
+            OxirsIpcField::new(
+                "ts",
+                OxirsIpcDataType::Timestamp(OxirsIpcTimeUnit::Millisecond),
+                false,
+            ),
+            OxirsIpcField::new("val", OxirsIpcDataType::Float64, false),
         ]);
-        ArrowRecordBatch::new(
+        OxirsIpcRecordBatch::new(
             schema,
             vec![
-                ArrowColumn::Timestamp(vec![1000, 2000, 3000], TimeUnit::Millisecond),
-                ArrowColumn::Float64(vec![10.0, 20.0, 30.0]),
+                OxirsIpcColumn::Timestamp(vec![1000, 2000, 3000], OxirsIpcTimeUnit::Millisecond),
+                OxirsIpcColumn::Float64(vec![10.0, 20.0, 30.0]),
             ],
         )
         .expect("should succeed")
@@ -957,13 +995,13 @@ mod tests {
 
     #[test]
     fn test_write_read_single_batch() {
-        let mut writer = ArrowIpcWriter::new();
+        let mut writer = OxirsIpcWriter::new();
         let batch = make_batch();
         let mut stream = writer.write_schema(&batch.schema).expect("should succeed");
         stream.extend(writer.write_batch(&batch).expect("should succeed"));
         stream.extend(writer.write_footer().expect("should succeed"));
 
-        let batches = ArrowIpcReader::read_batches(&stream).expect("should succeed");
+        let batches = OxirsIpcReader::read_batches(&stream).expect("should succeed");
         assert_eq!(batches.len(), 1);
         assert_eq!(batches[0].num_rows(), 3);
         assert_eq!(batches[0].columns[0], batch.columns[0]);
@@ -972,21 +1010,25 @@ mod tests {
 
     #[test]
     fn test_write_read_multiple_batches() {
-        let mut writer = ArrowIpcWriter::new();
+        let mut writer = OxirsIpcWriter::new();
         let batch = make_batch();
         let mut stream = writer.write_schema(&batch.schema).expect("should succeed");
         stream.extend(writer.write_batch(&batch).expect("should succeed"));
         stream.extend(writer.write_batch(&batch).expect("should succeed"));
         stream.extend(writer.write_footer().expect("should succeed"));
 
-        let batches = ArrowIpcReader::read_batches(&stream).expect("should succeed");
+        let batches = OxirsIpcReader::read_batches(&stream).expect("should succeed");
         assert_eq!(batches.len(), 2);
     }
 
     #[test]
     fn test_write_schema_twice_error() {
-        let mut writer = ArrowIpcWriter::new();
-        let schema = ArrowSchema::new(vec![ArrowField::new("x", ArrowDataType::Int64, false)]);
+        let mut writer = OxirsIpcWriter::new();
+        let schema = OxirsIpcSchema::new(vec![OxirsIpcField::new(
+            "x",
+            OxirsIpcDataType::Int64,
+            false,
+        )]);
         writer.write_schema(&schema).expect("should succeed");
         let result = writer.write_schema(&schema);
         assert!(result.is_err());
@@ -994,7 +1036,7 @@ mod tests {
 
     #[test]
     fn test_write_batch_before_schema_error() {
-        let mut writer = ArrowIpcWriter::new();
+        let mut writer = OxirsIpcWriter::new();
         let batch = make_batch();
         let result = writer.write_batch(&batch);
         assert!(result.is_err());
@@ -1003,7 +1045,7 @@ mod tests {
     #[test]
     fn test_invalid_magic_error() {
         let bad = b"BADMAG\x00\x00\x00".to_vec();
-        let result = ArrowIpcReader::read_batches(&bad);
+        let result = OxirsIpcReader::read_batches(&bad);
         assert!(result.is_err());
     }
 
@@ -1015,7 +1057,7 @@ mod tests {
             DataPoint::new(Utc::now(), 1.0),
             DataPoint::new(Utc::now(), 2.0),
         ];
-        let batch = ArrowIpcWriter::time_series_to_batch(&points);
+        let batch = OxirsIpcWriter::time_series_to_batch(&points);
         assert_eq!(batch.schema.fields.len(), 2);
         assert_eq!(batch.num_rows(), 2);
     }
@@ -1024,8 +1066,8 @@ mod tests {
     fn test_batch_to_time_series_roundtrip() {
         let now = Utc::now();
         let points = vec![DataPoint::new(now, 42.0), DataPoint::new(now, 99.5)];
-        let batch = ArrowIpcWriter::time_series_to_batch(&points);
-        let recovered = ArrowIpcReader::batch_to_time_series(&batch);
+        let batch = OxirsIpcWriter::time_series_to_batch(&points);
+        let recovered = OxirsIpcReader::batch_to_time_series(&batch);
         assert_eq!(recovered.len(), 2);
         assert_eq!(recovered[0].value, 42.0);
         assert_eq!(recovered[1].value, 99.5);
@@ -1033,7 +1075,7 @@ mod tests {
 
     #[test]
     fn test_time_series_to_batch_empty() {
-        let batch = ArrowIpcWriter::time_series_to_batch(&[]);
+        let batch = OxirsIpcWriter::time_series_to_batch(&[]);
         assert_eq!(batch.num_rows(), 0);
     }
 
@@ -1057,36 +1099,36 @@ mod tests {
         tags.insert("env".to_owned(), "prod".to_owned());
         let points = vec![TaggedDataPoint::new(0, 1.0, tags)];
         let batch = time_series_with_tags_to_batch(&points).expect("should succeed");
-        if let ArrowColumn::Utf8(json_cols) = &batch.columns[2] {
+        if let OxirsIpcColumn::Utf8(json_cols) = &batch.columns[2] {
             assert!(json_cols[0].contains("env"), "expected env in tags_json");
         } else {
             panic!("expected Utf8 column");
         }
     }
 
-    // ── ArrowRecordBatch validation ───────────────────────────────────────────
+    // ── OxirsIpcRecordBatch validation ───────────────────────────────────────────
 
     #[test]
     fn test_record_batch_mismatched_columns_error() {
-        let schema = ArrowSchema::new(vec![
-            ArrowField::new("a", ArrowDataType::Int64, false),
-            ArrowField::new("b", ArrowDataType::Float64, false),
+        let schema = OxirsIpcSchema::new(vec![
+            OxirsIpcField::new("a", OxirsIpcDataType::Int64, false),
+            OxirsIpcField::new("b", OxirsIpcDataType::Float64, false),
         ]);
-        let result = ArrowRecordBatch::new(schema, vec![ArrowColumn::Int64(vec![1, 2])]);
+        let result = OxirsIpcRecordBatch::new(schema, vec![OxirsIpcColumn::Int64(vec![1, 2])]);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_record_batch_unequal_column_lengths_error() {
-        let schema = ArrowSchema::new(vec![
-            ArrowField::new("a", ArrowDataType::Int64, false),
-            ArrowField::new("b", ArrowDataType::Float64, false),
+        let schema = OxirsIpcSchema::new(vec![
+            OxirsIpcField::new("a", OxirsIpcDataType::Int64, false),
+            OxirsIpcField::new("b", OxirsIpcDataType::Float64, false),
         ]);
-        let result = ArrowRecordBatch::new(
+        let result = OxirsIpcRecordBatch::new(
             schema,
             vec![
-                ArrowColumn::Int64(vec![1, 2, 3]),
-                ArrowColumn::Float64(vec![1.0]),
+                OxirsIpcColumn::Int64(vec![1, 2, 3]),
+                OxirsIpcColumn::Float64(vec![1.0]),
             ],
         );
         assert!(result.is_err());
@@ -1096,30 +1138,30 @@ mod tests {
 
     #[test]
     fn test_write_read_utf8_batch() {
-        let schema = ArrowSchema::new(vec![
-            ArrowField::new("name", ArrowDataType::Utf8, true),
-            ArrowField::new("count", ArrowDataType::Int64, false),
+        let schema = OxirsIpcSchema::new(vec![
+            OxirsIpcField::new("name", OxirsIpcDataType::Utf8, true),
+            OxirsIpcField::new("count", OxirsIpcDataType::Int64, false),
         ]);
-        let batch = ArrowRecordBatch::new(
+        let batch = OxirsIpcRecordBatch::new(
             schema.clone(),
             vec![
-                ArrowColumn::Utf8(vec!["alpha".into(), "beta".into(), "gamma".into()]),
-                ArrowColumn::Int64(vec![1, 2, 3]),
+                OxirsIpcColumn::Utf8(vec!["alpha".into(), "beta".into(), "gamma".into()]),
+                OxirsIpcColumn::Int64(vec![1, 2, 3]),
             ],
         )
         .expect("should succeed");
 
-        let mut writer = ArrowIpcWriter::new();
+        let mut writer = OxirsIpcWriter::new();
         let mut stream = writer.write_schema(&schema).expect("should succeed");
         stream.extend(writer.write_batch(&batch).expect("should succeed"));
         stream.extend(writer.write_footer().expect("should succeed"));
 
-        let batches = ArrowIpcReader::read_batches(&stream).expect("should succeed");
+        let batches = OxirsIpcReader::read_batches(&stream).expect("should succeed");
         assert_eq!(batches.len(), 1);
         assert_eq!(
             batches[0].columns[0],
-            ArrowColumn::Utf8(vec!["alpha".into(), "beta".into(), "gamma".into()])
+            OxirsIpcColumn::Utf8(vec!["alpha".into(), "beta".into(), "gamma".into()])
         );
-        assert_eq!(batches[0].columns[1], ArrowColumn::Int64(vec![1, 2, 3]));
+        assert_eq!(batches[0].columns[1], OxirsIpcColumn::Int64(vec![1, 2, 3]));
     }
 }

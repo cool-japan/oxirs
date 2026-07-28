@@ -457,7 +457,7 @@ impl ImmutableStorage {
 
                 // Remove references
                 refs.forward_refs.remove(&hash);
-                for (_, back_refs) in refs.backward_refs.iter_mut() {
+                for back_refs in refs.backward_refs.values_mut() {
                     back_refs.remove(&hash);
                 }
             }

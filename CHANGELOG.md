@@ -5,6 +5,64 @@ All notable changes to OxiRS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-07-28
+
+A workspace-wide production-readiness hardening pass: a 38-scope multi-agent audit surfaced 308 verified findings (62 P0, 131 P1, 115 P2), of which roughly 300 were fixed across 38 work packages, plus 74 test regressions caught by the full-suite gate and a follow-up chain of SPARQL-parser, storage-durability, and CLI/DID data-integrity fixes.
+
+### Security
+- **oxirs-fuseki**: closed a full authentication/authorization bypass — the `AuthUser` extractor never actually authenticated requests, `route_based_rbac` failed open, and the `/update` endpoint had no auth check at all; all three now correctly gate on `config.security.auth_required`
+- **oxirs-fuseki**: X.509 client-certificate trust now verifies the certificate's signature chain instead of only comparing DN strings
+- **oxirs-fuseki**: fixed a SPARQL injection vulnerability in the REST API v2 endpoints
+- **oxirs-fuseki**: SPARQL `LOAD` now carries SSRF guards against internal/loopback targets
+- **oxirs-gql**: the "AES" cache-encryption layer was a plaintext passthrough (data was never actually encrypted) and its token validation unconditionally granted access regardless of the token presented — both fixed
+- **oxirs-did**: DID/VC verification now checks credential revocation status, consumes the auth challenge to prevent replay, and verifies ZKP selective-disclosure proofs, instead of accepting them unconditionally
+- **oxirs-chat**: SAML signature verification hardened against XML Signature Wrapping attacks
+
+### Fixed
+- **oxirs-core**: the core SPARQL parser no longer silently drops `FILTER` clauses
+- **oxirs-core**: `Store::flush()` now actually flushes to disk (was a no-op)
+- **oxirs-embed**: KGE model save/load is now implemented (was a no-op); TransE/RotatE training loss sign corrected
+- **oxirs-stream**: the NATS consumer no longer acknowledges a message before it has actually been processed
+- **oxirs-shacl**: removed fabricated results from the W3C SHACL conformance test harness
+- **oxirs-shacl-ai**: removed fabricated quality metrics and fabricated AutoML "training" results
+- **oxirs-federate**: federated query planning now really decomposes queries instead of returning a canned plan
+- **oxirs-stream**: the NATS producer now fails loud instead of silently no-op'ing on a publish failure (the Kafka producer received the same fix before that backend was removed later in this release)
+- **oxirs-arq** / **oxirs-fuseki**: multi-line `CONSTRUCT`/`SELECT`/`ASK`/`DESCRIBE` queries and `UPDATE` statements (a newline before `WHERE`/braces, or a multi-`PREFIX` prologue) now parse correctly instead of failing
+- **oxirs-cluster**: Raft node state (vote/log/state-machine/snapshot) is now durably persisted — a new `DurableRaftStore` fsyncs every log append and writes hard state/snapshots atomically (write-temp + fsync + rename); previously all Raft state was in-memory only, so a node restart could double-vote or lose committed writes. Resolves the durable-storage gap deferred from the 0.4.0 Raft integration
+- **oxirs-cluster**: the replication-maintenance background task ran against a throwaway, empty `ReplicationManager` in a shutdown-blind infinite loop (a permanent task leak on every node); it now operates on the node's real shared manager with shutdown-aware periodic ticks
+- **oxirs** (CLI): `tdbupdate` (SPARQL Update against a TDB-backed store) no longer collapses every literal/blank-node position to an IRI before writing — this silently corrupted the store for every other reader (`tdbquery`, `tdbdump`); term kind is now preserved
+- **oxirs-tdb**: `repair_page_checksums` no longer re-stamps a fresh checksum over already-corrupt page bytes and reports success; it now repairs strictly from a trusted WAL redo image, or fails loud when no redo image exists
+- **oxirs-tdb**: superblock reads now verify the page checksum before decoding — a crash-torn superblock page previously could be decoded anyway and silently yield wrong query results or data loss
+- **oxirs-did**: `StatusList2021` credential-status encoding is now genuinely GZIP-compressed before base64url (previously plain base64url of the packed bits despite documentation claiming GZIP), fixing interoperability with external W3C-compliant verifiers
+- **performance_validation**: benchmark scenarios called `sleep()` to simulate workload instead of executing real queries; they now load real datasets and run genuine end-to-end SPARQL queries
+- **oxirs-fuseki**: `ServerConfig::load()` / `load_from_file()` now seed Figment with `ServerConfig::default()` before merging TOML/YAML/env, so a config file only has to state the fields it overrides; previously, since `ServerConfig`'s fields carry no `#[serde(default)]`, a file that omitted any top-level section (`datasets`, `security`, `monitoring`, `performance`, `logging`, `http_protocol`) failed to deserialize instead of falling back to that section's default
+- **oxirs** (CLI): the Jena-parity checker no longer advertises the removed Kafka backend as a "beyond Jena" feature; it now lists the Confluent Schema Registry client that replaced it in the streaming category
+
+### Added
+- **oxirs-arq**: SPARQL 1.1 sub-`SELECT` (a nested `{ SELECT ... }` inside a query's `WHERE` clause) and Turtle collection (`( )`) / property-list (`[ ]`) syntax are now supported inside query patterns
+- **oxirs-fuseki**: RDF-vocabulary-driven GraphQL schema auto-generation (`graphql_autoschema`), bridging discovered RDFS/OWL vocabulary into a generated GraphQL schema via oxirs-gql
+- **oxirs-core**: a new mmap-able RDF store snapshot format gives sub-second cold start on reopen, versus ~13.6s re-parsing 1.35M quads from N-Quads
+- **oxirs-geosparql**: the boundary-dependent Egenhofer (`ehMeet`/`ehInside`/`ehContains`) and RCC8 (`EC`/`TPP`/`TPPi`/`NTPP`/`NTPPi`) relations, plus `buffer` and `boundary`, now work in the published Pure-Rust crate — they previously returned an "requires GEOS" error unless you wired up a quarantine adapter. All three relation families and the operation functions are consequently registered in the SPARQL function registry by default
+- **oxirs-geosparql**: buffering now covers every geometry type (Point, LineString, the Multi* forms, GeometryCollection) with the full OGC cap and join styles; the previous Pure-Rust path handled Polygon/MultiPolygon only
+- **oxirs-stream**: `confluent_registry` — a Confluent Schema Registry REST client (register, fetch by ID or subject, compatibility checks, cached on both lookup paths). It was previously stranded inside the `publish = false` Kafka adapter despite never touching `rdkafka`; it is Pure Rust over `reqwest` and, since the Schema Registry is a standalone HTTP service, works with no broker at all. Distinct from `schema_registry`, which validates events against locally-held schemas
+
+### Changed
+- **oxirs-tauri**: the desktop app has real icons. `tauri-build` requires `icons/icon.ico` on Windows to emit the Windows Resource file, and only a 32x32 solid-colour placeholder `icon.png` was committed — so the crate could not build on Windows at all, which broke `cargo check --all-features` for the entire workspace. Both icons are now generated from one description by `icons/generate_icons.py` (an RDF-triple mark in the palette `ui/styles.css` defines), each ICO frame rendered at its own size so the 16px variant stays legible
+- **oxirs-fuseki** / **oxirs-arq**: the SPARQL query path is unified onto the real oxirs-arq execution engine
+- **oxirs-cluster**: state-machine checkpointing is now durable and amortized O(1) (was O(n²))
+- **oxirs-star**: tiered-storage default directories are now instance-unique, fixing a cross-process data-leakage bug where concurrent instances could share the same on-disk location
+- **oxirs-core**: the `blas` Cargo feature previously compiled but had no effect; it now wires into real OxiBLAS linear-algebra routines
+- **oxirs-vec**: HNSW graph construction is significantly faster — `select_neighbors_heuristic` now maintains the running minimum distance-to-selected incrementally instead of recomputing it from scratch every round (O(M × candidates) distance evaluations instead of O(M² × candidates), identical selected-node output), and `calculate_distance_between_nodes` uses a new `SimilarityMetric::distance_slices` over each node's cached `vector_data_f32` instead of `distance()`, which reallocated a fresh `Vec<f32>` per call via `Vector::as_f32()`; both sat in construction's hottest loop
+- **oxirs-vec**: the Linux NUMA allocator (`mmap_advanced`) is reimplemented in Pure Rust — topology discovery reads sysfs (`/sys/devices/system/node`, `/sys/devices/system/cpu`) directly and memory-policy binding goes through the raw `mbind(2)` syscall via `libc::syscall`, replacing `extern "C"` bindings to `libnuma` (`numa_available`/`numa_max_node`/`numa_node_of_cpu`/`numa_alloc_onnode`/`numa_free`/`mbind`) that required linking a system library, consistent with the COOLJAPAN Pure Rust Policy. CUDA detection/linking is also dropped from oxirs-vec itself (real CUDA acceleration lives in the quarantined `oxirs-vec-adapter-cuda` crate), so `build.rs` is deleted entirely — the crate no longer needs a build script at all
+- **oxirs** (CLI): the `all-features` Cargo feature (which silently omitted `excel-export` and `system-keyring`) has been renamed to `full-cli` and now genuinely enables every optional CLI feature; build scripts referencing `--features all-features` must switch to `--features full-cli`
+- COOLJAPAN ecosystem: `scirs2-*` 0.6.1 → 0.6.4; `oxigdal-proj` renamed to `oxigeo-proj` (0.1.7 → 0.2.1, two bumps: the rename+major jump to 0.2.0, then a follow-up patch to 0.2.1); new Pure-Rust `oxiarc-bzip2` dependency
+- **oxirs-stream**: the `sparkplug` feature's build script now compiles `sparkplug_b.proto` with `oxiproto-build` (COOLJAPAN OxiProto) instead of `prost-build`, removing the requirement for a separately installed `protoc` executable. The generated types are unchanged — OxiProto parses `.proto` in pure Rust and delegates codegen to the same prost-build version
+
+### Removed
+- **oxirs-geosparql**: the `oxirs-geosparql-adapter-geos` quarantine crate and the `rust-buffer` Cargo feature are both gone, along with the `geo-buffer` dependency. `geo::algorithm::buffer` (backed by `i_overlay`) replaces both, so buffering is unconditional Pure Rust with no C library and no opt-in. `buffer_rust` is removed — call `buffer`, which now handles what it did and more. **Breaking** for anyone passing `--features rust-buffer` or depending on the adapter crate
+- **oxirs-tsdb** / **oxirs** (CLI): the `oxirs-tsdb-adapter-duckdb` quarantine crate, the CLI's `tsdb-duckdb` feature, and the `oxirs tsdb duckdb` subcommand are removed with no replacement. Export chunks to Parquet via oxirs-tsdb's `arrow-export` feature and query them with an external DuckDB; the Pure-Rust `analytics::DuckDbQueryAdapter` still builds the SQL for that. **Breaking** for anyone using that subcommand
+- **oxirs-stream**: the Kafka backend is removed — the `oxirs-stream-adapter-rdkafka` quarantine crate, the `StreamBackendType::Kafka` config variant, and the unreferenced in-tree `backend::kafka_backup` module (744 lines that no `mod` declaration ever pulled in). Quarantining it in 0.3.2 had already made it unreachable: the adapter was `publish = false`, so no crates.io release could use it, and `StreamProducer::new`/`StreamConsumer::new` returned an error for a `Kafka` config. It also required a C toolchain (`librdkafka` via `rdkafka-sys`, plus `libz-sys`), which is what kept `cargo build --all-features` from working on a plain Windows checkout. A config variant that parses but can never connect is worse than no variant, so it is gone rather than deprecated; `OXIRS_BACKEND=kafka` now fails with an explanatory error instead of silently falling through. Use `nats`, `redis`, `rabbitmq`, `mqtt`, or `memory`. **Breaking** for anyone constructing `StreamBackendType::Kafka`
+
 ## [0.4.0] - 2026-07-19
 
 This release consolidates the 0.3.3 production-hardening work (a 272-finding audit that landed 288 fixes and 455 regression tests across storage, security, and distributed subsystems) with the 0.3.4 deployment fixes surfaced by the public, query-only sparql.wik.jp rollout. Neither 0.3.3 nor 0.3.4 was published to crates.io; both are shipped here as 0.4.0.
@@ -647,6 +705,7 @@ Production Impact (100K QPS):
 
 *"Rust makes memory safety table stakes; OxiRS makes knowledge-graph engineering table stakes."*
 
+[0.4.1]: https://github.com/cool-japan/oxirs/releases/tag/v0.4.1
 [0.4.0]: https://github.com/cool-japan/oxirs/releases/tag/v0.4.0
 [0.3.2]: https://github.com/cool-japan/oxirs/releases/tag/v0.3.2
 [0.3.1]: https://github.com/cool-japan/oxirs/releases/tag/v0.3.1

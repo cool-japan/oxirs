@@ -430,6 +430,13 @@ impl OpenApiGenerator {
     }
 
     fn characteristic_schema_v31(&self, char: &Characteristic) -> Result<Value> {
+        let schema = self.characteristic_schema_v31_base(char)?;
+        // OpenAPI 3.1 fully embeds JSON Schema draft 2020-12, so
+        // exclusiveMinimum/exclusiveMaximum are numeric bounds.
+        Ok(Self::apply_constraints(char, schema, true))
+    }
+
+    fn characteristic_schema_v31_base(&self, char: &Characteristic) -> Result<Value> {
         match char.kind() {
             CharacteristicKind::Trait => {
                 let json_type = char
@@ -616,6 +623,14 @@ impl OpenApiGenerator {
     }
 
     fn characteristic_schema(&self, char: &Characteristic) -> Result<Value> {
+        let schema = self.characteristic_schema_base(char)?;
+        // OpenAPI 3.0 uses a JSON Schema subset (draft-4 derived) where
+        // exclusiveMinimum/exclusiveMaximum are boolean flags alongside a
+        // minimum/maximum keyword carrying the numeric bound.
+        Ok(Self::apply_constraints(char, schema, false))
+    }
+
+    fn characteristic_schema_base(&self, char: &Characteristic) -> Result<Value> {
         match char.kind() {
             CharacteristicKind::Trait => {
                 let json_type = char
@@ -723,6 +738,124 @@ impl OpenApiGenerator {
             CharacteristicKind::StructuredValue { .. } => {
                 Ok(json!({ "type": "string", "format": "structured-value" }))
             }
+        }
+    }
+
+    /// Apply SAMM constraints (`samm-c:RangeConstraint`,
+    /// `samm-c:LengthConstraint`, `samm-c:RegularExpressionConstraint`,
+    /// `samm-c:EncodingConstraint`) declared on `char` as schema keywords.
+    ///
+    /// `numeric_exclusive_bounds` selects the wire representation used for
+    /// an open (exclusive) range bound: `true` for OpenAPI 3.1 / JSON Schema
+    /// draft 2020-12 (`exclusiveMinimum`/`exclusiveMaximum` carry the
+    /// numeric bound directly), `false` for OpenAPI 3.0 (`minimum`/`maximum`
+    /// carry the numeric bound and `exclusiveMinimum`/`exclusiveMaximum` are
+    /// sibling booleans).
+    fn apply_constraints(
+        char: &Characteristic,
+        mut schema: Value,
+        numeric_exclusive_bounds: bool,
+    ) -> Value {
+        use crate::metamodel::Constraint;
+
+        for constraint in &char.constraints {
+            let Some(obj) = schema.as_object_mut() else {
+                continue;
+            };
+            match constraint {
+                Constraint::RangeConstraint {
+                    min_value,
+                    max_value,
+                    lower_bound_definition,
+                    upper_bound_definition,
+                } => {
+                    if let Some(min) = min_value {
+                        if let Ok(n) = min.parse::<f64>() {
+                            Self::apply_bound(
+                                obj,
+                                "minimum",
+                                "exclusiveMinimum",
+                                n,
+                                lower_bound_definition,
+                                numeric_exclusive_bounds,
+                            );
+                        }
+                    }
+                    if let Some(max) = max_value {
+                        if let Ok(n) = max.parse::<f64>() {
+                            Self::apply_bound(
+                                obj,
+                                "maximum",
+                                "exclusiveMaximum",
+                                n,
+                                upper_bound_definition,
+                                numeric_exclusive_bounds,
+                            );
+                        }
+                    }
+                }
+                Constraint::LengthConstraint {
+                    min_value,
+                    max_value,
+                } => {
+                    if let Some(min) = min_value {
+                        obj.insert("minLength".to_string(), json!(min));
+                    }
+                    if let Some(max) = max_value {
+                        obj.insert("maxLength".to_string(), json!(max));
+                    }
+                }
+                Constraint::RegularExpressionConstraint { pattern } => {
+                    obj.insert("pattern".to_string(), Value::String(pattern.clone()));
+                }
+                Constraint::EncodingConstraint { encoding } => {
+                    obj.insert(
+                        "contentEncoding".to_string(),
+                        Value::String(encoding.clone()),
+                    );
+                }
+                Constraint::LanguageConstraint { .. } | Constraint::LocaleConstraint { .. } => {
+                    // Represented as metadata; no direct OpenAPI/JSON Schema equivalent.
+                }
+                Constraint::FixedPointConstraint { .. } => {
+                    // No direct OpenAPI/JSON Schema keyword for fixed-point precision.
+                }
+            }
+        }
+        schema
+    }
+
+    /// Insert a numeric range bound as either an inclusive (`minimum`/
+    /// `maximum`) or exclusive (`exclusiveMinimum`/`exclusiveMaximum`)
+    /// schema keyword, honoring SAMM's `samm-c:lowerBoundDefinition` /
+    /// `samm-c:upperBoundDefinition` semantics: [`BoundDefinition::AtLeast`]
+    /// is a closed (inclusive) bound; [`BoundDefinition::Open`],
+    /// [`BoundDefinition::GreaterThan`], and [`BoundDefinition::LessThan`]
+    /// are open (exclusive) bounds.
+    fn apply_bound(
+        obj: &mut Map<String, Value>,
+        inclusive_key: &str,
+        exclusive_key: &str,
+        value: f64,
+        bound: &crate::metamodel::BoundDefinition,
+        numeric_exclusive_bounds: bool,
+    ) {
+        use crate::metamodel::BoundDefinition;
+
+        let exclusive = matches!(
+            bound,
+            BoundDefinition::Open | BoundDefinition::GreaterThan | BoundDefinition::LessThan
+        );
+
+        if exclusive {
+            if numeric_exclusive_bounds {
+                obj.insert(exclusive_key.to_string(), json!(value));
+            } else {
+                obj.insert(inclusive_key.to_string(), json!(value));
+                obj.insert(exclusive_key.to_string(), json!(true));
+            }
+        } else {
+            obj.insert(inclusive_key.to_string(), json!(value));
         }
     }
 }

@@ -18,45 +18,85 @@ impl PropertyPathEvaluator {
     ) -> Result<Vec<Term>> {
         let mut result = Vec::new();
         let mut candidates: HashSet<Term> = HashSet::new();
-        let candidate_query = if let Some(graph) = graph_name {
-            format!(
-                r#"
-                SELECT DISTINCT ?candidate WHERE {{
-                    GRAPH <{graph}> {{
-                        ?candidate ?p ?o .
+
+        // Paginate the candidate-subject scan (OFFSET/LIMIT) instead of taking a
+        // single `LIMIT 1000` snapshot, so graphs with more than 1000 distinct
+        // subjects are still fully considered. `max_intermediate_results` is a
+        // real, error-producing hard limit: if the candidate set grows past it
+        // we fail loudly instead of silently returning an incomplete result.
+        const PAGE_SIZE: usize = 1000;
+        let mut offset: usize = 0;
+        loop {
+            let candidate_query = if let Some(graph) = graph_name {
+                format!(
+                    r#"
+                    SELECT DISTINCT ?candidate WHERE {{
+                        GRAPH <{graph}> {{
+                            ?candidate ?p ?o .
+                        }}
                     }}
-                }}
-                LIMIT 1000
-            "#
-            )
-        } else {
-            "SELECT DISTINCT ?candidate WHERE { ?candidate ?p ?o . } LIMIT 1000".to_string()
-        };
-        match self.execute_path_query(store, &candidate_query) {
-            Ok(results) => {
-                if let oxirs_core::query::QueryResult::Select {
-                    variables: _,
-                    bindings,
-                } = results
-                {
-                    for binding in bindings {
-                        if let Some(candidate) = binding.get("candidate") {
-                            candidates.insert(candidate.clone());
+                    LIMIT {PAGE_SIZE} OFFSET {offset}
+                "#
+                )
+            } else {
+                format!(
+                    "SELECT DISTINCT ?candidate WHERE {{ ?candidate ?p ?o . }} LIMIT {PAGE_SIZE} OFFSET {offset}"
+                )
+            };
+
+            match self.execute_path_query(store, &candidate_query) {
+                Ok(results) => {
+                    let mut page_count = 0usize;
+                    if let oxirs_core::query::QueryResult::Select {
+                        variables: _,
+                        bindings,
+                    } = results
+                    {
+                        page_count = bindings.len();
+                        for binding in bindings {
+                            if let Some(candidate) = binding.get("candidate") {
+                                candidates.insert(candidate.clone());
+                            }
                         }
                     }
+
+                    if page_count < PAGE_SIZE {
+                        // Fewer rows than requested page size: scan exhausted.
+                        break;
+                    }
+                    offset = offset.saturating_add(PAGE_SIZE);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get candidates for complex inverse path: {}", e);
+                    candidates = self.get_candidates_direct(store, graph_name)?;
+                    break;
                 }
             }
-            Err(e) => {
-                tracing::error!("Failed to get candidates for complex inverse path: {}", e);
-                candidates = self.get_candidates_direct(store, graph_name)?;
+
+            if candidates.len() > self.max_intermediate_results {
+                return Err(ShaclError::PropertyPath(format!(
+                    "Complex inverse path candidate scan exceeded the limit of {} distinct \
+                     subjects; the graph is too large to fully evaluate this inverse path \
+                     without truncation",
+                    self.max_intermediate_results
+                )));
             }
         }
+
+        if candidates.len() > self.max_intermediate_results {
+            return Err(ShaclError::PropertyPath(format!(
+                "Complex inverse path candidate set exceeded the limit of {} distinct subjects; \
+                 the graph is too large to fully evaluate this inverse path without truncation",
+                self.max_intermediate_results
+            )));
+        }
+
         tracing::debug!(
             "Testing {} candidates for complex inverse path",
             candidates.len()
         );
         for candidate in candidates {
-            if depth > self.max_depth - 5 {
+            if depth > self.max_depth.saturating_sub(5) {
                 tracing::warn!("Stopping complex inverse path evaluation due to depth limit");
                 break;
             }
@@ -70,9 +110,12 @@ impl PropertyPathEvaluator {
                     tracing::debug!("Failed to evaluate path for candidate: {}", e);
                 }
             }
-            if result.len() > 100 {
-                tracing::warn!("Limiting complex inverse path results to 100 items");
-                break;
+            if result.len() > self.max_intermediate_results {
+                return Err(ShaclError::PropertyPath(format!(
+                    "Complex inverse path result set exceeded the limit of {} items; refusing \
+                     to silently truncate results",
+                    self.max_intermediate_results
+                )));
             }
         }
         tracing::debug!("Complex inverse path found {} results", result.len());
@@ -220,5 +263,95 @@ impl PropertyPathEvaluator {
             .execute_query(&parsed_query, store)
             .map_err(|e| ShaclError::PropertyPath(format!("Path query execution failed: {e}")))?;
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxirs_core::{
+        model::{GraphName, Quad},
+        ConcreteStore,
+    };
+
+    fn nn(iri: &str) -> NamedNode {
+        NamedNode::new(iri).expect("valid IRI")
+    }
+
+    /// The candidate-subject scan must fail loudly (a real, error-producing
+    /// hard limit) instead of silently truncating results when the number of
+    /// distinct candidate subjects exceeds `max_intermediate_results`.
+    #[test]
+    fn regression_complex_inverse_candidate_scan_hard_limit_is_fail_loud() {
+        let store = ConcreteStore::new().expect("store");
+        // 5 distinct candidate subjects, each with one arbitrary triple.
+        for i in 0..5 {
+            store
+                .insert_quad(Quad::new(
+                    nn(&format!("http://example.org/subject{i}")),
+                    nn("http://example.org/p"),
+                    nn("http://example.org/o"),
+                    GraphName::DefaultGraph,
+                ))
+                .expect("insert");
+        }
+
+        // max_intermediate_results = 3 forces the candidate-scan hard limit
+        // (5 candidates > 3) to trip instead of silently truncating.
+        let evaluator = PropertyPathEvaluator::with_limits(50, 3);
+        let inner_path = PropertyPath::Predicate(nn("http://example.org/knows"));
+        let start_node = Term::NamedNode(nn("http://example.org/target"));
+
+        let result = evaluator.evaluate_complex_inverse(&store, &start_node, &inner_path, None, 0);
+
+        assert!(
+            result.is_err(),
+            "exceeding the candidate-scan hard limit must fail loudly, not silently truncate"
+        );
+    }
+
+    /// Below the hard limit, evaluation must still succeed and correctly
+    /// identify matches (regression guard against the fix being overly
+    /// aggressive).
+    #[test]
+    fn regression_complex_inverse_below_limit_finds_real_match() {
+        let store = ConcreteStore::new().expect("store");
+        let target = nn("http://example.org/target");
+        let matching_candidate = nn("http://example.org/matches");
+        let non_matching_candidate = nn("http://example.org/nomatch");
+        let knows = nn("http://example.org/knows");
+
+        // matching_candidate --knows--> target
+        store
+            .insert_quad(Quad::new(
+                matching_candidate.clone(),
+                knows.clone(),
+                target.clone(),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert matching triple");
+        // non_matching_candidate has some unrelated triple, so it's a
+        // candidate but does not reach `target` via `knows`.
+        store
+            .insert_quad(Quad::new(
+                non_matching_candidate,
+                nn("http://example.org/other"),
+                nn("http://example.org/somethingElse"),
+                GraphName::DefaultGraph,
+            ))
+            .expect("insert unrelated triple");
+
+        let evaluator = PropertyPathEvaluator::with_limits(50, 10_000);
+        let inner_path = PropertyPath::Predicate(knows);
+        let start_node = Term::NamedNode(target);
+
+        let result = evaluator
+            .evaluate_complex_inverse(&store, &start_node, &inner_path, None, 0)
+            .expect("evaluation should succeed below the hard limit");
+
+        assert!(
+            result.contains(&Term::NamedNode(matching_candidate)),
+            "the real inverse match must be found, got {result:?}"
+        );
     }
 }

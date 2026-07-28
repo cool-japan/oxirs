@@ -1,6 +1,6 @@
 # OxiRS Chat - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready (Experimental)
 
@@ -95,10 +95,10 @@
   - **Risk:** drift; mitigation: example-as-test.
 - [x] Model marketplace integration — HF Hub + Ollama + local GGUF registry (completed 2026-05-02)
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 26, 2026)
 - [x] Rich entity extraction — `nl2sparql::context_aware::extract_entities_rich()` returns typed, span-and-confidence-scored `ExtractedEntity` values (rule-based NL entity recognition)
 - [x] Rustdoc intra-doc link fixes across `rich_content`, `sso::session`
-- ✅ 1247 tests passing
+- ✅ 1278 tests passing
 
 ## Contributing
 
@@ -106,7 +106,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Chat v0.3.2 - AI-powered conversational RDF interface*
+*OxiRS Chat v0.4.1 - AI-powered conversational RDF interface*
 
 ## Proposed follow-ups
 

@@ -1,6 +1,6 @@
 # OxiRS TDB - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
@@ -25,7 +25,7 @@
 - **Asynchronous I/O** - Non-blocking operations with io_uring support
 - **Cost-Based Optimizer** - Intelligent index selection
 - **Production Features** - Resource quotas, materialized views, WAL archiving, connection pooling
-- **2106 tests passing** with clean build
+- **2166 tests passing** with clean build
 
 ## Roadmap
 
@@ -55,7 +55,7 @@
 - [x] Enterprise support (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 26, 2026)
 - [x] Saga steps now run real registered forward-action/compensation callbacks via
   `SagaCallbackRegistry` (`register_action`/`register_compensation`), with reverse-order
   compensation on failure; `DistributedTdbStore::execute_saga` previously reported success
@@ -70,7 +70,8 @@
 - [x] Distributed coordinator's `abort_transaction` now fans out an abort notification to all
   registered participants instead of a no-op
 - Note: oxirs-tdb has no DuckDB coupling (`grep -rn duckdb src/` is empty) — the DuckDB C-FFI
-  quarantine into `oxirs-tsdb-adapter-duckdb` this release applies to **oxirs-tsdb**, not this crate
+  quarantine into `oxirs-tsdb-adapter-duckdb`, and its subsequent removal outright, applied to
+  **oxirs-tsdb**, not this crate
 
 ## Contributing
 
@@ -78,4 +79,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TDB v0.3.2 - High-performance RDF storage*
+*OxiRS TDB v0.4.1 - High-performance RDF storage*

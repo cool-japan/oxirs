@@ -309,7 +309,7 @@ impl TwoPhaseCoordinator {
 
         // In a real implementation, this would send network requests
         // For now, simulate participant responses
-        for (node_id, _state) in participants.iter() {
+        for node_id in participants.keys() {
             let vote = self.request_prepare_vote(node_id).await?;
             votes.insert(node_id.clone(), vote);
 
@@ -362,7 +362,7 @@ impl TwoPhaseCoordinator {
         &self,
         participants: &HashMap<String, ParticipantState>,
     ) -> Result<()> {
-        for (node_id, _state) in participants.iter() {
+        for node_id in participants.keys() {
             self.send_commit_message(node_id).await?;
 
             // Update participant state
@@ -408,7 +408,7 @@ impl TwoPhaseCoordinator {
         &self,
         participants: &HashMap<String, ParticipantState>,
     ) -> Result<()> {
-        for (node_id, _state) in participants.iter() {
+        for node_id in participants.keys() {
             self.send_abort_message(node_id).await?;
         }
 

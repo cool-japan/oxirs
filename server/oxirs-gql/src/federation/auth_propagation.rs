@@ -329,10 +329,18 @@ impl Default for AuthPropagationManager {
     }
 }
 
-/// Simple JWT token transformer
+/// Simple JWT token transformer.
+///
+/// Applies an issuer (`iss`) claim remapping and re-signs the token with a
+/// configured HMAC-SHA256 signing key. If an issuer mapping is configured but
+/// no signing key is available, [`TokenTransformer::transform`] fails loud
+/// rather than silently forwarding the token with its mapping ignored (which
+/// would make the configuration a lie).
 pub struct JwtTransformer {
     /// Issuer transformation map
     issuer_map: HashMap<String, String>,
+    /// HMAC-SHA256 signing key used to re-sign a remapped token.
+    signing_key: Option<Vec<u8>>,
 }
 
 impl JwtTransformer {
@@ -340,6 +348,7 @@ impl JwtTransformer {
     pub fn new() -> Self {
         Self {
             issuer_map: HashMap::new(),
+            signing_key: None,
         }
     }
 
@@ -347,6 +356,74 @@ impl JwtTransformer {
     pub fn with_issuer_mapping(mut self, from: String, to: String) -> Self {
         self.issuer_map.insert(from, to);
         self
+    }
+
+    /// Set the HMAC-SHA256 signing key used to re-sign remapped tokens.
+    pub fn with_signing_key(mut self, key: impl Into<Vec<u8>>) -> Self {
+        self.signing_key = Some(key.into());
+        self
+    }
+
+    /// base64url (no padding) encode.
+    fn b64url_encode(data: &[u8]) -> String {
+        use base64::Engine;
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
+    }
+
+    /// base64url (no padding) decode.
+    fn b64url_decode(data: &str) -> Result<Vec<u8>> {
+        use base64::Engine;
+        base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(data)
+            .map_err(|e| anyhow::anyhow!("Invalid base64url segment: {e}"))
+    }
+
+    /// HMAC-SHA256 sign.
+    fn sign(key: &[u8], signing_input: &str) -> Result<Vec<u8>> {
+        use hmac::{Hmac, KeyInit, Mac};
+        use sha2::Sha256;
+        let mut mac = <Hmac<Sha256>>::new_from_slice(key)
+            .map_err(|e| anyhow::anyhow!("Invalid HMAC key: {e}"))?;
+        mac.update(signing_input.as_bytes());
+        Ok(mac.finalize().into_bytes().to_vec())
+    }
+
+    /// Decode the payload, remap the `iss` claim per `issuer_map`, and re-sign
+    /// the token with `signing_key`. Returns the new compact JWT string.
+    fn remap_and_resign(&self, token: &str) -> Result<String> {
+        let signing_key = self.signing_key.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "JwtTransformer has an issuer mapping configured but no signing key; \
+                 refusing to forward a token whose configured issuer remap cannot be applied"
+            )
+        })?;
+
+        let parts: Vec<&str> = token.split('.').collect();
+        if parts.len() != 3 {
+            return Err(anyhow::anyhow!(
+                "Malformed JWT: expected 3 segments, got {}",
+                parts.len()
+            ));
+        }
+
+        // Decode and remap the payload's issuer claim.
+        let payload_bytes = Self::b64url_decode(parts[1])?;
+        let mut payload: serde_json::Value = serde_json::from_slice(&payload_bytes)
+            .map_err(|e| anyhow::anyhow!("Invalid JWT payload JSON: {e}"))?;
+
+        if let Some(iss) = payload.get("iss").and_then(|v| v.as_str()) {
+            if let Some(mapped) = self.issuer_map.get(iss) {
+                payload["iss"] = serde_json::Value::String(mapped.clone());
+            }
+        }
+
+        // Re-encode the payload and re-sign (header segment is preserved).
+        let new_payload_b64 = Self::b64url_encode(serde_json::to_string(&payload)?.as_bytes());
+        let signing_input = format!("{}.{}", parts[0], new_payload_b64);
+        let signature = Self::sign(signing_key, &signing_input)?;
+        let signature_b64 = Self::b64url_encode(&signature);
+
+        Ok(format!("{signing_input}.{signature_b64}"))
     }
 }
 
@@ -362,10 +439,26 @@ impl TokenTransformer for JwtTransformer {
         credential: &AuthCredential,
         _service_name: &str,
     ) -> Result<AuthCredential> {
-        // In a real implementation, this would decode the JWT,
-        // transform claims, and re-sign with service-specific keys
-        // For now, we just clone the credential
-        Ok(credential.clone())
+        // No mapping configured => nothing to do; forward unchanged.
+        if self.issuer_map.is_empty() {
+            return Ok(credential.clone());
+        }
+
+        // A mapping is configured but this credential is not a JWT bearer token,
+        // so the mapping cannot be applied — fail loud rather than silently
+        // forwarding an untransformed credential.
+        if credential.scheme != AuthScheme::Bearer {
+            return Err(anyhow::anyhow!(
+                "JwtTransformer issuer mapping is configured but credential scheme is {:?}, \
+                 not Bearer; cannot apply mapping",
+                credential.scheme
+            ));
+        }
+
+        let new_token = self.remap_and_resign(&credential.value)?;
+        let mut transformed = credential.clone();
+        transformed.value = new_token;
+        Ok(transformed)
     }
 }
 
@@ -574,15 +667,69 @@ mod tests {
         // Just verify it doesn't panic
     }
 
+    fn make_jwt(iss: &str) -> String {
+        use base64::Engine;
+        let enc = |s: &str| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(s.as_bytes());
+        let header = enc(r#"{"alg":"HS256","typ":"JWT"}"#);
+        let payload = enc(&format!(r#"{{"iss":"{iss}","sub":"user"}}"#));
+        // Signature is irrelevant to the transformer (it re-signs); use a stub.
+        format!("{header}.{payload}.stubsig")
+    }
+
+    fn decode_iss(token: &str) -> String {
+        use base64::Engine;
+        let payload = token.split('.').nth(1).expect("payload segment");
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(payload)
+            .expect("decode payload");
+        let json: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        json["iss"].as_str().expect("iss").to_string()
+    }
+
     #[tokio::test]
-    async fn test_jwt_transformer() {
-        let transformer =
-            JwtTransformer::new().with_issuer_mapping("issuer1".to_string(), "issuer2".to_string());
-        let cred = AuthCredential::bearer("jwt_token".to_string());
+    async fn test_jwt_transformer_no_mapping_is_passthrough() {
+        let transformer = JwtTransformer::new();
+        let cred = AuthCredential::bearer("any_token".to_string());
         let result = transformer
             .transform(&cred, "test_service")
-            .expect("should succeed");
-        assert_eq!(result.scheme, AuthScheme::Bearer);
+            .expect("passthrough ok");
+        assert_eq!(result.value, "any_token");
+    }
+
+    #[tokio::test]
+    async fn regression_jwt_issuer_mapping_without_key_fails_loud() {
+        let transformer =
+            JwtTransformer::new().with_issuer_mapping("issuer1".to_string(), "issuer2".to_string());
+        let cred = AuthCredential::bearer(make_jwt("issuer1"));
+        // Mapping configured but no signing key => must error, never silently ignore.
+        assert!(transformer.transform(&cred, "svc").is_err());
+    }
+
+    #[tokio::test]
+    async fn regression_jwt_issuer_mapping_applied_and_resigned() {
+        let transformer = JwtTransformer::new()
+            .with_issuer_mapping("issuer1".to_string(), "issuer2".to_string())
+            .with_signing_key(b"service-signing-secret".to_vec());
+        let cred = AuthCredential::bearer(make_jwt("issuer1"));
+        let result = transformer.transform(&cred, "svc").expect("transform ok");
+
+        // The issuer claim must actually be rewritten.
+        assert_eq!(decode_iss(&result.value), "issuer2");
+        // Token must be re-signed (3 segments, new signature).
+        let parts: Vec<&str> = result.value.split('.').collect();
+        assert_eq!(parts.len(), 3);
+        assert_ne!(parts[2], "stubsig", "token must be re-signed");
+    }
+
+    #[tokio::test]
+    async fn regression_jwt_unmapped_issuer_preserved() {
+        let transformer = JwtTransformer::new()
+            .with_issuer_mapping("issuerX".to_string(), "issuerY".to_string())
+            .with_signing_key(b"k".to_vec());
+        let cred = AuthCredential::bearer(make_jwt("issuer1"));
+        let result = transformer.transform(&cred, "svc").expect("ok");
+        // issuer1 is not in the map, so it stays as-is.
+        assert_eq!(decode_iss(&result.value), "issuer1");
     }
 
     #[tokio::test]

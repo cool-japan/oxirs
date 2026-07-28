@@ -1,10 +1,10 @@
 # OxiRS WASM - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
-OxiRS WASM v0.3.2 provides WebAssembly bindings for browser-based RDF and SPARQL processing, enabling semantic web applications directly in the browser.
+OxiRS WASM v0.4.1 provides WebAssembly bindings for browser-based RDF and SPARQL processing, enabling semantic web applications directly in the browser.
 
 ### Features
 - ✅ WASM compilation with wasm-bindgen
@@ -28,7 +28,7 @@ OxiRS WASM v0.3.2 provides WebAssembly bindings for browser-based RDF and SPARQL
 - ✅ Namespace manager, endpoint client
 - ✅ WASM bridge, geojson support
 - ✅ Property path evaluator
-- ✅ 915 tests passing
+- ✅ 1116 tests passing
 
 ## Roadmap
 
@@ -76,12 +76,12 @@ OxiRS WASM v0.3.2 provides WebAssembly bindings for browser-based RDF and SPARQL
   - **Tests:** minCount/maxCount violation detection; datatype mismatch report; pattern regex failure; valid shape graph passes without violations
   - **Risk:** SHACL subset only — explicitly document which constraints are and are not supported
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 26, 2026)
 - ✅ `PREFIX`/`BASE` SPARQL prologue support (`query::prefix_expand::expand_prologue`), expanded before parsing so queries can use prefixed names instead of only full `<iri>` forms
 - ✅ Per-store solution budget (`setSolutionBudget`/`clearSolutionBudget`) — fails a query fast once a join produces more intermediate rows than configured
 - ✅ Triple pattern and property-path evaluation now drive off the store's subject/predicate/object indexes instead of scanning every triple, so a join costs a hash lookup per solution rather than a full graph scan
 - ✅ Fixed: pattern and property-path matching now treats bracketed `<iri>` and bare `iri` as equal, so a query no longer silently misses matches depending on which form was used; property paths also gained support for the `a` (`rdf:type`) keyword
-- ✅ 915 tests passing
+- ✅ 1116 tests passing
 
 ## Contributing
 
@@ -89,4 +89,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS WASM v0.3.2 - Semantic web in the browser*
+*OxiRS WASM v0.4.1 - Semantic web in the browser*

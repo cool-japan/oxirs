@@ -49,7 +49,9 @@ k8s-openapi = { workspace = true, optional = true }
 redis = { workspace = true, features = ["aio", "tokio-comp"], optional = true }
 lru = { workspace = true, optional = true }
 moka = { workspace = true, optional = true }
-bloom = { version = "0.3", optional = true }
+# Pure-Rust, MIT/Apache-2.0-licensed bloom filter (replaces GPL-2.0-only `bloom`,
+# which is incompatible with this workspace's Apache-2.0 license).
+fastbloom = { version = "0.17", optional = true }
 petgraph.workspace = true
 regex.workspace = true
 md5.workspace = true
@@ -74,7 +76,7 @@ wiremock.workspace = true
 default = ["caching", "redis-cache"]
 kubernetes = ["kube", "k8s-openapi"]
 redis-cache = ["redis"]
-caching = ["lru", "moka", "bloom"]
+caching = ["lru", "moka", "fastbloom"]
 service-discovery = ["mdns-sd"]
 # GPU acceleration via scirs2-core's Pure-Rust `gpu` feature (no GPU FFI).
 # Gates `gpu_accelerated_query.rs`, which imports `scirs2_core::gpu`.

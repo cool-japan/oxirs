@@ -410,10 +410,12 @@ impl GeoPackage {
         // Version 0
         buf.push(0x00);
 
-        // Flags: envelope_type=1 (XY) in bits [1..3], endianness=1 (LE) in bit 4
+        // Flags (GeoPackage spec §2.1.3): bit 0 = byte order (1 = LE), bits
+        // [1..3] = envelope contents indicator (1 = XY), bit 4 = empty
+        // geometry flag (0 = non-empty), bits [5..7] reserved.
         let envelope_type: u8 = 1;
         let endian_flag: u8 = 1;
-        let flags: u8 = (envelope_type << 1) | (endian_flag << 4);
+        let flags: u8 = (envelope_type << 1) | endian_flag;
         buf.push(flags);
 
         // SRS ID (4 bytes, i32 LE)
@@ -611,9 +613,12 @@ mod tests {
         assert_eq!(geometries.len(), 5);
     }
 
+    /// Regression test: `ewkb_parser` now serializes/parses Z coordinates,
+    /// so a 3D point must round-trip through GeoPackage insert/query with
+    /// its Z value intact (previously ignored: "3D WKB encoding needs
+    /// enhancement in ewkb_parser").
     #[test]
-    #[ignore] // 3D WKB encoding needs enhancement in ewkb_parser
-    fn test_3d_geometry() {
+    fn regression_3d_geometry_round_trip() {
         let mut gpkg = GeoPackage::create_memory().expect("create_memory");
         gpkg.create_feature_table("points_3d", "geom", "POINT", 4326, true, false)
             .expect("create_feature_table");
@@ -628,6 +633,49 @@ mod tests {
             .query_geometries("points_3d", "geom")
             .expect("query_geometries");
         assert_eq!(geometries.len(), 1);
+
+        if let GeoGeometry::Point(p) = &geometries[0].geom {
+            assert!((p.x() - 1.0).abs() < 1e-6, "x coordinate should round-trip");
+            assert!((p.y() - 2.0).abs() < 1e-6, "y coordinate should round-trip");
+        } else {
+            panic!("Expected Point geometry");
+        }
+        assert!(
+            geometries[0].coord3d.has_z(),
+            "Z coordinate must survive the GeoPackage round-trip"
+        );
+        assert_eq!(
+            geometries[0].coord3d.z_at(0),
+            Some(3.0),
+            "Z value must round-trip exactly"
+        );
+    }
+
+    /// Regression test: the GeoPackageBinary flags byte must place the
+    /// byte-order bit at bit 0 (not bit 4, which is the spec's
+    /// empty-geometry flag) per GeoPackage spec §2.1.3, so every geometry
+    /// this crate writes is NOT mismarked as an empty geometry.
+    #[test]
+    fn regression_gpkg_wkb_flags_byte_order_bit_position() {
+        let gpkg = GeoPackage::create_memory().expect("create_memory");
+        let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
+        let wkb = gpkg
+            .geometry_to_gpkg_wkb(&point)
+            .expect("geometry_to_gpkg_wkb");
+
+        // Header: [0..2] magic, [2] version, [3] flags
+        let flags = wkb[3];
+        assert_eq!(flags & 0x01, 0x01, "bit 0 (byte order) must be set to LE");
+        assert_eq!(
+            flags & 0x10,
+            0,
+            "bit 4 (empty-geometry flag) must be 0 for a non-empty geometry"
+        );
+        assert_eq!(
+            (flags >> 1) & 0x07,
+            1,
+            "bits [1..3] (envelope type) must indicate XY envelope"
+        );
     }
 
     #[test]

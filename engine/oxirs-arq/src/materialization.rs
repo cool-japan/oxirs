@@ -297,7 +297,7 @@ impl MaterializedResults {
         let mut var_cardinalities: HashMap<String, Vec<f64>> = HashMap::new();
 
         for solution in &self.in_memory {
-            for (var, _term) in solution.iter() {
+            for var in solution.keys() {
                 let var_name = format!("{}", var);
                 var_cardinalities.entry(var_name).or_default().push(1.0); // Count occurrences
             }

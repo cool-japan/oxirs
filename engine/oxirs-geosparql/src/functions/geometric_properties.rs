@@ -59,8 +59,7 @@ pub fn is_measured(geom: &Geometry) -> Result<bool> {
 /// - `MultiPoint` / `MultiLineString` / `MultiPolygon`: valid iff each component is valid
 /// - `GeometryCollection`: valid iff each element is valid
 ///
-/// This is a pure-Rust implementation. For full OGC SFA validity backed by GEOS, use
-/// the quarantined `oxirs-geosparql-adapter-geos` crate.
+/// This is a heuristic check, not full OGC SFA validity.
 pub fn is_valid(geom: &Geometry) -> Result<bool> {
     Ok(is_valid_recursive(&geom.geom))
 }
@@ -102,8 +101,7 @@ fn is_valid_recursive(geom: &GeoGeometry<f64>) -> bool {
                     }
                 }
             }
-            // Note: full self-intersection detection requires GEOS (the quarantined
-            // oxirs-geosparql-adapter-geos crate).
+            // Note: full self-intersection detection is not implemented here.
             // This pure-Rust implementation validates structural validity (closure, ring count).
             true
         }
@@ -140,7 +138,7 @@ pub fn is_ring(geom: &Geometry) -> Result<bool> {
             }
             // Simple check: use geo's IsConvex — convex implies simple;
             // for the general non-convex case we check no interior intersections
-            // using the coordinate uniqueness heuristic (full simplicity requires GEOS).
+            // using the coordinate uniqueness heuristic.
             // geo 0.33 does not expose a `IsSimple` trait for LineString, so we use
             // the is_simple() method on our Geometry wrapper if available.
             let simple = geom.is_simple();

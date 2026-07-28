@@ -158,11 +158,11 @@ impl ShardManager {
 
     /// Register (or update) the network address of a peer node with the
     /// underlying [`NetworkService`], so that shard-management RPCs issued by
-    /// this manager (shard creation via [`ShardManager::create_shard`], triple
+    /// this manager (shard creation via `ShardManager::create_shard`, triple
     /// storage forwarding/replication via [`ShardManager::store_triple`],
     /// remote shard queries via [`ShardManager::query_triples`], and shard
     /// split/merge/migrate/rebalance data transfer via
-    /// [`ShardManager::transfer_shard_data`]) can actually reach it.
+    /// `ShardManager::transfer_shard_data`) can actually reach it.
     ///
     /// This is the lifecycle hook cluster bootstrap / membership code must
     /// call for every peer node **before** any topology-changing call that

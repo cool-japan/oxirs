@@ -495,8 +495,12 @@ pub struct StratifiedReasoner {
     config: StratificationConfig,
     /// NAF rules
     rules: Vec<NafRule>,
-    /// Known facts (positive atoms)
+    /// Known facts (positive atoms) as canonical keys, for O(1) membership /
+    /// negation-as-failure checks.
     facts: HashSet<String>,
+    /// Known facts as structured atoms, for real pattern matching of non-ground
+    /// positive body atoms. Kept in sync with `facts` wherever an atom is known.
+    fact_atoms: HashSet<RuleAtom>,
     /// Stratification result
     stratification: Option<StratificationResult>,
     /// Analyzer
@@ -511,6 +515,7 @@ impl StratifiedReasoner {
             config,
             rules: Vec::new(),
             facts: HashSet::new(),
+            fact_atoms: HashSet::new(),
             stratification: None,
             analyzer,
         }
@@ -544,6 +549,7 @@ impl StratifiedReasoner {
         for fact in facts {
             let key = Self::atom_to_key(fact);
             self.facts.insert(key);
+            self.fact_atoms.insert(fact.clone());
         }
     }
 
@@ -616,6 +622,7 @@ impl StratifiedReasoner {
                     let key = Self::atom_to_key(&fact);
                     if !self.facts.contains(&key) {
                         self.facts.insert(key);
+                        self.fact_atoms.insert(fact.clone());
                         inferred.push(fact);
                         changed = true;
                     }
@@ -687,30 +694,82 @@ impl StratifiedReasoner {
         atom: &RuleAtom,
         current_subst: &HashMap<String, Term>,
     ) -> Vec<HashMap<String, Term>> {
-        let mut results = Vec::new();
-
-        // For simplicity, we check if the grounded atom matches known facts
-        // In a full implementation, we'd pattern match against all facts
         let grounded = Self::apply_substitution(atom, current_subst);
-        let key = Self::atom_to_key(&grounded);
 
-        // Check if fully grounded and known
-        if Self::is_ground(&grounded) && self.facts.contains(&key) {
-            results.push(current_subst.clone());
-        } else if !Self::is_ground(&grounded) {
-            // For non-ground atoms, we'd need to iterate over facts
-            // For now, just check if current substitution is consistent
-            if self.is_consistent_with_facts(&grounded) {
-                results.push(current_subst.clone());
+        // Fully ground: it is satisfied iff the exact fact is known.
+        if Self::is_ground(&grounded) {
+            let key = Self::atom_to_key(&grounded);
+            if self.facts.contains(&key) {
+                return vec![current_subst.clone()];
             }
+            return Vec::new();
         }
 
-        results
+        // Non-ground triple: genuinely pattern-match against every stored fact,
+        // extending the substitution for each unifying fact. This is what the
+        // stratified NAF inference needs to bind body variables like `?X` in
+        // `person(?X)` — previously these were accepted unconditionally without
+        // ever consulting the fact base.
+        match &grounded {
+            RuleAtom::Triple { .. } => {
+                let mut results = Vec::new();
+                for fact in &self.fact_atoms {
+                    if let Some(extended) = Self::unify_atom(&grounded, fact, current_subst) {
+                        results.push(extended);
+                    }
+                }
+                results
+            }
+            // A non-ground constraint/builtin atom cannot be resolved against
+            // stored facts here; it yields no bindings (constraints are expected
+            // to appear after their variables are already bound by triples).
+            _ => Vec::new(),
+        }
     }
 
-    fn is_consistent_with_facts(&self, _atom: &RuleAtom) -> bool {
-        // Simplified: in a full implementation, check against fact patterns
-        true
+    /// Unify a (possibly partially-ground) triple pattern against a stored fact,
+    /// extending `base` with newly bound variables. Returns None on any clash.
+    fn unify_atom(
+        pattern: &RuleAtom,
+        fact: &RuleAtom,
+        base: &HashMap<String, Term>,
+    ) -> Option<HashMap<String, Term>> {
+        if let (
+            RuleAtom::Triple {
+                subject: ps,
+                predicate: pp,
+                object: po,
+            },
+            RuleAtom::Triple {
+                subject: fs,
+                predicate: fp,
+                object: fo,
+            },
+        ) = (pattern, fact)
+        {
+            let mut subst = base.clone();
+            if Self::unify_term(ps, fs, &mut subst)
+                && Self::unify_term(pp, fp, &mut subst)
+                && Self::unify_term(po, fo, &mut subst)
+            {
+                return Some(subst);
+            }
+        }
+        None
+    }
+
+    /// Unify one pattern term against a fact term, updating `subst`.
+    fn unify_term(pattern: &Term, value: &Term, subst: &mut HashMap<String, Term>) -> bool {
+        match pattern {
+            Term::Variable(var) => match subst.get(var) {
+                Some(bound) => bound == value,
+                None => {
+                    subst.insert(var.clone(), value.clone());
+                    true
+                }
+            },
+            _ => pattern == value,
+        }
     }
 
     fn is_ground(atom: &RuleAtom) -> bool {
@@ -822,6 +881,7 @@ impl StratifiedReasoner {
     pub fn clear(&mut self) {
         self.rules.clear();
         self.facts.clear();
+        self.fact_atoms.clear();
         self.stratification = None;
     }
 
@@ -986,6 +1046,43 @@ mod tests {
                 Term::Constant(o.to_string())
             },
         }
+    }
+
+    /// Regression: positive non-ground body atoms must be matched against the
+    /// fact base to bind their variables. Previously `find_matches` accepted any
+    /// non-ground atom unconditionally (`is_consistent_with_facts` => true), so
+    /// bindings were never filtered by the knowledge base.
+    #[test]
+    fn regression_naf_positive_atom_binds_from_facts() -> Result<(), Box<dyn std::error::Error>> {
+        let mut reasoner = StratifiedReasoner::default();
+        // single(?X) :- person(?X), \+ married(?X)
+        reasoner.add_rule(create_naf_rule(
+            "single_rule",
+            vec![
+                NafAtom::positive(triple_atom("?X", "person", "yes")),
+                NafAtom::negated(triple_atom("?X", "married", "yes")),
+            ],
+            vec![triple_atom("?X", "single", "yes")],
+        ));
+
+        reasoner.add_facts_from_atoms(&[
+            triple_atom("alice", "person", "yes"),
+            triple_atom("bob", "person", "yes"),
+            triple_atom("bob", "married", "yes"),
+        ]);
+
+        let inferred = reasoner.infer()?;
+
+        let single = |who: &str| triple_atom(who, "single", "yes");
+        assert!(
+            inferred.contains(&single("alice")),
+            "alice (person, not married) must be single; got: {inferred:?}"
+        );
+        assert!(
+            !inferred.contains(&single("bob")),
+            "bob is married and must NOT be single; got: {inferred:?}"
+        );
+        Ok(())
     }
 
     #[test]

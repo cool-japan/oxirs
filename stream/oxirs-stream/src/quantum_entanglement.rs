@@ -424,27 +424,39 @@ impl QuantumChannel {
         Ok(())
     }
 
-    /// Generate quantum random numbers for cryptographic purposes
+    /// Generate quantum random numbers for cryptographic purposes.
+    ///
+    /// Each output byte accumulates 8 independent single-bit measurements so
+    /// that every byte carries a full 8 bits of entropy. Previously each byte
+    /// held only a single measured bit (0 or 1), yielding 1 bit of entropy per
+    /// byte — astronomically weaker than the function's name/doc promised.
     pub async fn generate_quantum_random(&self, length: usize) -> StreamResult<Vec<u8>> {
         let mut random_bytes = Vec::with_capacity(length);
-        
+
         for _ in 0..length {
-            // Simulate quantum random number generation
-            let pair = self.create_entangled_pair().await?;
-            let measurement = self.measure_particle_spin(&pair.particle_a).await?;
-            
-            let random_byte = match measurement {
-                SpinState::Up => 1,
-                SpinState::Down => 0,
-                SpinState::Superposition(up, _down) => {
-                    if up > 0.5 { 1 } else { 0 }
-                }
-            };
-            
-            random_bytes.push(random_byte);
+            let mut byte: u8 = 0;
+            for bit_index in 0..8u8 {
+                let pair = self.create_entangled_pair().await?;
+                let measurement = self.measure_particle_spin(&pair.particle_a).await?;
+
+                let bit: u8 = match measurement {
+                    SpinState::Up => 1,
+                    SpinState::Down => 0,
+                    SpinState::Superposition(up, _down) => {
+                        if up > 0.5 {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                };
+
+                byte |= bit << bit_index;
+            }
+            random_bytes.push(byte);
         }
 
-        info!("Generated {} quantum random bytes", length);
+        info!("Generated {} quantum random bytes (8 bits/byte)", length);
         Ok(random_bytes)
     }
 

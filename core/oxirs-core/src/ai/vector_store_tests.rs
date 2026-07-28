@@ -98,6 +98,85 @@ mod tests {
         assert_eq!(dot_product, 28.0);
     }
 
+    /// Regression test for the `blas` Cargo feature: it used to be `blas = []`
+    /// -- a complete no-op advertised as BLAS acceleration (see `Cargo.toml`'s
+    /// `[features]` table). `slice_dot`/`array_dot` in `vector_store_search`
+    /// are now the single source of truth for every dot-product-based metric,
+    /// and their `#[cfg(feature = "blas")]` branch genuinely compiles a
+    /// different, OxiBLAS-backed implementation. This test doesn't (and can't,
+    /// from a single feature configuration) prove *which* branch compiled,
+    /// but it pins down that whichever one did compile still produces
+    /// numerically correct, cross-metric-consistent results -- so a future
+    /// edit that breaks the BLAS branch's arithmetic (e.g. swapped operands,
+    /// wrong slice) fails this test under `--features blas`.
+    #[test]
+    fn regression_slice_dot_matches_reference_dot_product() {
+        let a = [1.0f32, 2.0, 3.0, 4.0, 5.0];
+        let b = [5.0f32, 4.0, 3.0, 2.0, 1.0];
+
+        let reference: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+
+        let dot_metric = compute_similarity(&a, &b, SimilarityMetric::DotProduct)
+            .expect("dot product should succeed");
+        assert!((dot_metric - reference).abs() < 1e-5);
+
+        // Cosine similarity of a vector with itself must be 1.0 (dot(a,a) /
+        // (|a| * |a|) == 1), exercising the norm's use of `slice_dot(a, a)`.
+        let self_cosine =
+            compute_similarity(&a, &a, SimilarityMetric::Cosine).expect("cosine should succeed");
+        assert!((self_cosine - 1.0).abs() < 1e-5);
+
+        // Euclidean distance of a vector with itself must be 0, exercising
+        // `array_dot` on the (all-zero) difference.
+        let self_euclidean = compute_similarity(&a, &a, SimilarityMetric::Euclidean)
+            .expect("euclidean should succeed");
+        assert!((self_euclidean - 1.0).abs() < 1e-5); // 1/(1+0) == 1
+
+        // The batched path must agree with the single-pair path for both the
+        // sequential (<=100 candidates) and parallel (>100 candidates)
+        // branches, both of which now go through `slice_dot`/`array_dot`.
+        let candidates: Vec<&[f32]> = vec![&b, &a];
+        let batch = compute_similarities_batch(&a, &candidates, SimilarityMetric::Cosine)
+            .expect("batch cosine should succeed");
+        assert_eq!(batch.len(), 2);
+        let single_ab =
+            compute_similarity(&a, &b, SimilarityMetric::Cosine).expect("cosine should succeed");
+        assert!((batch[0] - single_ab).abs() < 1e-5);
+        assert!((batch[1] - 1.0).abs() < 1e-5);
+    }
+
+    /// Regression test: a large batch (forcing the `>100` parallel branch in
+    /// `compute_similarities_batch`) must also agree with the sequential
+    /// single-pair path, for every dot-product-based metric that now routes
+    /// through `slice_dot`/`array_dot`.
+    #[test]
+    fn regression_large_batch_matches_sequential_path() {
+        let dim = 8;
+        let query: Vec<f32> = (0..dim).map(|i| i as f32 + 1.0).collect();
+        let owned_candidates: Vec<Vec<f32>> = (0..150)
+            .map(|c| (0..dim).map(|i| (i + c) as f32 * 0.5).collect())
+            .collect();
+        let candidates: Vec<&[f32]> = owned_candidates.iter().map(|v| v.as_slice()).collect();
+        assert!(candidates.len() > 100, "must exercise the parallel branch");
+
+        for metric in [
+            SimilarityMetric::Cosine,
+            SimilarityMetric::Euclidean,
+            SimilarityMetric::DotProduct,
+        ] {
+            let batch = compute_similarities_batch(&query, &candidates, metric)
+                .expect("batch computation should succeed");
+            for (candidate, &batched) in candidates.iter().zip(batch.iter()) {
+                let sequential = compute_similarity(&query, candidate, metric)
+                    .expect("sequential computation should succeed");
+                assert!(
+                    (batched - sequential).abs() < 1e-4,
+                    "batch/sequential mismatch for {metric:?}: {batched} vs {sequential}"
+                );
+            }
+        }
+    }
+
     #[tokio::test]
     async fn test_index_building() {
         let config = VectorStoreConfig {

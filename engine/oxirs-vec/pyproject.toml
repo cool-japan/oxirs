@@ -4,6 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "oxirs-vec"
+dynamic = ["version"]
 description = "High-performance vector search engine with SPARQL integration"
 readme = "README_PYTHON.md"
 license = {text = "Apache-2.0"}

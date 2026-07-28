@@ -514,7 +514,7 @@ impl MiddlewareChain {
 ### Event Processing Pipeline
 
 ```
-Event Source (Kafka/NATS)
+Event Source (NATS/Redis/MQTT/Kinesis/RabbitMQ)
     ↓
 [Deserializer] → Convert to RDF
     ↓

@@ -49,12 +49,111 @@
 //! let results = batcher.execute_batch(&batch_id).await?;
 //! ```
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+
+/// Outcome of executing a single batched query against a backend executor.
+#[derive(Debug, Clone, Default)]
+pub struct BatchExecutionOutcome {
+    /// Result data (JSON), if the query produced any.
+    pub data: Option<serde_json::Value>,
+    /// GraphQL errors encountered while executing the query.
+    pub errors: Vec<String>,
+}
+
+/// Backend that actually executes a batched GraphQL query.
+///
+/// [`QueryBatcher`] is transport/scheduling only; the real work of parsing and
+/// resolving a query is delegated to an implementation of this trait so that a
+/// concrete `QueryExecutor` (or any other engine) can be plugged in.
+#[async_trait]
+pub trait BatchQueryExecutor: Send + Sync {
+    /// Execute one query and return its data / errors.
+    async fn execute_batched(&self, query: &BatchedQuery) -> BatchExecutionOutcome;
+}
+
+/// Adapter that runs batched queries through the crate's real
+/// [`crate::execution::QueryExecutor`].
+pub struct GraphQLBatchExecutor {
+    executor: Arc<crate::execution::QueryExecutor>,
+}
+
+impl GraphQLBatchExecutor {
+    /// Wrap a shared [`crate::execution::QueryExecutor`].
+    pub fn new(executor: Arc<crate::execution::QueryExecutor>) -> Self {
+        Self { executor }
+    }
+
+    /// Convert a JSON variable value into a GraphQL AST value.
+    fn json_to_ast_value(value: &serde_json::Value) -> crate::ast::Value {
+        use crate::ast::Value as AstValue;
+        match value {
+            serde_json::Value::Null => AstValue::NullValue,
+            serde_json::Value::Bool(b) => AstValue::BooleanValue(*b),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    AstValue::IntValue(i)
+                } else {
+                    AstValue::FloatValue(n.as_f64().unwrap_or(0.0))
+                }
+            }
+            serde_json::Value::String(s) => AstValue::StringValue(s.clone()),
+            serde_json::Value::Array(arr) => {
+                AstValue::ListValue(arr.iter().map(Self::json_to_ast_value).collect())
+            }
+            serde_json::Value::Object(obj) => {
+                let map = obj
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Self::json_to_ast_value(v)))
+                    .collect();
+                AstValue::ObjectValue(map)
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl BatchQueryExecutor for GraphQLBatchExecutor {
+    async fn execute_batched(&self, query: &BatchedQuery) -> BatchExecutionOutcome {
+        let document = match crate::parser::parse_document(&query.query) {
+            Ok(doc) => doc,
+            Err(e) => {
+                return BatchExecutionOutcome {
+                    data: None,
+                    errors: vec![format!("Query parse error: {e}")],
+                };
+            }
+        };
+
+        let mut context = crate::execution::ExecutionContext::new();
+        if let Some(name) = &query.operation_name {
+            context.operation_name = Some(name.clone());
+        }
+        if let Some(serde_json::Value::Object(vars)) = &query.variables {
+            for (k, v) in vars {
+                context
+                    .variables
+                    .insert(k.clone(), Self::json_to_ast_value(v));
+            }
+        }
+
+        match self.executor.execute(&document, &context).await {
+            Ok(result) => BatchExecutionOutcome {
+                data: result.data,
+                errors: result.errors.into_iter().map(|e| e.message).collect(),
+            },
+            Err(e) => BatchExecutionOutcome {
+                data: None,
+                errors: vec![e.to_string()],
+            },
+        }
+    }
+}
 
 /// Execution strategy for batch processing
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -321,17 +420,37 @@ pub struct QueryBatcher {
     cache: Arc<RwLock<HashMap<String, QueryResult>>>,
     /// Batch statistics
     statistics: Arc<RwLock<HashMap<String, BatchStatistics>>>,
+    /// Backend that actually executes each GraphQL query. When absent, the
+    /// batcher fails loud (returns an error) rather than fabricating a
+    /// placeholder success payload.
+    executor: Option<Arc<dyn BatchQueryExecutor>>,
 }
 
 impl QueryBatcher {
-    /// Create a new query batcher
+    /// Create a new query batcher.
+    ///
+    /// Note: without an executor wired in via [`QueryBatcher::with_executor`],
+    /// every query execution fails loud. This prevents the batcher from
+    /// silently returning (and caching) fabricated placeholder results.
     pub fn new(config: BatchConfig) -> Self {
         Self {
             config,
             batches: Arc::new(RwLock::new(HashMap::new())),
             cache: Arc::new(RwLock::new(HashMap::new())),
             statistics: Arc::new(RwLock::new(HashMap::new())),
+            executor: None,
         }
+    }
+
+    /// Attach the backend GraphQL executor used to run each batched query.
+    pub fn with_executor(mut self, executor: Arc<dyn BatchQueryExecutor>) -> Self {
+        self.executor = Some(executor);
+        self
+    }
+
+    /// Set the backend GraphQL executor after construction.
+    pub fn set_executor(&mut self, executor: Arc<dyn BatchQueryExecutor>) {
+        self.executor = Some(executor);
     }
 
     /// Create a new batch
@@ -609,21 +728,28 @@ impl QueryBatcher {
             }
         }
 
-        // Execute query (placeholder - integrate with actual GraphQL executor)
+        // Execute the query against the wired-in backend. Fail loud if none is
+        // configured — never fabricate a placeholder success payload.
+        let executor = self.executor.as_ref().ok_or_else(|| {
+            "No GraphQL executor configured on QueryBatcher; \
+             call QueryBatcher::with_executor before executing batches"
+                .to_string()
+        })?;
+
+        let outcome = executor.execute_batched(&query).await;
+
         let result = QueryResult {
             query_id: query.id.clone(),
-            data: Some(serde_json::json!({
-                "placeholder": "Query execution not implemented",
-                "query": query.query
-            })),
-            errors: Vec::new(),
+            data: outcome.data,
+            errors: outcome.errors,
             duration: start_time.elapsed(),
             cached: false,
             deduplicated: false,
         };
 
-        // Cache result
-        if self.config.enable_caching {
+        // Only cache successful (error-free) results so a transient failure is
+        // never memoised as if it were a real answer.
+        if self.config.enable_caching && result.errors.is_empty() {
             self.cache
                 .write()
                 .await
@@ -685,6 +811,61 @@ impl QueryBatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Deterministic in-test executor: echoes the query text back as real data
+    /// so tests exercise the batching machinery without a live GraphQL schema.
+    struct MockBatchExecutor;
+
+    #[async_trait]
+    impl BatchQueryExecutor for MockBatchExecutor {
+        async fn execute_batched(&self, query: &BatchedQuery) -> BatchExecutionOutcome {
+            BatchExecutionOutcome {
+                data: Some(serde_json::json!({ "echo": query.query })),
+                errors: Vec::new(),
+            }
+        }
+    }
+
+    /// Build a batcher wired to the mock executor.
+    fn test_batcher(config: BatchConfig) -> QueryBatcher {
+        QueryBatcher::new(config).with_executor(Arc::new(MockBatchExecutor))
+    }
+
+    #[tokio::test]
+    async fn regression_execute_without_executor_fails_loud() {
+        // No executor configured => must error, never a placeholder success.
+        let batcher = QueryBatcher::new(BatchConfig::default());
+        let batch_id = batcher.create_batch().await;
+        batcher
+            .add_query(
+                &batch_id,
+                BatchedQuery::new("{ user { name } }".to_string()),
+            )
+            .await
+            .expect("add ok");
+        let result = batcher.execute_batch(&batch_id).await;
+        assert!(
+            result.is_err(),
+            "executing with no backend executor must fail loud"
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_no_placeholder_payload_and_only_real_results_cached() {
+        let batcher = test_batcher(BatchConfig::default());
+        let batch_id = batcher.create_batch().await;
+        batcher
+            .add_query(&batch_id, BatchedQuery::new("{ real }".to_string()))
+            .await
+            .expect("add ok");
+        let result = batcher.execute_batch(&batch_id).await.expect("exec ok");
+        let data = result.results[0].data.as_ref().expect("has data");
+        // The old fabricated payload must be gone.
+        assert!(data.get("placeholder").is_none());
+        assert_eq!(data["echo"], serde_json::json!("{ real }"));
+        // Real result was cached.
+        assert!(batcher.cache_size().await > 0);
+    }
 
     #[tokio::test]
     async fn test_batch_config_default() {
@@ -784,7 +965,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_batch() {
-        let batcher = QueryBatcher::new(BatchConfig::default());
+        let batcher = test_batcher(BatchConfig::default());
         let batch_id = batcher.create_batch().await;
 
         let q1 = BatchedQuery::new("{ user { name } }".to_string());
@@ -810,7 +991,7 @@ mod tests {
     #[tokio::test]
     async fn test_query_deduplication() {
         let config = BatchConfig::default().with_deduplication(true);
-        let batcher = QueryBatcher::new(config);
+        let batcher = test_batcher(config);
         let batch_id = batcher.create_batch().await;
 
         let q1 = BatchedQuery::new("{ user { name } }".to_string());
@@ -837,7 +1018,7 @@ mod tests {
     #[tokio::test]
     async fn test_priority_based_execution() {
         let config = BatchConfig::default().with_strategy(ExecutionStrategy::PriorityBased);
-        let batcher = QueryBatcher::new(config);
+        let batcher = test_batcher(config);
         let batch_id = batcher.create_batch().await;
 
         let q1 = BatchedQuery::new("low".to_string()).with_priority(QueryPriority::Low);
@@ -859,7 +1040,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_functionality() {
         let config = BatchConfig::default().with_deduplication(false);
-        let batcher = QueryBatcher::new(config);
+        let batcher = test_batcher(config);
 
         let batch1 = batcher.create_batch().await;
         let q1 = BatchedQuery::new("{ user { name } }".to_string());
@@ -889,7 +1070,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_clear_cache() {
-        let batcher = QueryBatcher::new(BatchConfig::default());
+        let batcher = test_batcher(BatchConfig::default());
         let batch_id = batcher.create_batch().await;
         let q1 = BatchedQuery::new("{ user { name } }".to_string());
         batcher
@@ -908,7 +1089,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_statistics() {
-        let batcher = QueryBatcher::new(BatchConfig::default());
+        let batcher = test_batcher(BatchConfig::default());
         let batch_id = batcher.create_batch().await;
 
         let q1 = BatchedQuery::new("query1".to_string());
@@ -939,7 +1120,7 @@ mod tests {
     #[tokio::test]
     async fn test_adaptive_dependency_analysis() {
         let config = BatchConfig::default().with_strategy(ExecutionStrategy::Adaptive);
-        let batcher = QueryBatcher::new(config);
+        let batcher = test_batcher(config);
         let batch_id = batcher.create_batch().await;
 
         let q_a = BatchedQuery::new("{ a }".to_string()).with_operation_name("A".to_string());

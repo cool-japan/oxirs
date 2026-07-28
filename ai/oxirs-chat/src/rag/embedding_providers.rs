@@ -5,14 +5,83 @@
 
 use super::*;
 use reqwest::Client;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+/// Bounded LRU cache for text→embedding lookups.
+///
+/// Enforces [`EmbeddingConfig::cache_size`] so a long-running RAG server can no
+/// longer accumulate every unique query/document embedding for the lifetime of
+/// the process. On a hit the key is promoted to most-recently-used; on an insert
+/// that would exceed capacity the least-recently-used entries are evicted.
+#[derive(Default)]
+pub(crate) struct LruEmbeddingCache {
+    capacity: usize,
+    map: HashMap<String, Vec<f32>>,
+    /// Recency order: front = least-recently-used, back = most-recently-used.
+    order: VecDeque<String>,
+}
+
+impl LruEmbeddingCache {
+    fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            map: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    /// Look up an embedding, promoting the key to most-recently-used on a hit.
+    fn get(&mut self, key: &str) -> Option<Vec<f32>> {
+        if let Some(value) = self.map.get(key) {
+            let value = value.clone();
+            self.touch(key);
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    /// Insert an embedding, evicting least-recently-used entries past capacity.
+    fn insert(&mut self, key: String, value: Vec<f32>) {
+        // A capacity of zero disables caching entirely (bounded by definition).
+        if self.capacity == 0 {
+            return;
+        }
+        if self.map.insert(key.clone(), value).is_some() {
+            self.touch(&key);
+        } else {
+            self.order.push_back(key);
+        }
+        while self.map.len() > self.capacity {
+            if let Some(evicted) = self.order.pop_front() {
+                self.map.remove(&evicted);
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn touch(&mut self, key: &str) {
+        if let Some(pos) = self.order.iter().position(|k| k == key) {
+            if let Some(k) = self.order.remove(pos) {
+                self.order.push_back(k);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.map.len()
+    }
+}
 
 /// Enhanced embedding model that supports multiple providers and caching
 pub struct EnhancedEmbeddingModel {
     provider: EmbeddingProvider,
     dimension: usize,
-    cache: Arc<RwLock<HashMap<String, Vec<f32>>>>,
+    cache: Arc<RwLock<LruEmbeddingCache>>,
     config: EmbeddingConfig,
 }
 
@@ -77,7 +146,7 @@ impl EnhancedEmbeddingModel {
         Ok(Self {
             provider,
             dimension,
-            cache: Arc::new(RwLock::new(HashMap::new())),
+            cache: Arc::new(RwLock::new(LruEmbeddingCache::new(config.cache_size))),
             config,
         })
     }
@@ -87,12 +156,12 @@ impl EnhancedEmbeddingModel {
         let mut uncached_texts = Vec::new();
         let mut cache_indices = Vec::new();
 
-        // Check cache first
+        // Check cache first (write lock so LRU recency is updated on hits)
         {
-            let cache = self.cache.read().await;
+            let mut cache = self.cache.write().await;
             for (i, text) in texts.iter().enumerate() {
                 if let Some(embedding) = cache.get(text) {
-                    results.push((i, embedding.clone()));
+                    results.push((i, embedding));
                 } else {
                     cache_indices.push(i);
                     uncached_texts.push(text.clone());
@@ -537,5 +606,39 @@ impl EmbeddingModel for SimpleEmbeddingModel {
             .map(|text| self.text_to_embedding(text))
             .collect();
         Ok(embeddings)
+    }
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::LruEmbeddingCache;
+
+    /// Regression: the embedding cache must honour its capacity bound and evict
+    /// the least-recently-used entry instead of growing without limit.
+    #[test]
+    fn regression_embedding_cache_bounded_lru_eviction() {
+        let mut cache = LruEmbeddingCache::new(2);
+        cache.insert("a".to_string(), vec![1.0]);
+        cache.insert("b".to_string(), vec![2.0]);
+        assert_eq!(cache.len(), 2);
+
+        // Touch "a" so "b" becomes least-recently-used.
+        assert_eq!(cache.get("a"), Some(vec![1.0]));
+
+        // Inserting a third entry must evict "b" (LRU), not exceed capacity.
+        cache.insert("c".to_string(), vec![3.0]);
+        assert_eq!(cache.len(), 2, "cache must stay within capacity");
+        assert_eq!(cache.get("b"), None, "LRU entry must be evicted");
+        assert_eq!(cache.get("a"), Some(vec![1.0]));
+        assert_eq!(cache.get("c"), Some(vec![3.0]));
+    }
+
+    /// Regression: a zero capacity disables caching (still bounded).
+    #[test]
+    fn regression_embedding_cache_zero_capacity_disabled() {
+        let mut cache = LruEmbeddingCache::new(0);
+        cache.insert("a".to_string(), vec![1.0]);
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.get("a"), None);
     }
 }

@@ -175,8 +175,8 @@ impl EntityLinker {
     /// Rather than scanning the whole text once per indexed label (which is
     /// `O(vocabulary × text length)`), this walks the text once and, at every
     /// character position, performs bounded `O(1)` hash lookups into
-    /// [`label_index`](Self::label_index) for substrings up to
-    /// [`max_label_chars`](Self::max_label_chars) long — giving
+    /// `label_index` for substrings up to
+    /// `max_label_chars` long — giving
     /// `O(text length × longest label)` overall, independent of vocabulary
     /// size. Overlapping spans from the same starting position are
     /// de-duplicated in favour of the longer match.
@@ -279,7 +279,7 @@ impl EntityLinker {
 
     /// Find all entity candidates for an arbitrary mention string.
     ///
-    /// Uses [`first_char_index`](Self::first_char_index) as a candidate-
+    /// Uses `first_char_index` as a candidate-
     /// generation blocking step — a standard record-linkage technique — so
     /// only entities sharing the mention's first character are scored,
     /// instead of computing edit-distance similarity against the entire

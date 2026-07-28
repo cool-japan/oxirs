@@ -1,10 +1,10 @@
 # OxiRS CLI - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Current Status
 
-OxiRS CLI v0.3.2 is production-ready with comprehensive SPARQL support, an interactive REPL, and ~60 CLI subcommands covering RDF data management, SPARQL query/update, SHACL/ShEx validation, TDB storage tools, industrial connectivity (TSDB/Modbus/CANbus), and SAMM/AAS model tooling (`oxirs --help` lists all of them).
+OxiRS CLI v0.4.1 is production-ready with comprehensive SPARQL support, an interactive REPL, and ~60 CLI subcommands covering RDF data management, SPARQL query/update, SHACL/ShEx validation, TDB storage tools, industrial connectivity (TSDB/Modbus/CANbus), and SAMM/AAS model tooling (`oxirs --help` lists all of them).
 
 ### Production Features
 - ✅ Complete SPARQL 1.1/1.2 query execution (`query`, `update`, `arq`, `r-sparql`, `r-update`)
@@ -17,7 +17,7 @@ OxiRS CLI v0.3.2 is production-ready with comprehensive SPARQL support, an inter
 - ✅ Benchmark command (`benchmark run/generate/analyze/compare`)
 - ✅ Industrial connectivity: TSDB, Modbus, CANbus/J1939 (`tsdb`, `modbus`, `canbus`)
 - ✅ SAMM/AAS/package tooling, Java ESMF SDK compatible (`aspect`, `aas`, `package`)
-- ✅ 1799 tests passing (0 failed)
+- ✅ 1311 tests passing (0 failed)
 
 Note: `commands/diff_command.rs`, `convert_command.rs`, `validate_command.rs`, `merge_command.rs`,
 `inspect_command.rs`, `query_command.rs`, `export_command.rs`, `import_command.rs`,
@@ -59,11 +59,12 @@ subcommands. The CLI-reachable equivalents are `rdf-diff`, `migrate format`, `sh
 - [x] Large command modules (import, interactive, aspect, jena-parity) split so every source file stays under 2,000 lines
 - [x] Dependency refresh: SciRS2 0.5.0, oxiarc 0.3.3 consumed directly from crates.io
 
-### v0.3.2 - Current (July 11, 2026)
+### v0.4.1 - Current (July 26, 2026)
 - [x] Pure-Rust Policy v2: GPU/GEOS/DuckDB/Kafka/Pulsar C-FFI integrations extracted to separate `publish = false` adapter crates; the `tsdb-duckdb` feature now depends on `oxirs-tsdb-adapter-duckdb` instead of an in-tree DuckDB integration
+- [x] (2026-07-27) `tsdb-duckdb` feature, the `arrow` dependency, `src/tools/tsdb_duckdb.rs` and the `oxirs tsdb duckdb` subcommand all removed along with the `oxirs-tsdb-adapter-duckdb` crate (**breaking**). Export chunks to Parquet via oxirs-tsdb's `arrow-export` and query them with an external DuckDB
 - [x] SHACL `sh:class`/implicit-class targets now honor `rdfs:subClassOf` closure, improving `oxirs shacl` validation accuracy
 - [x] Dependency refresh: SciRS2 0.6.0, oxiarc-* 0.3.5, oxicrypto/oxitls 0.2.0
-- [x] 1799 tests passing (0 failed)
+- [x] 1311 tests passing (0 failed)
 
 ## Contributing
 
@@ -71,4 +72,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines on how to contribute
 
 ---
 
-*OxiRS CLI v0.3.2 - Production-ready semantic web toolkit*
+*OxiRS CLI v0.4.1 - Production-ready semantic web toolkit*

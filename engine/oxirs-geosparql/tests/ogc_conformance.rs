@@ -410,17 +410,10 @@ mod geometry_properties_conformance {
     /// Requirement 26: boundary property
     #[test]
     fn test_req26_boundary_property() {
-        // The facade boundary() is GEOS-backed; that capability has been quarantined
-        // into the `oxirs-geosparql-adapter-geos` crate (Pure Rust Policy v2), so the
-        // default Pure-Rust build returns an error directing callers to the adapter.
-        // (A Pure-Rust OGC SFA boundary is available at functions::de9im::boundary.)
+        // The boundary of a LineString is its pair of endpoints (OGC SFA).
         let line = Geometry::from_wkt("LINESTRING(0 0, 1 1)").unwrap();
-        let result = boundary(&line);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("oxirs-geosparql-adapter-geos"));
+        let bound = boundary(&line).expect("boundary should succeed");
+        assert_eq!(bound.geometry_type(), "MultiPoint");
     }
 
     /// Requirement 27: envelope property
@@ -474,11 +467,7 @@ mod spatial_analysis_conformance {
     }
 
     /// Requirement 30: buffer function
-    ///
-    /// Point buffering needs GEOS (quarantined into oxirs-geosparql-adapter-geos);
-    /// the Pure-Rust `rust-buffer` path covers Polygon/MultiPolygon, exercised here.
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_req30_buffer_function() {
         let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
         let buffered = buffer(&poly, 1.0).unwrap();
@@ -629,9 +618,6 @@ mod crs_conformance {
 mod egenhofer_conformance {
     use super::*;
     use oxirs_geosparql::functions::egenhofer::*;
-    // NOTE: ehMeet/ehInside/ehContains need GEOS (quarantined into
-    // oxirs-geosparql-adapter-geos); only the Pure-Rust Egenhofer relations are
-    // asserted here.
 
     /// Requirement 38: ehEquals relation
     #[test]
@@ -702,8 +688,6 @@ mod egenhofer_conformance {
 mod rcc8_conformance {
     use super::*;
     use oxirs_geosparql::functions::rcc8::*;
-    // NOTE: the boundary-dependent RCC8 relations (EC/TPP/TPPi/NTPP/NTPPi) need GEOS
-    // (quarantined into oxirs-geosparql-adapter-geos); only EQ/DC/PO are asserted here.
 
     /// Requirement 46: rcc8eq relation
     #[test]

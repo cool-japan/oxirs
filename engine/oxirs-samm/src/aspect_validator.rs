@@ -114,20 +114,40 @@ pub enum DataType {
     Custom(String),
 }
 
+impl DataType {
+    /// Parse either a short SAMM/XSD prefix form (`"xsd:string"`) or a
+    /// fully-qualified XSD namespace URI
+    /// (`"http://www.w3.org/2001/XMLSchema#string"`) — the form the TTL
+    /// parser stores on [`crate::metamodel::Characteristic::data_type`].
+    ///
+    /// This never fails: an unrecognized data type IRI is preserved verbatim
+    /// as [`DataType::Custom`].
+    pub fn parse_xsd(s: &str) -> Self {
+        // The local name is whatever follows the last '#' or ':' — this
+        // covers both "xsd:integer" and the full XSD namespace URI form
+        // without needing to enumerate every possible prefix/authority.
+        let local = s.rsplit(['#', ':']).next().unwrap_or(s);
+        match local {
+            "string" => DataType::XsdString,
+            "integer" | "int" | "long" | "short" | "byte" | "unsignedInt" | "unsignedLong"
+            | "unsignedShort" | "unsignedByte" | "positiveInteger" | "negativeInteger"
+            | "nonNegativeInteger" | "nonPositiveInteger" => DataType::XsdInteger,
+            "float" | "double" | "decimal" => DataType::XsdFloat,
+            "boolean" => DataType::XsdBoolean,
+            "date" => DataType::XsdDate,
+            "dateTime" => DataType::XsdDateTime,
+            _ => DataType::Custom(s.to_owned()),
+        }
+    }
+}
+
 impl std::str::FromStr for DataType {
     type Err = std::convert::Infallible;
 
-    /// Parse from a string like `"xsd:string"`, `"xsd:integer"`, etc.
+    /// Parse from a string like `"xsd:string"`, `"xsd:integer"`, or a full
+    /// XSD namespace URI. See [`DataType::parse_xsd`].
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "xsd:string" | "http://www.w3.org/2001/XMLSchema#string" => DataType::XsdString,
-            "xsd:integer" | "http://www.w3.org/2001/XMLSchema#integer" => DataType::XsdInteger,
-            "xsd:float" | "xsd:double" => DataType::XsdFloat,
-            "xsd:boolean" => DataType::XsdBoolean,
-            "xsd:date" => DataType::XsdDate,
-            "xsd:dateTime" => DataType::XsdDateTime,
-            other => DataType::Custom(other.to_owned()),
-        })
+        Ok(DataType::parse_xsd(s))
     }
 }
 
@@ -210,6 +230,147 @@ impl AspectModel {
             entities: Vec::new(),
             description: None,
         }
+    }
+
+    /// Build an [`AspectModel`] from a real, TTL-parser-produced
+    /// [`crate::metamodel::Aspect`].
+    ///
+    /// This is the bridge between the crate's actual parsing pipeline
+    /// (`parser::parse_aspect_model` → [`crate::metamodel::Aspect`]) and the
+    /// structural / constraint-compatibility checks implemented by
+    /// [`AspectValidator`]. Only the information [`AspectValidator`]
+    /// actually inspects is carried over:
+    ///
+    /// - Each [`crate::metamodel::Property`] becomes an [`AspectProperty`],
+    ///   with `characteristic_ref` set to its characteristic's local name
+    ///   (empty if the property has no characteristic — a separate,
+    ///   pre-existing [`crate::validator::ShaclValidator`] check already
+    ///   flags that case).
+    /// - Each distinct [`crate::metamodel::Characteristic`] referenced by a
+    ///   property becomes an [`AspectCharacteristic`], with its
+    ///   `samm-c:RangeConstraint` / `samm-c:LengthConstraint` /
+    ///   `samm-c:RegularExpressionConstraint` entries translated into
+    ///   [`Constraints`].
+    ///
+    /// SAMM has no first-class embedded entity list on `Aspect` itself (an
+    /// entity referenced via `samm-c:SingleEntity` is only known by URN), so
+    /// the returned model's `entities` is always empty; entity-specific
+    /// checks in [`AspectValidator`] are therefore no-ops for a converted
+    /// model.
+    pub fn from_metamodel(aspect: &crate::metamodel::Aspect) -> Self {
+        use crate::metamodel::ModelElement;
+
+        let mut model = AspectModel::new(aspect.name());
+        model.description = aspect
+            .metadata()
+            .get_description("en")
+            .map(|s| s.to_string());
+
+        let mut seen_characteristics: HashSet<String> = HashSet::new();
+
+        for prop in aspect.properties() {
+            let characteristic_ref = prop
+                .characteristic
+                .as_ref()
+                .map(|c| c.name())
+                .unwrap_or_default();
+
+            model.properties.push(AspectProperty {
+                name: prop.name(),
+                cardinality: if prop.optional {
+                    Cardinality::Optional
+                } else {
+                    Cardinality::Mandatory
+                },
+                characteristic_ref: characteristic_ref.clone(),
+            });
+
+            if let Some(characteristic) = &prop.characteristic {
+                if seen_characteristics.insert(characteristic_ref) {
+                    model
+                        .characteristics
+                        .push(AspectCharacteristic::from_metamodel(characteristic));
+                }
+            }
+        }
+
+        model
+    }
+}
+
+impl AspectCharacteristic {
+    /// Build an [`AspectCharacteristic`] from a real
+    /// [`crate::metamodel::Characteristic`], translating its `data_type` and
+    /// SAMM constraints.
+    pub fn from_metamodel(characteristic: &crate::metamodel::Characteristic) -> Self {
+        use crate::metamodel::ModelElement;
+
+        let data_type = characteristic
+            .data_type
+            .as_deref()
+            .map(DataType::parse_xsd)
+            .unwrap_or_else(|| DataType::Custom(String::new()));
+
+        AspectCharacteristic {
+            name: characteristic.name(),
+            data_type,
+            constraints: Constraints::from_metamodel(&characteristic.constraints),
+        }
+    }
+}
+
+impl Constraints {
+    /// Translate the SAMM constraints attached to a characteristic
+    /// (`samm-c:RangeConstraint`, `samm-c:LengthConstraint`,
+    /// `samm-c:RegularExpressionConstraint`) into [`Constraints`].
+    ///
+    /// Constraint kinds with no direct [`Constraints`] field
+    /// (`LanguageConstraint`, `LocaleConstraint`, `EncodingConstraint`,
+    /// `FixedPointConstraint`) are not represented here — they carry no
+    /// data-type-compatibility rule for [`AspectValidator`] to check.
+    pub fn from_metamodel(constraints: &[crate::metamodel::Constraint]) -> Self {
+        use crate::metamodel::Constraint;
+
+        let mut result = Constraints::default();
+
+        for constraint in constraints {
+            match constraint {
+                Constraint::RangeConstraint {
+                    min_value,
+                    max_value,
+                    ..
+                } => {
+                    let min = min_value.as_deref().and_then(|s| s.parse::<f64>().ok());
+                    let max = max_value.as_deref().and_then(|s| s.parse::<f64>().ok());
+                    if min.is_some() || max.is_some() {
+                        result.range = Some(RangeConstraint { min, max });
+                    }
+                }
+                Constraint::LengthConstraint {
+                    min_value,
+                    max_value,
+                } => {
+                    let min = min_value.map(|v| v as usize);
+                    let max = max_value.map(|v| v as usize);
+                    if min.is_some() || max.is_some() {
+                        result.length = Some(LengthConstraint { min, max });
+                    }
+                }
+                Constraint::RegularExpressionConstraint { pattern } => {
+                    result.pattern = Some(PatternConstraint {
+                        pattern: pattern.clone(),
+                    });
+                }
+                Constraint::LanguageConstraint { .. }
+                | Constraint::LocaleConstraint { .. }
+                | Constraint::EncodingConstraint { .. }
+                | Constraint::FixedPointConstraint { .. } => {
+                    // No corresponding data-type-compatibility rule.
+                }
+            }
+        }
+
+        result
     }
 }
 
@@ -1318,5 +1479,159 @@ mod tests {
         let r = RangeConstraint::bounded(1.0, 10.0);
         assert_eq!(r.min, Some(1.0));
         assert_eq!(r.max, Some(10.0));
+    }
+
+    // ─── AspectModel::from_metamodel regression tests ──────────────────────
+
+    #[test]
+    fn regression_parse_xsd_handles_full_iri_numeric_and_date_types() {
+        assert_eq!(
+            DataType::parse_xsd("http://www.w3.org/2001/XMLSchema#float"),
+            DataType::XsdFloat
+        );
+        assert_eq!(
+            DataType::parse_xsd("http://www.w3.org/2001/XMLSchema#decimal"),
+            DataType::XsdFloat
+        );
+        assert_eq!(
+            DataType::parse_xsd("http://www.w3.org/2001/XMLSchema#unsignedInt"),
+            DataType::XsdInteger
+        );
+        assert_eq!(
+            DataType::parse_xsd("http://www.w3.org/2001/XMLSchema#dateTime"),
+            DataType::XsdDateTime
+        );
+        assert!(DataType::parse_xsd("http://www.w3.org/2001/XMLSchema#float").is_numeric());
+    }
+
+    #[test]
+    fn regression_from_metamodel_converts_properties_and_characteristics() {
+        use crate::metamodel::{Aspect, Characteristic, CharacteristicKind, Property};
+
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#Movement".to_string());
+        let speed_char = Characteristic::new(
+            "urn:samm:org.example:1.0.0#SpeedChar".to_string(),
+            CharacteristicKind::Measurement {
+                unit: "unit:kilometrePerHour".to_string(),
+            },
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string());
+        let speed_prop = Property::new("urn:samm:org.example:1.0.0#speed".to_string())
+            .with_characteristic(speed_char);
+        aspect.add_property(speed_prop);
+
+        let optional_char = Characteristic::new(
+            "urn:samm:org.example:1.0.0#NoteChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#string".to_string());
+        let note_prop = Property::new("urn:samm:org.example:1.0.0#note".to_string())
+            .with_characteristic(optional_char)
+            .as_optional();
+        aspect.add_property(note_prop);
+
+        let model = AspectModel::from_metamodel(&aspect);
+
+        assert_eq!(model.name, "Movement");
+        assert_eq!(model.properties.len(), 2);
+        assert!(model.entities.is_empty());
+
+        let speed = model
+            .properties
+            .iter()
+            .find(|p| p.name == "speed")
+            .expect("speed property present");
+        assert_eq!(speed.cardinality, Cardinality::Mandatory);
+        assert_eq!(speed.characteristic_ref, "SpeedChar");
+
+        let note = model
+            .properties
+            .iter()
+            .find(|p| p.name == "note")
+            .expect("note property present");
+        assert_eq!(note.cardinality, Cardinality::Optional);
+
+        let speed_characteristic = model
+            .characteristics
+            .iter()
+            .find(|c| c.name == "SpeedChar")
+            .expect("SpeedChar characteristic present");
+        assert_eq!(speed_characteristic.data_type, DataType::XsdFloat);
+    }
+
+    #[test]
+    fn regression_from_metamodel_translates_range_constraint() {
+        use crate::metamodel::{
+            Aspect, BoundDefinition, Characteristic, CharacteristicKind, Constraint, Property,
+        };
+
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#Reading".to_string());
+        let char = Characteristic::new(
+            "urn:samm:org.example:1.0.0#PercentageChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string())
+        .with_constraint(Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: BoundDefinition::AtLeast,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        });
+        let prop = Property::new("urn:samm:org.example:1.0.0#percentage".to_string())
+            .with_characteristic(char);
+        aspect.add_property(prop);
+
+        let model = AspectModel::from_metamodel(&aspect);
+        let characteristic = model
+            .characteristics
+            .iter()
+            .find(|c| c.name == "PercentageChar")
+            .expect("PercentageChar present");
+
+        let range = characteristic
+            .constraints
+            .range
+            .as_ref()
+            .expect("range constraint translated");
+        assert_eq!(range.min, Some(0.0));
+        assert_eq!(range.max, Some(100.0));
+
+        // A range constraint on a numeric type must not be flagged.
+        let result = AspectValidator::validate(&model);
+        assert!(result.is_valid(), "errors: {:?}", result.errors());
+    }
+
+    #[test]
+    fn regression_from_metamodel_detects_range_on_non_numeric_type() {
+        use crate::metamodel::{
+            Aspect, BoundDefinition, Characteristic, CharacteristicKind, Constraint, Property,
+        };
+
+        // A RangeConstraint applied to a string-typed characteristic is a
+        // real SAMM modelling error that AspectValidator must catch once
+        // wired to the real parser-produced metamodel.
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#BadModel".to_string());
+        let char = Characteristic::new(
+            "urn:samm:org.example:1.0.0#BadChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#string".to_string())
+        .with_constraint(Constraint::RangeConstraint {
+            min_value: Some("0".to_string()),
+            max_value: Some("100".to_string()),
+            lower_bound_definition: BoundDefinition::AtLeast,
+            upper_bound_definition: BoundDefinition::AtLeast,
+        });
+        let prop =
+            Property::new("urn:samm:org.example:1.0.0#bad".to_string()).with_characteristic(char);
+        aspect.add_property(prop);
+
+        let model = AspectModel::from_metamodel(&aspect);
+        let result = AspectValidator::validate(&model);
+
+        assert!(!result.is_valid());
+        assert!(result.errors().iter().any(|e| e
+            .message
+            .contains("RangeConstraint applied to non-numeric type")));
     }
 }

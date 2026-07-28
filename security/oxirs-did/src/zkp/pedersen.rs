@@ -101,7 +101,7 @@ fn generate_blinding(index: usize, name: &str) -> DidResult<[u8; 32]> {
 /// Public parameters for the Pedersen commitment scheme.
 ///
 /// The actual group generators are derived from `domain`: `G` is the Ristretto
-/// basepoint and `H` is a hash-to-curve point (see [`ped_generators`]). The
+/// basepoint and `H` is a hash-to-curve point (see `ped_generators`). The
 /// `g`/`h` byte fields carry the compressed generator points for reference /
 /// serialization.
 #[derive(Debug, Clone, Serialize, Deserialize)]

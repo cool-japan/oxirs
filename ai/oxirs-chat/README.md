@@ -1,7 +1,7 @@
 # OxiRS Chat
 
-[![Version](https://img.shields.io/badge/version-0.3.2-blue)](https://github.com/cool-japan/oxirs/releases)
-[![Tests](https://img.shields.io/badge/tests-1247%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Tests](https://img.shields.io/badge/tests-1278%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
 
 **AI-powered conversational interface for RDF knowledge graphs with RAG and natural language to SPARQL**
 
@@ -32,8 +32,8 @@ Key capabilities:
 
 ```toml
 [dependencies]
-oxirs-chat = "0.3.2"
-oxirs-core  = "0.3.2"
+oxirs-chat = "0.4.1"
+oxirs-core  = "0.4.1"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 ```
@@ -255,4 +255,4 @@ while let Some(chunk) = rx.recv().await {
 
 Apache-2.0 — see [LICENSE-APACHE](../../LICENSE-APACHE).
 
-*OxiRS Chat v0.3.2 — AI-powered conversational RDF interface by COOLJAPAN OU (Team Kitasan)*
+*OxiRS Chat v0.4.1 — AI-powered conversational RDF interface by COOLJAPAN OU (Team Kitasan)*

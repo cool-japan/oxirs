@@ -1,10 +1,10 @@
 # OxiRS Federate - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Current Status
 
-OxiRS Federate v0.3.2 is production-ready, providing SPARQL federation with advanced ML optimization and distributed consensus.
+OxiRS Federate v0.4.1 is production-ready, providing SPARQL federation with advanced ML optimization and distributed consensus.
 
 ### Production Features
 - ✅ **SPARQL Federation** - SERVICE clause execution with 2-phase commit
@@ -21,7 +21,7 @@ OxiRS Federate v0.3.2 is production-ready, providing SPARQL federation with adva
 - ✅ **Capability Negotiator** - Protocol capability exchange for federation peers
 - ✅ **Cache Coordinator** - Multi-level cache coordination across federation nodes
 - ✅ **ML Query Router** - ML-based endpoint routing with adaptive learning
-- ✅ **1555 tests passing** (`--all-features`) with zero warnings
+- ✅ **1576 tests passing** (`--all-features`) with zero warnings
 
 ## Roadmap
 
@@ -48,12 +48,12 @@ OxiRS Federate v0.3.2 is production-ready, providing SPARQL federation with adva
   - **Tests:** 39 hand-crafted SPARQL 1.1 Federation spec scenarios in `tests/sparql_federation_spec.rs` covering SERVICE clause forms (named / variable / SILENT), filter pushdown, adjacent service merge, join reordering by selectivity, UNION/OPTIONAL/MINUS preservation, capability-negotiation hooks, and cost-comparison invariants.  All 39 pass (100 %, > 95 % target).  Plus 39 unit tests across the new optimizer/cache/cost_model modules.
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 28, 2026)
 - [x] NATS federation message dispatch (completed 2026-07-11 per CHANGELOG.md)
   - **Goal:** Replace the no-op inbound-message stub in `nats_federation` with real handler dispatch.
   - **Delivered:** `NatsFederationClient::register_handler()` registers `Arc<dyn FederationMessageHandler>` implementations; the subscription loop matches each inbound `FederationMessage` variant (`QueryRequest`/`HealthCheckRequest`/`ServiceDiscovery`/`LoadInfo`/`ClusterMessage`) and dispatches to every registered handler's corresponding method (`handle_query_request`, `handle_health_check`, `handle_service_discovery`, `handle_load_info`, `handle_cluster_message`).
   - **Files (delivered):** `src/nats_federation.rs`.
-- [x] 1555 tests passing (`--all-features`), zero warnings
+- [x] 1576 tests passing (`--all-features`), zero warnings
 
 ## Contributing
 
@@ -61,4 +61,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Federate v0.3.2 - Advanced SPARQL federation*
+*OxiRS Federate v0.4.1 - Advanced SPARQL federation*

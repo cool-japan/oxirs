@@ -263,11 +263,7 @@ impl Store {
     ) -> QuadIter {
         let subject = subject.map(|s| {
             let s_ref = s.into();
-            match s_ref {
-                SubjectRef::NamedNode(n) => Subject::NamedNode(n.to_owned()),
-                SubjectRef::BlankNode(b) => Subject::BlankNode(b.to_owned()),
-                SubjectRef::Variable(v) => Subject::Variable(v.to_owned()),
-            }
+            s_ref.to_owned()
         });
 
         let predicate = predicate.map(|p| {
@@ -280,12 +276,7 @@ impl Store {
 
         let object = object.map(|o| {
             let o_ref = o.into();
-            match o_ref {
-                ObjectRef::NamedNode(n) => Object::NamedNode(n.to_owned()),
-                ObjectRef::BlankNode(b) => Object::BlankNode(b.to_owned()),
-                ObjectRef::Literal(l) => Object::Literal(l.to_owned()),
-                ObjectRef::Variable(v) => Object::Variable(v.to_owned()),
-            }
+            o_ref.to_owned()
         });
 
         let graph_name = graph_name.map(|g| {
@@ -629,10 +620,17 @@ impl Store {
         Ok(())
     }
 
-    /// Flushes any pending changes to disk
+    /// Flushes any pending changes to disk.
+    ///
+    /// Delegates to the inner [`RdfStore::flush`], which for the persistent
+    /// backend `fsync`s the append log (and compacts pending deletions),
+    /// guaranteeing durability of prior writes. For in-memory backends this is
+    /// a genuine no-op inside the inner store.
     pub fn flush(&self) -> Result<()> {
-        // No-op for now as OxiRS doesn't buffer writes
-        Ok(())
+        let store = self.inner.read().map_err(|e| {
+            OxirsError::Store(format!("Failed to acquire read lock for flush: {e}"))
+        })?;
+        store.flush()
     }
 }
 
@@ -1037,5 +1035,53 @@ mod tests {
         assert!(result.contains("<http://example.org/subject>"));
         assert!(result.contains("<http://example.org/predicate>"));
         assert!(result.contains("\"object\""));
+    }
+
+    #[test]
+    fn regression_flush_persists_to_disk() {
+        // flush() must delegate to the inner store and make writes durable, not
+        // be a silent no-op. Insert, flush, reopen, and verify data survived.
+        let dir =
+            std::env::temp_dir().join(format!("oxirs_flush_regression_{}", uuid::Uuid::new_v4()));
+
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
+        let object = Literal::new("durable");
+        let quad = Quad::new(
+            subject.clone(),
+            predicate.clone(),
+            object.clone(),
+            GraphName::DefaultGraph,
+        );
+
+        {
+            let store = Store::open(&dir).expect("open persistent store");
+            store
+                .insert(QuadRef::from(&quad))
+                .expect("insert should succeed");
+            // The whole point of flush(): force durability. Must return Ok.
+            store.flush().expect("flush should succeed and be durable");
+        }
+
+        // Reopen from the same path: the flushed quad must be present.
+        {
+            let reopened = Store::open(&dir).expect("reopen persistent store");
+            assert!(
+                reopened
+                    .contains(QuadRef::from(&quad))
+                    .expect("contains should succeed"),
+                "flushed quad was lost after reopen"
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn regression_flush_in_memory_is_ok() {
+        // flush() on an in-memory store must succeed (not error), delegating to
+        // the inner store's genuine no-op path.
+        let store = Store::new().expect("construction should succeed");
+        store.flush().expect("in-memory flush should be Ok");
     }
 }

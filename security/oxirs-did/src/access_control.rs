@@ -179,7 +179,12 @@ impl AccessControlList {
     ///
     /// Returns `AclError::PolicyNotFound` if the policy does not exist.
     /// Returns `AclError::DuplicateDid` if the DID is already in the allow list.
-    pub fn grant(&mut self, resource: &str, did: &str, permission: Permission) -> Result<(), AclError> {
+    pub fn grant(
+        &mut self,
+        resource: &str,
+        did: &str,
+        permission: Permission,
+    ) -> Result<(), AclError> {
         let policy = self
             .policies
             .get_mut(resource)
@@ -236,11 +241,7 @@ impl AccessControlList {
     pub fn expired_policies(&self, current_time_ms: u64) -> Vec<&AccessPolicy> {
         self.policies
             .values()
-            .filter(|p| {
-                p.expiry_ms
-                    .map(|e| current_time_ms >= e)
-                    .unwrap_or(false)
-            })
+            .filter(|p| p.expiry_ms.map(|e| current_time_ms >= e).unwrap_or(false))
             .collect()
     }
 
@@ -348,7 +349,9 @@ mod tests {
         let mut acl = make_acl();
         acl.deny_did("/graph/data", "did:key:alice").unwrap();
         let req = make_request("did:key:alice", "/graph/data", Permission::Read);
-        assert!(matches!(acl.check(&req), AccessDecision::Deny(msg) if msg.contains("explicitly denied")));
+        assert!(
+            matches!(acl.check(&req), AccessDecision::Deny(msg) if msg.contains("explicitly denied"))
+        );
     }
 
     #[test]
@@ -440,7 +443,11 @@ mod tests {
     fn test_admin_allows_read() {
         let acl = make_acl();
         let req = make_request("did:key:admin", "/graph/admin", Permission::Read);
-        assert_eq!(acl.check(&req), AccessDecision::Allow, "Admin should imply Read");
+        assert_eq!(
+            acl.check(&req),
+            AccessDecision::Allow,
+            "Admin should imply Read"
+        );
     }
 
     #[test]
@@ -469,7 +476,8 @@ mod tests {
     #[test]
     fn test_grant_adds_did() {
         let mut acl = make_acl();
-        acl.grant("/graph/data", "did:key:carol", Permission::Read).unwrap();
+        acl.grant("/graph/data", "did:key:carol", Permission::Read)
+            .unwrap();
         let req = make_request("did:key:carol", "/graph/data", Permission::Read);
         assert_eq!(acl.check(&req), AccessDecision::Allow);
     }
@@ -477,7 +485,8 @@ mod tests {
     #[test]
     fn test_grant_adds_permission() {
         let mut acl = make_acl();
-        acl.grant("/graph/data", "did:key:alice", Permission::Delete).unwrap();
+        acl.grant("/graph/data", "did:key:alice", Permission::Delete)
+            .unwrap();
         let req = make_request("did:key:alice", "/graph/data", Permission::Delete);
         assert_eq!(acl.check(&req), AccessDecision::Allow);
     }
@@ -541,7 +550,8 @@ mod tests {
     #[test]
     fn test_policies_for_did_multiple_resources() {
         let mut acl = make_acl();
-        acl.grant("/graph/admin", "did:key:alice", Permission::Read).unwrap();
+        acl.grant("/graph/admin", "did:key:alice", Permission::Read)
+            .unwrap();
         let policies = acl.policies_for_did("did:key:alice");
         assert_eq!(policies.len(), 2);
     }

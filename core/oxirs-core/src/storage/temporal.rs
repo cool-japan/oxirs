@@ -358,7 +358,7 @@ impl TemporalStorage {
 
         // Search relevant buckets
         let buckets = self.buckets.read().await;
-        for (_, bucket) in buckets.iter() {
+        for bucket in buckets.values() {
             for temporal in &bucket.triples {
                 // Check if triple is valid at the given time
                 if temporal.valid_from <= time {

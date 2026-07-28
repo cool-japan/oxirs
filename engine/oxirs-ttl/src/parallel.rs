@@ -102,7 +102,7 @@ impl<R: Read + Send + Sync> ParallelParser<R> {
     ///
     /// This splits the document into chunks and parses them concurrently.
     /// Chunks are cut on complete-statement boundaries (see
-    /// [`crate::statement_boundary`]) rather than raw line boundaries, so a
+    /// `statement_boundary`) rather than raw line boundaries, so a
     /// statement that spans multiple lines (a pretty-printed predicate/object
     /// list, or a triple-quoted string containing embedded newlines) is
     /// always kept whole in a single chunk instead of being corrupted or

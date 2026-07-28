@@ -282,7 +282,7 @@ impl HNSWIndex {
                 }
 
                 let mut candidates: Vec<(String, f32)> = Vec::new();
-                for (other_id, _) in layer.iter() {
+                for other_id in layer.keys() {
                     if other_id == id {
                         continue;
                     }

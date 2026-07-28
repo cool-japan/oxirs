@@ -565,7 +565,7 @@ impl TurtleSerializer {
             let mut typed_predicate_map = HashMap::new();
             for triple in triples_group {
                 let predicate = triple.predicate().clone();
-                let predicate_key = format!("{:?}", &predicate);
+                let predicate_key = format!("{:?}", predicate);
                 if let Some(objects) = predicate_map.get(&predicate_key) {
                     typed_predicate_map.insert(predicate, objects.clone());
                 }
@@ -956,7 +956,7 @@ impl TurtleSerializer {
             let mut typed_predicate_map = HashMap::new();
             for triple in triples_group {
                 let predicate = triple.predicate().clone();
-                let predicate_key = format!("{:?}", &predicate);
+                let predicate_key = format!("{:?}", predicate);
                 if let Some(objects) = predicate_map.get(&predicate_key) {
                     typed_predicate_map.insert(predicate, objects.clone());
                 }

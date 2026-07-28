@@ -1,12 +1,12 @@
 # OxiRS Stream - Real-time RDF Streaming
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.4.0 - Released 2026-07-19
+**Status**: v0.4.1 - Released 2026-07-28
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
-Real-time RDF data streaming with support for MQTT 5.0/3.1.1, NATS JetStream, RabbitMQ, Redis Streams, and AWS Kinesis in-tree, plus Kafka and Pulsar via separate adapter crates. Process RDF streams with windowing, aggregation, and pattern matching.
+Real-time RDF data streaming with support for MQTT 5.0/3.1.1, NATS JetStream, RabbitMQ, Redis Streams, and AWS Kinesis in-tree, plus Apache Pulsar via a separate adapter crate. Process RDF streams with windowing, aggregation, and pattern matching.
 
 ## Features
 
@@ -15,7 +15,8 @@ Real-time RDF data streaming with support for MQTT 5.0/3.1.1, NATS JetStream, Ra
 - **NATS** - Lightweight, high-performance messaging with JetStream persistence
 - **RabbitMQ** - Reliable message queuing
 - **AWS Kinesis / Redis Streams** - Cloud-native and in-memory backends
-- **Apache Kafka / Apache Pulsar** - Quarantined out of the default build per COOLJAPAN Pure Rust Policy v2; available as the separate `oxirs-stream-adapter-rdkafka` / `oxirs-stream-adapter-pulsar` crates (`publish = false`, workspace-internal — see [Kafka & Pulsar](#kafka--pulsar-adapter-crates) below)
+- **Apache Pulsar** - Quarantined out of the default build per COOLJAPAN Pure Rust Policy v2; available as the separate `oxirs-stream-adapter-pulsar` crate (`publish = false`, workspace-internal — see [Apache Pulsar](#apache-pulsar-adapter-crate) below)
+- **Confluent Schema Registry** - `confluent_registry`: register, fetch and compatibility-check schemas against an external registry (Pure Rust, no broker required)
 - **Custom Adapters** - Bring your own message broker
 
 ### Stream Processing
@@ -36,14 +37,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-stream = "0.3.2"
+oxirs-stream = "0.4.1"
 
 # Default features enable only the in-memory backend. Turn on the backends you need:
-oxirs-stream = { version = "0.3.2", features = ["mqtt", "nats"] }
+oxirs-stream = { version = "0.4.1", features = ["mqtt", "nats"] }
 
 # `industry40` bundles mqtt + opcua + sparkplug for Industry 4.0 deployments.
 # `all-backends` bundles nats + kinesis + redis + rabbitmq + mqtt + opcua.
-# Kafka and Pulsar are NOT Cargo features of this crate — see "Kafka & Pulsar" below.
+# Pulsar is NOT a Cargo feature of this crate — see "Apache Pulsar" below.
 ```
 
 ## Quick Start
@@ -105,20 +106,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Message Broker Configuration
 
-### Kafka & Pulsar (adapter crates)
+### Apache Pulsar (adapter crate)
 
-The in-tree `kafka`/`pulsar` Cargo features were removed in the COOLJAPAN Pure Rust
-Policy v2 migration (`rdkafka`/`rdkafka-sys`/`libz-sys` and `pulsar`/`native-tls`/`lz4-sys`
-are not Pure Rust). The former in-tree backends moved **verbatim** into two
-`publish = false`, workspace-internal adapter crates that stay API-compatible with the
-original in-tree types:
+The in-tree `pulsar` Cargo feature was removed in the COOLJAPAN Pure Rust Policy v2
+migration (`pulsar` pulls `native-tls`/`lz4-sys`). The backend moved **verbatim** into
+`oxirs-stream-adapter-pulsar`, a `publish = false`, workspace-internal crate that stays
+API-compatible with the original in-tree types (`PulsarProducer`/`PulsarConsumer`).
 
-- `oxirs-stream-adapter-rdkafka` — `KafkaBackend`, `KafkaProducerConfig`, `SaslConfig`, `SslConfig`, schema registry client
-- `oxirs-stream-adapter-pulsar` — the former in-tree `PulsarProducer`/`PulsarConsumer`
+Construct `oxirs_stream_adapter_pulsar::PulsarProducer` directly rather than going
+through `oxirs-stream`'s own backend enum, which returns a typed "moved to the adapter
+crate" error for the `Pulsar` variant. The adapter's build needs `protoc`; see its
+README for the `oxiproto-protoc` recipe.
 
-Construct `oxirs_stream_adapter_rdkafka::KafkaBackend` / `oxirs_stream_adapter_pulsar::PulsarProducer`
-directly rather than going through `oxirs-stream`'s own backend enum, which now returns a
-typed "moved to the adapter crate" error for the Kafka/Pulsar variants.
+### Apache Kafka (removed in 0.4.1)
+
+There is no Kafka backend. The `rdkafka`-backed one was quarantined in 0.3.2 and
+removed in 0.4.1: `publish = false` made it unreachable from any crates.io release,
+nothing in the workspace depended on it, and it required a `librdkafka` C build. There
+is no `StreamBackendType::Kafka` variant — use `nats`, `redis`, `rabbitmq`, `mqtt`, or
+`memory`.
+
+What survived is the part that never needed a broker: [`confluent_registry`], a Pure-Rust
+REST client for a Confluent-compatible Schema Registry.
+
+```rust
+use oxirs_stream::confluent_registry::{ConfluentRegistryConfig, SchemaRegistryClient, SchemaType};
+
+let client = SchemaRegistryClient::new(ConfluentRegistryConfig {
+    url: "http://localhost:8081".to_string(),
+    ..Default::default()
+})?;
+
+let meta = client
+    .register_schema("rdf-events-value", schema_json, SchemaType::Json, None)
+    .await?;
+```
+
+[`confluent_registry`]: https://docs.rs/oxirs-stream/latest/oxirs_stream/confluent_registry/index.html
 
 ### NATS
 
@@ -344,7 +368,7 @@ use oxirs_shacl::ValidationEngine;
 let validator = ValidationEngine::new(&shapes, config);
 
 let processor = StreamProcessor::builder()
-    .source(kafka_source)
+    .source(nats_source)
     .window(WindowConfig::tumbling(Duration::from_secs(10)))
     .validate_with(validator)
     .build()?;
@@ -394,7 +418,6 @@ let processor = StreamProcessor::builder()
 
 | Message Broker | Throughput | Latency (p99) |
 |---------------|------------|---------------|
-| Kafka (`oxirs-stream-adapter-rdkafka`) | 100K triples/s | 15ms |
 | NATS | 80K triples/s | 8ms |
 | RabbitMQ | 50K triples/s | 20ms |
 
@@ -420,14 +443,15 @@ let processor = StreamProcessor::builder()
 
 ## Status
 
-### Production Release (v0.3.2)
+### Production Release (v0.4.1)
 - ✅ MQTT 5.0 property codec (`backend::mqtt::properties`) — encode/decode for the PUBLISH-relevant
   property set (Payload Format Indicator, Message Expiry Interval, Content Type, Response Topic,
   Correlation Data, Subscription Identifier, Topic Alias, repeatable User Properties), wired into
   `MqttClient::parse_properties_from_bytes()`
 - ✅ NATS JetStream integration with persisted consumer/offset configuration
-- ✅ Kafka/Pulsar available via the separate `oxirs-stream-adapter-{rdkafka,pulsar}` crates
-  (COOLJAPAN Pure Rust Policy v2 quarantine — see "Kafka & Pulsar" above)
+- ✅ Pulsar available via the separate `oxirs-stream-adapter-pulsar` crate
+  (COOLJAPAN Pure Rust Policy v2 quarantine — see "Apache Pulsar" above)
+- ✅ Confluent Schema Registry client (`confluent_registry`), Pure Rust, no broker needed
 - ✅ Windowing (tumbling/sliding/session/landmark), filtering, and mapping
 - ✅ Aggregation operators and pattern matching / CEP engine
 - ✅ SPARQL stream federation with `SERVICE` bridging to remote endpoints
@@ -436,7 +460,7 @@ let processor = StreamProcessor::builder()
   throughput, lag, and error rates
 - ✅ Exactly-once semantics (Chandy-Lamport checkpointing + idempotent producers + atomic ingress transactions)
 - ✅ Distributed stream processing across cluster nodes (Raft-backed operator state via oxirs-cluster)
-- ✅ 1747 tests passing (`--all-features`), zero warnings
+- ✅ 1770 tests passing (`--all-features`), zero warnings
 
 ## Contributing
 

@@ -98,7 +98,7 @@ pub struct MultimodalSearchQuery {
 ///   is excluded (empty results, logged warning) rather than fabricated.
 /// * `text_query` and `spatial_query` currently have no in-process, stateless
 ///   full-text or spatial search backend wired into this free function (see
-///   [`execute_text_search`] / [`execute_spatial_search`] docs), so they are
+///   `execute_text_search` / `execute_spatial_search` docs), so they are
 ///   always excluded with a logged warning instead of returning fake scores.
 pub fn sparql_multimodal_search(
     query: MultimodalSearchQuery,

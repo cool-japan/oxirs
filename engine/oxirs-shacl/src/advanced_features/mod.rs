@@ -109,34 +109,43 @@ pub use shape_comparison::{
 /// Version of SHACL-AF implementation
 pub const SHACL_AF_VERSION: &str = "1.0.0-alpha";
 
-/// Check if a feature is supported
+/// Check if a SHACL-AF feature is actually wired into shape parsing and the
+/// validation/rule engines (not merely present as a standalone type).
+///
+/// Capabilities that exist only as unreferenced public types — `triple-rules`
+/// (`RuleEngine::execute_triple_rule` fails loud), parameterized SPARQL target
+/// types, and SHACL functions used as targets — are deliberately **not**
+/// advertised here, so callers that branch on this predicate are not told a
+/// path works when it will actually error or be silently ignored.
 pub fn is_feature_supported(feature: &str) -> bool {
     matches!(
         feature,
         "rules"
             | "functions"
             | "advanced-targets"
-            | "triple-rules"
             | "construct-rules"
+            | "sparql-rules"
             | "shape-comparison"
     )
 }
 
-/// Get all supported SHACL-AF features
+/// Get all supported SHACL-AF features.
+///
+/// Only features that are genuinely reachable through the shape parser and the
+/// validation/rule engines are listed. Unwired constructs (`triple-rules`,
+/// `sparql-targets`/SPARQLTargetType, `function-targets`) are omitted until they
+/// are dispatched for real, matching [`is_feature_supported`].
 pub fn supported_features() -> Vec<&'static str> {
     vec![
         "rules",
         "functions",
         "advanced-targets",
-        "triple-rules",
         "construct-rules",
         "sparql-rules",
-        "sparql-targets",
         "target-objects-of",
         "target-subjects-of",
         "implicit-targets",
         "path-targets",
-        "function-targets",
         "shape-comparison",
     ]
 }
@@ -159,5 +168,16 @@ mod tests {
         assert!(!features.is_empty());
         assert!(features.contains(&"rules"));
         assert!(features.contains(&"functions"));
+    }
+
+    #[test]
+    fn regression_unwired_features_not_advertised() {
+        // triple-rules fails loud; sparql-targets/function-targets are never
+        // wired into shape parsing. They must NOT be reported as supported.
+        assert!(!is_feature_supported("triple-rules"));
+        let features = supported_features();
+        assert!(!features.contains(&"triple-rules"));
+        assert!(!features.contains(&"sparql-targets"));
+        assert!(!features.contains(&"function-targets"));
     }
 }

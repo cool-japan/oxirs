@@ -553,29 +553,102 @@ impl RecoveryManager {
         Ok(report)
     }
 
-    /// Repair page checksums (for minor corruption)
+    /// Repair pages that failed checksum verification.
+    ///
+    /// A checksum mismatch means the page's bytes are already untrusted. The
+    /// previous implementation simply called `page.update_header()` on every
+    /// page, recomputing the checksum over whatever (possibly corrupt) bytes were
+    /// present — which does not repair anything: it converts a *detectable*
+    /// mismatch into a page that now passes verification while still holding
+    /// corrupt data, then reports success. That is a data-integrity lie.
+    ///
+    /// Instead, a corrupt page is only repaired if the WAL holds a known-good
+    /// full-page redo image (`LogRecord::Update.after_image`) for it, in which
+    /// case the page is restored from that trusted image. Any corrupt page
+    /// without such a redo image is *unrepairable*: this method returns an error
+    /// so the caller records the failure and does NOT claim a successful repair.
+    /// Pages that already verify are left untouched — their checksum is never
+    /// re-stamped over unverified bytes.
     fn repair_page_checksums(&self) -> Result<()> {
+        use crate::storage::page::PAGE_SIZE;
+        use crate::transaction::wal::LogRecord;
+        use std::collections::HashMap;
+
+        // Build the latest known-good full-page image per page id from the WAL
+        // redo records. These images were written whole under their own
+        // transaction, so they are trusted (unlike the on-disk corrupt page).
+        let entries = self.wal.recover()?;
+        let mut redo_images: HashMap<PageId, Vec<u8>> = HashMap::new();
+        for entry in &entries {
+            if let LogRecord::Update {
+                page_id,
+                after_image,
+                ..
+            } = &entry.record
+            {
+                redo_images.insert(*page_id, after_image.clone());
+            }
+        }
+
         let cached_count = self.buffer_pool.cached_pages();
         let max_pages_to_check = cached_count.max(100);
 
-        // Check all allocated pages
+        let mut recovered = 0usize;
+        let mut unrepairable: Vec<PageId> = Vec::new();
+
         for page_id in 0..max_pages_to_check as u64 {
-            match self.buffer_pool.fetch_page(page_id) {
-                Ok(page_guard) => {
-                    let mut page_lock = page_guard.page_mut();
-                    if let Some(ref mut page) = *page_lock {
-                        // Recompute and update checksum
-                        page.update_header();
-                        log::debug!("Repaired checksum for page {}", page_id);
-                    }
+            let page_guard = match self.buffer_pool.fetch_page(page_id) {
+                Ok(g) => g,
+                Err(_) => continue, // Page does not exist.
+            };
+
+            // Only act on genuinely corrupt pages; a valid page is never
+            // re-stamped.
+            let is_corrupt = {
+                let page_lock = page_guard.page();
+                match page_lock.as_ref() {
+                    Some(page) => !page.verify_checksum(),
+                    None => false,
                 }
-                Err(_) => {
-                    // Page doesn't exist - skip
-                    continue;
+            };
+            if !is_corrupt {
+                continue;
+            }
+
+            match redo_images.get(&page_id) {
+                Some(after_image) if after_image.len() == PAGE_SIZE => {
+                    // Restore the page from its trusted WAL redo image. The
+                    // checksum that results is computed over known-good bytes,
+                    // not over the corrupt on-disk bytes.
+                    drop(page_guard);
+                    self.apply_page_update(page_id, after_image)?;
+                    recovered += 1;
+                    log::info!("Recovered corrupt page {} from WAL redo image", page_id);
+                }
+                _ => {
+                    unrepairable.push(page_id);
+                    log::error!(
+                        "Page {} failed checksum and has no WAL redo image; it cannot be \
+                         repaired without data loss",
+                        page_id
+                    );
                 }
             }
         }
 
+        if !unrepairable.is_empty() {
+            return Err(TdbError::Other(format!(
+                "Checksum repair incomplete: {} corrupt page(s) have no WAL redo image and \
+                 cannot be repaired without data loss (pages: {:?}). Restore from backup.",
+                unrepairable.len(),
+                unrepairable
+            )));
+        }
+
+        log::info!(
+            "Recovered {} corrupt page(s) from the WAL during checksum repair",
+            recovered
+        );
         Ok(())
     }
 
@@ -1025,5 +1098,123 @@ mod tests {
         // Only transaction 1's update should be replayed
         assert_eq!(report.wal_entries_replayed, 1);
         assert!(report.recovered);
+    }
+
+    /// Persist a single page with valid content+checksum, drop it from the
+    /// cache, then flip one on-disk payload byte so it fails checksum when read
+    /// back into a clean frame (simulating real on-disk bit-rot / a torn write,
+    /// not a dirty in-memory page that normal eviction would simply re-checksum).
+    fn write_then_corrupt_page_on_disk(
+        buffer_pool: &Arc<BufferPool>,
+        db_path: &std::path::Path,
+    ) -> PageId {
+        use crate::storage::page::{PageType, PAGE_SIZE};
+
+        let pid = {
+            let guard = buffer_pool.new_page(PageType::BTreeLeaf).unwrap();
+            let mut lock = guard.page_mut();
+            if let Some(page) = lock.as_mut() {
+                page.write_at(0, b"important data").unwrap();
+                page.update_header();
+            }
+            guard.page_id()
+        };
+        buffer_pool.flush_all().unwrap();
+        // Drop the clean cached copy so the corrupt on-disk bytes are what gets
+        // read back (a cached clean copy would otherwise hide the corruption).
+        assert!(buffer_pool.discard_page(pid));
+
+        // Flip a payload byte on disk (offset 40 is inside the page's data
+        // region, past the 32-byte header that holds the checksum).
+        let mut bytes = std::fs::read(db_path).unwrap();
+        let corrupt_at = (pid as usize) * PAGE_SIZE + 40;
+        assert!(bytes.len() > corrupt_at);
+        bytes[corrupt_at] ^= 0xFF;
+        std::fs::write(db_path, &bytes).unwrap();
+
+        pid
+    }
+
+    #[test]
+    fn regression_repair_does_not_mask_corruption_without_wal() {
+        // A checksum-corrupt page with NO WAL redo image must be reported as
+        // unrepairable: repair() must NOT recompute a fresh checksum over the
+        // corrupt bytes and claim success.
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let wal_dir = temp_dir.path();
+
+        // use_mmap=false so on-disk edits are observed on the next read.
+        let file_manager = Arc::new(FileManager::open(&db_path, false).unwrap());
+        let buffer_pool = Arc::new(BufferPool::new(10, file_manager));
+        let wal = Arc::new(WriteAheadLog::new(wal_dir).unwrap());
+
+        write_then_corrupt_page_on_disk(&buffer_pool, &db_path);
+
+        let mut recovery = RecoveryManager::new(buffer_pool, wal);
+        let report = recovery.repair().unwrap();
+
+        assert_eq!(report.repairs_attempted, 1);
+        assert_eq!(
+            report.repairs_successful, 0,
+            "corruption without a WAL redo image must NOT be reported as repaired"
+        );
+        assert!(
+            report
+                .errors
+                .iter()
+                .any(|e| e.contains("no WAL redo image") || e.contains("cannot be repaired")),
+            "expected an unrepairable-corruption error, got: {:?}",
+            report.errors
+        );
+    }
+
+    #[test]
+    fn regression_repair_restores_corrupt_page_from_wal_image() {
+        // A checksum-corrupt page that DOES have a trusted WAL redo image is
+        // restored from that image (not by re-stamping the corrupt bytes).
+        use crate::storage::page::{Page, PageType, PAGE_SIZE};
+        use crate::transaction::wal::{LogRecord, TxnId};
+
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let wal_dir = temp_dir.path();
+
+        let file_manager = Arc::new(FileManager::open(&db_path, false).unwrap());
+        let buffer_pool = Arc::new(BufferPool::new(10, file_manager));
+        let wal = Arc::new(WriteAheadLog::new(wal_dir).unwrap());
+
+        let pid = write_then_corrupt_page_on_disk(&buffer_pool, &db_path);
+
+        // Trusted full-page redo image for `pid` in the WAL.
+        let after_image = {
+            let mut page = Page::new(pid, PageType::BTreeLeaf);
+            page.write_at(0, b"recovered-from-wal").unwrap();
+            page.update_header();
+            page.raw_data().to_vec()
+        };
+        assert_eq!(after_image.len(), PAGE_SIZE);
+
+        let txn = TxnId::new(1);
+        wal.append(LogRecord::Begin { txn_id: txn }).unwrap();
+        wal.append(LogRecord::Update {
+            txn_id: txn,
+            page_id: pid,
+            before_image: vec![0u8; PAGE_SIZE],
+            after_image,
+        })
+        .unwrap();
+        wal.append(LogRecord::Commit { txn_id: txn }).unwrap();
+        wal.flush().unwrap();
+
+        let mut recovery = RecoveryManager::new(buffer_pool, wal);
+        let report = recovery.repair().unwrap();
+
+        assert_eq!(report.repairs_attempted, 1);
+        assert_eq!(
+            report.repairs_successful, 1,
+            "corrupt page with a WAL redo image should be recovered"
+        );
+        assert!(report.errors.is_empty(), "errors: {:?}", report.errors);
     }
 }

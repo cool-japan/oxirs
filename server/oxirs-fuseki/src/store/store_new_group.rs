@@ -47,10 +47,10 @@ impl Store {
     /// [`StoreType`](crate::dataset_manager::StoreType) at `location`.
     ///
     /// This is how a server selects a durable on-disk backend for its default
-    /// dataset: `StoreType::TDB2` opens a [`TdbStoreAdapter`](crate::store::TdbStoreAdapter)
+    /// dataset: `StoreType::TDB2` opens a [`TdbStoreAdapter`]
     /// rooted at `location`, while `StoreType::InMemory` keeps the
     /// [`RdfStore`]-backed store. An unknown/unsupported type is rejected by
-    /// [`StoreFactory`](crate::store::StoreFactory) rather than silently falling
+    /// [`StoreFactory`] rather than silently falling
     /// back to memory.
     pub fn open_with_store_type(
         store_type: &crate::dataset_manager::StoreType,
@@ -73,7 +73,7 @@ impl Store {
     ///
     /// Unlike [`create_dataset`](Store::create_dataset) (which always uses the
     /// in-memory [`RdfStore`] backend), this selects the backend through
-    /// [`StoreFactory`](crate::store::StoreFactory): a `StoreType::TDB2` dataset
+    /// [`StoreFactory`]: a `StoreType::TDB2` dataset
     /// becomes a durable on-disk store rooted at `location`. `StoreType::External`
     /// is rejected; an unknown type string must be rejected earlier via
     /// [`StoreFactory::store_type_from_str`](crate::store::StoreFactory::store_type_from_str).
@@ -176,12 +176,75 @@ impl Store {
         );
         Ok(("CLEAR GRAPH", 0, deleted_count, vec![graph_iri.to_string()]))
     }
-    /// Execute DELETE/INSERT operation (simplified implementation)
+    /// Detect a top-level `WHERE` keyword in a raw update statement, ignoring
+    /// any `WHERE` text that appears inside a string literal or an `<IRI>`.
+    ///
+    /// Used by the anchored-keyword fallback handlers below to refuse — rather
+    /// than silently mis-execute — a pattern-based `DELETE/INSERT ... WHERE`
+    /// statement that the AST parser could not handle (so its `WHERE` clause
+    /// would otherwise be discarded). See the fail-loud contract.
+    pub(super) fn statement_has_where_keyword(sparql: &str) -> bool {
+        let mut in_dquote = false;
+        let mut in_squote = false;
+        let mut in_iri = false;
+        let mut escaped = false;
+        let mut word = String::new();
+        let mut found = false;
+        let flush = |word: &mut String, found: &mut bool| {
+            if word.eq_ignore_ascii_case("WHERE") {
+                *found = true;
+            }
+            word.clear();
+        };
+        for ch in sparql.chars() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match ch {
+                '\\' if in_dquote || in_squote => escaped = true,
+                '"' if !in_squote && !in_iri => {
+                    flush(&mut word, &mut found);
+                    in_dquote = !in_dquote;
+                }
+                '\'' if !in_dquote && !in_iri => {
+                    flush(&mut word, &mut found);
+                    in_squote = !in_squote;
+                }
+                '<' if !in_dquote && !in_squote && !in_iri => {
+                    flush(&mut word, &mut found);
+                    in_iri = true;
+                }
+                '>' if in_iri => in_iri = false,
+                c if !in_dquote && !in_squote && !in_iri && c.is_alphabetic() => word.push(c),
+                _ if !in_dquote && !in_squote && !in_iri => flush(&mut word, &mut found),
+                _ => {}
+            }
+        }
+        flush(&mut word, &mut found);
+        found
+    }
+
+    /// Execute DELETE/INSERT operation (anchored-keyword fallback path).
+    ///
+    /// Only reached when the AST parser rejected the statement. If the statement
+    /// carries a `WHERE` clause this simplified path cannot evaluate, it fails
+    /// loud rather than discarding the `WHERE` and mutating data unconditionally
+    /// (which was a silent data-loss bug). A genuine data-only `DELETE`/`INSERT`
+    /// (no `WHERE`) is still handled here.
     pub(super) fn execute_delete_insert_operation(
         &self,
         store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
+        if Self::statement_has_where_keyword(sparql) {
+            return Err(FusekiError::bad_request(
+                "Unsupported DELETE/INSERT ... WHERE update: this statement uses SPARQL \
+                 constructs the update executor cannot evaluate (e.g. GRAPH/FILTER/OPTIONAL \
+                 in the WHERE clause). Refusing to execute rather than ignore the WHERE clause."
+                    .to_string(),
+            ));
+        }
         warn!("DELETE/INSERT operation using simplified implementation");
         let mut inserted_count = 0;
         let mut deleted_count = 0;

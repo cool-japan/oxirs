@@ -656,6 +656,7 @@ pub async fn run_comprehensive_benchmark() -> Result<BenchmarkResults> {
             registry,
             cache_manager,
             models,
+            metrics: Arc::new(oxirs_embed::api::ApiMetrics::new()),
             config: api_config,
         };
 

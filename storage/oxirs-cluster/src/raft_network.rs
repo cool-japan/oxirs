@@ -59,6 +59,11 @@ enum RaftWireRequest {
     AppendEntries(AppendEntriesRequest<OxirsTypeConfig>),
     Vote(VoteRequest<OxirsNodeId>),
     InstallSnapshot(InstallSnapshotRequest<OxirsTypeConfig>),
+    /// Raft §3.10 leadership-transfer signal: instruct the receiving node to
+    /// immediately start an election (`Raft::trigger().elect()`), as OpenRaft
+    /// 0.9.24 has no native leader-transfer API. Sent by the current leader to
+    /// a caught-up target during a graceful handoff.
+    TimeoutNow,
 }
 
 /// Wire envelope for the corresponding response. Each variant carries the
@@ -74,6 +79,12 @@ enum RaftWireResponse {
     InstallSnapshot(
         Result<InstallSnapshotResponse<OxirsNodeId>, RaftError<OxirsNodeId, InstallSnapshotError>>,
     ),
+    /// Acknowledgement of a [`RaftWireRequest::TimeoutNow`]: `Ok(())` once the
+    /// receiver has triggered its election, or a stringified `Fatal` error if
+    /// its Raft core has already shut down. Stringified because `Fatal`'s
+    /// serde round-trip is not needed here — the sender only needs
+    /// success/failure to decide whether to fail loud.
+    TimeoutNow(Result<(), String>),
 }
 
 /// Transport-level failures from this module's own plumbing (connect,
@@ -478,6 +489,58 @@ impl RaftNetwork<OxirsTypeConfig> for OxirsRaftNetworkClient {
     }
 }
 
+/// Deliver a leadership-transfer ([`RaftWireRequest::TimeoutNow`]) signal to
+/// `target` at `addr` and wait for its acknowledgement. Opens a fresh
+/// connection (matching this module's per-RPC connection style), sends the
+/// signal, and reads back the target's [`RaftWireResponse::TimeoutNow`]. Fails
+/// loud on connect/codec/timeout errors, on a mismatched response kind, or if
+/// the target reports its Raft core could not start an election — the caller
+/// (`RaftNode::transfer_leadership`) surfaces any error rather than pretending
+/// the handoff succeeded.
+pub(crate) async fn send_timeout_now(
+    self_id: OxirsNodeId,
+    target: OxirsNodeId,
+    addr: SocketAddr,
+) -> anyhow::Result<()> {
+    // A generous fixed budget: the receiver only flips an internal flag and
+    // returns, so this should be fast, but a loaded host can still add jitter.
+    const TIMEOUT: Duration = Duration::from_secs(5);
+
+    let attempt = async {
+        let mut stream = TcpStream::connect(addr)
+            .await
+            .map_err(|e| RaftTransportError::Connect { addr, source: e })?;
+        if let Err(e) = stream.set_nodelay(true) {
+            tracing::debug!("failed to set TCP_NODELAY on leadership-transfer connection: {e}");
+        }
+        write_frame(
+            &mut stream,
+            &RaftWireRequest::TimeoutNow,
+            addr,
+            MAX_MESSAGE_SIZE,
+        )
+        .await?;
+        let response: RaftWireResponse = read_frame(&mut stream, addr, MAX_MESSAGE_SIZE).await?;
+        match response {
+            RaftWireResponse::TimeoutNow(Ok(())) => Ok(()),
+            RaftWireResponse::TimeoutNow(Err(message)) => Err(RaftTransportError::Decode {
+                addr,
+                message: format!("target {target} refused leadership transfer: {message}"),
+            }),
+            _ => Err(RaftTransportError::MismatchedResponse { addr }),
+        }
+    };
+
+    let _ = self_id;
+    match tokio::time::timeout(TIMEOUT, attempt).await {
+        Ok(result) => result.map_err(anyhow::Error::from),
+        Err(_) => Err(anyhow::Error::from(RaftTransportError::Timeout {
+            addr,
+            timeout: TIMEOUT,
+        })),
+    }
+}
+
 /// Inbound accept loop for Raft RPCs — the counterpart `network.rs` never
 /// grew (see the comment at `NetworkManager::start_background_tasks`, which
 /// explicitly skips a listener task because `TcpListener` doesn't support
@@ -535,6 +598,13 @@ async fn serve_raft_connection(
             RaftWireRequest::Vote(rpc) => RaftWireResponse::Vote(raft.vote(rpc).await),
             RaftWireRequest::InstallSnapshot(rpc) => {
                 RaftWireResponse::InstallSnapshot(raft.install_snapshot(rpc).await)
+            }
+            RaftWireRequest::TimeoutNow => {
+                // Leadership-transfer signal from the current leader: start an
+                // election right now. The target's up-to-date log means Raft's
+                // election restriction lets it win over stale voters.
+                let result = raft.trigger().elect().await.map_err(|e| e.to_string());
+                RaftWireResponse::TimeoutNow(result)
             }
         };
 

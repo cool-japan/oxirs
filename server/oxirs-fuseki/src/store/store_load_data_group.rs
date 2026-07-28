@@ -26,7 +26,17 @@ pub fn bulk_insert_quads(
     store: &dyn CoreStore,
     quads: Vec<Quad>,
 ) -> Result<usize, oxirs_core::OxirsError> {
-    store.bulk_insert_quads(quads)
+    // After a genuinely large batch (a bulk import: SPARQL `LOAD`, `/upload`, a
+    // GSP PUT of a whole graph) release the capacity the term dictionaries
+    // over-provisioned while growing by doubling. Small incremental writes stay
+    // below the threshold so they never pay a full-dictionary reallocation.
+    const SHRINK_THRESHOLD: usize = 50_000;
+    let large_batch = quads.len() >= SHRINK_THRESHOLD;
+    let inserted = store.bulk_insert_quads(quads)?;
+    if large_batch {
+        store.shrink_to_fit()?;
+    }
+    Ok(inserted)
 }
 
 impl Store {

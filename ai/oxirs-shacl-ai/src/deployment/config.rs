@@ -41,6 +41,15 @@ pub struct DeploymentConfig {
 
     /// Security configuration
     pub security: SecurityConfig,
+
+    /// Backend responsible for actually applying deployments.
+    ///
+    /// This crate ships without a wired real orchestration backend, so the
+    /// default is [`DeploymentBackend::None`]. With `None`, [`crate::deployment::DeploymentManager::deploy_system`]
+    /// deliberately refuses to fabricate a "successful" deployment and instead
+    /// returns [`crate::ShaclAiError::Unsupported`]; use `plan_deployment` for a
+    /// dry-run plan derived from the spec.
+    pub deployment_backend: DeploymentBackend,
 }
 
 impl Default for DeploymentConfig {
@@ -57,8 +66,23 @@ impl Default for DeploymentConfig {
             monitoring: MonitoringConfig::default(),
             update_strategy: UpdateStrategy::RollingUpdate,
             security: SecurityConfig::default(),
+            deployment_backend: DeploymentBackend::None,
         }
     }
+}
+
+/// Backend used to actually provision/apply a deployment.
+///
+/// Only [`DeploymentBackend::None`] is currently available. Real backends
+/// (Kubernetes/Docker API clients) are intentionally not bundled to keep the
+/// default build Pure-Rust and free of network side effects; when they are
+/// added they become additional variants here and are dispatched by
+/// `deploy_system`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeploymentBackend {
+    /// No live backend is configured. `deploy_system` fails loudly instead of
+    /// pretending a real cluster was provisioned.
+    None,
 }
 
 /// Deployment strategies

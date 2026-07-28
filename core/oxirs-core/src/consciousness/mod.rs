@@ -17,10 +17,12 @@
 //! # Module layout
 //!
 //! The implementation is split across sibling modules:
-//! - [`consciousness_module`]: the integrated [`ConsciousnessModule`] and its
-//!   supporting insight/approach/metric types.
-//! - [`meta_consciousness`]: [`MetaConsciousness`] self-awareness and
-//!   cross-component communication.
+//! - [`consciousness_module`](crate::consciousness::consciousness_module): the
+//!   integrated [`ConsciousnessModule`](crate::consciousness::ConsciousnessModule)
+//!   and its supporting insight/approach/metric types.
+//! - [`meta_consciousness`](crate::consciousness::meta_consciousness):
+//!   [`MetaConsciousness`](crate::consciousness::MetaConsciousness) self-awareness
+//!   and cross-component communication.
 //! - The remaining sibling modules each implement a single consciousness
 //!   subsystem (intuitive planner, quantum consciousness, emotional learning,
 //!   dream processing, and so on).

@@ -31,7 +31,7 @@ use crate::{
         value_constraints::{ClassConstraint, DatatypeConstraint, NodeKind, NodeKindConstraint},
     },
     validation::ValidationViolation,
-    ConstraintComponentId, PropertyPath, Severity, ShapeId,
+    ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
 };
 use oxirs_core::{
     model::{BlankNode, Literal, NamedNode, Term},
@@ -91,6 +91,14 @@ fn make_context_with_values(values: Vec<Term>) -> ConstraintContext {
 
 fn empty_context() -> ConstraintContext {
     make_context_with_values(vec![])
+}
+
+/// An empty node shape (no constraints): every value node conforms to it.
+/// Registering the referenced shapes lets logical constraints resolve and run
+/// their real nested conformance logic instead of failing loud on a missing
+/// registry.
+fn empty_node_shape(id: &str) -> Shape {
+    Shape::node_shape(shape_id(id))
 }
 
 // ---------------------------------------------------------------------------
@@ -1357,27 +1365,33 @@ fn test_logical_constraint_not_evaluates_with_values() {
         shape: shape_id("http://example.org/S"),
     };
     let store = ConcreteStore::new().expect("store");
-    let ctx = make_context_with_values(vec![make_iri("v1")]);
+    let ctx = make_context_with_values(vec![make_iri("v1")])
+        .with_shape_definitions(vec![empty_node_shape("http://example.org/S")]);
     let result = c.evaluate(&ctx, &store).expect("eval");
-    assert!(result.is_satisfied() || result.is_violated());
+    // v1 conforms to the empty shape S, so sh:not is violated.
+    assert!(result.is_violated());
 }
 
 #[test]
 fn test_logical_constraint_and_evaluates_with_values() {
     let c = AndConstraint::new(vec![shape_id("http://example.org/S")]);
     let store = ConcreteStore::new().expect("store");
-    let ctx = make_context_with_values(vec![make_iri("v1")]);
+    let ctx = make_context_with_values(vec![make_iri("v1")])
+        .with_shape_definitions(vec![empty_node_shape("http://example.org/S")]);
     let result = c.evaluate(&ctx, &store).expect("eval");
-    assert!(result.is_satisfied() || result.is_violated());
+    // v1 conforms to the empty shape S, so sh:and is satisfied.
+    assert!(result.is_satisfied());
 }
 
 #[test]
 fn test_logical_constraint_or_evaluates_with_values() {
     let c = OrConstraint::new(vec![shape_id("http://example.org/S")]);
     let store = ConcreteStore::new().expect("store");
-    let ctx = make_context_with_values(vec![make_iri("v1")]);
+    let ctx = make_context_with_values(vec![make_iri("v1")])
+        .with_shape_definitions(vec![empty_node_shape("http://example.org/S")]);
     let result = c.evaluate(&ctx, &store).expect("eval");
-    assert!(result.is_satisfied() || result.is_violated());
+    // v1 conforms to the empty shape S, so sh:or is satisfied.
+    assert!(result.is_satisfied());
 }
 
 #[test]
@@ -1387,9 +1401,13 @@ fn test_logical_constraint_xone_evaluates_with_values() {
         shape_id("http://example.org/B"),
     ]);
     let store = ConcreteStore::new().expect("store");
-    let ctx = make_context_with_values(vec![make_iri("v1")]);
+    let ctx = make_context_with_values(vec![make_iri("v1")]).with_shape_definitions(vec![
+        empty_node_shape("http://example.org/A"),
+        empty_node_shape("http://example.org/B"),
+    ]);
     let result = c.evaluate(&ctx, &store).expect("eval");
-    assert!(result.is_satisfied() || result.is_violated());
+    // v1 conforms to both A and B (2 of 2), so sh:xone (exactly one) is violated.
+    assert!(result.is_violated());
 }
 
 #[test]

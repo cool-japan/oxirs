@@ -257,8 +257,9 @@ impl QueryEngine {
         // Execute the plan
         let solutions = executor.execute(&plan)?;
 
-        // Extract variable names and convert solutions
-        let variables = self.extract_variables(pattern);
+        // Extract the *result* variable names (honoring any explicit projection)
+        // and convert solutions.
+        let variables = self.result_variables(pattern);
         let bindings: Vec<HashMap<String, Term>> = solutions
             .into_iter()
             .take(self.executor_config.max_results)
@@ -448,6 +449,25 @@ impl QueryEngine {
                     input: Box::new(input_plan),
                 })
             }
+            SparqlGraphPattern::Reduced { inner } => {
+                // REDUCED permits (but does not require) duplicate elimination.
+                // Implementing it as DISTINCT is a conformant choice.
+                let input_plan = self.pattern_to_plan(inner)?;
+                Ok(ExecutionPlan::Distinct {
+                    input: Box::new(input_plan),
+                })
+            }
+            SparqlGraphPattern::OrderBy { inner, expression } => {
+                let input_plan = self.pattern_to_plan(inner)?;
+                let order_by = expression
+                    .iter()
+                    .map(|oe| self.convert_order_expression(oe))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(ExecutionPlan::Sort {
+                    input: Box::new(input_plan),
+                    order_by,
+                })
+            }
             SparqlGraphPattern::Slice {
                 inner,
                 start,
@@ -548,10 +568,73 @@ impl QueryEngine {
         })
     }
 
-    /// Find variables that appear in both execution plans
-    fn find_join_variables(&self, _left: &ExecutionPlan, _right: &ExecutionPlan) -> Vec<Variable> {
-        // Simplified implementation - would need to analyze the plans
-        Vec::new()
+    /// Find variables that appear in (are produced by) both execution plans.
+    ///
+    /// These shared variables are the hash-join keys. Returning them lets the
+    /// executor bucket solutions by their common bindings instead of hashing
+    /// every solution under the empty key (which degenerates into a full
+    /// cartesian product materialised in memory).
+    fn find_join_variables(&self, left: &ExecutionPlan, right: &ExecutionPlan) -> Vec<Variable> {
+        let mut left_vars = std::collections::HashSet::new();
+        Self::collect_plan_variables(left, &mut left_vars);
+        let mut right_vars = std::collections::HashSet::new();
+        Self::collect_plan_variables(right, &mut right_vars);
+
+        // Deterministic ordering keeps the join key stable across runs.
+        let mut shared: Vec<Variable> = left_vars.intersection(&right_vars).cloned().collect();
+        shared.sort_by(|a, b| a.name().cmp(b.name()));
+        shared
+    }
+
+    /// Collect every variable an execution plan can bind in its output rows.
+    fn collect_plan_variables(
+        plan: &ExecutionPlan,
+        vars: &mut std::collections::HashSet<Variable>,
+    ) {
+        use crate::model::pattern::{ObjectPattern, PredicatePattern, SubjectPattern};
+        match plan {
+            ExecutionPlan::TripleScan { pattern } => {
+                if let Some(SubjectPattern::Variable(v)) = pattern.subject() {
+                    vars.insert(v.clone());
+                }
+                if let Some(PredicatePattern::Variable(v)) = pattern.predicate() {
+                    vars.insert(v.clone());
+                }
+                if let Some(ObjectPattern::Variable(v)) = pattern.object() {
+                    vars.insert(v.clone());
+                }
+            }
+            ExecutionPlan::HashJoin { left, right, .. } | ExecutionPlan::Union { left, right } => {
+                Self::collect_plan_variables(left, vars);
+                Self::collect_plan_variables(right, vars);
+            }
+            ExecutionPlan::Filter { input, .. }
+            | ExecutionPlan::Sort { input, .. }
+            | ExecutionPlan::Limit { input, .. }
+            | ExecutionPlan::Distinct { input } => {
+                Self::collect_plan_variables(input, vars);
+            }
+            ExecutionPlan::Project { vars: proj, .. } => {
+                vars.extend(proj.iter().cloned());
+            }
+        }
+    }
+
+    /// Convert a sparql_algebra ordering condition into an algebra
+    /// [`OrderExpression`] usable by the execution plan.
+    fn convert_order_expression(
+        &self,
+        order: &sparql_algebra::OrderExpression,
+    ) -> Result<crate::query::algebra::OrderExpression, OxirsError> {
+        use crate::query::algebra::OrderExpression as AlgebraOrder;
+        Ok(match order {
+            sparql_algebra::OrderExpression::Asc(expr) => {
+                AlgebraOrder::Asc(self.convert_expression(expr.clone())?)
+            }
+            sparql_algebra::OrderExpression::Desc(expr) => {
+                AlgebraOrder::Desc(self.convert_expression(expr.clone())?)
+            }
+        })
     }
 
     /// Convert sparql_algebra::Expression to algebra::Expression
@@ -626,12 +709,41 @@ impl QueryEngine {
                 let inner_expr = self.convert_expression(*inner)?;
                 Ok(AlgebraExpr::Not(Box::new(inner_expr)))
             }
+            SparqlExpr::Bound(var) => Ok(AlgebraExpr::Bound(var)),
             _ => {
                 // For expressions not yet supported, create a placeholder
                 Err(OxirsError::Query(format!(
                     "Expression type not yet supported in conversion: {expr:?}"
                 )))
             }
+        }
+    }
+
+    /// Determine the result variables of a SELECT query, honoring an explicit
+    /// projection when present (in SELECT order), otherwise falling back to all
+    /// variables bound by the pattern (sorted, `SELECT *` semantics).
+    fn result_variables(&self, pattern: &SparqlGraphPattern) -> Vec<Variable> {
+        if let Some(vars) = Self::projection_of(pattern) {
+            let mut seen = std::collections::HashSet::new();
+            vars.into_iter()
+                .filter(|v| seen.insert(v.clone()))
+                .collect()
+        } else {
+            self.extract_variables(pattern)
+        }
+    }
+
+    /// Find the projection variable list, descending through the solution
+    /// modifier wrappers (Distinct/Reduced/Slice/OrderBy) that sit above a
+    /// Project node.
+    fn projection_of(pattern: &SparqlGraphPattern) -> Option<Vec<Variable>> {
+        match pattern {
+            SparqlGraphPattern::Project { variables, .. } => Some(variables.clone()),
+            SparqlGraphPattern::Distinct { inner }
+            | SparqlGraphPattern::Reduced { inner }
+            | SparqlGraphPattern::Slice { inner, .. }
+            | SparqlGraphPattern::OrderBy { inner, .. } => Self::projection_of(inner),
+            _ => None,
         }
     }
 
@@ -928,9 +1040,9 @@ impl QueryEngine {
             .execute_pattern_with_federation(pattern, local_bindings, federation_executor, store)
             .await?;
 
-        // Extract variable names
+        // Extract result variable names (honoring any explicit projection)
         let variables = self
-            .extract_variables(pattern)
+            .result_variables(pattern)
             .into_iter()
             .map(|v| v.name().to_string())
             .collect();
@@ -1033,5 +1145,50 @@ impl QueryEngine {
             }
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod join_variable_tests {
+    use super::*;
+    use crate::model::pattern::{ObjectPattern, PredicatePattern, SubjectPattern, TriplePattern};
+
+    fn scan(subject: &str, predicate: &str, object: &str) -> ExecutionPlan {
+        ExecutionPlan::TripleScan {
+            pattern: TriplePattern::new(
+                Some(SubjectPattern::Variable(
+                    Variable::new(subject).expect("var"),
+                )),
+                Some(PredicatePattern::NamedNode(
+                    crate::model::NamedNode::new(predicate).expect("iri"),
+                )),
+                Some(ObjectPattern::Variable(Variable::new(object).expect("var"))),
+            ),
+        }
+    }
+
+    /// P1: find_join_variables must return the variables shared by both plans so
+    /// the hash join keys correctly instead of degenerating into a cartesian
+    /// product hashed under the empty key.
+    #[test]
+    fn regression_find_join_variables_returns_shared() {
+        let engine = QueryEngine::new();
+        // { ?x :p ?y } JOIN { ?y :q ?z } shares ?y.
+        let left = scan("?x", "http://example.org/p", "?y");
+        let right = scan("?y", "http://example.org/q", "?z");
+
+        let join_vars = engine.find_join_variables(&left, &right);
+        assert_eq!(join_vars.len(), 1, "exactly one shared variable expected");
+        assert_eq!(join_vars[0].name(), "y");
+    }
+
+    /// When the two plans share no variable the join key must be empty (a real
+    /// cartesian product, correctly represented).
+    #[test]
+    fn regression_find_join_variables_disjoint_is_empty() {
+        let engine = QueryEngine::new();
+        let left = scan("?a", "http://example.org/p", "?b");
+        let right = scan("?c", "http://example.org/q", "?d");
+        assert!(engine.find_join_variables(&left, &right).is_empty());
     }
 }

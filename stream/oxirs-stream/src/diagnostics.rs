@@ -1265,7 +1265,7 @@ mod tests {
             .record_error(
                 "ConnectionError".to_string(),
                 "Failed to connect to backend".to_string(),
-                "KafkaBackend".to_string(),
+                "NatsBackend".to_string(),
             )
             .await;
 
@@ -1273,7 +1273,7 @@ mod tests {
             .record_error(
                 "TimeoutError".to_string(),
                 "Request timed out".to_string(),
-                "KafkaBackend".to_string(),
+                "NatsBackend".to_string(),
             )
             .await;
 

@@ -1,9 +1,9 @@
 //! # OxiRS SHACL-AI
 //!
-//! [![Version](https://img.shields.io/badge/version-0.3.3-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Production Release (v0.3.3)
+//! **Status**: Production Release (v0.4.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.
@@ -1143,6 +1143,9 @@ pub enum ShaclAiError {
 
     #[error("Benchmark error: {0}")]
     Benchmark(String),
+
+    #[error("Unsupported operation: {0}")]
+    Unsupported(String),
 }
 
 /// Result type alias for SHACL-AI operations

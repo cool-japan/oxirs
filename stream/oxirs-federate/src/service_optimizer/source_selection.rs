@@ -4,8 +4,6 @@
 //! including pattern coverage analysis, predicate-based filtering, and range-based selection.
 
 use anyhow::Result;
-#[cfg(feature = "caching")]
-use bloom::ASMS;
 
 #[cfg(not(feature = "caching"))]
 mod cache_stubs {
@@ -609,16 +607,16 @@ impl ServiceOptimizer {
         registry: &ServiceRegistry,
     ) -> Result<HashMap<String, ServiceBloomFilter>> {
         #[cfg(feature = "caching")]
-        use bloom::{BloomFilter, ASMS};
+        use fastbloom::BloomFilter;
 
         let mut filters = HashMap::new();
 
         for service in services {
             // Create Bloom filter for predicates
-            let mut predicate_filter = BloomFilter::with_rate(0.01, 10000);
+            let mut predicate_filter = BloomFilter::with_false_pos(0.01).expected_items(10000);
 
             // Create Bloom filter for subjects/objects
-            let mut resource_filter = BloomFilter::with_rate(0.01, 100000);
+            let mut resource_filter = BloomFilter::with_false_pos(0.01).expected_items(100000);
 
             // Populate filters based on service capabilities and known data
             if let Some(service_meta) = registry.get_service(&service.endpoint) {

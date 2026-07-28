@@ -19,10 +19,47 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::{error, instrument};
+use tracing::{debug, error, instrument};
 
 // SPARQL query parsing
 use oxirs_arq::query::parse_query;
+// Runtime resource budget: enforces the effective query timeout *during*
+// evaluation (cooperative wall-time checks inside the engine's hot loops).
+use oxirs_arq::query_governor::{ExecutionBudget, ResourceBudget};
+
+/// Extra wall-clock slack, beyond the cooperative query budget, before the
+/// outer `tokio::time::timeout` safety net gives up on the blocking task and
+/// frees the HTTP response. The engine's own budget should abort at
+/// ~`effective`; this grace only matters if a budget checkpoint was missed, so
+/// it is deliberately small. It also must stay below
+/// `server.request_timeout_secs` (the axum `TimeoutLayer`) so the query budget,
+/// not the coarse outer layer, is what normally fires — see the startup warning
+/// in `Runtime::build_router`.
+pub(crate) const QUERY_TIMEOUT_GRACE_SECS: u64 = 5;
+
+/// Fixed, non-revealing client message for a query-execution task failure.
+///
+/// The internal cause (a panic payload, which may embed an assertion message, a
+/// file path, or a fragment of query/engine state) is logged server-side but
+/// never returned to the client — see [`internal_execution_error`].
+pub(crate) const INTERNAL_EXECUTION_ERROR_MSG: &str = "internal query execution error";
+
+/// Map a `spawn_blocking` join failure (a panicked query task, or the runtime
+/// shutting down) to a client-facing 500 **without leaking the internal cause**.
+///
+/// `FusekiError::internal`'s `Display` is embedded verbatim in the JSON error
+/// body (`to_error_response`), so formatting the raw [`tokio::task::JoinError`]
+/// (which carries any captured panic message) into it would expose engine
+/// internals to every caller. Instead the full join error is logged at `error`
+/// level for operators and the client receives only the fixed
+/// [`INTERNAL_EXECUTION_ERROR_MSG`] sentence.
+fn internal_execution_error(join_err: &tokio::task::JoinError) -> FusekiError {
+    error!(
+        error = %join_err,
+        "SPARQL query execution task failed (panic or runtime shutdown)"
+    );
+    FusekiError::internal(INTERNAL_EXECUTION_ERROR_MSG)
+}
 
 /// Deserializer that accepts either a single string or a sequence of
 /// strings, returning `Some(Vec<String>)` in either case.
@@ -143,7 +180,7 @@ pub struct SparqlQueryRequest {
 }
 
 /// SPARQL query execution result
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryResult {
     pub query_type: String,
     pub execution_time_ms: u64,
@@ -175,6 +212,10 @@ pub struct QueryContext {
     pub enable_federation: bool,
     pub enable_caching: bool,
     pub request_id: String,
+    /// SPARQL 1.1 Protocol `default-graph-uri` values (RDF dataset scoping).
+    pub default_graph_uris: Vec<String>,
+    /// SPARQL 1.1 Protocol `named-graph-uri` values (RDF dataset scoping).
+    pub named_graph_uris: Vec<String>,
 }
 
 impl Default for QueryContext {
@@ -188,6 +229,8 @@ impl Default for QueryContext {
             enable_federation: true,
             enable_caching: true,
             request_id: uuid::Uuid::new_v4().to_string(),
+            default_graph_uris: Vec::new(),
+            named_graph_uris: Vec::new(),
         }
     }
 }
@@ -216,14 +259,18 @@ pub async fn sparql_query(
         }
     };
 
-    // Create query context
+    // Create query context. `context.timeout` carries ONLY the client-requested
+    // `?timeout=` (seconds), or `None` when the client did not ask for one — in
+    // which case the configured `max_query_time_secs` becomes the effective cap
+    // (see `execute_sparql_query`). This intentionally overrides the QueryContext
+    // default so "no ?timeout" means "server default", not a hardcoded 30 s.
     let mut context = QueryContext {
         user,
         ..Default::default()
     };
-    if let Some(timeout) = params.timeout {
-        context.timeout = Some(Duration::from_secs(timeout as u64));
-    }
+    context.timeout = params.timeout.map(|t| Duration::from_secs(t as u64));
+    context.default_graph_uris = params.default_graph_uri.clone().unwrap_or_default();
+    context.named_graph_uris = params.named_graph_uri.clone().unwrap_or_default();
 
     // Execute query
     match execute_sparql_query(&query_string, context, &state).await {
@@ -291,8 +338,14 @@ pub async fn sparql_query(
 }
 
 /// SPARQL query POST endpoint handler (for form data and direct body)
+///
+/// `Query(url_params)` exposes the request-line query string so the SPARQL
+/// protocol's `?timeout=` (seconds) is read identically to GET — it is a URL
+/// parameter even on POST, never part of the body — and is capped the same way
+/// (`min(config max)`) in `execute_sparql_query`.
 #[instrument(skip(state))]
 pub async fn sparql_query_post(
+    Query(url_params): Query<SparqlQueryParams>,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     user: Option<AuthUser>,
@@ -377,11 +430,28 @@ pub async fn sparql_query_post(
         }
     };
 
-    // Create query context
-    let context = QueryContext {
+    // Create query context. The client `?timeout=` (if any) rides the URL query
+    // string on POST just as on GET; `None` means "no client cap", leaving the
+    // configured `max_query_time_secs` as the effective ceiling in
+    // `execute_sparql_query` (rather than the QueryContext default of 30 s).
+    let mut context = QueryContext {
         user,
         ..Default::default()
     };
+    context.timeout = url_params.timeout.map(|t| Duration::from_secs(t as u64));
+    // Dataset scoping may arrive in the form body (params) or, for a direct
+    // `application/sparql-query` body, on the URL (url_params); prefer the body
+    // values and fall back to the URL.
+    context.default_graph_uris = params
+        .default_graph_uri
+        .clone()
+        .or_else(|| url_params.default_graph_uri.clone())
+        .unwrap_or_default();
+    context.named_graph_uris = params
+        .named_graph_uri
+        .clone()
+        .or_else(|| url_params.named_graph_uri.clone())
+        .unwrap_or_default();
 
     // Execute the query using the same logic as GET
     match execute_sparql_query(&query_string, context, &state).await {
@@ -422,27 +492,33 @@ pub async fn sparql_update(
 ) -> impl IntoResponse {
     let start_time = Instant::now();
 
-    // Check permissions
-    if let Some(ref user) = user {
-        if !user.0.permissions.contains(&Permission::SparqlUpdate) {
+    // Check permissions — only when authentication is actually configured
+    // (`security.auth_required`). With auth disabled (the default) the endpoint
+    // serves anonymous callers and write-protection is the dataset `read_only`
+    // flag enforced in `execute_sparql_update`. With auth enabled the hardened
+    // enforcement stands: no credential → 401, missing permission → 403.
+    if state.config.security.auth_required {
+        if let Some(ref user) = user {
+            if !user.0.permissions.contains(&Permission::SparqlUpdate) {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(serde_json::json!({
+                        "error": "insufficient_permissions",
+                        "message": "SPARQL update permission required"
+                    })),
+                )
+                    .into_response();
+            }
+        } else {
             return (
-                StatusCode::FORBIDDEN,
+                StatusCode::UNAUTHORIZED,
                 Json(serde_json::json!({
-                    "error": "insufficient_permissions",
-                    "message": "SPARQL update permission required"
+                    "error": "authentication_required",
+                    "message": "Authentication required for SPARQL updates"
                 })),
             )
                 .into_response();
         }
-    } else {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({
-                "error": "authentication_required",
-                "message": "Authentication required for SPARQL updates"
-            })),
-        )
-            .into_response();
     }
 
     // Create update context
@@ -526,7 +602,7 @@ pub async fn sparql_update(
 /// error. The endpoint never answers `200 OK` with a fabricated empty result.
 pub async fn execute_sparql_query(
     query: &str,
-    _context: QueryContext,
+    context: QueryContext,
     state: &Arc<AppState>,
 ) -> FusekiResult<QueryResult> {
     // Basic validation first.
@@ -534,28 +610,172 @@ pub async fn execute_sparql_query(
         return Err(FusekiError::query_parsing("Empty query"));
     }
 
-    // Parse ONCE via the real arq parser. The parsed query form is the single
-    // routing authority; a parse failure is a 400, never a silent 200 + empty.
-    let parsed = match parse_query(query) {
-        Ok(parsed) => parsed,
-        Err(e) => {
-            // A SPARQL UPDATE sent to the query endpoint will not parse as a
-            // query; point the caller at the dedicated /update endpoint instead
-            // of emitting a generic parse error.
-            if looks_like_update(query) {
-                return Err(FusekiError::query_parsing(
-                    "This is a SPARQL Query endpoint; send SPARQL UPDATE requests to /update",
-                ));
-            }
-            return Err(FusekiError::query_parsing(format!(
-                "SPARQL parse error: {e}"
-            )));
+    // ── Result cache lookup ──────────────────────────────────────────────
+    // When the result cache is wired (`performance.caching.query_cache_enabled`),
+    // look the query up first. The cache key folds the dataset scope AND any
+    // protocol graph URIs into the key so differently-scoped executions of the
+    // same text never collide. A hit returns the stored structured result
+    // (format-independent, so content negotiation still applies downstream).
+    let cache_key = state.sparql_cache.as_ref().map(|_| {
+        let mut scope = context.dataset.clone();
+        for g in &context.default_graph_uris {
+            scope.push_str("|d=");
+            scope.push_str(g);
         }
+        for g in &context.named_graph_uris {
+            scope.push_str("|n=");
+            scope.push_str(g);
+        }
+        crate::cache::QueryCacheKey::new(query, scope)
+    });
+    if let (Some(cache), Some(key)) = (state.sparql_cache.as_ref(), cache_key.as_ref()) {
+        if let Some(hit) = cache.get(key) {
+            if let Ok(cached) = serde_json::from_str::<QueryResult>(&hit.result_json) {
+                return Ok(cached);
+            }
+        }
+    }
+
+    // ── Effective timeout ────────────────────────────────────────────────
+    // The configured `max_query_time_secs` is the ceiling AND the default. A
+    // client `?timeout=` can only LOWER it (never raise it above the server
+    // cap): effective = min(requested, config_max). A `?timeout=0` (or absent)
+    // falls back to the config cap rather than timing out instantly. `.max(1)`
+    // guards a pathological config of 0. This is the wiring that finally makes
+    // `performance.query_optimization.max_query_time_secs` a live setting.
+    let config_max_secs = state
+        .config
+        .performance
+        .query_optimization
+        .max_query_time_secs
+        .max(1);
+    let requested_secs = context.timeout.map(|d| d.as_secs()).filter(|&s| s > 0);
+    let effective_secs = requested_secs.map_or(config_max_secs, |s| s.min(config_max_secs));
+    let effective = Duration::from_secs(effective_secs);
+    let outer_wait = effective + Duration::from_secs(QUERY_TIMEOUT_GRACE_SECS);
+
+    // ── Off-thread execution + hard response deadline ────────────────────
+    // The oxirs-arq engine runs synchronously with no `.await`, so running it
+    // directly on the async worker would (a) pin a tokio runtime thread for the
+    // whole query and (b) make `tokio::time::timeout` and the outer TimeoutLayer
+    // structurally unable to fire. `spawn_blocking` moves it to the blocking
+    // pool (freeing the async worker) and lets the timeout race it.
+    //
+    // `spawn_blocking` is NOT cancellable, so the timeout alone cannot stop the
+    // CPU work — that is the `ExecutionBudget`'s job (cooperative wall-time
+    // checks inside the engine). BOTH are required: the budget halts the
+    // computation, the timeout guarantees the client gets a response even if a
+    // budget checkpoint is somehow missed. `Store` is a cheap `Arc` clone, which
+    // satisfies the `'static` bound on the blocking closure.
+    let budget = ExecutionBudget::new(ResourceBudget {
+        max_wall_time: Some(effective),
+        max_result_rows: None,
+        max_triples_scanned: None,
+    });
+    let store = state.store.clone();
+    let query_owned = query.to_string();
+    // SPARQL 1.1 Protocol dataset scoping: `default-graph-uri` / `named-graph-uri`
+    // supplied out-of-band override any in-query FROM/FROM NAMED (protocol §2.1.4).
+    let protocol_default_graphs = context.default_graph_uris.clone();
+    let protocol_named_graphs = context.named_graph_uris.clone();
+    let join = tokio::task::spawn_blocking(move || {
+        // Parse ONCE via the real arq parser. The parsed query form is the single
+        // routing authority; a parse failure is a 400, never a silent 200 + empty.
+        let mut parsed = match parse_query(&query_owned) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                // A SPARQL UPDATE sent to the query endpoint will not parse as a
+                // query; point the caller at the dedicated /update endpoint
+                // instead of emitting a generic parse error.
+                if looks_like_update(&query_owned) {
+                    return Err(FusekiError::query_parsing(
+                        "This is a SPARQL Query endpoint; send SPARQL UPDATE requests to /update",
+                    ));
+                }
+                return Err(FusekiError::query_parsing(format!(
+                    "SPARQL parse error: {e}"
+                )));
+            }
+        };
+        // Honour the protocol-supplied RDF dataset. If either list is present it
+        // replaces the query's own dataset clause; an unparseable IRI is a 400
+        // (fail-loud) rather than being silently ignored.
+        if !protocol_default_graphs.is_empty() || !protocol_named_graphs.is_empty() {
+            parsed.dataset =
+                build_protocol_dataset(&protocol_default_graphs, &protocol_named_graphs)?;
+        }
+        // Dispatch on the parsed form with the wall-time budget attached; a
+        // budget breach surfaces as a typed HTTP error (408/503), never a silent
+        // empty body.
+        crate::handlers::sparql::arq_exec::dispatch_with_budget(&parsed, &store, Some(budget))
+    });
+
+    let outcome = match tokio::time::timeout(outer_wait, join).await {
+        // Task finished within the deadline: propagate its Ok/Err verbatim (a
+        // BudgetExceeded that fired first is already a typed 408/503 here).
+        Ok(Ok(result)) => result,
+        // The blocking task panicked (or the runtime is shutting down).
+        Ok(Err(join_err)) => Err(internal_execution_error(&join_err)),
+        // Outer safety net fired: the cooperative budget did not stop the query
+        // within `effective + grace`. The blocking thread is still running
+        // (uncancellable) but must hit a budget checkpoint shortly and exit. We
+        // return 408 for consistency with the budget-timeout and TimeoutLayer.
+        Err(_elapsed) => Err(FusekiError::TimeoutWithMessage(format!(
+            "query exceeded the {effective_secs}s execution-time limit (server aborted)"
+        ))),
     };
 
-    // Dispatch on the parsed form. All four query forms run through the real
-    // engine; failures surface as typed HTTP errors, never a silent empty body.
-    crate::handlers::sparql::arq_exec::dispatch(&parsed, &state.store)
+    // ── Result cache store ───────────────────────────────────────────────
+    // Only successful results are cached. Serialization failures are non-fatal
+    // (the result is still returned to the client, just not cached).
+    if let (Some(cache), Some(key), Ok(result)) = (state.sparql_cache.as_ref(), cache_key, &outcome)
+    {
+        if let Ok(serialized) = serde_json::to_string(result) {
+            let graphs = result
+                .bindings
+                .as_ref()
+                .map(|_| Vec::<String>::new())
+                .unwrap_or_default();
+            cache.put(key, serialized, "application/json", graphs);
+        }
+    }
+
+    outcome
+}
+
+/// Build an oxirs-arq [`DatasetClause`](oxirs_arq::query::DatasetClause) from the
+/// SPARQL 1.1 Protocol `default-graph-uri` / `named-graph-uri` values.
+///
+/// Each value must be an absolute IRI; an unparseable value is rejected with a
+/// 400 (fail-loud) so a malformed `?default-graph-uri=` never silently degrades
+/// to whole-dataset results.
+fn build_protocol_dataset(
+    default_graph_uris: &[String],
+    named_graph_uris: &[String],
+) -> FusekiResult<oxirs_arq::query::DatasetClause> {
+    use oxirs_core::model::NamedNode;
+
+    let parse_iri = |uri: &str| -> FusekiResult<NamedNode> {
+        NamedNode::new(uri).map_err(|e| {
+            FusekiError::query_parsing(format!(
+                "invalid graph URI '{uri}' in protocol dataset: {e}"
+            ))
+        })
+    };
+
+    let default_graphs = default_graph_uris
+        .iter()
+        .map(|u| parse_iri(u))
+        .collect::<FusekiResult<Vec<_>>>()?;
+    let named_graphs = named_graph_uris
+        .iter()
+        .map(|u| parse_iri(u))
+        .collect::<FusekiResult<Vec<_>>>()?;
+
+    Ok(oxirs_arq::query::DatasetClause {
+        default_graphs,
+        named_graphs,
+    })
 }
 
 /// Heuristic used only to improve the error message when a request that fails to
@@ -593,6 +813,19 @@ pub async fn execute_sparql_update(
 
     // Execute through store
     let store_result = state.store.update(update)?;
+
+    // Invalidate cached results for the mutated dataset (conservative: any
+    // successful UPDATE drops every cached entry for the dataset so a subsequent
+    // query never serves a stale answer).
+    if let Some(cache) = state.sparql_cache.as_ref() {
+        let invalidated = cache.invalidate_dataset(&context.dataset);
+        if invalidated > 0 {
+            debug!(
+                "SPARQL UPDATE invalidated {invalidated} cached result(s) for dataset '{}'",
+                context.dataset
+            );
+        }
+    }
 
     // Convert store::UpdateResult to sparql::core::UpdateResult
     let operations_count = count_update_operations(update);
@@ -756,8 +989,16 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
             | "application/rdf+xml"
             | "application/ld+json"
     );
+    // Symmetric fallback: a SELECT/ASK result (bindings/boolean) negotiated to
+    // a graph media type (e.g. Accept: text/turtle, application/rdf+xml,
+    // application/ld+json) has no graph to serialize. Falling into the graph
+    // arms below would silently emit an empty document instead of the
+    // client's actual bindings/boolean. Fall back to SPARQL Results JSON
+    // instead, mirroring the CONSTRUCT/DESCRIBE -> Turtle fallback above.
     let primary = if is_graph && !is_graph_format {
         "text/turtle".to_string()
+    } else if !is_graph && is_graph_format {
+        "application/sparql-results+json".to_string()
     } else {
         primary
     };
@@ -798,24 +1039,26 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
             response_with_content_type(body, "application/n-triples")
         }
         "application/rdf+xml" => {
-            let body = crate::handlers::sparql::content_types::rdf_graph_to_rdfxml(
-                result
-                    .construct_graph
-                    .as_deref()
-                    .or(result.describe_graph.as_deref())
-                    .unwrap_or(""),
-            );
-            response_with_content_type(body, "application/rdf+xml")
+            let graph = result
+                .construct_graph
+                .as_deref()
+                .or(result.describe_graph.as_deref())
+                .unwrap_or("");
+            match crate::handlers::sparql::content_types::rdf_graph_to_rdfxml(graph) {
+                Ok(body) => response_with_content_type(body, "application/rdf+xml"),
+                Err(e) => e.into_response(),
+            }
         }
         "application/ld+json" => {
-            let body = crate::handlers::sparql::content_types::rdf_graph_to_jsonld(
-                result
-                    .construct_graph
-                    .as_deref()
-                    .or(result.describe_graph.as_deref())
-                    .unwrap_or(""),
-            );
-            response_with_content_type(body, "application/ld+json")
+            let graph = result
+                .construct_graph
+                .as_deref()
+                .or(result.describe_graph.as_deref())
+                .unwrap_or("");
+            match crate::handlers::sparql::content_types::rdf_graph_to_jsonld(graph) {
+                Ok(body) => response_with_content_type(body, "application/ld+json"),
+                Err(e) => e.into_response(),
+            }
         }
         _ => {
             // Default: SPARQL Results JSON.
@@ -892,15 +1135,21 @@ fn validate_sparql_update(update: &str) -> FusekiResult<()> {
         return Err(FusekiError::query_parsing("Empty update"));
     }
 
-    // Basic syntax validation
+    // Basic sanity check: the request must contain at least one recognized
+    // SPARQL 1.1 Update keyword. This includes the graph-management operations
+    // (CREATE/DROP/COPY/MOVE/ADD), which are valid updates the store implements
+    // but which contain none of INSERT/DELETE/LOAD/CLEAR — rejecting them here
+    // would make those operations unreachable via HTTP with a spurious 400. The
+    // authoritative validation is the store's AST-based dispatch downstream,
+    // which rejects genuinely unrecognized operations.
     let upper_update = update.to_uppercase();
-    if !upper_update.contains("INSERT")
-        && !upper_update.contains("DELETE")
-        && !upper_update.contains("LOAD")
-        && !upper_update.contains("CLEAR")
-    {
+    const UPDATE_KEYWORDS: [&str; 9] = [
+        "INSERT", "DELETE", "LOAD", "CLEAR", "CREATE", "DROP", "COPY", "MOVE", "ADD",
+    ];
+    if !UPDATE_KEYWORDS.iter().any(|kw| upper_update.contains(kw)) {
         return Err(FusekiError::query_parsing(
-            "Update must contain INSERT, DELETE, LOAD, or CLEAR",
+            "Update must contain a SPARQL 1.1 Update operation \
+             (INSERT, DELETE, LOAD, CLEAR, CREATE, DROP, COPY, MOVE, or ADD)",
         ));
     }
 
@@ -1003,4 +1252,97 @@ fn escape_turtle_string(s: &str) -> String {
         .replace('\n', "\\n")
         .replace('\r', "\\r")
         .replace('\t', "\\t")
+}
+
+#[cfg(test)]
+mod update_validation_tests {
+    use super::validate_sparql_update;
+
+    #[test]
+    fn regression_graph_management_updates_accepted() {
+        // SPARQL 1.1 graph-management operations contain none of
+        // INSERT/DELETE/LOAD/CLEAR but are valid updates the store implements.
+        for stmt in [
+            "CREATE GRAPH <http://example.org/g>",
+            "DROP GRAPH <http://example.org/g>",
+            "COPY <http://example.org/a> TO <http://example.org/b>",
+            "MOVE <http://example.org/a> TO <http://example.org/b>",
+            "ADD <http://example.org/a> TO <http://example.org/b>",
+            "INSERT DATA { <s> <p> <o> }",
+            "DELETE WHERE { ?s ?p ?o }",
+        ] {
+            assert!(
+                validate_sparql_update(stmt).is_ok(),
+                "should accept valid update: {stmt}"
+            );
+        }
+    }
+
+    #[test]
+    fn regression_non_update_rejected() {
+        assert!(validate_sparql_update("").is_err());
+        assert!(validate_sparql_update("SELECT ?s WHERE { ?s ?p ?o }").is_err());
+    }
+}
+
+#[cfg(test)]
+mod protocol_dataset_tests {
+    use super::build_protocol_dataset;
+
+    #[test]
+    fn regression_protocol_dataset_threaded_and_validated() {
+        // Valid protocol graph URIs build a dataset clause carrying them.
+        let clause = build_protocol_dataset(
+            &["http://example.org/g1".to_string()],
+            &["http://example.org/n1".to_string()],
+        )
+        .expect("valid IRIs build a dataset clause");
+        assert_eq!(clause.default_graphs.len(), 1);
+        assert_eq!(clause.named_graphs.len(), 1);
+        assert_eq!(clause.default_graphs[0].as_str(), "http://example.org/g1");
+
+        // A malformed IRI is rejected (fail-loud), not silently dropped.
+        assert!(build_protocol_dataset(&["not a valid iri".to_string()], &[]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod internal_error_tests {
+    use super::{internal_execution_error, INTERNAL_EXECUTION_ERROR_MSG};
+
+    /// A panicked query task must surface to the client as a fixed, generic 500
+    /// message — never the panic payload (which can embed engine internals,
+    /// assertion text, or query state). We build a real [`tokio::task::JoinError`]
+    /// carrying a distinctive secret and assert it does not reach the
+    /// client-facing error body (`FusekiError::Display`, which
+    /// `to_error_response` embeds verbatim).
+    #[test]
+    fn internal_execution_error_hides_panic_payload_from_client_body() {
+        let secret = "SENSITIVE_PANIC_9f3c_do_not_leak";
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("build current-thread runtime for the test");
+        let join_err = rt.block_on(async move {
+            tokio::task::spawn_blocking(move || {
+                panic!("{secret}");
+            })
+            .await
+            .expect_err("the blocking task panicked, so join must return Err")
+        });
+
+        // Sanity: this really is a panic join error (version-robust — some tokio
+        // releases omit the message from `Display`, so we check the kind).
+        assert!(join_err.is_panic(), "expected a panic JoinError");
+
+        let client_body = internal_execution_error(&join_err).to_string();
+
+        assert!(
+            !client_body.contains("SENSITIVE_PANIC"),
+            "client body must not leak the panic payload, got: {client_body}"
+        );
+        assert!(
+            client_body.contains(INTERNAL_EXECUTION_ERROR_MSG),
+            "client body should carry the fixed sentinel, got: {client_body}"
+        );
+    }
 }

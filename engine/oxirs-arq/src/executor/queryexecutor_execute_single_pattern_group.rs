@@ -59,7 +59,7 @@ impl QueryExecutor {
         if let Some(ref budget) = self.execution_budget {
             budget
                 .record_triple_scan(solution.len() as u64)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+                .map_err(anyhow::Error::new)?;
         }
 
         // Feed actual cardinality back to the adaptive statistics store so

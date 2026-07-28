@@ -123,18 +123,13 @@ pub enum PulsarAuthMethod {
 
 /// Enhanced streaming backend options
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// NOTE: there is no `Kafka` variant. The `rdkafka`-backed backend was removed in
+// 0.4.1 — it required a C toolchain (librdkafka), was never published (the adapter
+// crate was `publish = false`), and had no consumers. A config-only selector that
+// could never be constructed into a working backend was a trap: it parsed fine and
+// failed at connect time. Kafka's Confluent Schema Registry is still supported —
+// see [`crate::confluent_registry`] — because that is an independent HTTP service.
 pub enum StreamBackendType {
-    /// Apache Kafka backend selector. The variant (pure config data) stays here so
-    /// configs remain API-stable, but the `rdkafka`-backed implementation was
-    /// quarantined into the publish=false `oxirs-stream-adapter-rdkafka` crate
-    /// (Pure Rust Policy v2). Build a `KafkaBackend` from that crate via the
-    /// `StreamBackend` trait; `StreamProducer::new`/`StreamConsumer::new` return an
-    /// error explaining this for a `Kafka` config.
-    Kafka {
-        brokers: Vec<String>,
-        security_protocol: Option<String>,
-        sasl_config: Option<SaslConfig>,
-    },
     #[cfg(feature = "nats")]
     Nats {
         url: String,

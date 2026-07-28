@@ -478,7 +478,9 @@ impl ReteNetwork {
         token: Token,
         join_condition: &JoinCondition,
     ) -> Result<Vec<Token>> {
-        println!("perform_beta_join called with beta_id={beta_id}, token={token:?}");
+        if self.debug_mode {
+            debug!("perform_beta_join called with beta_id={beta_id}, token={token:?}");
+        }
         if self.enhanced_beta_nodes.contains_key(&beta_id) {
             let from_left = self.is_left_token(&token, beta_id)?;
             let mut enhanced_token = EnhancedToken::new();
@@ -509,18 +511,22 @@ impl ReteNetwork {
                     debug!("Beta join stats: {:?}", stats.get_stats());
                 }
             }
-            println!(
-                "Enhanced beta join produced {} joined tokens",
-                joined_tokens.len()
-            );
-            for (i, token) in joined_tokens.iter().enumerate() {
-                println!("  Joined token {i}: {token:?}");
+            if self.debug_mode {
+                debug!(
+                    "Enhanced beta join produced {} joined tokens",
+                    joined_tokens.len()
+                );
+                for (i, token) in joined_tokens.iter().enumerate() {
+                    debug!("  Joined token {i}: {token:?}");
+                }
             }
             Ok(joined_tokens)
         } else {
             let is_left_token = self.is_left_token(&token, beta_id)?;
             let mut joined_tokens = Vec::new();
-            println!("Using fallback beta join implementation, is_left_token: {is_left_token}");
+            if self.debug_mode {
+                debug!("Using fallback beta join implementation, is_left_token: {is_left_token}");
+            }
             if is_left_token {
                 let right_tokens: Vec<_> = {
                     let (_, right_memory) = self.beta_memory.get(&beta_id).ok_or_else(|| {
@@ -534,17 +540,10 @@ impl ReteNetwork {
                     })?;
                     left_memory.push(token.clone());
                 }
-                println!("Left token: {token:?}");
-                println!("Available right tokens: {} tokens", right_tokens.len());
-                for (i, right_token) in right_tokens.iter().enumerate() {
-                    println!("  Right token {i}: {right_token:?}");
+                for right_token in right_tokens.iter() {
                     if self.satisfies_join_condition(&token, right_token, join_condition)? {
-                        println!("    Join condition satisfied! Creating joined token...");
                         let joined = self.join_tokens(&token, right_token)?;
-                        println!("    Joined token: {joined:?}");
                         joined_tokens.push(joined);
-                    } else {
-                        println!("    Join condition NOT satisfied");
                     }
                 }
             } else {
@@ -561,17 +560,10 @@ impl ReteNetwork {
                         })?;
                     right_memory.push(token.clone());
                 }
-                println!("Right token: {token:?}");
-                println!("Available left tokens: {} tokens", left_tokens.len());
-                for (i, left_token) in left_tokens.iter().enumerate() {
-                    println!("  Left token {i}: {left_token:?}");
+                for left_token in left_tokens.iter() {
                     if self.satisfies_join_condition(left_token, &token, join_condition)? {
-                        println!("    Join condition satisfied! Creating joined token...");
                         let joined = self.join_tokens(left_token, &token)?;
-                        println!("    Joined token: {joined:?}");
                         joined_tokens.push(joined);
-                    } else {
-                        println!("    Join condition NOT satisfied");
                     }
                 }
             }
@@ -588,12 +580,14 @@ impl ReteNetwork {
                     right_memory.drain(0..right_memory.len() / 2);
                 }
             }
-            println!(
-                "Fallback beta join produced {} joined tokens",
-                joined_tokens.len()
-            );
-            for (i, token) in joined_tokens.iter().enumerate() {
-                println!("  Fallback joined token {i}: {token:?}");
+            if self.debug_mode {
+                debug!(
+                    "Fallback beta join produced {} joined tokens",
+                    joined_tokens.len()
+                );
+                for (i, token) in joined_tokens.iter().enumerate() {
+                    debug!("  Fallback joined token {i}: {token:?}");
+                }
             }
             Ok(joined_tokens)
         }

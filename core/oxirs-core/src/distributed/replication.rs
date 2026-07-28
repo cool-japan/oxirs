@@ -937,7 +937,7 @@ impl ReplicationManager {
 
                 // Send to all connected peers
                 let connections = network.connections.read().await;
-                for (_, conn) in connections.iter() {
+                for conn in connections.values() {
                     let _ = conn.send_tx.send(heartbeat.clone()).await;
                 }
             }
@@ -1028,7 +1028,7 @@ impl ReplicationManager {
         let connections = self.network.connections.read().await;
         let mut futures = Vec::new();
 
-        for (_region_id, conn) in connections.iter() {
+        for conn in connections.values() {
             let tx = conn.send_tx.clone();
             let op_clone = op.clone();
             let future = async move { tx.send(op_clone).await };
@@ -1052,7 +1052,7 @@ impl ReplicationManager {
     async fn replicate_async_all(&self, op: ReplicationOp) -> Result<(), OxirsError> {
         let connections = self.network.connections.read().await;
 
-        for (_, conn) in connections.iter() {
+        for conn in connections.values() {
             // Fire and forget
             let _ = conn.send_tx.try_send(op.clone());
         }

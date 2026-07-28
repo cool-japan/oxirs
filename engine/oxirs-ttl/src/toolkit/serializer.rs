@@ -138,6 +138,146 @@ impl SerializationConfig {
     }
 }
 
+// ─── Turtle PN_LOCAL grammar helpers ─────────────────────────────────────────
+//
+// Per the Turtle 1.1 / SPARQL grammar:
+//   PN_CHARS_BASE ::= [A-Z] | [a-z] | [#x00C0-#x00D6] | [#x00D8-#x00F6]
+//                   | [#x00F8-#x02FF] | [#x0370-#x037D] | [#x037F-#x1FFF]
+//                   | [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF]
+//                   | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD]
+//                   | [#x10000-#xEFFFF]
+//   PN_CHARS_U    ::= PN_CHARS_BASE | '_'
+//   PN_CHARS      ::= PN_CHARS_U | '-' | [0-9] | #x00B7
+//                   | [#x0300-#x036F] | [#x203F-#x2040]
+//   PN_LOCAL_ESC  ::= '\' ('_' | '~' | '.' | '-' | '!' | '$' | '&' | "'"
+//                   | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '/' | '?'
+//                   | '#' | '@' | '%')
+//   PLX           ::= PERCENT | PN_LOCAL_ESC
+//   PN_LOCAL      ::= (PN_CHARS_U | ':' | [0-9] | PLX)
+//                     ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
+
+fn is_pn_chars_base(c: char) -> bool {
+    matches!(c,
+        'A'..='Z' | 'a'..='z' |
+        '\u{00C0}'..='\u{00D6}' | '\u{00D8}'..='\u{00F6}' | '\u{00F8}'..='\u{02FF}' |
+        '\u{0370}'..='\u{037D}' | '\u{037F}'..='\u{1FFF}' |
+        '\u{200C}'..='\u{200D}' | '\u{2070}'..='\u{218F}' |
+        '\u{2C00}'..='\u{2FEF}' | '\u{3001}'..='\u{D7FF}' |
+        '\u{F900}'..='\u{FDCF}' | '\u{FDF0}'..='\u{FFFD}' |
+        '\u{10000}'..='\u{EFFFF}'
+    )
+}
+
+fn is_pn_chars_u(c: char) -> bool {
+    is_pn_chars_base(c) || c == '_'
+}
+
+fn is_pn_chars(c: char) -> bool {
+    is_pn_chars_u(c)
+        || c == '-'
+        || c.is_ascii_digit()
+        || c == '\u{00B7}'
+        || ('\u{0300}'..='\u{036F}').contains(&c)
+        || ('\u{203F}'..='\u{2040}').contains(&c)
+}
+
+/// Characters that `PN_LOCAL_ESC` permits escaping with a leading backslash.
+fn is_pn_local_esc_char(c: char) -> bool {
+    matches!(
+        c,
+        '_' | '~'
+            | '.'
+            | '-'
+            | '!'
+            | '$'
+            | '&'
+            | '\''
+            | '('
+            | ')'
+            | '*'
+            | '+'
+            | ','
+            | ';'
+            | '='
+            | '/'
+            | '?'
+            | '#'
+            | '@'
+            | '%'
+    )
+}
+
+/// Attempt to render `local` — the portion of an IRI following a matched
+/// namespace prefix — as a syntactically legal Turtle `PN_LOCAL`, escaping
+/// any `PN_LOCAL_ESC`-eligible character with a backslash where required by
+/// its position. Returns `None` when `local` contains a character (or an
+/// invalid `%` escape) that cannot legally appear in, or be escaped into, a
+/// `PN_LOCAL` — the caller must then fall back to the full `<iri>` form
+/// rather than emit a broken prefixed name.
+fn escape_pn_local(local: &str) -> Option<String> {
+    if local.is_empty() {
+        // `prefix:` with an empty local part is legal.
+        return Some(String::new());
+    }
+
+    let chars: Vec<char> = local.chars().collect();
+    let n = chars.len();
+    let mut result = String::with_capacity(local.len());
+    let mut i = 0;
+
+    while i < n {
+        let c = chars[i];
+        let is_first = i == 0;
+
+        if c == '%' {
+            // Only a well-formed PERCENT triplet ('%' HEX HEX) may pass
+            // through unescaped; anything else cannot be represented.
+            if i + 2 < n && chars[i + 1].is_ascii_hexdigit() && chars[i + 2].is_ascii_hexdigit() {
+                result.push('%');
+                result.push(chars[i + 1]);
+                result.push(chars[i + 2]);
+                i += 3;
+                continue;
+            }
+            return None;
+        }
+
+        let allowed_unescaped = if is_first {
+            is_pn_chars_u(c) || c.is_ascii_digit() || c == ':'
+        } else {
+            is_pn_chars(c) || c == ':' || c == '.'
+        };
+
+        if allowed_unescaped {
+            result.push(c);
+            i += 1;
+            continue;
+        }
+
+        if is_pn_local_esc_char(c) {
+            result.push('\\');
+            result.push(c);
+            i += 1;
+            continue;
+        }
+
+        // No legal unescaped or escaped representation exists for this
+        // character (e.g. '<', '>', '"', whitespace, control characters).
+        return None;
+    }
+
+    // The final character of a multi-character PN_LOCAL must not be an
+    // unescaped '.': only PN_CHARS | ':' | PLX are permitted there. If the
+    // loop above emitted a raw trailing '.', escape it now.
+    if result.ends_with('.') && !result.ends_with("\\.") {
+        result.pop();
+        result.push('\\');
+        result.push('.');
+    }
+
+    Some(result)
+}
+
 /// Helper for writing formatted output
 pub struct FormattedWriter<W: Write> {
     writer: W,
@@ -209,16 +349,38 @@ impl<W: Write> FormattedWriter<W> {
     }
 
     /// Abbreviate an IRI using prefixes if possible
+    ///
+    /// An IRI is only compacted to `prefix:local` when the portion of the
+    /// IRI after the matched namespace can be legally represented as a
+    /// Turtle `PN_LOCAL` (escaping any `PN_LOCAL_ESC`-eligible character as
+    /// needed). If no registered prefix yields a legal `PN_LOCAL` — e.g.
+    /// because the local part contains a character such as `<`, `>`, `"`,
+    /// whitespace, or a control character that cannot appear in, or be
+    /// escaped into, a prefixed name — the full `<iri>` form is emitted
+    /// instead so the output always remains syntactically valid Turtle that
+    /// round-trips through a conformant parser.
     pub fn abbreviate_iri(&self, iri: &str) -> String {
         if !self.config.use_prefixes {
             return format!("<{iri}>");
         }
 
-        // Try to find a matching prefix
-        for (prefix, prefix_iri) in &self.config.prefixes {
-            if iri.starts_with(prefix_iri) {
-                let local = &iri[prefix_iri.len()..];
-                return format!("{prefix}:{local}");
+        // Consider every registered namespace prefix that matches, preferring
+        // the longest (most specific) match first, and only accept a match
+        // whose local part can be legally escaped into a PN_LOCAL.
+        let mut candidates: Vec<(&String, &String)> = self
+            .config
+            .prefixes
+            .iter()
+            .filter(|(_, prefix_iri)| {
+                !prefix_iri.is_empty() && iri.starts_with(prefix_iri.as_str())
+            })
+            .collect();
+        candidates.sort_by_key(|(_, prefix_iri)| std::cmp::Reverse(prefix_iri.len()));
+
+        for (prefix, prefix_iri) in candidates {
+            let local = &iri[prefix_iri.len()..];
+            if let Some(escaped_local) = escape_pn_local(local) {
+                return format!("{prefix}:{escaped_local}");
             }
         }
 
@@ -272,5 +434,59 @@ impl<W: Write> Write for FormattedWriter<W> {
 
     fn flush(&mut self) -> std::io::Result<()> {
         self.writer.flush()
+    }
+}
+
+#[cfg(test)]
+mod regression_tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn writer_with_prefix(prefix: &str, ns: &str) -> FormattedWriter<Cursor<Vec<u8>>> {
+        let config = SerializationConfig::new().with_prefix(prefix.to_string(), ns.to_string());
+        FormattedWriter::new(Cursor::new(Vec::new()), config)
+    }
+
+    #[test]
+    fn regression_abbreviate_iri_escapes_parentheses_in_local_part() {
+        let w = writer_with_prefix("ex", "http://example.org/");
+        let out = w.abbreviate_iri("http://example.org/page(disambiguation)");
+        assert_eq!(out, "ex:page\\(disambiguation\\)");
+    }
+
+    #[test]
+    fn regression_abbreviate_iri_falls_back_to_full_iri_for_illegal_local() {
+        // '<' cannot legally appear in, or be escaped into, a PN_LOCAL.
+        let w = writer_with_prefix("ex", "http://example.org/");
+        let out = w.abbreviate_iri("http://example.org/a<b");
+        assert_eq!(out, "<http://example.org/a<b>");
+    }
+
+    #[test]
+    fn regression_abbreviate_iri_escapes_extra_slash_in_local_part() {
+        let w = writer_with_prefix("ex", "http://example.org/");
+        let out = w.abbreviate_iri("http://example.org/a/b");
+        assert_eq!(out, "ex:a\\/b");
+    }
+
+    #[test]
+    fn regression_abbreviate_iri_escapes_trailing_dot() {
+        let w = writer_with_prefix("ex", "http://example.org/");
+        let out = w.abbreviate_iri("http://example.org/v1.0.");
+        assert_eq!(out, "ex:v1.0\\.");
+    }
+
+    #[test]
+    fn regression_abbreviate_iri_plain_local_unchanged() {
+        let w = writer_with_prefix("ex", "http://example.org/");
+        let out = w.abbreviate_iri("http://example.org/alice");
+        assert_eq!(out, "ex:alice");
+    }
+
+    #[test]
+    fn regression_abbreviate_iri_escapes_every_reserved_char() {
+        let w = writer_with_prefix("ex", "http://example.org/");
+        let out = w.abbreviate_iri("http://example.org/page(disambiguation),v2");
+        assert_eq!(out, "ex:page\\(disambiguation\\)\\,v2");
     }
 }

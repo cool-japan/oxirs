@@ -2,6 +2,9 @@
 //!
 //! This module contains the producer implementation for NATS streaming backend.
 
+use super::circuit_breaker::{
+    CircuitBreaker, CircuitBreakerConfig as ResilientCircuitBreakerConfig,
+};
 use super::config::*;
 use super::message::NatsEventMessage;
 use crate::{EventMetadata, PatchOperation, RdfPatch, StreamConfig, StreamEvent};
@@ -65,6 +68,11 @@ pub struct NatsProducer {
     pub publish_semaphore: Arc<Semaphore>,
     pub stream_metadata: Arc<RwLock<HashMap<String, StreamMetadata>>>,
     pub cluster_info: Arc<RwLock<ClusterInfo>>,
+    /// Resilience circuit breaker, lazily built from
+    /// `nats_config.request_reply_config.circuit_breaker` when configured. When
+    /// present it gates `publish()` and records success/failure so a configured
+    /// circuit breaker is actually enforced instead of being ignored.
+    pub circuit_breaker: Arc<RwLock<Option<Arc<CircuitBreaker>>>>,
 }
 
 impl NatsProducer {
@@ -100,7 +108,44 @@ impl NatsProducer {
             publish_semaphore: Arc::new(Semaphore::new(1000)),
             stream_metadata: Arc::new(RwLock::new(HashMap::new())),
             cluster_info: Arc::new(RwLock::new(ClusterInfo::default())),
+            circuit_breaker: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Lazily obtain the circuit breaker if one is configured.
+    async fn get_circuit_breaker(&self) -> Option<Arc<CircuitBreaker>> {
+        let cb_config = self
+            .nats_config
+            .request_reply_config
+            .as_ref()
+            .and_then(|rr| rr.circuit_breaker.clone())?;
+
+        {
+            let guard = self.circuit_breaker.read().await;
+            if let Some(cb) = guard.as_ref() {
+                return Some(cb.clone());
+            }
+        }
+
+        let mut guard = self.circuit_breaker.write().await;
+        if let Some(cb) = guard.as_ref() {
+            return Some(cb.clone());
+        }
+        // Map the request-reply circuit breaker config onto the resilient
+        // circuit breaker state machine's configuration.
+        let resilient_config = ResilientCircuitBreakerConfig {
+            failure_threshold: cb_config.failure_threshold,
+            success_threshold: 1,
+            timeout_seconds: cb_config.recovery_timeout.as_secs(),
+            half_open_max_calls: cb_config.half_open_max_calls,
+            enable_adaptive_thresholds: false,
+            enable_ml_prediction: false,
+            window_size_seconds: 60,
+            slow_call_threshold_ms: 1000,
+        };
+        let cb = Arc::new(CircuitBreaker::new(resilient_config));
+        *guard = Some(cb.clone());
+        Some(cb)
     }
 
     pub fn with_nats_config(mut self, nats_config: NatsConfig) -> Self {
@@ -268,6 +313,24 @@ impl NatsProducer {
             self.nats_config.subject_prefix, nats_event.event_type
         );
 
+        // Gate the publish on the circuit breaker when configured. An open
+        // circuit fails fast instead of hammering an unhealthy broker.
+        let circuit_breaker = self.get_circuit_breaker().await;
+        if let Some(cb) = &circuit_breaker {
+            if !cb.allow_call().await {
+                let mut stats = self.stats.write().await;
+                stats.events_failed += 1;
+                return Err(anyhow!("NATS circuit breaker is open; publish rejected"));
+            }
+        }
+
+        // If queue groups are configured, route to the group subject selected by
+        // its load balancing strategy instead of the default subject.
+        let subject = match self.select_queue_group_subject(&subject).await {
+            Some(routed) => routed,
+            None => subject,
+        };
+
         #[cfg(feature = "nats")]
         {
             if self.jetstream.is_none() {
@@ -293,6 +356,9 @@ impl NatsProducer {
                 {
                     Ok(_ack) => {
                         let latency = start_time.elapsed().as_millis() as u64;
+                        if let Some(cb) = &circuit_breaker {
+                            cb.record_success(latency).await;
+                        }
                         let mut stats = self.stats.write().await;
                         stats.events_published += 1;
                         stats.bytes_sent += payload.len() as u64;
@@ -314,6 +380,9 @@ impl NatsProducer {
                         debug!("Published event to NATS: {}", nats_event.event_id);
                     }
                     Err(e) => {
+                        if let Some(cb) = &circuit_breaker {
+                            cb.record_failure("publish_error").await;
+                        }
                         let mut stats = self.stats.write().await;
                         stats.events_failed += 1;
                         stats.delivery_errors += 1;
@@ -328,6 +397,10 @@ impl NatsProducer {
         #[cfg(not(feature = "nats"))]
         {
             debug!("Mock NATS publish: {} to {}", nats_event.event_id, subject);
+            if let Some(cb) = &circuit_breaker {
+                cb.record_success(start_time.elapsed().as_millis() as u64)
+                    .await;
+            }
             let mut stats = self.stats.write().await;
             stats.events_published += 1;
         }
@@ -451,34 +524,54 @@ impl NatsProducer {
         self.stats.read().await.clone()
     }
 
-    /// Determine if message should be processed based on load balancing strategy
-    fn should_process_message(
-        strategy: &LoadBalancingStrategy,
-        message_count: u64,
-        _subject: &str,
-    ) -> bool {
-        match strategy {
-            LoadBalancingStrategy::RoundRobin => message_count % 2 == 0, // Simple implementation
-            LoadBalancingStrategy::Random => rng().random::<bool>(),
-            LoadBalancingStrategy::LeastConnections => true, // Simplified
-            LoadBalancingStrategy::WeightedRoundRobin(_weights) => true, // Simplified
-            LoadBalancingStrategy::Consistent => true,       // Simplified
+    /// Select which queue-group subject a message should be routed to based on
+    /// the group's load balancing strategy, consulting `nats_config.queue_groups`
+    /// (previously configured but never read). Returns `None` when no queue
+    /// groups are configured, in which case the default subject is used.
+    async fn select_queue_group_subject(&self, base_subject: &str) -> Option<String> {
+        let group = self.nats_config.queue_groups.first()?;
+        if group.subjects.is_empty() {
+            return None;
         }
-    }
 
-    // Circuit breaker helper methods
-    async fn is_circuit_open(&self, _config: &CircuitBreakerConfig) -> Result<bool> {
-        // Simplified implementation - in production, you'd maintain circuit state
-        Ok(false)
-    }
+        let message_count = self.stats.read().await.events_published;
+        let index = match &group.load_balancing_strategy {
+            LoadBalancingStrategy::RoundRobin => (message_count as usize) % group.subjects.len(),
+            LoadBalancingStrategy::Random => {
+                (rng().random::<u64>() as usize) % group.subjects.len()
+            }
+            LoadBalancingStrategy::WeightedRoundRobin(weights) if !weights.is_empty() => {
+                // Weighted selection over the provided weights, mapped onto the
+                // available subjects.
+                let total: u64 = weights.iter().map(|w| *w as u64).sum();
+                if total == 0 {
+                    (message_count as usize) % group.subjects.len()
+                } else {
+                    let mut target = message_count % total;
+                    let mut chosen = 0usize;
+                    for (i, w) in weights.iter().enumerate() {
+                        let w = *w as u64;
+                        if target < w {
+                            chosen = i % group.subjects.len();
+                            break;
+                        }
+                        target -= w;
+                    }
+                    chosen
+                }
+            }
+            // Consistent hashing keyed by the base subject.
+            LoadBalancingStrategy::Consistent => {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                base_subject.hash(&mut hasher);
+                (hasher.finish() as usize) % group.subjects.len()
+            }
+            // LeastConnections and empty-weight WeightedRoundRobin fall back to
+            // round-robin (no per-connection counters are tracked here).
+            _ => (message_count as usize) % group.subjects.len(),
+        };
 
-    async fn record_circuit_success(&self, _config: &CircuitBreakerConfig) -> Result<()> {
-        // Record success for circuit breaker
-        Ok(())
-    }
-
-    async fn record_circuit_failure(&self, _config: &CircuitBreakerConfig) -> Result<()> {
-        // Record failure for circuit breaker
-        Ok(())
+        group.subjects.get(index).cloned()
     }
 }

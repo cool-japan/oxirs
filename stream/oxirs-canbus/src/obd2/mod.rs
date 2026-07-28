@@ -233,6 +233,8 @@ pub enum ObdValue {
     Pressure(f64),
     /// Time in seconds
     Seconds(f64),
+    /// Signed angle in degrees (e.g. ignition timing advance, before/after TDC)
+    Degrees(f64),
     /// OBD standard identifier
     Standard(u8),
     /// Raw uninterpreted bytes
@@ -251,6 +253,7 @@ impl ObdValue {
             Self::Km(v) => format!("{:.0} {}", v, unit),
             Self::Pressure(v) => format!("{:.1} {}", v, unit),
             Self::Seconds(v) => format!("{:.0} {}", v, unit),
+            Self::Degrees(v) => format!("{:.1} {}", v, unit),
             Self::Standard(v) => format!("Standard {}", v),
             Self::Raw(bytes) => {
                 let hex: Vec<String> = bytes.iter().map(|b| format!("{:02X}", b)).collect();
@@ -353,7 +356,7 @@ impl ObdResponse {
             0x0D => ObdValue::Speed(a as f64),
 
             // PID 0x0E: Timing advance = (A - 128) / 2 degrees
-            0x0E => ObdValue::Raw(vec![((a as f64 - 128.0) / 2.0) as u8]),
+            0x0E => ObdValue::Degrees((a as f64 - 128.0) / 2.0),
 
             // PID 0x0F: Intake air temperature = A - 40 °C
             0x0F => ObdValue::Temperature(a as f64 - 40.0),
@@ -1122,6 +1125,45 @@ mod tests {
         assert_eq!(ObdService::from_byte(0x01), Some(ObdService::CurrentData));
         assert_eq!(ObdService::from_byte(0x03), Some(ObdService::StoredDtcs));
         assert_eq!(ObdService::from_byte(0xFF), None);
+    }
+
+    // ---- PID 0x0E: Timing advance (regression) ----
+
+    #[test]
+    fn regression_decode_timing_advance_negative() {
+        // PID 0x0E: (A - 128) / 2 degrees
+        // A=0x00 (0): (0 - 128) / 2 = -64.0 degrees (fully retarded)
+        // Before the fix this saturated to a u8 Raw(0), indistinguishable
+        // from an actual 0.0 degree reading.
+        let resp = ObdResponse::new(0x0E, vec![0x00]);
+        let value = resp.decode();
+        assert!(matches!(value, ObdValue::Degrees(d) if (d - (-64.0)).abs() < 0.01));
+    }
+
+    #[test]
+    fn regression_decode_timing_advance_zero() {
+        // A=0x80 (128): (128 - 128) / 2 = 0.0 degrees
+        let resp = ObdResponse::new(0x0E, vec![0x80]);
+        let value = resp.decode();
+        assert!(matches!(value, ObdValue::Degrees(d) if d.abs() < 0.01));
+    }
+
+    #[test]
+    fn regression_decode_timing_advance_positive() {
+        // A=0xFF (255): (255 - 128) / 2 = 63.5 degrees
+        let resp = ObdResponse::new(0x0E, vec![0xFF]);
+        let value = resp.decode();
+        assert!(matches!(value, ObdValue::Degrees(d) if (d - 63.5).abs() < 0.01));
+    }
+
+    #[test]
+    fn regression_timing_advance_display_string_shows_signed_degrees() {
+        let decoder = ObdDecoder::new();
+        let resp = ObdResponse::new(0x0E, vec![0x00]);
+        let s = decoder.format_response(&resp);
+        assert!(s.contains("Timing Advance"));
+        assert!(s.contains("-64.0"));
+        assert!(s.contains("before TDC"));
     }
 
     #[test]

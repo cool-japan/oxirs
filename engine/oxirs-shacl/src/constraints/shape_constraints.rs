@@ -16,7 +16,7 @@
 
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
 use crate::{validation::ValidationEngine, Result, ShaclError, ShapeId, ValidationConfig};
-use oxirs_core::{model::Term, Object, Predicate, Store, Subject};
+use oxirs_core::{model::Term, Store, Subject};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -466,50 +466,17 @@ impl QualifiedValueShapeConstraint {
                 )))
             }
         } else {
-            tracing::trace!("value_conforms_to_shape: no shapes_registry, using fallback");
-            // Fallback to basic type checking for backward compatibility
-            // This handles the case where full shape context is not available
-            self.basic_type_conformance_check(value, store)
+            tracing::trace!(
+                "value_conforms_to_shape: no shapes_registry, failing loud (no fabricated result)"
+            );
+            // No shapes registry available: we cannot know whether `value`
+            // conforms to `self.shape`, so fail loudly rather than fabricate
+            // a pass/fail result (matches NodeConstraint/PropertyConstraint's
+            // behavior for the same situation, see above).
+            Err(ShaclError::ValidationEngine(
+                "Shapes registry not available in constraint context".to_string(),
+            ))
         }
-    }
-
-    /// Basic type conformance check as fallback when full shape context unavailable
-    fn basic_type_conformance_check(&self, value: &Term, store: &dyn Store) -> Result<bool> {
-        // For the test cases, we're checking if the value conforms to a "FriendShape"
-        // which requires the value to have rdf:type Friend
-        if self.shape.as_str().contains("FriendShape") {
-            // Check if the value has type Friend
-            if let Term::NamedNode(node) = value {
-                // Look for rdf:type Friend triples
-                let type_predicate = match oxirs_core::model::NamedNode::new(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-                ) {
-                    Ok(pred) => pred,
-                    Err(_) => return Ok(false),
-                };
-
-                let friend_type =
-                    match oxirs_core::model::NamedNode::new("http://example.org/Friend") {
-                        Ok(friend) => friend,
-                        Err(_) => return Ok(false),
-                    };
-
-                // Check if the store contains the triple: value rdf:type Friend
-                let subject: Subject = node.clone().into();
-                let predicate: Predicate = type_predicate.into();
-                let object: Object = friend_type.clone().into();
-                let quads =
-                    store.find_quads(Some(&subject), Some(&predicate), Some(&object), None)?;
-                if !quads.is_empty() {
-                    return Ok(true);
-                }
-            }
-            return Ok(false);
-        }
-
-        // For other shapes without full context, conservatively return false
-        // This prevents false positives in qualified cardinality validation
-        Ok(false)
     }
 
     /// Enhanced evaluation with disjoint checking
@@ -1065,8 +1032,10 @@ mod tests {
     }
 
     #[test]
-    fn test_qualified_max_with_friend_type_satisfied() {
-        // FriendShape fallback: value that has rdf:type Friend => conforms
+    fn regression_qualified_value_shape_no_registry_fails_loud_not_friendshape_hack() {
+        // With no shapes_registry in the ConstraintContext and non-empty values,
+        // value_conforms_to_shape must fail loudly (Err) instead of fabricating
+        // a pass/fail result via a hardcoded "FriendShape" substring match.
         let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
             .with_qualified_min_count(1)
             .with_qualified_max_count(2);
@@ -1075,25 +1044,28 @@ mod tests {
         insert_type_triple(&store, friend_iri, "http://example.org/Friend");
 
         let ctx = base_ctx(vec![make_iri(friend_iri)]);
-        // The fallback checks if value has rdf:type Friend => conforms => count=1 >= min=1
-        assert!(c.evaluate(&ctx, &store).expect("eval").is_satisfied());
+        let result = c.evaluate(&ctx, &store);
+        assert!(
+            result.is_err(),
+            "evaluate() must fail loudly without a shapes registry, not fabricate a result"
+        );
     }
 
     #[test]
-    fn test_qualified_min_with_non_friend_violated() {
-        // FriendShape fallback: value that does NOT have rdf:type Friend => non-conforming
+    fn regression_qualified_min_no_registry_non_empty_values_fails_loud() {
         let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
             .with_qualified_min_count(1);
         let store = ConcreteStore::new().expect("store");
-        // Do not insert type triple, so the value does not conform
         let ctx = base_ctx(vec![make_iri("http://example.org/stranger")]);
-        // Count conforming = 0 < min_count = 1 => violated
-        assert!(c.evaluate(&ctx, &store).expect("eval").is_violated());
+        let result = c.evaluate(&ctx, &store);
+        assert!(
+            result.is_err(),
+            "evaluate() must fail loudly without a shapes registry, not fabricate a result"
+        );
     }
 
     #[test]
-    fn test_qualified_max_exceeded_violated() {
-        // FriendShape fallback: 3 friends, max_count = 2 => violated
+    fn regression_qualified_max_no_registry_non_empty_values_fails_loud() {
         let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
             .with_qualified_max_count(2);
         let store = ConcreteStore::new().expect("store");
@@ -1106,7 +1078,11 @@ mod tests {
             make_iri("http://example.org/friend2"),
             make_iri("http://example.org/friend3"),
         ]);
-        assert!(c.evaluate(&ctx, &store).expect("eval").is_violated());
+        let result = c.evaluate(&ctx, &store);
+        assert!(
+            result.is_err(),
+            "evaluate() must fail loudly without a shapes registry, not fabricate a result"
+        );
     }
 
     #[test]

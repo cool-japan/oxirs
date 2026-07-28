@@ -8,7 +8,7 @@ CANbus/J1939 protocol support for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.4.0) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.4.1) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 
@@ -54,7 +54,7 @@ CANbus/J1939 protocol support for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-canbus = "0.3.2"
+oxirs-canbus = "0.4.1"
 ```
 
 **Note**: Linux only (requires socketcan kernel module).
@@ -230,7 +230,7 @@ See `/tmp/oxirs_cli_phase_d_guide.md` for complete CLI documentation.
 
 ## Production Status
 
-- ✅ **1,183 tests passing** - 100% success rate
+- ✅ **1,192 tests passing** - 100% success rate
 - ✅ **Zero warnings** - Strict code quality enforcement
 - ✅ **7 examples** - Complete usage documentation
 - ✅ **54 files, 24,855 lines** - Comprehensive implementation

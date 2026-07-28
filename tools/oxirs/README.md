@@ -1,12 +1,12 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: v0.4.0 — release preparation on branch `0.4.0`, last verified 2026-07-19
+**Status**: v0.4.1 — release preparation on branch `0.4.1`, last verified 2026-07-28
 
-**Tests**: 1279 passed, 0 failed (`cargo nextest run -p oxirs`)
+**Tests**: 1311 passed, 0 failed (`cargo nextest run -p oxirs`)
 
 ⚡ **Production-Ready**: APIs are stable and tested. Ready for production use with comprehensive documentation.
 
@@ -51,7 +51,7 @@ cd oxirs/tools/oxirs
 cargo install --path .
 
 # Or with all optional features (full-text search, geo, PDF export)
-cargo install --path . --features all-features
+cargo install --path . --features full-cli
 ```
 
 To just produce a binary without installing it onto your `PATH`:
@@ -739,4 +739,4 @@ RUST_LOG=oxirs_core=debug,oxirs_arq=trace oxirs query mydata query.sparql
 
 ---
 
-**OxiRS CLI v0.3.2** - Production-ready command-line interface for semantic web operations
+**OxiRS CLI v0.4.1** - Production-ready command-line interface for semantic web operations

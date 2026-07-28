@@ -914,10 +914,11 @@ fn semicolon_in_optional_and_construct() {
 }
 
 #[test]
-fn blank_node_and_collection_syntax_are_clean_parse_errors() {
+fn blank_node_and_collection_syntax_parse() {
     // Blank-node property lists `[ … ]` / `[]` and RDF collections `( … )` are
-    // not yet implemented. They must surface as a clear parse error (a 4xx over
-    // HTTP), never a silent wrong answer.
+    // now supported (R8): they expand to triples at parse time. (Full coverage
+    // of the expansion lives in tests/blank_node_collection_test.rs; this is the
+    // smoke guard that they no longer 4xx.)
     for query in [
         "PREFIX : <http://ex/> SELECT * WHERE { [ :p ?o ] }",
         "PREFIX : <http://ex/> SELECT * WHERE { [] :p ?o }",
@@ -926,8 +927,8 @@ fn blank_node_and_collection_syntax_are_clean_parse_errors() {
     ] {
         let mut parser = QueryParser::new();
         assert!(
-            parser.parse(query).is_err(),
-            "unsupported blank-node/collection syntax must be a parse error: `{query}`"
+            parser.parse(query).is_ok(),
+            "blank-node/collection syntax must now parse: `{query}`"
         );
     }
 }
@@ -1258,15 +1259,16 @@ fn eval_in_and_not_in() {
 }
 
 #[test]
-fn subquery_is_a_clean_parse_error() {
-    // A `{ SELECT … }` subquery is not yet implemented; it must be a clear parse
-    // error (a 4xx over HTTP), never a silent wrong answer.
+fn subquery_parses() {
+    // A `{ SELECT … }` subquery is now supported (R8, SPARQL 1.1 §8.2.4): it
+    // lowers to a projected sub-tree joined into the outer BGP. (Full coverage
+    // in tests/subquery_test.rs; this is the smoke guard that it no longer 4xx.)
     let mut parser = QueryParser::new();
     assert!(
         parser
             .parse("SELECT ?c WHERE { { SELECT ?c WHERE { ?c a <http://ex/Concept> } } }")
-            .is_err(),
-        "an unsupported subquery must be a parse error, not a silent result"
+            .is_ok(),
+        "a subquery must now parse, not error"
     );
 }
 
@@ -1456,5 +1458,216 @@ fn perf_optional_join_is_not_nested_loop() {
         30,
         20_000,
         "optional-join",
+    );
+}
+
+// --- XSD constructor/cast functions (SPARQL 1.1 §17.5) ----------------------
+// These used to fall through to the unknown-function arm, so a BIND target
+// stayed silently unbound and a FILTER dropped every row.
+
+#[test]
+fn eval_xsd_integer_cast_binds_typed_integer() {
+    let ds = multilingual_dataset();
+    let rows = run(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
+         SELECT ?c ?n WHERE { ?c <http://ex/ref> ?o BIND(xsd:integer(\"5\") AS ?n) }",
+        &ds,
+    );
+    assert_eq!(rows.len(), 1, "one ref triple: {rows:?}");
+    match rows[0].get(&var("n")) {
+        Some(Term::Literal(lit)) => {
+            assert_eq!(lit.value, "5");
+            assert_eq!(
+                lit.datatype.as_ref().map(|d| d.as_str()),
+                Some("http://www.w3.org/2001/XMLSchema#integer"),
+                "cast result must be typed xsd:integer"
+            );
+        }
+        other => panic!("xsd:integer(\"5\") must bind a literal, got {other:?}"),
+    }
+}
+
+#[test]
+fn eval_xsd_cast_works_without_prefix_declaration() {
+    // Without a PREFIX xsd: declaration the parser hands the evaluator the
+    // raw "xsd:integer" spelling — it must still be recognized.
+    let ds = multilingual_dataset();
+    let rows = run(
+        "SELECT ?c ?n WHERE { ?c <http://ex/ref> ?o BIND(xsd:integer(\"7\") AS ?n) }",
+        &ds,
+    );
+    assert_eq!(rows.len(), 1, "one ref triple: {rows:?}");
+    match rows[0].get(&var("n")) {
+        Some(Term::Literal(lit)) => assert_eq!(lit.value, "7"),
+        other => panic!("unprefixed xsd:integer must still cast, got {other:?}"),
+    }
+}
+
+#[test]
+fn eval_xsd_casts_string_decimal_boolean() {
+    let ds = multilingual_dataset();
+    let rows = run(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
+         SELECT ?c ?s ?d ?b WHERE { ?c <http://ex/ref> ?o \
+           BIND(xsd:string(42) AS ?s) \
+           BIND(xsd:decimal(\"2.5\") AS ?d) \
+           BIND(xsd:boolean(\"true\") AS ?b) }",
+        &ds,
+    );
+    assert_eq!(rows.len(), 1, "one ref triple: {rows:?}");
+    let lit_of = |name: &str| match rows[0].get(&var(name)) {
+        Some(Term::Literal(lit)) => lit.clone(),
+        other => panic!("?{name} must bind a literal, got {other:?}"),
+    };
+    let s = lit_of("s");
+    assert_eq!(s.value, "42");
+    assert_eq!(
+        s.datatype.as_ref().map(|d| d.as_str()),
+        Some("http://www.w3.org/2001/XMLSchema#string")
+    );
+    let d = lit_of("d");
+    assert_eq!(d.value, "2.5");
+    assert_eq!(
+        d.datatype.as_ref().map(|d| d.as_str()),
+        Some("http://www.w3.org/2001/XMLSchema#decimal")
+    );
+    let b = lit_of("b");
+    assert_eq!(b.value, "true");
+    assert_eq!(
+        b.datatype.as_ref().map(|d| d.as_str()),
+        Some("http://www.w3.org/2001/XMLSchema#boolean")
+    );
+}
+
+#[test]
+fn eval_xsd_cast_of_stored_integer_in_filter() {
+    // Cast a stored xsd:integer to xsd:string and compare: the FILTER path
+    // must evaluate the cast, not error out or drop rows silently.
+    let ds = multilingual_dataset();
+    let rows = run(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
+         SELECT ?c WHERE { ?c <http://ex/age> ?a FILTER(xsd:string(?a) = \"30\") }",
+        &ds,
+    );
+    assert_eq!(rows.len(), 1, "c1's age casts to \"30\": {rows:?}");
+}
+
+#[test]
+fn eval_xsd_integer_cast_failure_leaves_bind_target_unbound() {
+    // SPARQL 1.1 §18.6: an error in a BIND expression leaves the target
+    // variable unbound but keeps the row.
+    let ds = multilingual_dataset();
+    let rows = run(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
+         SELECT ?c ?n WHERE { ?c <http://ex/ref> ?o BIND(xsd:integer(\"abc\") AS ?n) }",
+        &ds,
+    );
+    assert_eq!(rows.len(), 1, "the row itself must survive: {rows:?}");
+    assert!(
+        !rows[0].contains_key(&var("n")),
+        "a failed cast must leave ?n unbound, not bound to garbage: {rows:?}"
+    );
+}
+
+#[test]
+fn eval_xsd_cast_rejects_language_tagged_literals() {
+    // §17.5's cast table has no rdf:langString row: "犬"@ja must not cast,
+    // even to xsd:string (STR() is the tool for that).
+    let ds = multilingual_dataset();
+    let rows = run(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
+         SELECT ?c ?x WHERE { ?c <http://ex/label> ?l \
+           FILTER(lang(?l) = \"ja\") BIND(xsd:string(?l) AS ?x) }",
+        &ds,
+    );
+    assert_eq!(rows.len(), 2, "both @ja rows survive: {rows:?}");
+    for row in &rows {
+        assert!(
+            !row.contains_key(&var("x")),
+            "casting a lang-tagged literal must leave the BIND target unbound: {row:?}"
+        );
+    }
+}
+
+#[test]
+fn eval_xsd_decimal_cast_preserves_big_integer_digits() {
+    // xsd:decimal is arbitrary-precision: digits beyond f64's 2^53 must not
+    // be rounded away by the cast.
+    let ds = multilingual_dataset();
+    let rows = run(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
+         SELECT ?c ?d WHERE { ?c <http://ex/ref> ?o \
+           BIND(xsd:decimal(\"10000000000000000001\") AS ?d) }",
+        &ds,
+    );
+    assert_eq!(rows.len(), 1);
+    match rows[0].get(&var("d")) {
+        Some(Term::Literal(lit)) => assert_eq!(
+            lit.value, "10000000000000000001",
+            "every digit must survive the cast"
+        ),
+        other => panic!("?d must bind a literal, got {other:?}"),
+    }
+}
+
+#[test]
+fn eval_xsd_float_cast_rejects_non_xsd_special_spellings() {
+    // Rust's f64 parser accepts "inf"/"nan" case-insensitively, but XSD's
+    // lexical space only admits INF, +INF, -INF, NaN.
+    let ds = multilingual_dataset();
+    let rows = run(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
+         SELECT ?c ?f ?g WHERE { ?c <http://ex/ref> ?o \
+           BIND(xsd:float(\"inf\") AS ?f) BIND(xsd:float(\"NaN\") AS ?g) }",
+        &ds,
+    );
+    assert_eq!(rows.len(), 1);
+    assert!(
+        !rows[0].contains_key(&var("f")),
+        "\"inf\" is not an XSD float lexical: {rows:?}"
+    );
+    match rows[0].get(&var("g")) {
+        Some(Term::Literal(lit)) => assert_eq!(lit.value, "NaN", "canonical NaN is valid"),
+        other => panic!("?g must bind NaN, got {other:?}"),
+    }
+}
+
+#[test]
+fn eval_bracketed_iri_function_call_form() {
+    // SPARQL grammar `iriOrFunction`: <http://…#integer>("5") is the
+    // bracketed spelling of xsd:integer("5"). The parser used to leave the
+    // `(` in the stream and fail the whole query.
+    let ds = multilingual_dataset();
+    let rows = run(
+        "SELECT ?c ?n WHERE { ?c <http://ex/ref> ?o \
+           BIND(<http://www.w3.org/2001/XMLSchema#integer>(\"5\") AS ?n) }",
+        &ds,
+    );
+    assert_eq!(rows.len(), 1);
+    match rows[0].get(&var("n")) {
+        Some(Term::Literal(lit)) => {
+            assert_eq!(lit.value, "5");
+            assert_eq!(
+                lit.datatype.as_ref().map(|d| d.as_str()),
+                Some("http://www.w3.org/2001/XMLSchema#integer")
+            );
+        }
+        other => panic!("bracketed-IRI call must bind ?n, got {other:?}"),
+    }
+}
+
+#[test]
+fn eval_plain_iri_in_expression_still_parses() {
+    // Guard for the parser change: an IRI NOT followed by `(` must stay a
+    // plain term expression.
+    let ds = multilingual_dataset();
+    let rows = run(
+        "SELECT ?c WHERE { ?c <http://ex/ref> ?o FILTER(?o = <http://ex/other>) }",
+        &ds,
+    );
+    assert_eq!(
+        rows.len(),
+        1,
+        "IRI equality FILTER must still work: {rows:?}"
     );
 }

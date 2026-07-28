@@ -29,6 +29,9 @@ thiserror.workspace = true
 # FILTER(regex(...)) support in the lightweight in-memory SPARQL executor
 regex.workspace = true
 
+# RFC 3986 §5.3 reference resolution for SPARQL BASE IRI handling
+url.workspace = true
+
 # WASM bindings
 wasm-bindgen.workspace = true
 js-sys.workspace = true
@@ -41,6 +44,13 @@ sparql = []
 reasoning = []
 shacl = []
 jsonld = []
+# Opt-in, off by default: a deterministic, in-memory *mock* SPARQL endpoint
+# client (`endpoint_client`) that fabricates responses from query text and
+# performs no network I/O whatsoever. It exists for tests/demos that need a
+# stand-in `EndpointClient` without a real HTTP round-trip. Gated behind this
+# feature (rather than compiled in by default) so it can never be mistaken
+# for, or accidentally wired up as, a real SPARQL protocol client.
+mock-endpoint-client = []
 
 [package.metadata.docs.rs]
 all-features = true

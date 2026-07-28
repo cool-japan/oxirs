@@ -7,6 +7,7 @@
 //!
 //! Reference: Yang et al. "Embedding Entities and Relations for Learning and Inference in Knowledge Bases" (2014)
 
+use crate::models::serialization::{BaseModelSnapshot, MatrixF64};
 use crate::models::{common::*, BaseModel};
 use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
@@ -15,9 +16,23 @@ use scirs2_core::ndarray_ext::{Array1, Array2};
 #[allow(unused_imports)]
 use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
 use std::ops::AddAssign;
+use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, info, warn};
+
+/// Serializable representation of a DistMult model for persistence.
+#[derive(Debug, Serialize, Deserialize)]
+struct DistMultSerializable {
+    base: BaseModelSnapshot,
+    entity_embeddings: MatrixF64,
+    relation_embeddings: MatrixF64,
+    embeddings_initialized: bool,
+    dropout_rate: f64,
+    loss_function: LossFunction,
+}
 use uuid::Uuid;
 
 /// DistMult embedding model
@@ -605,11 +620,48 @@ impl EmbeddingModel for DistMult {
 
     fn save(&self, path: &str) -> Result<()> {
         info!("Saving DistMult model to {}", path);
+
+        let serializable = DistMultSerializable {
+            base: BaseModelSnapshot::capture(&self.base),
+            entity_embeddings: MatrixF64::from_array(&self.entity_embeddings),
+            relation_embeddings: MatrixF64::from_array(&self.relation_embeddings),
+            embeddings_initialized: self.embeddings_initialized,
+            dropout_rate: self.dropout_rate,
+            loss_function: self.loss_function,
+        };
+
+        let file = File::create(path)
+            .map_err(|e| anyhow!("Failed to create model file {}: {}", path, e))?;
+        let writer = BufWriter::new(file);
+        oxicode::serde::encode_into_std_write(&serializable, writer, oxicode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize DistMult model: {}", e))?;
+
+        info!("DistMult model saved successfully");
         Ok(())
     }
 
     fn load(&mut self, path: &str) -> Result<()> {
         info!("Loading DistMult model from {}", path);
+
+        if !Path::new(path).exists() {
+            return Err(anyhow!("Model file not found: {}", path));
+        }
+
+        let file =
+            File::open(path).map_err(|e| anyhow!("Failed to open model file {}: {}", path, e))?;
+        let reader = BufReader::new(file);
+        let (serializable, _): (DistMultSerializable, _) =
+            oxicode::serde::decode_from_std_read(reader, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize DistMult model: {}", e))?;
+
+        self.entity_embeddings = serializable.entity_embeddings.to_array()?;
+        self.relation_embeddings = serializable.relation_embeddings.to_array()?;
+        self.embeddings_initialized = serializable.embeddings_initialized;
+        self.dropout_rate = serializable.dropout_rate;
+        self.loss_function = serializable.loss_function;
+        serializable.base.restore_into(&mut self.base);
+
+        info!("DistMult model loaded successfully");
         Ok(())
     }
 

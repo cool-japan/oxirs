@@ -4,7 +4,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/oxirs-graphrag.svg)](https://crates.io/crates/oxirs-graphrag)
 [![docs.rs](https://docs.rs/oxirs-graphrag/badge.svg)](https://docs.rs/oxirs-graphrag)
-[![Tests](https://img.shields.io/badge/tests-1125%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
+[![Tests](https://img.shields.io/badge/tests-1148%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
 
 Microsoft-style GraphRAG implementation combining vector similarity search with knowledge graph topology for enhanced retrieval-augmented generation.
 

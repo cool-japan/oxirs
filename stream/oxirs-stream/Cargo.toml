@@ -27,8 +27,10 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-# NOTE: the Kafka (rdkafka) backend was quarantined into the `oxirs-stream-adapter-rdkafka`
-# crate (publish=false) per COOLJAPAN Pure Rust Policy v2 — it pulled rdkafka-sys + libz-sys.
+# NOTE: there is no Kafka backend. It was rdkafka-backed (rdkafka-sys + libz-sys),
+# quarantined into a publish=false adapter, and removed entirely in 0.4.1 — see
+# the CHANGELOG. `confluent_registry` (Schema Registry over reqwest) is what
+# remains of the Kafka integration, and it needs no broker.
 async-nats = { workspace = true, optional = true }
 chrono.workspace = true
 uuid.workspace = true
@@ -40,8 +42,13 @@ parking_lot.workspace = true
 bytes = { workspace = true }
 fastrand.workspace = true
 rayon.workspace = true
-aws-config = { version = "1.9", optional = true }
-aws-sdk-kinesis = { version = "1.110", optional = true }
+# Pure Rust TLS: `default-features = false` avoids aws-smithy-http-client's default feature set,
+# which compiles BOTH `rustls-aws-lc` (rustls 0.23.x, patched rustls-webpki 0.103.x) AND
+# `legacy-rustls-ring` (rustls 0.21.x, vulnerable rustls-webpki 0.101.7 -- RUSTSEC-2026-0104/0098/0099)
+# -- with the legacy stack winning dependency resolution. Re-enabling only this subset keeps the
+# modern rustls-aws-lc stack and drops the vulnerable rustls-webpki 0.101.7 from the tree entirely.
+aws-config = { version = "1.9", optional = true, default-features = false, features = ["default-https-client", "rt-tokio", "behavior-version-latest", "credentials-process", "sso"] }
+aws-sdk-kinesis = { version = "1.110", optional = true, default-features = false, features = ["default-https-client", "rt-tokio", "behavior-version-latest"] }
 aws-smithy-types = { version = "1.6", optional = true }
 redis = { workspace = true, features = ["tokio-comp", "connection-manager", "cluster-async", "streams"], optional = true }
 # NOTE: the Pulsar backend was quarantined into the `oxirs-stream-adapter-pulsar` crate
@@ -91,7 +98,16 @@ once_cell.workspace = true
 serde_yaml.workspace = true
 
 [build-dependencies]
-prost-build = { version = "0.14", optional = true }
+# Pure Rust `.proto` → Rust codegen (COOLJAPAN OxiProto ecosystem).
+#
+# Replaces `prost-build`, which shells out to a `protoc` binary that has to be
+# installed separately — a hard external-toolchain dependency that broke
+# `cargo build --all-features` on any machine without it (and on Windows in
+# particular). `oxiproto-build` parses `.proto` in-process with a pure-Rust
+# parser, and still emits prost-compatible code because it delegates codegen to
+# prost-build 0.14.3 internally — matching the `prost = "0.14"` runtime
+# dependency above, so the generated types are unchanged.
+oxiproto-build = { version = "0.1", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -101,7 +117,6 @@ tracing-subscriber.workspace = true
 [features]
 default = ["memory"]
 memory = []
-# `kafka` backend moved to the `oxirs-stream-adapter-rdkafka` crate (publish=false).
 nats = ["async-nats", "time"]
 kinesis = ["aws-config", "aws-sdk-kinesis", "aws-smithy-types"]
 redis = ["dep:redis"]
@@ -109,7 +124,7 @@ redis = ["dep:redis"]
 rabbitmq = ["dep:lapin", "time"]
 mqtt = ["dep:rumqttc"]
 opcua = []
-sparkplug = ["mqtt", "dep:prost-build"]
+sparkplug = ["mqtt", "dep:oxiproto-build"]
 industry40 = ["mqtt", "opcua", "sparkplug"]
 compression = []
 # GPU acceleration via scirs2-core's Pure-Rust `gpu` feature (`gpu = ["std"]`, no GPU FFI).
@@ -117,7 +132,8 @@ compression = []
 # feature-gated in scirs2-core. Enabling this here turns that on (see src/lib.rs).
 gpu = ["scirs2-core/gpu"]
 opentelemetry = ["dep:opentelemetry"]
-# Kafka/Pulsar are NOT here: they live in the publish=false adapter crates (Pure Rust Policy v2).
+# Pulsar is NOT here: it lives in the publish=false adapter crate (Pure Rust Policy v2).
+# Kafka is not here either — that backend was removed in 0.4.1.
 all-backends = ["nats", "kinesis", "redis", "rabbitmq", "mqtt", "opcua"]
 wasm = ["dep:wasmtime"]
 wasm-rsa = ["dep:rsa"]  # RUSTSEC-2023-0071: opt-in only; enables RSA WASM module signature verification (wasm_edge_processor.rs)
@@ -127,8 +143,8 @@ post-quantum = ["dep:pqcrypto-dilithium", "dep:pqcrypto-falcon", "dep:pqcrypto-s
 [package.metadata.docs.rs]
 # Use memory backend only for docs.rs (avoids async-nats system deps)
 features = ["memory", "compression"]
-# Exclude: nats, kinesis, redis, rabbitmq, wasm (wasmtime). Kafka/Pulsar live in the
-# publish=false oxirs-stream-adapter-{rdkafka,pulsar} crates.
+# Exclude: nats, kinesis, redis, rabbitmq, wasm (wasmtime). Pulsar lives in the
+# publish=false oxirs-stream-adapter-pulsar crate; Kafka was removed in 0.4.1.
 rustdoc-args = ["--cfg", "docsrs"]
 
 [[bench]]

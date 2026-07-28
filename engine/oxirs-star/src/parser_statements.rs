@@ -297,11 +297,12 @@ impl StarParser {
         // Parse the base triple
         let base_triple = self.parse_triple_pattern_safe(base_triple_str, context)?;
 
-        // If the base triple has a quoted triple as subject, insert it
-        // This is a regular assertion about a quoted triple, not just metadata
-        if base_triple.subject.is_quoted_triple() {
-            graph.insert(base_triple.clone())?;
-        }
+        // The annotation shorthand `{| |}` is syntactic sugar that expands to
+        // BOTH the base triple assertion AND the reification annotation
+        // triple(s) about it: `<s> <p> <o> .` plus `<<s p o>> ap ao .`.
+        // Always assert the base triple, regardless of what term its subject
+        // is (plain term or quoted triple).
+        graph.insert(base_triple.clone())?;
 
         // Create quoted triple from base triple for annotations
         let quoted_triple = StarTerm::quoted_triple(base_triple.clone());

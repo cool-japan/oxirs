@@ -10,7 +10,9 @@ RUN apt-get update && apt-get install -y \
     cmake \
     pkg-config \
     libssl-dev \
-    libnuma-dev \
+    # NOTE: libnuma-dev is no longer required. oxirs-vec discovers the NUMA
+    # topology from sysfs and applies memory policies with the raw mbind(2)
+    # syscall (Pure Rust), so nothing in the workspace links against libnuma.
     # GPU acceleration dependencies
     nvidia-cuda-dev \
     opencl-headers \

@@ -1,10 +1,10 @@
 # OxiRS Fuseki
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility**
 
-**Status**: v0.4.0 - Released 2026-07-19
+**Status**: v0.4.1 - Released 2026-07-26
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-oxirs-fuseki = "0.3.2"
+oxirs-fuseki = "0.4.1"
 ```
 
 ### As a Binary
@@ -167,7 +167,7 @@ Content-Type: text/turtle
 
 ## Operational Contracts
 
-These are the behaviors an operator should rely on when running `oxirs-fuseki` in production. They reflect the actual code (`src/server/types.rs`, `src/main.rs`, `src/lib.rs`) as of v0.4.0, not aspirational design.
+These are the behaviors an operator should rely on when running `oxirs-fuseki` in production. They reflect the actual code (`src/server/types.rs`, `src/main.rs`, `src/lib.rs`) as of v0.4.1, not aspirational design.
 
 ### `read_only` dataset resolution
 
@@ -195,7 +195,7 @@ SPARQL query execution never returns HTTP 200 with a silently-empty result on fa
 - A query that parses but fails during **execution** (unsupported construct, store error, federation failure, etc.) returns HTTP 500 with an error message.
 - `SELECT`, `ASK`, `CONSTRUCT`, and `DESCRIBE` all execute through the real oxirs-arq engine (`handlers/sparql/arq_exec.rs`) via a single parse-once dispatch — including `GRAPH`/`FROM`/`FROM NAMED` named-graph scoping, `SERVICE` HTTP federation, and aggregate/`HAVING` projections. There is no legacy "demo" fallback path left in the SELECT/ASK/CONSTRUCT/DESCRIBE handlers that could return 200 OK with an empty body on an unrecognized or unsupported query.
 
-Status-code guarantees, made precise (v0.4.0):
+Status-code guarantees, made precise (v0.4.1):
 
 - **Parse / validation errors are 400, not 500 or 200.** A malformed aggregate call inside `HAVING` — a wrong-arity aggregate such as `SUM()` or `COUNT(?a, ?b)` — is caught at parse time and returns HTTP 400, rather than parsing cleanly and failing deep in execution. The same wrong-arity check applies to aggregate projections in the `SELECT` list.
 - **A genuinely undefined function fails the whole query loudly.** An unknown function inside a `FILTER` or `HAVING` raises a typed `UnknownFunctionError` that surfaces as a 5xx, instead of being swallowed per row and silently shrinking the result set (a 200 with dropped rows).
@@ -347,7 +347,7 @@ GET /health
 ```json
 {
   "status": "healthy",
-  "version": "0.3.2",
+  "version": "0.4.1",
   "uptime": "2h 15m 30s",
   "datasets": {
     "example": {
@@ -586,9 +586,9 @@ Licensed under:
 
 ## Status
 
-🚀 **Production Release (v0.4.0)** - 2026-07-19
+🚀 **Production Release (v0.4.1)** - 2026-07-26
 
-**2,464 tests passing**, zero warnings
+**2,548 tests passing**, zero warnings
 
 Current features:
 - ✅ SPARQL query/update endpoints backed by persisted N-Quads datasets

@@ -248,18 +248,22 @@ fn bench_spatial_index_operations(c: &mut Criterion) {
     group.finish();
 }
 
-// NOTE: Point/LineString buffering needs GEOS (quarantined into
-// oxirs-geosparql-adapter-geos); only the Pure-Rust Polygon buffer is benchmarked here.
-#[cfg(feature = "rust-buffer")]
 fn bench_buffer_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("buffer_operations");
     group.sample_size(20);
 
     let polygon = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
+    let line = Geometry::from_wkt("LINESTRING(0 0, 10 0, 10 10)").unwrap();
 
     group.bench_function("buffer_polygon_1.0", |b| {
         b.iter(|| {
             let _buffered = buffer(black_box(&polygon), black_box(1.0)).unwrap();
+        });
+    });
+
+    group.bench_function("buffer_linestring_1.0", |b| {
+        b.iter(|| {
+            let _buffered = buffer(black_box(&line), black_box(1.0)).unwrap();
         });
     });
 
@@ -312,17 +316,12 @@ criterion_group!(index_benches, bench_spatial_index_operations,);
 
 criterion_group!(geometry_benches, bench_set_operations,);
 
-#[cfg(feature = "rust-buffer")]
 criterion_group!(buffer_benches, bench_buffer_operations,);
 
 // Main benchmark runner
-#[cfg(feature = "rust-buffer")]
 criterion_main!(
     core_benches,
     index_benches,
     geometry_benches,
     buffer_benches
 );
-
-#[cfg(not(feature = "rust-buffer"))]
-criterion_main!(core_benches, index_benches, geometry_benches);

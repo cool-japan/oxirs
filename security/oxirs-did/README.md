@@ -196,7 +196,7 @@ did:web:example.com%3A8080
 
 ```toml
 [dependencies]
-oxirs-did = { version = "0.3.2", features = ["did-web", "signed-graphs"] }
+oxirs-did = { version = "0.4.1", features = ["did-web", "signed-graphs"] }
 ```
 
 Available features:

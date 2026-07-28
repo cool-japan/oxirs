@@ -340,7 +340,7 @@ oxirs/                  # Cargoワークスペースルート
 │  ├─ oxirs-tdb         # MVCCレイヤー（TDB2互換）
 │  └─ oxirs-cluster     # Raft分散データセット
 ├─ stream/              # リアルタイムと連携
-│  ├─ oxirs-stream      # Kafka/NATS I/O、RDF Patch
+│  ├─ oxirs-stream      # NATS/Redis/MQTT I/O、RDF Patch
 │  └─ oxirs-federate    # SERVICEプランナー、GraphQLステッチング
 ├─ ai/
 │  ├─ oxirs-embed       # KG埋め込み（TransE、ComplEx...）
@@ -377,7 +377,7 @@ oxirs/                  # Cargoワークスペースルート
 | SPARQL連携（SERVICE） | `oxirs-federate` | ✅ 安定版（1148テスト、2PC） | ✅ |
 | フェデレーション認証 | `oxirs-federate` | ✅ 安定版（OAuth2/SAML/JWT） | 🔸 |
 | **リアルタイム & ストリーミング** | | | |
-| ストリーム処理（Kafka/NATS） | `oxirs-stream` | ✅ 安定版（1191テスト、SIMD） | 🔸 |
+| ストリーム処理（NATS/Redis/MQTT） | `oxirs-stream` | ✅ 安定版（1191テスト、SIMD） | 🔸 |
 | RDF Patch & SPARQL Updateデルタ | `oxirs-stream` | ✅ 安定版 | 🔸 |
 | **検索 & 地理空間** | | | |
 | 全文検索（`text:`） | `oxirs-textsearch` | ⏳ 計画中 | ✅ |

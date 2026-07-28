@@ -21,14 +21,23 @@ impl Store {
         })?;
         let mut brace_count = 0;
         let mut close_brace_pos = None;
-        let chars: Vec<char> = remaining.chars().collect();
-        for (i, &ch) in chars.iter().enumerate().skip(open_brace_pos) {
+        // Track the matching '}' by BYTE offset (via `char_indices`), not by the
+        // `chars().enumerate()` char index used previously. `open_brace_pos` is a
+        // byte offset (`find`), so mixing it with a char-index end bound made the
+        // final slice `&remaining[open_brace_pos + 1..close_brace_pos]` land in
+        // the middle of a multibyte code point (Japanese, emoji, …) inside the
+        // data block and panic ("byte index N is not a char boundary"). Iterating
+        // `char_indices` keeps both bounds byte-consistent and valid.
+        for (byte_idx, ch) in remaining
+            .char_indices()
+            .skip_while(|&(b, _)| b < open_brace_pos)
+        {
             match ch {
                 '{' => brace_count += 1,
                 '}' => {
                     brace_count -= 1;
                     if brace_count == 0 {
-                        close_brace_pos = Some(i);
+                        close_brace_pos = Some(byte_idx);
                         break;
                     }
                 }
@@ -38,6 +47,8 @@ impl Store {
         let close_brace_pos = close_brace_pos.ok_or_else(|| {
             FusekiError::update_execution("Matching closing brace '}' not found".to_string())
         })?;
+        // `open_brace_pos` indexes the ASCII '{' (1 byte); `close_brace_pos` is the
+        // byte offset of the matching ASCII '}'. Both are valid char boundaries.
         let data_block = &remaining[open_brace_pos + 1..close_brace_pos];
         Ok(data_block.trim().to_string())
     }

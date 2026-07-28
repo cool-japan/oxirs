@@ -1,11 +1,11 @@
 # OxiRS SAMM - Semantic Aspect Meta Model for Rust
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](../../../LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1%2C555%20passing-brightgreen)](./TODO.md)
+[![Tests](https://img.shields.io/badge/tests-1%2C609%20passing-brightgreen)](./TODO.md)
 [![Documentation](https://img.shields.io/badge/docs-100%25-brightgreen)](./src/lib.rs)
 
-**Status**: v0.4.0 - Released 2026-07-19
+**Status**: v0.4.1 - Released 2026-07-26
 ✅ APIs stable. Ready for production use with backward compatibility guarantees.
 
 ## Overview
@@ -47,7 +47,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-samm = "0.3.2"
+oxirs-samm = "0.4.1"
 ```
 
 ### Basic Usage
@@ -434,7 +434,7 @@ oxirs aas file.aasx to aspect       # AASX (default)
 
 ### Test Coverage
 
-**1,555 tests passing (100% pass rate)**:
+**1,609 tests passing (100% pass rate)**:
 - 245 unit tests (including 10 DTDL generator tests, 11 DTDL parser tests)
 - 16 advanced integration tests
 - 13 fuzz tests
@@ -514,7 +514,7 @@ Robust fuzz testing for parser resilience:
 
 ## Development Status
 
-### ✅ v0.3.2 Production-Ready
+### ✅ v0.4.1 Production-Ready
 
 **All major features complete and tested**:
 - [x] SAMM 2.0.0-2.3.0 full specification support
@@ -527,7 +527,7 @@ Robust fuzz testing for parser resilience:
 - [x] Performance optimizations (parallel, streaming)
 - [x] Production metrics and health checks
 - [x] BAMM to SAMM migration
-- [x] Comprehensive testing (1,549 tests)
+- [x] Comprehensive testing (1,609 tests)
 - [x] API stability guarantees
 - [x] Migration guide for Java users
 - [x] 6 runnable examples

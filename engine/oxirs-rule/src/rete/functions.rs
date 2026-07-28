@@ -514,4 +514,134 @@ mod tests {
         );
         Ok(())
     }
+    /// Regression: a two-atom rule body whose first atom is an `rdf:type`
+    /// triple (full RDF IRI) must still fire through `add_fact`.
+    ///
+    /// Previously `analyze_join_conditions` attached a `type_check` builtin
+    /// join condition, but `evaluate_builtin` had no arm for it and returned
+    /// `Ok(false)`, so the beta join silently rejected every match and no fact
+    /// was ever derived for such rules (the dominant shape in RDFS/OWL-RL).
+    #[test]
+    fn regression_rete_rdf_type_join_fires() -> Result<(), Box<dyn std::error::Error>> {
+        const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+        const SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+        let mut network = ReteNetwork::new();
+        // ?x rdf:type ?c , ?c rdfs:subClassOf ?d  =>  ?x rdf:type ?d
+        let rule = Rule {
+            name: "rdfs-subclass".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("x".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Variable("c".to_string()),
+                },
+                RuleAtom::Triple {
+                    subject: Term::Variable("c".to_string()),
+                    predicate: Term::Constant(SUBCLASS_OF.to_string()),
+                    object: Term::Variable("d".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("x".to_string()),
+                predicate: Term::Constant(RDF_TYPE.to_string()),
+                object: Term::Variable("d".to_string()),
+            }],
+        };
+        network.add_rule(&rule)?;
+        let facts = vec![
+            RuleAtom::Triple {
+                subject: Term::Constant("fido".to_string()),
+                predicate: Term::Constant(RDF_TYPE.to_string()),
+                object: Term::Constant("Dog".to_string()),
+            },
+            RuleAtom::Triple {
+                subject: Term::Constant("Dog".to_string()),
+                predicate: Term::Constant(SUBCLASS_OF.to_string()),
+                object: Term::Constant("Animal".to_string()),
+            },
+        ];
+        let derived = network.forward_chain(facts)?;
+        let expected = RuleAtom::Triple {
+            subject: Term::Constant("fido".to_string()),
+            predicate: Term::Constant(RDF_TYPE.to_string()),
+            object: Term::Constant("Animal".to_string()),
+        };
+        assert!(
+            derived.contains(&expected),
+            "rdf:type-based two-atom rule must fire; got: {derived:?}"
+        );
+        Ok(())
+    }
+    /// Regression: after `clear()` the network must remain reusable AND continue
+    /// to enforce compiled comparison filters. Previously `clear()` dropped
+    /// `enhanced_beta_nodes`, so a clear()-then-reuse cycle fell onto the
+    /// fallback join whose `apply_filter` returned `true` for every filter —
+    /// silently deriving facts that violate the rule's `>` guard.
+    #[test]
+    fn regression_rete_clear_preserves_filters() -> Result<(), Box<dyn std::error::Error>> {
+        let mut network = ReteNetwork::new();
+        // ?person :hasAge ?age , ?age > 18  =>  ?person :isAdult true
+        let rule = Rule {
+            name: "isAdult".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("person".to_string()),
+                    predicate: Term::Constant(":hasAge".to_string()),
+                    object: Term::Variable("age".to_string()),
+                },
+                RuleAtom::GreaterThan {
+                    left: Term::Variable("age".to_string()),
+                    right: Term::Literal("18".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("person".to_string()),
+                predicate: Term::Constant(":isAdult".to_string()),
+                object: Term::Literal("true".to_string()),
+            }],
+        };
+        network.add_rule(&rule)?;
+        // First use.
+        network.forward_chain(vec![RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant(":hasAge".to_string()),
+            object: Term::Literal("20".to_string()),
+        }])?;
+
+        // Reset facts, keep compiled rules, then reuse.
+        network.clear();
+
+        let reuse = network.forward_chain(vec![
+            RuleAtom::Triple {
+                subject: Term::Constant("mary".to_string()),
+                predicate: Term::Constant(":hasAge".to_string()),
+                object: Term::Literal("10".to_string()),
+            },
+            RuleAtom::Triple {
+                subject: Term::Constant("bob".to_string()),
+                predicate: Term::Constant(":hasAge".to_string()),
+                object: Term::Literal("30".to_string()),
+            },
+        ])?;
+
+        let adult_bob = RuleAtom::Triple {
+            subject: Term::Constant("bob".to_string()),
+            predicate: Term::Constant(":isAdult".to_string()),
+            object: Term::Literal("true".to_string()),
+        };
+        let adult_mary = RuleAtom::Triple {
+            subject: Term::Constant("mary".to_string()),
+            predicate: Term::Constant(":isAdult".to_string()),
+            object: Term::Literal("true".to_string()),
+        };
+        assert!(
+            reuse.contains(&adult_bob),
+            "bob (age 30) must satisfy age > 18 after clear+reuse; got: {reuse:?}"
+        );
+        assert!(
+            !reuse.contains(&adult_mary),
+            "mary (age 10) must NOT satisfy age > 18 — filter must survive clear(); got: {reuse:?}"
+        );
+        Ok(())
+    }
 }

@@ -1,10 +1,10 @@
 # OxiRS SHACL 🔍
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: v0.4.0 - Released 2026-07-19
+**Status**: v0.4.1 - Released 2026-07-26
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -40,8 +40,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-shacl = "0.3.2"
-oxirs-core = "0.3.2"
+oxirs-shacl = "0.4.1"
+oxirs-core = "0.4.1"
 ```
 
 ### Basic Usage
@@ -86,7 +86,7 @@ and [`examples/parallel_validation.rs`](examples/parallel_validation.rs), plus t
 
 ## 🏗️ Current Development Status
 
-This crate is production-ready. Core constraint types, the validation engine, and the public API are stable and covered by 2,140 passing tests (`--all-features`).
+This crate is production-ready. Core constraint types, the validation engine, and the public API are stable and covered by 2,210 passing tests (`--all-features`).
 
 ### Implementation Progress
 - ✅ Core constraint types (class, datatype, cardinality, range, string, etc.)

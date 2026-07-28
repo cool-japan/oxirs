@@ -163,6 +163,7 @@ pub fn build_minimal_app_state(
         startup_time: std::time::Instant::now(),
         system_monitor: Arc::new(parking_lot::Mutex::new(sysinfo::System::new())),
         audit_logger: Arc::new(oxirs_core::audit::InMemoryAuditLogger::new()),
+        sparql_cache: None,
         #[cfg(feature = "rate-limit")]
         rate_limiter: None,
     }

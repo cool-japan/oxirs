@@ -8,11 +8,14 @@ use std::{
 use tokio::sync::{mpsc, RwLock};
 
 use crate::{
-    error::Result,
+    error::{FusekiError, Result},
     store::Store,
     streaming::{CDCConfig, RDFEvent, StreamingManager},
 };
-use oxirs_core::{Quad, Triple};
+use oxirs_core::{
+    model::{GraphName, NamedNode},
+    Quad, Triple,
+};
 
 /// CDC listener trait for intercepting store operations
 #[async_trait::async_trait]
@@ -346,8 +349,35 @@ impl CDCStore {
     // For example:
 
     pub async fn add_triple(&self, triple: Triple, graph: Option<String>) -> Result<()> {
-        // Add to store
-        // self.inner.add_triple(triple.clone(), graph.clone()).await?;
+        // Build the quad to persist: either into the named graph (when
+        // `graph` is provided) or the default graph.
+        let quad = match &graph {
+            Some(graph_iri) => {
+                let named_graph = NamedNode::new(graph_iri).map_err(|e| {
+                    FusekiError::bad_request(format!("Invalid graph IRI '{graph_iri}': {e}"))
+                })?;
+                Quad::new(
+                    triple.subject().clone(),
+                    triple.predicate().clone(),
+                    triple.object().clone(),
+                    GraphName::NamedNode(named_graph),
+                )
+            }
+            None => Quad::from_triple(triple.clone()),
+        };
+
+        // Actually persist the triple in the underlying store before
+        // notifying listeners, and propagate any store error instead of
+        // silently reporting success on a dropped write.
+        let dataset = self.inner.get_dataset(None)?;
+        {
+            let store_guard = dataset
+                .read()
+                .map_err(|e| FusekiError::store(format!("Failed to acquire store lock: {e}")))?;
+            store_guard
+                .insert_quad(quad)
+                .map_err(|e| FusekiError::store(format!("Failed to insert triple: {e}")))?;
+        }
 
         // Notify CDC listeners
         let triple_clone = triple.clone();

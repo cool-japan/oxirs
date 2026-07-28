@@ -16,7 +16,7 @@
 //!
 //! ## Build behavior
 //!
-//! The crate's [`build.rs`] probes for the CUDA toolkit (`nvcc`). When found, the
+//! The crate's `build.rs` probes for the CUDA toolkit (`nvcc`). When found, the
 //! `cuda_runtime_available` cfg is set and the real FFI paths are compiled; when
 //! absent, host-memory fallbacks are compiled so the crate's own Rust still
 //! builds. Note that `cuda-runtime-sys` links `libcudart` only when a *final*

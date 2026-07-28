@@ -32,6 +32,13 @@ pub struct ServerSettings {
     #[serde(default)]
     pub backup_directory: Option<PathBuf>,
 
+    /// Root directory for static assets served via `/$/cdn/assets/*path`
+    /// (see [`crate::handlers::production::serve_static_asset`]). When
+    /// `None`, static asset serving is disabled and the route returns 404
+    /// for every request instead of silently pretending to serve files.
+    #[serde(default)]
+    pub static_asset_dir: Option<PathBuf>,
+
     /// Path to the configuration file (set at runtime)
     #[serde(skip)]
     pub config_file: Option<PathBuf>,

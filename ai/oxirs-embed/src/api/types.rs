@@ -70,11 +70,24 @@ pub struct BatchOptions {
     pub batch_size: Option<usize>,
 }
 
+/// A single entity that could not be embedded in a batch request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailedEmbedding {
+    /// The entity identifier that failed
+    pub entity: String,
+    /// Human-readable reason the embedding could not be produced
+    pub error: String,
+}
+
 /// Batch embedding response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchEmbeddingResponse {
     /// Embedding results
     pub embeddings: Vec<EmbeddingResponse>,
+    /// Entities that could not be embedded (e.g. unknown entities). Populated so
+    /// callers can distinguish partial success from silent data loss instead of
+    /// receiving fewer results than requested with no explanation.
+    pub failed: Vec<FailedEmbedding>,
     /// Total processing time in milliseconds
     pub total_time_ms: f64,
     /// Number of cache hits

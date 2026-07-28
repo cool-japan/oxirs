@@ -623,40 +623,163 @@ pub async fn execute_query(
 
     let execution_time_ms = start.elapsed().as_millis() as u64;
 
-    // Convert results to API format
-    let bindings = match results.inner {
-        oxirs_core::query::QueryResult::Select { bindings, .. } => bindings
-            .into_iter()
-            .map(|binding| {
-                binding
-                    .into_iter()
-                    .map(|(var, value)| {
-                        (
-                            var,
-                            BindingValue {
-                                value_type: "uri".to_string(), // Simplified
-                                value: value.to_string(),
-                                datatype: None,
-                                lang: None,
-                            },
-                        )
-                    })
-                    .collect()
-            })
-            .collect(),
-        _ => Vec::new(), // Handle other query types
+    // Convert results to API format, deriving the SPARQL 1.1 JSON Results
+    // `type`/`datatype`/`xml:lang` fields from the actual term variant and
+    // populating `head.vars` from the query's projected variables.
+    let (vars, bindings, boolean) = match results.inner {
+        oxirs_core::query::QueryResult::Select {
+            variables,
+            bindings,
+        } => {
+            let api_bindings: Vec<std::collections::HashMap<String, BindingValue>> = bindings
+                .into_iter()
+                .map(|binding| {
+                    binding
+                        .into_iter()
+                        .map(|(var, term)| (var, term_to_binding_value(&term)))
+                        .collect()
+                })
+                .collect();
+            (variables, Some(api_bindings), None)
+        }
+        oxirs_core::query::QueryResult::Ask(result) => (Vec::new(), None, Some(result)),
+        oxirs_core::query::QueryResult::Construct(_) => {
+            return Err(ApiError::BadRequest(
+                "CONSTRUCT/DESCRIBE queries are not supported by this JSON endpoint; \
+                 request an RDF serialization instead"
+                    .to_string(),
+            ));
+        }
     };
 
     Ok(Json(QueryResponse {
-        head: Some(QueryHead {
-            vars: vec![], // Would extract from query
-        }),
-        results: QueryResults {
-            bindings: Some(bindings),
-            boolean: None,
-        },
+        head: Some(QueryHead { vars }),
+        results: QueryResults { bindings, boolean },
         execution_time_ms,
     }))
+}
+
+/// Convert an oxirs-core [`Term`](oxirs_core::model::Term) into the REST v2
+/// [`BindingValue`], mapping the SPARQL 1.1 JSON Results `type` (`uri`,
+/// `literal`, `bnode`, `triple`) and carrying literal `datatype`/`xml:lang`.
+fn term_to_binding_value(term: &oxirs_core::model::Term) -> BindingValue {
+    use oxirs_core::model::Term;
+    match term {
+        Term::NamedNode(node) => BindingValue {
+            value_type: "uri".to_string(),
+            value: node.as_str().to_string(),
+            datatype: None,
+            lang: None,
+        },
+        Term::BlankNode(node) => BindingValue {
+            value_type: "bnode".to_string(),
+            value: node.as_str().to_string(),
+            datatype: None,
+            lang: None,
+        },
+        Term::Literal(literal) => {
+            let lang = literal.language().map(|l| l.to_string());
+            // Per SPARQL JSON Results, a language-tagged literal reports the
+            // language via `xml:lang`; otherwise the datatype IRI is reported
+            // (xsd:string for a plain literal).
+            let datatype = if lang.is_some() {
+                None
+            } else {
+                Some(literal.datatype().as_str().to_string())
+            };
+            BindingValue {
+                value_type: "literal".to_string(),
+                value: literal.value().to_string(),
+                datatype,
+                lang,
+            }
+        }
+        Term::Variable(var) => BindingValue {
+            value_type: "variable".to_string(),
+            value: var.as_str().to_string(),
+            datatype: None,
+            lang: None,
+        },
+        Term::QuotedTriple(triple) => BindingValue {
+            value_type: "triple".to_string(),
+            value: triple.to_string(),
+            datatype: None,
+            lang: None,
+        },
+    }
+}
+
+/// Validate `value` as a well-formed absolute IRI and return it wrapped as a
+/// SPARQL `<iri>` token. Rejects (HTTP 400) any value that is not a valid IRI —
+/// which, because RFC 3987 forbids spaces, `<`, `>`, `"`, `{`, `}` and control
+/// characters, also makes SPARQL injection through the term text impossible.
+fn build_iri_token(value: &str, field: &str) -> Result<String, ApiError> {
+    let node = oxirs_core::model::NamedNode::new(value)
+        .map_err(|e| ApiError::BadRequest(format!("Invalid {field} IRI '{value}': {e}")))?;
+    Ok(format!("<{}>", node.as_str()))
+}
+
+/// Escape a string value for safe inclusion inside a SPARQL double-quoted
+/// literal (`"…"`), per the SPARQL string-literal grammar.
+fn escape_sparql_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Build the SPARQL object token for an insert triple, honouring the
+/// documented `object_type` (`uri` or `literal`). An unknown type is a client
+/// error rather than a silent misinterpretation.
+fn build_object_token(t: &Triple) -> Result<String, ApiError> {
+    match t.object_type.to_ascii_lowercase().as_str() {
+        "uri" | "iri" => build_iri_token(&t.object, "object"),
+        "literal" => Ok(format!("\"{}\"", escape_sparql_string(&t.object))),
+        other => Err(ApiError::BadRequest(format!(
+            "Unsupported object_type '{other}' for object '{}': expected \"uri\" or \"literal\"",
+            t.object
+        ))),
+    }
+}
+
+/// Build a subject/predicate token for a `DELETE WHERE` pattern. A `None` value
+/// or one beginning with `?` is a wildcard variable (`default_var`); a concrete
+/// value must be a well-formed IRI.
+fn build_pattern_subject(
+    value: Option<&str>,
+    default_var: &str,
+    field: &str,
+) -> Result<String, ApiError> {
+    match value {
+        None => Ok(default_var.to_string()),
+        Some(v) if v == "?" || v.starts_with('?') => Ok(default_var.to_string()),
+        Some(v) => build_iri_token(v, field),
+    }
+}
+
+/// Build an object token for a `DELETE WHERE` pattern. A `None` value or one
+/// beginning with `?` is the wildcard `?o`; a concrete value is emitted as an
+/// IRI when it parses as one, otherwise as a quoted literal.
+fn build_pattern_object(value: Option<&str>) -> Result<String, ApiError> {
+    match value {
+        None => Ok("?o".to_string()),
+        Some(v) if v == "?" || v.starts_with('?') => Ok("?o".to_string()),
+        Some(v) => {
+            if oxirs_core::model::NamedNode::new(v).is_ok() {
+                Ok(format!("<{}>", v))
+            } else {
+                Ok(format!("\"{}\"", escape_sparql_string(v)))
+            }
+        }
+    }
 }
 
 /// Get triples from a dataset
@@ -750,13 +873,22 @@ pub async fn insert_triple(
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
     }
 
-    // Build SPARQL INSERT query
-    let triples_str = request
-        .triples
-        .iter()
-        .map(|t| format!("<{}> <{}> <{}> .", t.subject, t.predicate, t.object))
-        .collect::<Vec<_>>()
-        .join(" ");
+    // Build the SPARQL INSERT DATA body from validated, properly-escaped terms.
+    // Subject/predicate must be well-formed IRIs; the object is an IRI or a
+    // quoted literal depending on `object_type`. This both validates input and
+    // prevents any SPARQL injection through unescaped term text.
+    let mut triples_str = String::new();
+    for t in &request.triples {
+        let subject = build_iri_token(&t.subject, "subject")?;
+        let predicate = build_iri_token(&t.predicate, "predicate")?;
+        let object = build_object_token(t)?;
+        triples_str.push_str(&subject);
+        triples_str.push(' ');
+        triples_str.push_str(&predicate);
+        triples_str.push(' ');
+        triples_str.push_str(&object);
+        triples_str.push_str(" .\n");
+    }
 
     let query = format!("INSERT DATA {{ {} }}", triples_str);
 
@@ -803,10 +935,15 @@ pub async fn delete_triple(
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
     }
 
-    // Build SPARQL DELETE query
-    let s = request.subject.as_deref().unwrap_or("?s");
-    let p = request.predicate.as_deref().unwrap_or("?p");
-    let o = request.object.as_deref().unwrap_or("?o");
+    // Build a DELETE WHERE pattern from validated, escaped terms. A `None` or
+    // `?`-prefixed field is a wildcard variable; a concrete subject/predicate
+    // must be a well-formed IRI, and a concrete object is emitted as an IRI when
+    // it parses as one, otherwise as a quoted literal. This yields syntactically
+    // valid SPARQL for concrete patterns (the old code emitted bare IRIs that
+    // failed to parse) and blocks injection through unescaped term text.
+    let s = build_pattern_subject(request.subject.as_deref(), "?s", "subject")?;
+    let p = build_pattern_subject(request.predicate.as_deref(), "?p", "predicate")?;
+    let o = build_pattern_object(request.object.as_deref())?;
 
     let query = format!("DELETE WHERE {{ {} {} {} }}", s, p, o);
 
@@ -932,6 +1069,104 @@ mod tests {
 
         let json = serde_json::to_string(&info).unwrap();
         assert!(json.contains("2.0.0"));
+    }
+
+    /// Regression: a subject value that tries to break out of the INSERT DATA
+    /// block (SPARQL injection) must be rejected by IRI validation, not
+    /// interpolated verbatim.
+    #[test]
+    fn regression_insert_iri_validation_blocks_injection() {
+        let malicious =
+            "http://x> } ; DROP ALL ; INSERT DATA { <http://a> <http://b> <http://c> } #";
+        assert!(
+            build_iri_token(malicious, "subject").is_err(),
+            "an IRI containing '>', spaces and control syntax must be rejected"
+        );
+        // A well-formed IRI is accepted and wrapped.
+        assert_eq!(
+            build_iri_token("http://example.org/s", "subject").expect("valid iri"),
+            "<http://example.org/s>"
+        );
+    }
+
+    /// Regression: object_type "literal" must produce a quoted, escaped literal
+    /// token rather than a malformed `<...>` IRI, and injection via quotes is
+    /// escaped.
+    #[test]
+    fn regression_insert_literal_object_type_emits_literal() {
+        let triple = Triple {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "hello \"world\"\n".to_string(),
+            object_type: "literal".to_string(),
+        };
+        let token = build_object_token(&triple).expect("literal token");
+        assert_eq!(token, "\"hello \\\"world\\\"\\n\"");
+
+        // Unknown object_type is a client error, not a silent misinterpretation.
+        let bad = Triple {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "x".to_string(),
+            object_type: "banana".to_string(),
+        };
+        assert!(build_object_token(&bad).is_err());
+    }
+
+    /// Regression: DELETE pattern terms must wrap concrete IRIs in `<>` and
+    /// treat `?`/None as wildcards, producing syntactically valid SPARQL.
+    #[test]
+    fn regression_delete_pattern_terms_are_valid_sparql() {
+        assert_eq!(
+            build_pattern_subject(Some("http://example.org/s"), "?s", "subject").expect("iri"),
+            "<http://example.org/s>"
+        );
+        assert_eq!(
+            build_pattern_subject(None, "?s", "subject").expect("wildcard"),
+            "?s"
+        );
+        assert_eq!(
+            build_pattern_object(Some("http://example.org/o")).expect("iri object"),
+            "<http://example.org/o>"
+        );
+        assert_eq!(
+            build_pattern_object(Some("plain literal")).expect("literal object"),
+            "\"plain literal\""
+        );
+        // A concrete subject that is not a valid IRI is rejected (injection guard).
+        assert!(build_pattern_subject(Some("not a > iri"), "?s", "subject").is_err());
+    }
+
+    /// Regression: query bindings must report the real term type, not a
+    /// hardcoded "uri", and carry datatype/lang for literals.
+    #[test]
+    fn regression_binding_value_reflects_term_type() {
+        use oxirs_core::model::{BlankNode, Literal, NamedNode, Term};
+
+        let uri = term_to_binding_value(&Term::NamedNode(
+            NamedNode::new("http://example.org/x").expect("iri"),
+        ));
+        assert_eq!(uri.value_type, "uri");
+        assert_eq!(uri.value, "http://example.org/x");
+
+        let bnode = term_to_binding_value(&Term::BlankNode(BlankNode::new("b0").expect("bnode")));
+        assert_eq!(bnode.value_type, "bnode");
+
+        let plain = term_to_binding_value(&Term::Literal(Literal::new_simple_literal("hi")));
+        assert_eq!(plain.value_type, "literal");
+        assert_eq!(plain.value, "hi");
+        assert!(plain.lang.is_none());
+        assert_eq!(
+            plain.datatype.as_deref(),
+            Some("http://www.w3.org/2001/XMLSchema#string")
+        );
+
+        let lang = term_to_binding_value(&Term::Literal(
+            Literal::new_language_tagged_literal("bonjour", "fr").expect("lang literal"),
+        ));
+        assert_eq!(lang.value_type, "literal");
+        assert_eq!(lang.lang.as_deref(), Some("fr"));
+        assert!(lang.datatype.is_none());
     }
 
     #[test]

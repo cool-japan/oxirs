@@ -1,6 +1,6 @@
 # OxiRS SAMM - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
@@ -21,7 +21,7 @@ OxiRS SAMM provides comprehensive support for the Semantic Aspect Meta Model (SA
 - **Graph Analytics** - Dependency analysis with scirs2-graph integration
 - **Graph Visualization** - DOT format generation with Graphviz rendering
 - **SciRS2 Integration** - Full compliance with SciRS2 policy
-- **1549 tests passing** with zero warnings
+- **1609 tests passing** with zero warnings
 
 ### Key Capabilities
 
@@ -71,7 +71,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS SAMM v0.3.2 - Semantic Aspect Meta Model support*
+*OxiRS SAMM v0.4.1 - Semantic Aspect Meta Model support*
 
 ## Proposed follow-ups
 

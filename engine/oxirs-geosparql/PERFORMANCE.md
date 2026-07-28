@@ -44,7 +44,7 @@ This document describes performance characteristics and optimization strategies 
 ### Topological Relations
 
 **Current Implementation:**
-- Direct geo/GEOS library calls
+- Direct `geo` library calls
 - No result caching
 - Sequential checking
 
@@ -307,7 +307,7 @@ pub fn rcc8_ntpp(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 **Actual Improvement:**
 - Spatial Index: Filters ~50-90% of candidates before expensive distance calculations
 - Topological Relations: 50-90% faster for disjoint geometry pairs
-- Avoids expensive GEOS `boundary()` calls in 50-90% of cases
+- Avoids expensive `boundary()` calls in 50-90% of cases
 
 ### 5. CRS Transformation Batch Optimization
 
@@ -440,8 +440,8 @@ Topological Relations:
 
 Buffer Operations:
   Polygon (Pure Rust):        ~2.1ms
-  Polygon (GEOS):             ~1.8ms
-  Point (GEOS):               ~2.5ms
+  Polygon:                    ~1.8ms
+  Point:                      ~2.5ms
 ```
 
 ### Performance After Optimization
@@ -460,7 +460,7 @@ CRS Transformation:
 
 Topological Relations:
   With bbox pre-filter:       50-90% faster for disjoint geometry pairs
-  Avoided boundary calls:     50-90% of cases skip expensive GEOS operations
+  Avoided boundary calls:     50-90% of cases skip expensive boundary computation
   All 15 functions optimized: sf_*, eh_*, rcc8_* now use bbox filtering
 
 Overall Query Performance:
@@ -499,7 +499,6 @@ Overall Query Performance:
 oxirs-geosparql = {
     version = "0.1",
     features = [
-        "geos-backend",      # Best quality/performance
         "proj-support",      # CRS transformations
         "parallel",          # Multi-core processing
     ]
@@ -512,7 +511,6 @@ oxirs-geosparql = {
 oxirs-geosparql = {
     version = "0.1",
     features = [
-        "rust-buffer",       # Pure Rust buffer (Polygon only)
         "wkt-support",       # Minimal parsing
     ]
 }
@@ -524,7 +522,6 @@ oxirs-geosparql = {
 oxirs-geosparql = {
     version = "0.1",
     features = [
-        "geos-backend",
         "proj-support",
         "gml-support",
         "geojson-support",
@@ -638,7 +635,7 @@ let results = transform_batch(&small_dataset, &target_crs)?;
 
 2. **criterion**: Detailed benchmarking
    ```bash
-   cargo bench --features geos-backend
+   cargo bench
    ```
 
 3. **heaptrack**: Memory profiling

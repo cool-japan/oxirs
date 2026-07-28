@@ -49,7 +49,24 @@ pub struct AdvancedMemoryOptimizer {
 
     /// Current optimization state
     optimization_state: Arc<RwLock<OptimizationState>>,
+
+    /// Rolling window of recent real memory-usage samples (MB, oldest
+    /// first), used by `calculate_memory_trend` to detect a genuine trend
+    /// via linear regression instead of a hardcoded placeholder.
+    usage_history: Arc<RwLock<VecDeque<f64>>>,
 }
+
+/// Maximum number of recent usage samples retained for trend detection.
+const TREND_HISTORY_CAPACITY: usize = 30;
+
+/// Minimum number of samples required before a trend judgement is made.
+/// With fewer samples than this there isn't enough real signal, so the
+/// trend is honestly reported as `Stable` rather than guessed from noise.
+const TREND_MIN_SAMPLES: usize = 4;
+
+/// Relative slope (as a fraction of mean usage, per sample) above which the
+/// trend is classified `Increasing`/`Decreasing` rather than `Stable`.
+const TREND_SLOPE_THRESHOLD: f64 = 0.02;
 
 /// Configuration for the memory optimizer
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -245,6 +262,22 @@ impl Default for MemoryOptimizerConfig {
     }
 }
 
+/// Ordinary-least-squares fit of a real usage-history sample sequence (MB,
+/// oldest first, evenly spaced at the monitoring interval).
+#[derive(Debug, Clone, Copy)]
+struct UsageTrendFit {
+    /// MB change per sample (the raw OLS slope).
+    slope_mb_per_sample: f64,
+    /// `slope_mb_per_sample` normalized by mean usage, making the judgement
+    /// scale-independent (works whether usage is in the tens of MB or
+    /// hundreds of GB).
+    relative_slope: f64,
+    /// Residual standard deviation around the fitted line, normalized by
+    /// mean usage -- large values mean the samples bounce around without a
+    /// clean monotonic direction.
+    relative_noise: f64,
+}
+
 impl AdvancedMemoryOptimizer {
     /// Create a new advanced memory optimizer
     pub fn new(config: MemoryOptimizerConfig) -> Self {
@@ -277,6 +310,7 @@ impl AdvancedMemoryOptimizer {
                 memory_trend: MemoryTrend::Stable,
                 predicted_exhaustion: None,
             })),
+            usage_history: Arc::new(RwLock::new(VecDeque::with_capacity(TREND_HISTORY_CAPACITY))),
         }
     }
 
@@ -300,6 +334,7 @@ impl AdvancedMemoryOptimizer {
         let state = self.optimization_state.clone();
         let config = self.config.clone();
         let trigger = self.optimization_trigger.clone();
+        let usage_history = self.usage_history.clone();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(config.optimization_intervals.monitoring);
@@ -313,8 +348,24 @@ impl AdvancedMemoryOptimizer {
                     profiler_guard.generate_report()
                 };
 
-                let current_usage = memory_report.current_usage_mb * 1024 * 1024; // Convert to bytes
+                // `average_usage_mb` is the real, already-measured usage
+                // figure the profiler reports (MB); convert to bytes for
+                // the pressure ratio below.
+                let current_usage_mb = memory_report.average_usage_mb;
+                let current_usage = (current_usage_mb * 1024.0 * 1024.0) as u64;
                 let pressure = current_usage as f64 / config.emergency_memory_threshold as f64;
+
+                // Record this real sample into the rolling trend-detection
+                // history (bounded so it never grows unboundedly).
+                let history_snapshot: Vec<f64> = {
+                    let mut history_guard =
+                        usage_history.write().expect("lock should not be poisoned");
+                    if history_guard.len() >= TREND_HISTORY_CAPACITY {
+                        history_guard.pop_front();
+                    }
+                    history_guard.push_back(current_usage_mb);
+                    history_guard.iter().copied().collect()
+                };
 
                 // Update optimization state
                 let mut state_guard = state.write().expect("lock should not be poisoned");
@@ -330,14 +381,18 @@ impl AdvancedMemoryOptimizer {
                     MemoryPressureLevel::Normal
                 };
 
-                // Calculate memory trend
-                state_guard.memory_trend = Self::calculate_memory_trend(&memory_report);
+                // Calculate memory trend from the real, accumulated history
+                // of measured usage samples (never a hardcoded placeholder).
+                state_guard.memory_trend = Self::calculate_memory_trend(&history_snapshot);
 
-                // Predict memory exhaustion
+                // Predict memory exhaustion from the same real, fitted
+                // growth rate (rather than a hardcoded 1MB/s placeholder).
                 state_guard.predicted_exhaustion = Self::predict_memory_exhaustion(
                     current_usage,
                     config.emergency_memory_threshold,
-                    &state_guard.memory_trend
+                    &state_guard.memory_trend,
+                    &history_snapshot,
+                    config.optimization_intervals.monitoring,
                 );
 
                 // Trigger optimization if pressure increased
@@ -536,28 +591,99 @@ impl AdvancedMemoryOptimizer {
         operations
     }
 
-    /// Calculate memory trend from profiling data
-    fn calculate_memory_trend(memory_report: &MemoryReport) -> MemoryTrend {
-        // This would analyze historical data to determine trend
-        // For now, return stable as placeholder
-        MemoryTrend::Stable
+    /// Analyze a real history of recent memory-usage samples (MB, oldest
+    /// first) to determine the current trend via linear-regression slope,
+    /// instead of unconditionally returning `Stable`. Returns `Stable` (not
+    /// a guess) when there isn't yet enough history for a real judgement.
+    fn calculate_memory_trend(usage_history_mb: &[f64]) -> MemoryTrend {
+        match Self::fit_trend(usage_history_mb) {
+            Some(fit)
+                if fit.relative_noise > TREND_SLOPE_THRESHOLD * 4.0
+                    && fit.relative_slope.abs() < TREND_SLOPE_THRESHOLD * 2.0 =>
+            {
+                MemoryTrend::Oscillating
+            }
+            Some(fit) if fit.relative_slope > TREND_SLOPE_THRESHOLD => MemoryTrend::Increasing,
+            Some(fit) if fit.relative_slope < -TREND_SLOPE_THRESHOLD => MemoryTrend::Decreasing,
+            _ => MemoryTrend::Stable,
+        }
     }
 
-    /// Predict when memory will be exhausted based on current trend
+    /// Fit an OLS line through the real usage-history samples. `None` when
+    /// there isn't enough history (`< TREND_MIN_SAMPLES`) or the mean usage
+    /// is (near) zero to support a meaningful fit.
+    fn fit_trend(usage_history_mb: &[f64]) -> Option<UsageTrendFit> {
+        if usage_history_mb.len() < TREND_MIN_SAMPLES {
+            return None;
+        }
+
+        let n = usage_history_mb.len() as f64;
+        let mean_x = (n - 1.0) / 2.0;
+        let mean_y = usage_history_mb.iter().sum::<f64>() / n;
+        if mean_y.abs() < f64::EPSILON {
+            return None;
+        }
+
+        let mut numerator = 0.0;
+        let mut denominator = 0.0;
+        for (i, &y) in usage_history_mb.iter().enumerate() {
+            let dx = i as f64 - mean_x;
+            numerator += dx * (y - mean_y);
+            denominator += dx * dx;
+        }
+        if denominator == 0.0 {
+            return None;
+        }
+
+        let slope_mb_per_sample = numerator / denominator;
+        let relative_slope = slope_mb_per_sample / mean_y;
+
+        let residual_variance = usage_history_mb
+            .iter()
+            .enumerate()
+            .map(|(i, &y)| {
+                let predicted = mean_y + slope_mb_per_sample * (i as f64 - mean_x);
+                (y - predicted).powi(2)
+            })
+            .sum::<f64>()
+            / n;
+        let relative_noise = residual_variance.sqrt() / mean_y.abs();
+
+        Some(UsageTrendFit {
+            slope_mb_per_sample,
+            relative_slope,
+            relative_noise,
+        })
+    }
+
+    /// Predict when memory will be exhausted based on the real, fitted
+    /// growth rate derived from `usage_history_mb`, rather than a fixed
+    /// "1MB per second" placeholder. Returns `None` when the trend isn't
+    /// really increasing (nothing to predict) or the fit is unavailable.
     fn predict_memory_exhaustion(
         current_usage: u64,
         max_memory: usize,
         trend: &MemoryTrend,
+        usage_history_mb: &[f64],
+        sample_interval: Duration,
     ) -> Option<Duration> {
-        match trend {
-            MemoryTrend::Increasing => {
-                // Simple linear prediction (in reality would be more sophisticated)
-                let remaining = max_memory as u64 - current_usage;
-                let estimated_rate = 1024 * 1024; // 1MB per second (placeholder)
-                Some(Duration::from_secs(remaining / estimated_rate))
-            }
-            _ => None,
+        if !matches!(trend, MemoryTrend::Increasing) {
+            return None;
         }
+
+        let fit = Self::fit_trend(usage_history_mb)?;
+        if fit.slope_mb_per_sample <= 0.0 || sample_interval.as_secs_f64() <= 0.0 {
+            return None;
+        }
+
+        let bytes_per_sample = fit.slope_mb_per_sample * 1024.0 * 1024.0;
+        let bytes_per_sec = bytes_per_sample / sample_interval.as_secs_f64();
+        if bytes_per_sec <= 0.0 {
+            return None;
+        }
+
+        let remaining = (max_memory as u64).saturating_sub(current_usage);
+        Some(Duration::from_secs_f64(remaining as f64 / bytes_per_sec))
     }
 
     /// Get current optimization statistics
@@ -654,26 +780,101 @@ mod tests {
         assert!(operations.iter().any(|op| matches!(op.operation_type, OptimizationType::GarbageCollection)));
     }
 
-    #[tokio::test]
-    async fn test_memory_trend_calculation() {
-        let report = MemoryReport {
-            current_usage_mb: 1024.0,
-            peak_usage_mb: 2048.0,
-            total_available_mb: 4096.0,
-            heap_usage_mb: 512.0,
-            stack_usage_mb: 64.0,
-            allocation_rate_mb_per_sec: 10.0,
-            deallocation_rate_mb_per_sec: 8.0,
-            fragmentation_score: 0.15,
-            gc_pressure_score: 0.3,
-            cache_hit_rate: 0.85,
-            pool_efficiency: 0.9,
-            per_thread_usage: vec![128.0, 256.0, 384.0, 256.0],
-            allocation_patterns: std::collections::HashMap::new(),
-        };
+    /// regression: too little history must not be enough to declare a
+    /// trend -- `calculate_memory_trend` must stay honestly `Stable`
+    /// rather than guess from noise (was previously *always* Stable
+    /// regardless of input, which this also covers, but the real
+    /// implementation must specifically choose `Stable` here for the
+    /// *right* reason: insufficient samples).
+    #[test]
+    fn regression_memory_trend_insufficient_history_is_stable() {
+        let history = vec![1000.0, 1010.0];
+        assert_eq!(
+            AdvancedMemoryOptimizer::calculate_memory_trend(&history),
+            MemoryTrend::Stable
+        );
+    }
 
-        let trend = AdvancedMemoryOptimizer::calculate_memory_trend(&report);
+    /// regression: a clearly, consistently climbing series of real usage
+    /// samples must be detected as `Increasing` -- proving the trend
+    /// detector actually reads its input instead of being hardcoded.
+    #[test]
+    fn regression_memory_trend_detects_increasing_usage() {
+        let history: Vec<f64> = (0..10).map(|i| 1000.0 + i as f64 * 50.0).collect();
+        assert_eq!(
+            AdvancedMemoryOptimizer::calculate_memory_trend(&history),
+            MemoryTrend::Increasing
+        );
+    }
+
+    /// regression: a clearly, consistently shrinking series must be
+    /// detected as `Decreasing`.
+    #[test]
+    fn regression_memory_trend_detects_decreasing_usage() {
+        let history: Vec<f64> = (0..10).map(|i| 2000.0 - i as f64 * 50.0).collect();
+        assert_eq!(
+            AdvancedMemoryOptimizer::calculate_memory_trend(&history),
+            MemoryTrend::Decreasing
+        );
+    }
+
+    /// regression: a flat series (no real drift) must stay `Stable`.
+    #[test]
+    fn regression_memory_trend_flat_usage_is_stable() {
+        let history = vec![1000.0; 10];
+        assert_eq!(
+            AdvancedMemoryOptimizer::calculate_memory_trend(&history),
+            MemoryTrend::Stable
+        );
+    }
+
+    /// regression: predict_memory_exhaustion must now actually fire on a
+    /// genuinely `Increasing` trend (previously dead code, since the trend
+    /// was hardcoded `Stable` and this arm was therefore unreachable), and
+    /// the predicted duration must be derived from the real fitted growth
+    /// rate rather than a fixed "1MB/s" placeholder.
+    #[test]
+    fn regression_predict_memory_exhaustion_fires_on_real_increasing_trend() {
+        // Usage climbing by ~50MB per sample, sampled every 1 second.
+        let history: Vec<f64> = (0..10).map(|i| 1000.0 + i as f64 * 50.0).collect();
+        let trend = AdvancedMemoryOptimizer::calculate_memory_trend(&history);
+        assert_eq!(trend, MemoryTrend::Increasing);
+
+        let current_usage_bytes = 1450 * 1024 * 1024; // matches the last sample
+        let max_memory_bytes = 2000 * 1024 * 1024; // 550MB of headroom left
+        let prediction = AdvancedMemoryOptimizer::predict_memory_exhaustion(
+            current_usage_bytes,
+            max_memory_bytes,
+            &trend,
+            &history,
+            Duration::from_secs(1),
+        );
+
+        let predicted = prediction.expect("an increasing trend must produce a real prediction");
+        // ~50MB/s growth against ~550MB headroom -> roughly 11s, not the
+        // old placeholder's ~550s (which assumed a fixed 1MB/s).
+        assert!(
+            predicted.as_secs_f64() < 60.0,
+            "expected a prediction in the tens of seconds given the real ~50MB/s growth rate, got {predicted:?}"
+        );
+    }
+
+    /// regression: a `Stable`/`Decreasing` trend must never produce an
+    /// exhaustion prediction (nothing to predict).
+    #[test]
+    fn regression_predict_memory_exhaustion_none_when_not_increasing() {
+        let flat_history = vec![1000.0; 10];
+        let trend = AdvancedMemoryOptimizer::calculate_memory_trend(&flat_history);
         assert_eq!(trend, MemoryTrend::Stable);
+
+        let prediction = AdvancedMemoryOptimizer::predict_memory_exhaustion(
+            1000 * 1024 * 1024,
+            2000 * 1024 * 1024,
+            &trend,
+            &flat_history,
+            Duration::from_secs(1),
+        );
+        assert_eq!(prediction, None);
     }
 
     #[test]

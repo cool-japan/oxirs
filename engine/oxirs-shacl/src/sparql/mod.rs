@@ -220,8 +220,12 @@ impl SparqlConstraint {
             substituted_query.replace("$this", &self.format_term_for_sparql(&context.focus_node));
 
         if let Some(path) = &context.path {
-            // Convert PropertyPath to string representation - simplified for now
-            substituted_query = substituted_query.replace("$PATH", &format!("<{path:?}>"));
+            // Render the property path as a real SPARQL property-path
+            // expression (e.g. `<http://example.org/p>`, `^(<...>)`,
+            // `(<...>|<...>)`, ...) rather than the Rust Debug output of the
+            // PropertyPath enum, which is never valid SPARQL syntax.
+            let sparql_path = path.to_sparql_path()?;
+            substituted_query = substituted_query.replace("$PATH", &sparql_path);
         }
 
         substituted_query =
@@ -252,10 +256,20 @@ impl SparqlConstraint {
                 }
             }
             Term::Variable(var) => format!("?{}", var.as_str()),
-            Term::QuotedTriple(_triple) => {
-                // Format as RDF-star quoted triple - simplified for now
-                // In a real implementation, this would need proper recursive formatting
-                format!("<< {} {} {} >>", "?s", "?p", "?o")
+            Term::QuotedTriple(triple) => {
+                // Recursively format the actual subject/predicate/object of the
+                // quoted triple as an RDF-star `<< s p o >>` pattern, instead of
+                // a fixed `?s ?p ?o` placeholder that ignores the real term.
+                let inner = triple.inner();
+                let subject = Term::from_subject(inner.subject());
+                let predicate = Term::from_predicate(inner.predicate());
+                let object = Term::from_object(inner.object());
+                format!(
+                    "<< {} {} {} >>",
+                    self.format_term_for_sparql(&subject),
+                    self.format_term_for_sparql(&predicate),
+                    self.format_term_for_sparql(&object)
+                )
             }
         }
     }
@@ -655,5 +669,111 @@ mod tests {
             }
             _ => panic!("Expected literal result, got: {result:?}"),
         }
+    }
+
+    fn make_sparql_constraint(query: &str) -> SparqlConstraint {
+        SparqlConstraint {
+            query: query.to_string(),
+            prefixes: None,
+            message: None,
+            severity: None,
+            construct_query: None,
+        }
+    }
+
+    /// `$PATH` must be substituted with a real SPARQL property-path
+    /// expression (`PropertyPath::to_sparql_path()`), not the Rust `Debug`
+    /// representation of the `PropertyPath` enum, which is never valid
+    /// SPARQL syntax.
+    #[test]
+    fn regression_substitute_path_renders_real_sparql_path() {
+        let constraint = make_sparql_constraint("ASK { ?this $PATH ?value }");
+
+        let path = crate::PropertyPath::Predicate(
+            oxirs_core::model::NamedNode::new("http://example.org/p").expect("valid IRI"),
+        );
+        let focus = Term::NamedNode(
+            oxirs_core::model::NamedNode::new("http://example.org/subj").expect("valid IRI"),
+        );
+        let context = crate::constraints::ConstraintContext::new(
+            focus,
+            crate::ShapeId::new("http://example.org/Shape"),
+        )
+        .with_path(path);
+
+        let substituted = constraint
+            .substitute_variables(&constraint.query, &context)
+            .expect("substitution should succeed");
+
+        assert!(
+            substituted.contains("<http://example.org/p>"),
+            "the substituted $PATH must render as a real SPARQL IRI, got: {substituted}"
+        );
+        assert!(
+            !substituted.contains("Predicate(NamedNode"),
+            "the substituted $PATH must not be the Rust Debug representation, got: {substituted}"
+        );
+    }
+
+    /// `$PATH` for a non-trivial (inverse) path must render valid SPARQL
+    /// property-path syntax, not a Debug-formatted enum.
+    #[test]
+    fn regression_substitute_path_renders_inverse_path() {
+        let constraint = make_sparql_constraint("ASK { ?this $PATH ?value }");
+
+        let inner = crate::PropertyPath::Predicate(
+            oxirs_core::model::NamedNode::new("http://example.org/knows").expect("valid IRI"),
+        );
+        let path = crate::PropertyPath::Inverse(Box::new(inner));
+        let focus = Term::NamedNode(
+            oxirs_core::model::NamedNode::new("http://example.org/subj").expect("valid IRI"),
+        );
+        let context = crate::constraints::ConstraintContext::new(
+            focus,
+            crate::ShapeId::new("http://example.org/Shape"),
+        )
+        .with_path(path);
+
+        let substituted = constraint
+            .substitute_variables(&constraint.query, &context)
+            .expect("substitution should succeed");
+
+        assert!(
+            substituted.contains('^') && substituted.contains("<http://example.org/knows>"),
+            "an inverse path must render as `^(<iri>)`, got: {substituted}"
+        );
+    }
+
+    /// `Term::QuotedTriple` must format its actual subject/predicate/object,
+    /// not the fixed `?s ?p ?o` placeholder pattern.
+    #[test]
+    fn regression_format_quoted_triple_uses_real_terms_not_placeholder() {
+        let constraint = make_sparql_constraint("");
+
+        let subj = oxirs_core::model::NamedNode::new("http://example.org/s").expect("valid IRI");
+        let pred = oxirs_core::model::NamedNode::new("http://example.org/p").expect("valid IRI");
+        let obj = oxirs_core::model::NamedNode::new("http://example.org/o").expect("valid IRI");
+        let triple = oxirs_core::model::Triple::new(subj, pred, obj);
+        let quoted = oxirs_core::model::star::QuotedTriple::new(triple);
+        let term = Term::QuotedTriple(Box::new(quoted));
+
+        let formatted = constraint.format_term_for_sparql(&term);
+
+        assert_ne!(
+            formatted, "<< ?s ?p ?o >>",
+            "must not emit the fixed placeholder pattern regardless of the real triple"
+        );
+        assert!(
+            formatted.contains("http://example.org/s"),
+            "got: {formatted}"
+        );
+        assert!(
+            formatted.contains("http://example.org/p"),
+            "got: {formatted}"
+        );
+        assert!(
+            formatted.contains("http://example.org/o"),
+            "got: {formatted}"
+        );
     }
 }

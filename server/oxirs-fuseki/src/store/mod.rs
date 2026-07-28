@@ -48,6 +48,7 @@ pub mod store_traits;
 pub mod store_type;
 pub mod store_update_group;
 pub mod store_watch_changes_group;
+pub mod store_where_update_group;
 pub mod tdb_adapter;
 pub mod types;
 
@@ -79,5 +80,6 @@ pub use store_traits::*;
 pub use store_type::*;
 pub use store_update_group::*;
 pub use store_watch_changes_group::*;
+pub use store_where_update_group::*;
 pub use tdb_adapter::*;
 pub use types::*;

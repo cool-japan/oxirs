@@ -207,6 +207,42 @@ mod aggregate_extended_tests {
         }
     }
 
+    /// Regression: SUM over xsd:integer operands must keep xsd:integer typing
+    /// (not be widened to xsd:decimal) on the live group-by execution path.
+    #[test]
+    fn regression_sum_integer_typing_live_path() {
+        let dataset = build_dataset_with_scores();
+        let mut executor = QueryExecutor::new();
+        let algebra = Algebra::Group {
+            pattern: Box::new(score_bgp()),
+            variables: vec![],
+            aggregates: vec![(
+                Variable::new("total").expect("valid variable"),
+                Aggregate::Sum {
+                    distinct: false,
+                    expr: Expression::Variable(Variable::new("score").expect("valid variable")),
+                },
+            )],
+        };
+        let (solution, _stats) = executor
+            .execute(&algebra, &dataset)
+            .expect("execution must succeed");
+        let total = solution[0]
+            .get(&Variable::new("total").expect("valid variable"))
+            .expect("total must be bound");
+        match total {
+            Term::Literal(lit) => {
+                assert_eq!(lit.value, "210", "exact integer sum");
+                assert_eq!(
+                    lit.datatype.as_ref().map(|d| d.as_str()),
+                    Some("http://www.w3.org/2001/XMLSchema#integer"),
+                    "SUM of integers must stay xsd:integer"
+                );
+            }
+            _ => panic!("Expected literal for SUM result"),
+        }
+    }
+
     #[test]
     fn test_min_aggregation() {
         let dataset = build_dataset_with_scores();
@@ -237,6 +273,13 @@ mod aggregate_extended_tests {
             Term::Literal(lit) => {
                 let n: f64 = lit.value.parse().expect("min value must be numeric");
                 assert!((n - 60.0).abs() < 0.001, "MIN must be 60, got {n}");
+                // MIN returns an input term verbatim (SPARQL 1.1 §18.5.1.9);
+                // the fixture's scores are xsd:integer, not a synthesized decimal.
+                assert_eq!(
+                    lit.datatype.as_ref().map(|d| d.as_str()),
+                    Some("http://www.w3.org/2001/XMLSchema#integer"),
+                    "MIN must preserve the input datatype"
+                );
             }
             _ => panic!("Expected literal for MIN result"),
         }
@@ -272,6 +315,12 @@ mod aggregate_extended_tests {
             Term::Literal(lit) => {
                 let n: f64 = lit.value.parse().expect("max value must be numeric");
                 assert!((n - 80.0).abs() < 0.001, "MAX must be 80, got {n}");
+                // MAX returns an input term verbatim (SPARQL 1.1 §18.5.1.10).
+                assert_eq!(
+                    lit.datatype.as_ref().map(|d| d.as_str()),
+                    Some("http://www.w3.org/2001/XMLSchema#integer"),
+                    "MAX must preserve the input datatype"
+                );
             }
             _ => panic!("Expected literal for MAX result"),
         }

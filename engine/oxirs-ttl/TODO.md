@@ -1,6 +1,6 @@
 # OxiRS TTL - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
@@ -26,7 +26,7 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
 - **Graph Utilities** - Merging, diff, transformation, and statistics
 - **Format Conversion** - Universal converter between all RDF formats
 - **Pattern Matching** - SPARQL-like in-memory queries without full engine
-- **1779 tests passing** with zero warnings
+- **1852 tests passing** with zero warnings
 
 ### Key Capabilities
 
@@ -77,7 +77,7 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
 - [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 26, 2026)
 - [x] Maintenance release: no functional/API changes. Workspace-wide dependency modernization (`lazy_static` → `once_cell::sync::Lazy`) and rustdoc intra-doc link fixes
 
 ## Contributing
@@ -86,4 +86,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TTL v0.3.2 - Streaming RDF parser and serializer*
+*OxiRS TTL v0.4.1 - Streaming RDF parser and serializer*

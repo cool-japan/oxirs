@@ -477,10 +477,13 @@ impl JenaParityChecker {
     }
 
     fn register_streaming(&mut self) {
+        // No "Apache Kafka Integration" entry: the rdkafka-backed backend was removed
+        // in 0.4.1, so claiming a native Kafka consumer/producer would be false. The
+        // Confluent Schema Registry client below is the part that survived.
         self.add(ParityFeature::beyond_jena(
-            "Apache Kafka Integration",
+            "Confluent Schema Registry Client",
             ParityCategory::Streaming,
-            Some("Jena has no built-in streaming; OxiRS provides native Kafka consumer/producer"),
+            Some("Register, fetch and compatibility-check event schemas against an external registry"),
         ));
         self.add(ParityFeature::beyond_jena(
             "NATS.io Integration",

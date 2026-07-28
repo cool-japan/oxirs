@@ -96,11 +96,75 @@ impl SubjectPattern {
             (SubjectPattern::NamedNode(pn), Subject::NamedNode(sn)) => pn == sn,
             (SubjectPattern::BlankNode(pb), Subject::BlankNode(sb)) => pb == sb,
             (SubjectPattern::Variable(_), _) => true,
-            // A quoted-triple pattern matches any quoted-triple subject (variable binding
-            // refinement is handled by the query evaluator, not at the pattern level).
-            (SubjectPattern::QuotedTriple(_), Subject::QuotedTriple(_)) => true,
+            // A quoted-triple pattern matches a quoted-triple subject only when the
+            // inner pattern structurally matches the inner triple (variables act as
+            // wildcards). A fully-ground inner pattern requires exact equality.
+            (SubjectPattern::QuotedTriple(pat), Subject::QuotedTriple(sqt)) => {
+                algebra_pattern_matches_triple(pat, sqt.inner())
+            }
             _ => false,
         }
+    }
+}
+
+/// Structurally match a SPARQL algebra triple pattern against a concrete triple.
+///
+/// Variables in the pattern act as wildcards; concrete terms (including nested
+/// quoted triples) must match exactly. This is used for RDF-star quoted-triple
+/// pattern matching so that a ground quoted-triple pattern such as
+/// `<< <a> <b> <c> >> ?p ?o` does NOT spuriously match a triple whose subject is
+/// `<< <x> <y> <z> >>`.
+pub(crate) fn algebra_pattern_matches_triple(
+    pattern: &crate::query::algebra::AlgebraTriplePattern,
+    triple: &Triple,
+) -> bool {
+    term_pattern_matches_subject(&pattern.subject, triple.subject())
+        && term_pattern_matches_predicate(&pattern.predicate, triple.predicate())
+        && term_pattern_matches_object(&pattern.object, triple.object())
+}
+
+fn term_pattern_matches_subject(
+    pattern: &crate::query::algebra::TermPattern,
+    subject: &Subject,
+) -> bool {
+    use crate::query::algebra::TermPattern;
+    match (pattern, subject) {
+        (TermPattern::Variable(_), _) => true,
+        (TermPattern::NamedNode(pn), Subject::NamedNode(sn)) => pn == sn,
+        (TermPattern::BlankNode(pb), Subject::BlankNode(sb)) => pb == sb,
+        (TermPattern::QuotedTriple(pat), Subject::QuotedTriple(sqt)) => {
+            algebra_pattern_matches_triple(pat, sqt.inner())
+        }
+        _ => false,
+    }
+}
+
+fn term_pattern_matches_predicate(
+    pattern: &crate::query::algebra::TermPattern,
+    predicate: &Predicate,
+) -> bool {
+    use crate::query::algebra::TermPattern;
+    match (pattern, predicate) {
+        (TermPattern::Variable(_), _) => true,
+        (TermPattern::NamedNode(pn), Predicate::NamedNode(sn)) => pn == sn,
+        _ => false,
+    }
+}
+
+fn term_pattern_matches_object(
+    pattern: &crate::query::algebra::TermPattern,
+    object: &Object,
+) -> bool {
+    use crate::query::algebra::TermPattern;
+    match (pattern, object) {
+        (TermPattern::Variable(_), _) => true,
+        (TermPattern::NamedNode(pn), Object::NamedNode(on)) => pn == on,
+        (TermPattern::BlankNode(pb), Object::BlankNode(ob)) => pb == ob,
+        (TermPattern::Literal(pl), Object::Literal(ol)) => pl == ol,
+        (TermPattern::QuotedTriple(pat), Object::QuotedTriple(oqt)) => {
+            algebra_pattern_matches_triple(pat, oqt.inner())
+        }
+        _ => false,
     }
 }
 
@@ -160,8 +224,12 @@ impl ObjectPattern {
             (ObjectPattern::BlankNode(pb), Object::BlankNode(ob)) => pb == ob,
             (ObjectPattern::Literal(pl), Object::Literal(ol)) => pl == ol,
             (ObjectPattern::Variable(_), _) => true,
-            // A quoted-triple pattern matches any quoted-triple object.
-            (ObjectPattern::QuotedTriple(_), Object::QuotedTriple(_)) => true,
+            // A quoted-triple pattern matches a quoted-triple object only when the
+            // inner pattern structurally matches the inner triple (variables act as
+            // wildcards). A fully-ground inner pattern requires exact equality.
+            (ObjectPattern::QuotedTriple(pat), Object::QuotedTriple(oqt)) => {
+                algebra_pattern_matches_triple(pat, oqt.inner())
+            }
             _ => false,
         }
     }
@@ -364,5 +432,53 @@ mod tests {
             None,
         );
         assert!(!pattern.matches(&triple));
+    }
+
+    #[test]
+    fn regression_ground_quoted_triple_pattern_is_exact() {
+        use crate::model::star::QuotedTriple;
+        use crate::query::algebra::{AlgebraTriplePattern, TermPattern};
+
+        let nn = |s: &str| NamedNode::new(s).expect("valid IRI");
+
+        // Inner triple stored in the data: << <a> <b> <c> >>
+        let stored_inner = Triple::new(nn("http://ex/a"), nn("http://ex/b"), nn("http://ex/c"));
+        let subject = Subject::QuotedTriple(Box::new(QuotedTriple::new(stored_inner.clone())));
+
+        // Ground pattern << <a> <b> <c> >> must match the identical inner triple.
+        let ground_match = AlgebraTriplePattern::new(
+            TermPattern::NamedNode(nn("http://ex/a")),
+            TermPattern::NamedNode(nn("http://ex/b")),
+            TermPattern::NamedNode(nn("http://ex/c")),
+        );
+        let sp_match = SubjectPattern::QuotedTriple(Box::new(ground_match));
+        assert!(sp_match.matches(&subject));
+
+        // Ground pattern << <x> <y> <z> >> must NOT match (previously returned true).
+        let ground_diff = AlgebraTriplePattern::new(
+            TermPattern::NamedNode(nn("http://ex/x")),
+            TermPattern::NamedNode(nn("http://ex/y")),
+            TermPattern::NamedNode(nn("http://ex/z")),
+        );
+        let sp_diff = SubjectPattern::QuotedTriple(Box::new(ground_diff));
+        assert!(!sp_diff.matches(&subject));
+
+        // A pattern with variable positions acts as a wildcard and matches.
+        let var_pat = AlgebraTriplePattern::new(
+            TermPattern::NamedNode(nn("http://ex/a")),
+            TermPattern::Variable(Variable::new("p").expect("valid var")),
+            TermPattern::Variable(Variable::new("o").expect("valid var")),
+        );
+        let sp_var = SubjectPattern::QuotedTriple(Box::new(var_pat));
+        assert!(sp_var.matches(&subject));
+
+        // Same semantics for the object position.
+        let object = Object::QuotedTriple(Box::new(QuotedTriple::new(stored_inner)));
+        let op_diff = ObjectPattern::QuotedTriple(Box::new(AlgebraTriplePattern::new(
+            TermPattern::NamedNode(nn("http://ex/x")),
+            TermPattern::NamedNode(nn("http://ex/y")),
+            TermPattern::NamedNode(nn("http://ex/z")),
+        )));
+        assert!(!op_diff.matches(&object));
     }
 }

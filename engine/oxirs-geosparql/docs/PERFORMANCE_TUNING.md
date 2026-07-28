@@ -27,11 +27,10 @@ This guide helps you optimize `oxirs-geosparql` for production workloads, coveri
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-geosparql = { version = "0.3.0", features = [
+oxirs-geosparql = { version = "0.4.1", features = [
     "performance",    # Enables parallel, GPU, and caching
     "parallel",       # Parallel processing with rayon
     "gpu",            # GPU acceleration (optional)
-    "geos-backend",   # Robust geometric operations
 ] }
 ```
 

@@ -78,6 +78,28 @@ impl ConstraintContext {
         self.shapes_registry = Some(shapes_registry);
         self
     }
+
+    /// Build the shapes registry for this context directly from a set of shape
+    /// definitions, keyed by their shape id.
+    ///
+    /// This is the ergonomic entry point for callers that hold concrete
+    /// [`crate::Shape`] values (e.g. logical / qualified-value-shape constraints
+    /// resolving their referenced shapes) but do not want to assemble an
+    /// [`IndexMap`] by hand. Constraints that need to resolve referenced shapes
+    /// (`sh:and`/`sh:or`/`sh:not`/`sh:xone`/`sh:qualifiedValueShape`) require a
+    /// registry to be present; providing one here lets them evaluate the real
+    /// nested conformance logic instead of failing loud.
+    pub fn with_shape_definitions<I>(mut self, shapes: I) -> Self
+    where
+        I: IntoIterator<Item = crate::Shape>,
+    {
+        let mut registry = IndexMap::new();
+        for shape in shapes {
+            registry.insert(shape.id.clone(), shape);
+        }
+        self.shapes_registry = Some(std::sync::Arc::new(registry));
+        self
+    }
 }
 
 /// Constraint evaluation result

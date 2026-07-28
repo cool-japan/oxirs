@@ -6,8 +6,13 @@
 //! # Performance Features
 //!
 //! - **Wait-free reads**: No blocking, no contention
-//! - **Cache prefetching**: Hardware-level memory access optimization
-//! - **SIMD bulk operations**: Process multiple triples in parallel
+//! - **Cache prefetching**: On x86/x86_64 this issues a real `PREFETCHT0`
+//!   instruction via `core::arch`; on architectures without a stable
+//!   hardware-prefetch intrinsic it falls back to an eager volatile touch of
+//!   the target memory so the access still happens ahead of time.
+//! - **SIMD bulk operations**: Large candidate sets are re-verified through
+//!   [`crate::simd_triple_matching::SimdTripleMatcher::match_batch`], which
+//!   uses SciRS2-core's vectorized batch matching.
 //! - **Read-ahead caching**: Anticipate sequential access patterns
 //! - **Zero-copy iteration**: Direct access to underlying data structures
 //!
@@ -29,19 +34,56 @@
 //! ```
 
 use crate::concurrent::lock_free_graph::ConcurrentGraph;
-use crate::model::{Object, Predicate, Subject, Triple};
+use crate::model::{Object, Predicate, Subject, SubjectPattern, Triple, TriplePattern};
+use crate::model::{ObjectPattern, PredicatePattern};
 use crate::simd_triple_matching::SimdTripleMatcher;
 use crate::OxirsError;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+/// Issue a cache-prefetch hint for the memory backing `reference`.
+///
+/// On x86/x86_64 this compiles to a real, non-faulting `PREFETCHT0`
+/// instruction (stable via `core::arch`), which asks the CPU to start
+/// pulling the target cache line into L1 ahead of the access that will
+/// shortly follow. `PREFETCHT0` never traps even for a dangling or
+/// out-of-bounds pointer, so it is safe to call unconditionally.
+///
+/// Other architectures (e.g. aarch64) do not expose a stable hardware
+/// prefetch intrinsic in `std`/`core`, so as a fallback this performs a
+/// volatile read of the first byte of `reference`. `reference` is always a
+/// live, valid Rust reference for the duration of the call, so the read is
+/// sound; it eagerly forces the cache line to be loaded now instead of at
+/// the point of the "real" access.
+#[inline]
+fn prefetch_hint<T>(reference: &T) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+        // SAFETY: `_mm_prefetch` is a non-faulting hint instruction; it is
+        // always safe to invoke regardless of pointer validity.
+        unsafe {
+            _mm_prefetch(reference as *const T as *const i8, _MM_HINT_T0);
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        // SAFETY: `reference` is a valid, live reference for the duration of
+        // this call, so reading its first byte through a raw pointer is an
+        // in-bounds read of initialized memory.
+        unsafe {
+            let _ = std::ptr::read_volatile(reference as *const T as *const u8);
+        }
+    }
+}
+
 /// Performance-optimized reader for lock-free graphs
 pub struct OptimizedReader {
     /// Reference to the underlying graph
     graph: Arc<ConcurrentGraph>,
-    /// SIMD matcher for bulk pattern matching (reserved for future use)
-    #[allow(dead_code)]
+    /// SIMD matcher used to re-verify large pattern-match result sets in
+    /// bulk (see [`OptimizedReader::simd_filter_large`]).
     simd_matcher: SimdTripleMatcher,
     /// Read counter for metrics
     read_count: AtomicU64,
@@ -104,10 +146,9 @@ impl OptimizedReader {
         // Get candidates using lock-free pattern matching
         let candidates = self.graph.match_pattern(subject, predicate, object);
 
-        // For large result sets, apply additional SIMD filtering if needed
+        // For large result sets, re-verify with the SIMD batch matcher
         if candidates.len() > 1000 {
-            // SIMD-accelerated filtering for large result sets
-            self.simd_filter_large(&candidates)
+            self.simd_filter_large(subject, predicate, object, &candidates)
         } else {
             Ok(candidates)
         }
@@ -187,21 +228,21 @@ impl OptimizedReader {
         let all_triples: Vec<Triple> = self.graph.iter().collect();
 
         let mut result = Vec::with_capacity(positions.len());
-        for &pos in positions {
-            if pos < all_triples.len() {
-                // Prefetch next position
-                if let Some(&next_pos) = positions
-                    .iter()
-                    .position(|&p| p == pos)
-                    .and_then(|idx| positions.get(idx + 1))
-                {
-                    if next_pos < all_triples.len() {
-                        // CPU hint: prefetch next element
-                        std::hint::black_box(&all_triples[next_pos]);
-                    }
+        for (idx, &pos) in positions.iter().enumerate() {
+            let Some(triple) = all_triples.get(pos) else {
+                continue;
+            };
+
+            // Prefetch the next requested position while we finish processing
+            // the current one, so its cache line is already resident when the
+            // loop reaches it.
+            if let Some(&next_pos) = positions.get(idx + 1) {
+                if let Some(next_triple) = all_triples.get(next_pos) {
+                    prefetch_hint(next_triple);
                 }
-                result.push(all_triples[pos].clone());
             }
+
+            result.push(triple.clone());
         }
 
         Ok(result)
@@ -226,16 +267,52 @@ impl OptimizedReader {
 
     // Helper methods
 
-    fn prefetch_next_chunk(&self, _offset: usize) {
-        // Hint to CPU to prefetch next chunk
-        // This is a hint and may be ignored by the CPU
-        std::hint::black_box(());
+    /// Speculatively walk and prefetch the chunk of triples that starts at
+    /// `offset`, on the assumption that a caller reading sequentially
+    /// (e.g. a follow-up `bulk_read`/`streaming_read` call) will request it
+    /// next. Since `ConcurrentGraph::iter` clones each triple out of the
+    /// underlying `DashMap` as it walks, doing that walk here performs the
+    /// expensive hash-bucket traversal and clone eagerly, ahead of when the
+    /// caller would otherwise pay for it, and issues a real prefetch hint on
+    /// each resulting triple.
+    fn prefetch_next_chunk(&self, offset: usize) {
+        const PREFETCH_LOOKAHEAD: usize = 8;
+        if offset == 0 {
+            return;
+        }
+        for triple in self.graph.iter().skip(offset).take(PREFETCH_LOOKAHEAD) {
+            prefetch_hint(&triple);
+        }
     }
 
-    fn simd_filter_large(&self, triples: &[Triple]) -> Result<Vec<Triple>, OxirsError> {
-        // For now, just return the triples
-        // In the future, apply additional SIMD-based filtering
-        Ok(triples.to_vec())
+    /// Re-verify a large pattern-match candidate set through the SIMD batch
+    /// matcher.
+    ///
+    /// `candidates` were already produced by [`ConcurrentGraph::match_pattern`]
+    /// so they are expected to already satisfy `(subject, predicate, object)`;
+    /// running them back through [`SimdTripleMatcher::match_batch`] exercises
+    /// SciRS2-core's vectorized batch comparison instead of a plain clone, and
+    /// protects against any future divergence between the two matching
+    /// implementations by returning only the triples the SIMD matcher agrees
+    /// on. When the filter can't be expressed as a [`TriplePattern`] (e.g. a
+    /// quoted-triple or variable component), the already-correct candidates
+    /// are returned unfiltered.
+    fn simd_filter_large(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+        triples: &[Triple],
+    ) -> Result<Vec<Triple>, OxirsError> {
+        let Some(pattern) = build_triple_pattern(subject, predicate, object) else {
+            return Ok(triples.to_vec());
+        };
+
+        let indices = self.simd_matcher.match_batch(&pattern, triples)?;
+        Ok(indices
+            .into_iter()
+            .filter_map(|i| triples.get(i).cloned())
+            .collect())
     }
 
     fn calculate_hit_rate(&self) -> f64 {
@@ -249,6 +326,42 @@ impl OptimizedReader {
             0.0
         }
     }
+}
+
+/// Convert a concrete `(subject, predicate, object)` filter into a
+/// [`TriplePattern`] usable by [`SimdTripleMatcher`], or `None` when a
+/// component can't be losslessly expressed as one (a `Variable` or
+/// `QuotedTriple` term used *as a concrete filter value* has no equivalent
+/// "match exactly this" pattern variant -- `SubjectPattern::Variable`, for
+/// instance, means "match anything", not "match this specific variable").
+fn build_triple_pattern(
+    subject: Option<&Subject>,
+    predicate: Option<&Predicate>,
+    object: Option<&Object>,
+) -> Option<TriplePattern> {
+    let subject_pattern = match subject {
+        None => None,
+        Some(Subject::NamedNode(n)) => Some(SubjectPattern::NamedNode(n.clone())),
+        Some(Subject::BlankNode(b)) => Some(SubjectPattern::BlankNode(b.clone())),
+        Some(Subject::Variable(_)) | Some(Subject::QuotedTriple(_)) => return None,
+    };
+    let predicate_pattern = match predicate {
+        None => None,
+        Some(Predicate::NamedNode(n)) => Some(PredicatePattern::NamedNode(n.clone())),
+        Some(Predicate::Variable(_)) => return None,
+    };
+    let object_pattern = match object {
+        None => None,
+        Some(Object::NamedNode(n)) => Some(ObjectPattern::NamedNode(n.clone())),
+        Some(Object::BlankNode(b)) => Some(ObjectPattern::BlankNode(b.clone())),
+        Some(Object::Literal(l)) => Some(ObjectPattern::Literal(l.clone())),
+        Some(Object::Variable(_)) | Some(Object::QuotedTriple(_)) => return None,
+    };
+    Some(TriplePattern::new(
+        subject_pattern,
+        predicate_pattern,
+        object_pattern,
+    ))
 }
 
 /// Streaming reader for efficient sequential access

@@ -269,7 +269,7 @@ oxirs/                  # Racine Cargo Workspace
 │  ├─ oxirs-cluster     # Dataset distribué basé Raft
 │  └─ oxirs-tsdb        # Base de données de séries temporelles
 ├─ stream/              # Temps réel et fédération
-│  ├─ oxirs-stream      # E/S Kafka/NATS, RDF Patch
+│  ├─ oxirs-stream      # E/S NATS/Redis/MQTT, RDF Patch
 │  ├─ oxirs-federate    # Planificateur SERVICE, stitching GraphQL
 │  ├─ oxirs-modbus      # Protocole Modbus TCP/RTU
 │  └─ oxirs-canbus      # Protocole CANbus / J1939
@@ -308,7 +308,7 @@ oxirs/                  # Racine Cargo Workspace
 | Fédération SPARQL (SERVICE) | `oxirs-federate` | Stable (1 148 tests, 2PC) | Oui |
 | Authentification fédérée | `oxirs-federate` | Stable (OAuth2/SAML/JWT) | Partiel |
 | **Temps Réel & Streaming** | | | |
-| Traitement de flux (Kafka/NATS) | `oxirs-stream` | Stable (1 191 tests, SIMD) | Partiel |
+| Traitement de flux (NATS/Redis/MQTT) | `oxirs-stream` | Stable (1 191 tests, SIMD) | Partiel |
 | RDF Patch & SPARQL Update delta | `oxirs-stream` | Stable | Partiel |
 | **Recherche & Géo** | | | |
 | Recherche plein texte (`text:`) | `oxirs-textsearch` | Prévu | Oui |

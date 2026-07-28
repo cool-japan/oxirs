@@ -60,7 +60,25 @@ pub enum FilterValue {
 }
 
 impl FilterValue {
-    /// Compare two filter values
+    /// Numeric view of a value, coercing across the numeric kinds (Integer /
+    /// Float, and numeric-looking Strings) so that e.g. a stored `Integer(75)`
+    /// can be meaningfully compared against a filter literal `Float(50.0)`.
+    fn as_numeric(&self) -> Option<f64> {
+        match self {
+            FilterValue::Integer(i) => Some(*i as f64),
+            FilterValue::Float(f) => Some(*f),
+            FilterValue::String(s) => s.parse::<f64>().ok(),
+            _ => None,
+        }
+    }
+
+    /// Compare two filter values.
+    ///
+    /// Numeric values compare across types (Integer vs. Float, and
+    /// numeric-looking Strings) by promoting both sides to `f64`; this fixes
+    /// `GreaterThan`/`LessThan`/`*OrEqual` predicates that would otherwise
+    /// silently return `Ordering::Equal` for cross-type numeric comparisons
+    /// (e.g. stored `"75"` -> `Integer(75)` against filter `Float(50.0)`).
     fn compare(&self, other: &FilterValue) -> std::cmp::Ordering {
         match (self, other) {
             (FilterValue::String(a), FilterValue::String(b)) => a.cmp(b),
@@ -69,7 +87,16 @@ impl FilterValue {
                 a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
             }
             (FilterValue::Boolean(a), FilterValue::Boolean(b)) => a.cmp(b),
-            _ => std::cmp::Ordering::Equal,
+            _ => {
+                // Cross-type: fall back to numeric coercion when both sides are
+                // numeric (or numeric-looking strings). If either side is not
+                // numeric, the values are genuinely incomparable -> Equal (the
+                // pre-existing conservative default).
+                match (self.as_numeric(), other.as_numeric()) {
+                    (Some(a), Some(b)) => a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal),
+                    _ => std::cmp::Ordering::Equal,
+                }
+            }
         }
     }
 }
@@ -474,6 +501,41 @@ mod tests {
 
         metadata.insert("score".to_string(), "25".to_string());
         assert!(!filter.evaluate(&metadata));
+    }
+
+    #[test]
+    fn regression_cross_type_numeric_comparison() {
+        // Stored "75" auto-detects as Integer(75); the filter literal is a Float.
+        // Before the fix, compare() fell through to Ordering::Equal so the
+        // predicate silently returned false even though 75 > 50.
+        let mut metadata = HashMap::new();
+        metadata.insert("score".to_string(), "75".to_string());
+
+        let gt = MetadataFilter::GreaterThan {
+            field: "score".to_string(),
+            value: FilterValue::Float(50.0),
+        };
+        assert!(gt.evaluate(&metadata), "75 > 50.0 must be true");
+
+        let lt = MetadataFilter::LessThan {
+            field: "score".to_string(),
+            value: FilterValue::Float(50.0),
+        };
+        assert!(!lt.evaluate(&metadata), "75 < 50.0 must be false");
+
+        // Float stored value vs Integer literal, the other direction.
+        metadata.insert("score".to_string(), "12.5".to_string());
+        let ge = MetadataFilter::GreaterThanOrEqual {
+            field: "score".to_string(),
+            value: FilterValue::Integer(12),
+        };
+        assert!(ge.evaluate(&metadata), "12.5 >= 12 must be true");
+
+        let le = MetadataFilter::LessThanOrEqual {
+            field: "score".to_string(),
+            value: FilterValue::Integer(12),
+        };
+        assert!(!le.evaluate(&metadata), "12.5 <= 12 must be false");
     }
 
     #[test]

@@ -473,7 +473,7 @@ impl ResearchNetworkAnalyzer {
     /// there is no external publication database to resolve them from
     /// otherwise, so metadata must be registered before an embedding can be
     /// generated. Registering also makes the publication discoverable via
-    /// [`get_author_publications`](Self::get_author_publications) for every
+    /// `get_author_publications` for every
     /// author listed in `metadata.authors`.
     pub fn register_publication_metadata(
         &self,
@@ -489,7 +489,7 @@ impl ResearchNetworkAnalyzer {
     /// Record a collaboration edge between two authors.
     ///
     /// Stored bidirectionally so
-    /// [`get_author_collaborations`](Self::get_author_collaborations) can
+    /// `get_author_collaborations` can
     /// look it up from either author's perspective. This is the real,
     /// in-process data source backing collaboration-derived statistics
     /// (e.g. `collaboration_score` in [`AuthorEmbedding`]) — nothing here

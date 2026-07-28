@@ -141,15 +141,20 @@ impl HnswIndex {
         let mut candidates = BinaryHeap::new();
         let mut dynamic_list: BinaryHeap<std::cmp::Reverse<Candidate>> = BinaryHeap::new();
 
-        // Initialize with entry points
+        // Initialize with entry points. They must ALWAYS seed the frontier —
+        // `visited` is shared across the per-level insertion loop, so the entry
+        // points for a given level are typically already marked visited (from a
+        // higher level or the initial `visited.insert(entry_point)`). Guarding
+        // the seeding on `!visited.contains` left the construction search with an
+        // empty candidate set, so NO neighbors were ever selected and the graph
+        // was built with zero connections. Marking `visited` stays idempotent;
+        // the guard only ever belongs on *neighbor* expansion below.
         for &entry_id in entry_points {
-            if !visited.contains(&entry_id) {
-                visited.insert(entry_id);
-                let distance = self.calculate_distance(query, entry_id)?;
-                let candidate = Candidate::new(entry_id, distance);
-                candidates.push(candidate);
-                dynamic_list.push(std::cmp::Reverse(candidate));
-            }
+            visited.insert(entry_id);
+            let distance = self.calculate_distance(query, entry_id)?;
+            let candidate = Candidate::new(entry_id, distance);
+            candidates.push(candidate);
+            dynamic_list.push(std::cmp::Reverse(candidate));
         }
 
         // Main search loop
@@ -212,17 +217,35 @@ impl HnswIndex {
         self.select_neighbors_heuristic(candidates, m)
     }
 
-    /// Calculate distance between two nodes
+    /// Calculate distance between two nodes.
+    ///
+    /// Uses the index's configured [`SimilarityMetric`](crate::similarity::SimilarityMetric)
+    /// so that graph construction (neighbor selection & pruning) agrees with
+    /// query-time traversal. Previously this was hardcoded to cosine distance,
+    /// which silently degraded recall for indices configured with Euclidean /
+    /// Manhattan / other metrics.
+    ///
+    /// Uses [`SimilarityMetric::distance_slices`] against each node's cached
+    /// `vector_data_f32` rather than [`SimilarityMetric::distance`] against
+    /// `node.vector`: the latter calls `Vector::as_f32()` on every single
+    /// invocation, which allocates and clones a fresh `Vec<f32>` per operand.
+    /// This function sits in the hottest loop in graph construction
+    /// (`select_neighbors_heuristic` / `prune_connections` call it up to
+    /// O(M × candidates) times per insertion), so that allocation overhead is
+    /// not incidental — it previously made large-index construction take
+    /// orders of magnitude longer than the underlying math requires.
+    /// `vector_data_f32` is kept in sync with `vector` at every mutation site
+    /// (`Node::new`, `Node::with_metadata`, `update_vector`), so this is a
+    /// value-identical, allocation-free replacement.
     fn calculate_distance_between_nodes(&self, node1_id: usize, node2_id: usize) -> Option<f32> {
         let nodes = self.nodes();
         let node1 = nodes.get(node1_id)?;
         let node2 = nodes.get(node2_id)?;
 
-        // Use cosine distance (1 - cosine_similarity) for similarity calculations
-        match node1.vector.cosine_similarity(&node2.vector) {
-            Ok(similarity) => Some(1.0 - similarity),
-            _ => None,
-        }
+        self.config()
+            .metric
+            .distance_slices(&node1.vector_data_f32, &node2.vector_data_f32)
+            .ok()
     }
 
     /// Generate a random level for a new node
@@ -255,6 +278,31 @@ impl HnswIndex {
     }
 
     /// Select neighbors using heuristic for better connectivity
+    ///
+    /// # Complexity
+    ///
+    /// This used to recompute, on every one of the `m` selection rounds, the
+    /// distance from every remaining candidate to *every already-selected*
+    /// neighbor from scratch — O(M² × candidates) `calculate_distance_between_nodes`
+    /// calls in total. Once real graph connectivity started flowing through
+    /// this function (see the `search_layer_for_construction` entry-point-seeding
+    /// fix elsewhere in this file — previously entry points were skipped
+    /// whenever already `visited`, which starved this function of real
+    /// candidates and hid its cost), that quadratic-in-M factor made
+    /// construction of a few hundred to a few thousand vectors take minutes
+    /// instead of a fraction of a second.
+    ///
+    /// The diversity criterion only ever needs `min_distance_to_selected`,
+    /// i.e. the minimum distance from a candidate to *any* member of the
+    /// current selected set. That running minimum can be maintained
+    /// incrementally: each round adds exactly one new member to `selected`,
+    /// so folding in the distance to *that one new member* (via `f32::min`)
+    /// reproduces the exact same minimum as recomputing over the whole set,
+    /// since `min(a, b, c) == min(min(a, b), c)`. This drops the cost to
+    /// O(M × candidates) — for the default config (`m_l0` = 32) that is a
+    /// 32x reduction in distance evaluations, with identical output (same
+    /// selected-node set, same tie-breaking order) to the original
+    /// implementation.
     fn select_neighbors_heuristic(&self, candidates: &[usize], m: usize) -> Vec<usize> {
         // Implementation of heuristic neighbor selection algorithm
         // This provides better connectivity than simple closest selection
@@ -267,7 +315,6 @@ impl HnswIndex {
             return candidates.to_vec();
         }
 
-        let mut selected = HashSet::new();
         let mut candidates_with_distance: Vec<(usize, f32)> = Vec::new();
 
         // Calculate distances for all candidates (assuming they're already sorted by distance)
@@ -283,49 +330,71 @@ impl HnswIndex {
         candidates_with_distance
             .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        // Select first candidate (closest)
-        if let Some((first_id, _)) = candidates_with_distance.first() {
-            selected.insert(*first_id);
+        let n = candidates_with_distance.len();
+        // Running minimum distance from each not-yet-selected candidate (by
+        // index into `candidates_with_distance`) to the currently-selected
+        // set. Updated incrementally, one newly-added member at a time.
+        let mut min_distance_to_selected = vec![f32::INFINITY; n];
+        let mut is_selected = vec![false; n];
+
+        let mut selected: Vec<usize> = Vec::with_capacity(m.min(n));
+
+        // Select first candidate (closest to the query-side anchor)
+        let mut last_selected_idx = 0usize;
+        if n > 0 {
+            is_selected[0] = true;
+            selected.push(candidates_with_distance[0].0);
         }
 
         // For remaining slots, use diversity-based selection
-        while selected.len() < m && selected.len() < candidates_with_distance.len() {
-            let mut best_candidate = None;
-            let mut best_score = f32::NEG_INFINITY;
+        while selected.len() < m && selected.len() < n {
+            let last_selected_id = candidates_with_distance[last_selected_idx].0;
 
-            for &(candidate_id, candidate_distance) in &candidates_with_distance {
-                if selected.contains(&candidate_id) {
+            // Fold the newly-selected member into every remaining candidate's
+            // running minimum. Members folded in on earlier rounds are
+            // already reflected in `min_distance_to_selected`, so this alone
+            // keeps each entry equal to the true min-distance-to-selected.
+            for (idx, slot) in min_distance_to_selected.iter_mut().enumerate() {
+                if is_selected[idx] {
                     continue;
                 }
-
-                // Calculate diversity score (prefer candidates far from already selected)
-                let mut min_distance_to_selected = f32::INFINITY;
-                for &selected_id in &selected {
-                    if let Some(dist) =
-                        self.calculate_distance_between_nodes(candidate_id, selected_id)
-                    {
-                        min_distance_to_selected = min_distance_to_selected.min(dist);
+                let candidate_id = candidates_with_distance[idx].0;
+                if let Some(dist) =
+                    self.calculate_distance_between_nodes(candidate_id, last_selected_id)
+                {
+                    if dist < *slot {
+                        *slot = dist;
                     }
-                }
-
-                // Score combines closeness to query and distance from selected
-                let diversity_weight = 0.3;
-                let score = -candidate_distance + diversity_weight * min_distance_to_selected;
-
-                if score > best_score {
-                    best_score = score;
-                    best_candidate = Some(candidate_id);
                 }
             }
 
-            if let Some(best_id) = best_candidate {
-                selected.insert(best_id);
-            } else {
-                break;
+            // Score combines closeness to query and distance from selected
+            let diversity_weight = 0.3;
+            let mut best_idx = None;
+            let mut best_score = f32::NEG_INFINITY;
+            for idx in 0..n {
+                if is_selected[idx] {
+                    continue;
+                }
+                let candidate_distance = candidates_with_distance[idx].1;
+                let score = -candidate_distance + diversity_weight * min_distance_to_selected[idx];
+                if score > best_score {
+                    best_score = score;
+                    best_idx = Some(idx);
+                }
+            }
+
+            match best_idx {
+                Some(idx) => {
+                    is_selected[idx] = true;
+                    selected.push(candidates_with_distance[idx].0);
+                    last_selected_idx = idx;
+                }
+                None => break,
             }
         }
 
-        selected.into_iter().collect()
+        selected
     }
 
     /// Prune connections to maintain M connections per node

@@ -228,6 +228,10 @@ pub struct QuantumCommSystem {
     network_topology: RwLock<NetworkTopology>,
     quantum_resources: Semaphore,
     performance_metrics: RwLock<QuantumMetrics>,
+    /// One-time-pad key material, keyed by per-message key id. Each entry is the
+    /// full-length symmetric key used to encrypt one message; it is consumed
+    /// (removed) on decryption so keys are never reused.
+    channel_keys: RwLock<HashMap<String, Vec<u8>>>,
 }
 
 /// Quantum system performance metrics
@@ -259,6 +263,7 @@ impl QuantumCommSystem {
             network_topology: RwLock::new(NetworkTopology::AdaptiveHybrid),
             quantum_resources,
             performance_metrics: RwLock::new(QuantumMetrics::default()),
+            channel_keys: RwLock::new(HashMap::new()),
         }
     }
 
@@ -578,6 +583,23 @@ impl QuantumCommSystem {
         // Create entangled pairs for the channel
         let entangled_pair_id = self.create_entangled_pair(source, destination).await?;
 
+        // Select the QKD protocol from configuration rather than hardcoding.
+        // Only BB84 has an implemented encode/measure path; any other configured
+        // protocol is rejected explicitly (fail-loud) instead of being silently
+        // downgraded to BB84.
+        let quantum_protocol = self
+            .config
+            .security_protocols
+            .first()
+            .cloned()
+            .unwrap_or(QuantumSecurityProtocol::BB84);
+        if !matches!(quantum_protocol, QuantumSecurityProtocol::BB84) {
+            return Err(anyhow!(
+                "Quantum security protocol {:?} is not implemented; only BB84 is currently supported",
+                quantum_protocol
+            ));
+        }
+
         let channel = QuantumChannel {
             channel_id: channel_id.clone(),
             source_node: source.to_string(),
@@ -587,7 +609,7 @@ impl QuantumCommSystem {
             transmission_rate_qubits_per_sec: 1000.0,
             error_rate: 0.01,
             channel_capacity: 1.0, // 1 qubit per use
-            quantum_protocol: QuantumSecurityProtocol::BB84,
+            quantum_protocol,
             classical_channel: Some(format!("classical_{channel_id}")),
         };
 
@@ -614,10 +636,19 @@ impl QuantumCommSystem {
             .get(channel_id)
             .ok_or_else(|| anyhow!("Quantum channel not found: {}", channel_id))?;
 
+        // Only BB84 has an implemented encode path. Reject anything else so the
+        // caller is never told data was securely transmitted when it was not.
+        if !matches!(channel.quantum_protocol, QuantumSecurityProtocol::BB84) {
+            return Err(anyhow!(
+                "Quantum security protocol {:?} is not implemented for encryption",
+                channel.quantum_protocol
+            ));
+        }
+
         // Serialize event
         let event_data = serde_json::to_vec(event)?;
 
-        // Quantum encrypt using BB84 protocol (simplified)
+        // Quantum encrypt using BB84-derived one-time-pad key material.
         let encrypted_data = self.bb84_encrypt(&event_data, channel).await?;
 
         debug!(
@@ -628,27 +659,78 @@ impl QuantumCommSystem {
         Ok(encrypted_data)
     }
 
-    /// BB84 quantum key distribution and encryption
-    async fn bb84_encrypt(&self, data: &[u8], _channel: &QuantumChannel) -> Result<Vec<u8>> {
-        // Simplified BB84 implementation
-        let mut encrypted = Vec::new();
-
-        let mut rng = Random::default();
-        for &byte in data {
-            // Generate random basis and bit
-            let _basis = if rng.random_bool_with_chance(0.5) {
-                MeasurementBasis::Computational
-            } else {
-                MeasurementBasis::Diagonal
-            };
-            let key_bit = (rng.random_f64() * 256.0) as u8 & 1;
-
-            // XOR encrypt with quantum key
-            let encrypted_byte = byte ^ key_bit;
-            encrypted.push(encrypted_byte);
+    /// Decrypt an event previously produced by [`Self::send_quantum_encrypted_event`].
+    ///
+    /// The ciphertext carries a 16-byte key id prefix identifying the one-time
+    /// pad stored at encryption time. The key is consumed (removed) on use so it
+    /// can never be reused. Returns an error if the key id is unknown/already
+    /// consumed or the payload is malformed.
+    pub async fn receive_quantum_encrypted_event(&self, data: &[u8]) -> Result<StreamEvent> {
+        if data.len() < 16 {
+            return Err(anyhow!(
+                "Quantum ciphertext too short: expected at least a 16-byte key id prefix"
+            ));
         }
 
-        Ok(encrypted)
+        let (id_bytes, payload) = data.split_at(16);
+        let mut id_arr = [0u8; 16];
+        id_arr.copy_from_slice(id_bytes);
+        let key_id = uuid::Uuid::from_bytes(id_arr).to_string();
+
+        let key = {
+            let mut keys = self.channel_keys.write().await;
+            keys.remove(&key_id)
+                .ok_or_else(|| anyhow!("Unknown or already-consumed quantum key: {}", key_id))?
+        };
+
+        if key.len() != payload.len() {
+            return Err(anyhow!(
+                "Quantum key length {} does not match payload length {}",
+                key.len(),
+                payload.len()
+            ));
+        }
+
+        let plaintext: Vec<u8> = payload
+            .iter()
+            .zip(key.iter())
+            .map(|(cipher, k)| cipher ^ k)
+            .collect();
+
+        let event: StreamEvent = serde_json::from_slice(&plaintext)
+            .map_err(|e| anyhow!("Failed to deserialize decrypted event: {}", e))?;
+        Ok(event)
+    }
+
+    /// BB84 quantum key distribution and encryption.
+    ///
+    /// Generates full-byte one-time-pad key material (8 bits of key per data
+    /// byte), XOR-encrypts the plaintext, and persists the key under a fresh key
+    /// id which is prefixed (16 bytes) to the returned ciphertext. The matching
+    /// key is later consumed by [`Self::receive_quantum_encrypted_event`], so
+    /// the data is fully recoverable (previously the per-byte key was discarded,
+    /// making the ciphertext unrecoverable).
+    async fn bb84_encrypt(&self, data: &[u8], _channel: &QuantumChannel) -> Result<Vec<u8>> {
+        let key_id = uuid::Uuid::new_v4();
+        let mut rng = Random::default();
+
+        let mut key = Vec::with_capacity(data.len());
+        let mut out = Vec::with_capacity(16 + data.len());
+        out.extend_from_slice(key_id.as_bytes());
+
+        for &byte in data {
+            // Full-byte key derived from the (simulated) BB84 basis/bit stream.
+            let key_byte = (rng.random_f64() * 256.0) as u8;
+            key.push(key_byte);
+            out.push(byte ^ key_byte);
+        }
+
+        self.channel_keys
+            .write()
+            .await
+            .insert(key_id.to_string(), key);
+
+        Ok(out)
     }
 
     /// Get quantum system metrics
@@ -786,6 +868,68 @@ mod tests {
             .await
             .unwrap();
         assert!(!channel_id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn regression_quantum_encrypt_roundtrip() {
+        let config = QuantumCommConfig::default();
+        let system = QuantumCommSystem::new(config);
+
+        let channel_id = system
+            .establish_quantum_channel("source", "destination")
+            .await
+            .unwrap();
+
+        let event = StreamEvent::TripleAdded {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+            graph: None,
+            metadata: crate::event::EventMetadata::default(),
+        };
+
+        let ciphertext = system
+            .send_quantum_encrypted_event(&event, &channel_id)
+            .await
+            .unwrap();
+
+        // Ciphertext must be recoverable (previously the key was discarded).
+        let decrypted = system
+            .receive_quantum_encrypted_event(&ciphertext)
+            .await
+            .unwrap();
+
+        match decrypted {
+            StreamEvent::TripleAdded {
+                subject, object, ..
+            } => {
+                assert_eq!(subject, "http://example.org/s");
+                assert_eq!(object, "http://example.org/o");
+            }
+            other => panic!("Unexpected decrypted event: {other:?}"),
+        }
+
+        // The one-time pad is consumed: a second decrypt attempt must fail.
+        assert!(system
+            .receive_quantum_encrypted_event(&ciphertext)
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn regression_unsupported_protocol_rejected() {
+        let config = QuantumCommConfig {
+            security_protocols: vec![QuantumSecurityProtocol::E91],
+            ..Default::default()
+        };
+        let system = QuantumCommSystem::new(config);
+
+        // A non-BB84 configured protocol must fail loudly at channel setup
+        // rather than being silently downgraded to BB84.
+        assert!(system
+            .establish_quantum_channel("source", "destination")
+            .await
+            .is_err());
     }
 
     #[test]

@@ -500,14 +500,26 @@ fn test_register_custom_feature() {
 }
 
 #[test]
-fn test_kafka_is_beyond_jena() {
+fn test_schema_registry_is_beyond_jena() {
     let c = checker();
-    let f = c.all_features().iter().find(|f| f.name.contains("Kafka"));
+    let f = c
+        .all_features()
+        .iter()
+        .find(|f| f.name.contains("Schema Registry"));
     assert!(f.is_some());
     assert!(matches!(
         f.unwrap().oxirs_support,
         FeatureStatus::BeyondJena
     ));
+}
+
+/// The Kafka backend was removed in 0.4.1, so the checker must not advertise it —
+/// a "beyond Jena" claim for a backend that does not exist is exactly the kind of
+/// fabrication this release set out to remove.
+#[test]
+fn test_no_kafka_feature_is_advertised() {
+    let c = checker();
+    assert!(!c.all_features().iter().any(|f| f.name.contains("Kafka")));
 }
 
 #[test]

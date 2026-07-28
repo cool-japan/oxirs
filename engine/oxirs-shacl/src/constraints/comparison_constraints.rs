@@ -18,6 +18,19 @@ use crate::Result;
 use oxirs_core::{model::Term, rdf_store::Store};
 use serde::{Deserialize, Serialize};
 
+/// Convert a focus node `Term` into an `oxirs_core::model::Subject`, if the term
+/// can occur as an RDF subject. Both IRIs and blank nodes are valid subjects
+/// (SHACL shapes are routinely applied to blank-node focus nodes), so this
+/// covers both instead of silently dropping blank-node focus nodes.
+fn focus_node_as_subject(focus_node: &Term) -> Option<oxirs_core::model::Subject> {
+    use oxirs_core::model::Subject;
+    match focus_node {
+        Term::NamedNode(nn) => Some(Subject::from(nn.clone())),
+        Term::BlankNode(bn) => Some(Subject::from(bn.clone())),
+        _ => None,
+    }
+}
+
 /// `sh:equals` constraint (SHACL Core §4.5.1).
 ///
 /// Validates that the set of value nodes for the focus path equals the set of
@@ -50,15 +63,14 @@ impl EqualsConstraint {
         context: &ConstraintContext,
         store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        use oxirs_core::model::{Predicate, Subject};
+        use oxirs_core::model::Predicate;
 
         // Get the property values for the constraint property
         let mut constraint_property_values = Vec::new();
 
-        if let (Term::NamedNode(focus_node), Term::NamedNode(property_node)) =
-            (&context.focus_node, &self.property)
+        if let (Some(subject), Term::NamedNode(property_node)) =
+            (focus_node_as_subject(&context.focus_node), &self.property)
         {
-            let subject = Subject::from(focus_node.clone());
             let predicate = Predicate::from(property_node.clone());
 
             let quads = store.find_quads(Some(&subject), Some(&predicate), None, None)?;
@@ -109,15 +121,14 @@ impl DisjointConstraint {
         context: &ConstraintContext,
         store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        use oxirs_core::model::{Predicate, Subject};
+        use oxirs_core::model::Predicate;
 
         // Get the property values for the constraint property
         let mut constraint_property_values = Vec::new();
 
-        if let (Term::NamedNode(focus_node), Term::NamedNode(property_node)) =
-            (&context.focus_node, &self.property)
+        if let (Some(subject), Term::NamedNode(property_node)) =
+            (focus_node_as_subject(&context.focus_node), &self.property)
         {
-            let subject = Subject::from(focus_node.clone());
             let predicate = Predicate::from(property_node.clone());
 
             let quads = store.find_quads(Some(&subject), Some(&predicate), None, None)?;
@@ -145,9 +156,9 @@ impl DisjointConstraint {
 
 /// `sh:lessThan` constraint (SHACL Core §4.5.3).
 ///
-/// For every value node `v` of the focus shape, there must be at least one
-/// value `w` of the comparator property such that `v < w` under SPARQL ordering.
-/// Non-numeric (and non-comparable) value nodes are skipped.
+/// For every value node `v` of the focus shape, `v` must be less than EVERY
+/// value `w` of the comparator property (universal quantification) under
+/// SPARQL ordering. Non-numeric (and non-comparable) value nodes are skipped.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LessThanConstraint {
     /// Comparator property whose values must each be greater than every value node.
@@ -170,15 +181,14 @@ impl LessThanConstraint {
         store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         use crate::validation::utils::{is_numeric_term, parse_numeric_value};
-        use oxirs_core::model::{Predicate, Subject};
+        use oxirs_core::model::Predicate;
 
         // Get the property values for the constraint property
         let mut constraint_property_values = Vec::new();
 
-        if let (Term::NamedNode(focus_node), Term::NamedNode(property_node)) =
-            (&context.focus_node, &self.property)
+        if let (Some(subject), Term::NamedNode(property_node)) =
+            (focus_node_as_subject(&context.focus_node), &self.property)
         {
-            let subject = Subject::from(focus_node.clone());
             let predicate = Predicate::from(property_node.clone());
 
             let quads = store.find_quads(Some(&subject), Some(&predicate), None, None)?;
@@ -187,33 +197,37 @@ impl LessThanConstraint {
             }
         }
 
-        // Check if current values are less than constraint property values
+        // Per SHACL Core §4.5.3, every value node must be less than ALL numeric
+        // values of the comparator property (universal quantification), not
+        // merely at least one of them.
         for current_value in &context.values {
             if !is_numeric_term(current_value) {
                 continue; // Skip non-numeric values
             }
 
             let current_num = parse_numeric_value(current_value)?;
-            let mut satisfied = false;
 
             for constraint_value in &constraint_property_values {
-                if is_numeric_term(constraint_value) {
-                    let constraint_num = parse_numeric_value(constraint_value)?;
-                    if current_num < constraint_num {
-                        satisfied = true;
-                        break;
-                    }
+                if !is_numeric_term(constraint_value) {
+                    continue; // Skip non-numeric comparator values
                 }
-            }
 
-            if !satisfied {
-                return Ok(ConstraintEvaluationResult::violated(
-                    Some(current_value.clone()),
-                    Some(format!(
-                        "Value {current_value} is not less than any value of property {}",
-                        self.property
-                    )),
-                ));
+                let constraint_num = parse_numeric_value(constraint_value)?;
+                // Use `partial_cmp` (rather than `!(a < b)`) so that
+                // incomparable values (e.g. NaN) are treated consistently as
+                // a violation, matching a strict "a < b" success condition.
+                if !matches!(
+                    current_num.partial_cmp(&constraint_num),
+                    Some(std::cmp::Ordering::Less)
+                ) {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(current_value.clone()),
+                        Some(format!(
+                            "Value {current_value} is not less than value {constraint_value} of property {}",
+                            self.property
+                        )),
+                    ));
+                }
             }
         }
 
@@ -246,15 +260,14 @@ impl LessThanOrEqualsConstraint {
         store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         use crate::validation::utils::{is_numeric_term, parse_numeric_value};
-        use oxirs_core::model::{Predicate, Subject};
+        use oxirs_core::model::Predicate;
 
         // Get the property values for the constraint property
         let mut constraint_property_values = Vec::new();
 
-        if let (Term::NamedNode(focus_node), Term::NamedNode(property_node)) =
-            (&context.focus_node, &self.property)
+        if let (Some(subject), Term::NamedNode(property_node)) =
+            (focus_node_as_subject(&context.focus_node), &self.property)
         {
-            let subject = Subject::from(focus_node.clone());
             let predicate = Predicate::from(property_node.clone());
 
             let quads = store.find_quads(Some(&subject), Some(&predicate), None, None)?;
@@ -263,30 +276,34 @@ impl LessThanOrEqualsConstraint {
             }
         }
 
-        // Check if current values are less than or equal to constraint property values
+        // Per SHACL Core §4.5.4, every value node must be less than or equal to
+        // ALL numeric values of the comparator property (universal
+        // quantification), not merely at least one of them.
         for current_value in &context.values {
             if !is_numeric_term(current_value) {
                 continue; // Skip non-numeric values
             }
 
             let current_num = parse_numeric_value(current_value)?;
-            let mut satisfied = false;
 
             for constraint_value in &constraint_property_values {
-                if is_numeric_term(constraint_value) {
-                    let constraint_num = parse_numeric_value(constraint_value)?;
-                    if current_num <= constraint_num {
-                        satisfied = true;
-                        break;
-                    }
+                if !is_numeric_term(constraint_value) {
+                    continue; // Skip non-numeric comparator values
                 }
-            }
 
-            if !satisfied {
-                return Ok(ConstraintEvaluationResult::violated(
-                    Some(current_value.clone()),
-                    Some(format!("Value {current_value} is not less than or equal to any value of property {}", self.property)),
-                ));
+                let constraint_num = parse_numeric_value(constraint_value)?;
+                // Use `partial_cmp` (rather than `!(a <= b)`) so that
+                // incomparable values (e.g. NaN) are treated consistently as
+                // a violation, matching a strict "a <= b" success condition.
+                if !matches!(
+                    current_num.partial_cmp(&constraint_num),
+                    Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal)
+                ) {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(current_value.clone()),
+                        Some(format!("Value {current_value} is not less than or equal to value {constraint_value} of property {}", self.property)),
+                    ));
+                }
             }
         }
 
@@ -382,7 +399,8 @@ mod tests {
     fn insert_triple(store: &ConcreteStore, subject: &Term, predicate_iri: &str, object: Term) {
         let subj = match subject {
             Term::NamedNode(n) => Subject::from(n.clone()),
-            _ => panic!("subject must be named node"),
+            Term::BlankNode(b) => Subject::from(b.clone()),
+            _ => panic!("subject must be a named node or blank node"),
         };
         let pred = Predicate::from(NamedNode::new(predicate_iri).expect("valid IRI"));
         let obj = match object {
@@ -758,6 +776,85 @@ mod tests {
         let store = ConcreteStore::new().expect("store");
         let ctx = make_ctx(focus_node(), property_path(PRED_B), vec![]);
         assert!(c.evaluate(&ctx, &store).expect("eval").is_violated());
+    }
+
+    // ---- Universal quantification for sh:lessThan / sh:lessThanOrEquals ----
+
+    #[test]
+    fn regression_less_than_requires_universal_not_existential() {
+        // Focus value 15, comparator property has TWO values: 10 and 20.
+        // 15 is NOT less than 10, so this must be a VIOLATION even though
+        // 15 < 20 (the old existential "satisfied = any(...)" bug would have
+        // reported this as satisfied after finding just the 20 match).
+        let c = LessThanConstraint::new(make_iri(PRED_A));
+        let store = ConcreteStore::new().expect("store");
+        insert_triple(&store, &focus_node(), PRED_A, int_lit("10"));
+        insert_triple(&store, &focus_node(), PRED_A, int_lit("20"));
+        let ctx = make_ctx(focus_node(), property_path(PRED_B), vec![int_lit("15")]);
+        let result = c.evaluate(&ctx, &store).expect("eval");
+        assert!(
+            result.is_violated(),
+            "15 is not less than 10, so this must violate even though 15 < 20"
+        );
+    }
+
+    #[test]
+    fn regression_less_than_satisfied_when_less_than_all_comparator_values() {
+        let c = LessThanConstraint::new(make_iri(PRED_A));
+        let store = ConcreteStore::new().expect("store");
+        insert_triple(&store, &focus_node(), PRED_A, int_lit("10"));
+        insert_triple(&store, &focus_node(), PRED_A, int_lit("20"));
+        let ctx = make_ctx(focus_node(), property_path(PRED_B), vec![int_lit("5")]);
+        let result = c.evaluate(&ctx, &store).expect("eval");
+        assert!(
+            result.is_satisfied(),
+            "5 is less than every comparator value (10 and 20), so this must be satisfied"
+        );
+    }
+
+    #[test]
+    fn regression_less_than_or_equals_requires_universal_not_existential() {
+        let c = LessThanOrEqualsConstraint::new(make_iri(PRED_A));
+        let store = ConcreteStore::new().expect("store");
+        insert_triple(&store, &focus_node(), PRED_A, int_lit("10"));
+        insert_triple(&store, &focus_node(), PRED_A, int_lit("20"));
+        // 15 <= 20 but 15 > 10 -> must violate.
+        let ctx = make_ctx(focus_node(), property_path(PRED_B), vec![int_lit("15")]);
+        let result = c.evaluate(&ctx, &store).expect("eval");
+        assert!(result.is_violated());
+    }
+
+    // ---- Blank-node focus node support for comparison constraints ----
+
+    #[test]
+    fn regression_disjoint_blank_node_focus_detects_overlap() {
+        let bnode = Term::BlankNode(oxirs_core::model::BlankNode::new_unchecked("b1"));
+        let c = DisjointConstraint::new(make_iri(PRED_A));
+        let store = ConcreteStore::new().expect("store");
+        // The blank-node focus node has "shared" for PRED_A in the store, and
+        // the current property (evaluated via context.values) also has
+        // "shared" -> real overlap -> must violate.
+        insert_triple(&store, &bnode, PRED_A, plain_lit("shared"));
+        let ctx = make_ctx(bnode, property_path(PRED_B), vec![plain_lit("shared")]);
+        let result = c.evaluate(&ctx, &store).expect("eval");
+        assert!(
+            result.is_violated(),
+            "blank-node focus node overlap must be detected, not silently ignored"
+        );
+    }
+
+    #[test]
+    fn regression_equals_blank_node_focus_uses_store_values() {
+        let bnode = Term::BlankNode(oxirs_core::model::BlankNode::new_unchecked("b2"));
+        let c = EqualsConstraint::new(make_iri(PRED_A));
+        let store = ConcreteStore::new().expect("store");
+        insert_triple(&store, &bnode, PRED_A, plain_lit("Alice"));
+        let ctx = make_ctx(bnode, property_path(PRED_B), vec![plain_lit("Alice")]);
+        let result = c.evaluate(&ctx, &store).expect("eval");
+        assert!(
+            result.is_satisfied(),
+            "blank-node focus node's stored PRED_A value must be looked up, not skipped"
+        );
     }
 }
 

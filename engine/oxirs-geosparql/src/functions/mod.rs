@@ -21,7 +21,6 @@ pub mod ogc11;
 pub mod rcc8;
 pub mod simple_features;
 pub mod topological_3d;
-pub mod topology_functions;
 
 #[cfg(feature = "proj-support")]
 pub mod transformation_cache;

@@ -853,3 +853,37 @@ fn test_builtin_divide_by_two() -> Result<(), Box<dyn std::error::Error>> {
     assert!(builtin_divide(&args)?);
     Ok(())
 }
+
+/// Regression: SWRL list built-ins must fail loud when handed an RDF list
+/// resource (an `Individual` heading an rdf:List) instead of silently splitting
+/// its IRI on commas and returning a wrong result. Comma-encoded literals still
+/// work as before.
+#[test]
+fn regression_list_builtin_rejects_rdf_list_resource() -> Result<(), Box<dyn std::error::Error>> {
+    // Individual (rdf:List head) in the list position -> explicit error.
+    let bad = vec![
+        SwrlArgument::Literal("b".to_string()),
+        SwrlArgument::Individual("http://example.org/list#head".to_string()),
+    ];
+    assert!(
+        builtin_member(&bad).is_err(),
+        "member() must reject an RDF list resource argument"
+    );
+
+    let bad_len = vec![
+        SwrlArgument::Individual("http://example.org/list#head".to_string()),
+        SwrlArgument::Literal("3".to_string()),
+    ];
+    assert!(
+        builtin_list_length(&bad_len).is_err(),
+        "listLength() must reject an RDF list resource argument"
+    );
+
+    // Comma-encoded literal list still evaluates correctly.
+    let good = vec![
+        SwrlArgument::Literal("a".to_string()),
+        SwrlArgument::Literal("a,b,c".to_string()),
+    ];
+    assert!(builtin_member(&good)?, "member('a', 'a,b,c') should hold");
+    Ok(())
+}

@@ -1,15 +1,15 @@
 # OxiRS GeoSPARQL - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Current Status
 
-OxiRS GeoSPARQL v0.3.2 is production-ready, providing complete OGC GeoSPARQL 1.0/1.1 implementation for spatial data and queries in RDF/SPARQL.
+OxiRS GeoSPARQL v0.4.1 is production-ready, providing complete OGC GeoSPARQL 1.0/1.1 implementation for spatial data and queries in RDF/SPARQL.
 
 ### Production Features
 - ✅ **GeoSPARQL Vocabulary** - Full support for GeoSPARQL ontology and datatypes
 - ✅ **WKT/GML Support** - Parse and serialize Well-Known Text and GML geometries; WKT parser accepts optional Z/M coordinate dimensions
-- ✅ **Topological Predicates** - All 24 relations (Simple Features, Egenhofer, RCC8); 16/24 run in pure Rust, the remaining 8 boundary-dependent Egenhofer/RCC8 relations require the companion `oxirs-geosparql-adapter-geos` crate (publish=false)
+- ✅ **Topological Predicates** - All 24 relations (Simple Features, Egenhofer, RCC8), all in pure Rust
 - ✅ **Geometric Operations** - Distance, buffer, convex hull, intersection, union
 - ✅ **Spatial Indexing** - R-tree based spatial index for efficient queries
 - ✅ **CRS Support** - Coordinate Reference System handling with EPSG codes
@@ -47,9 +47,10 @@ OxiRS GeoSPARQL v0.3.2 is production-ready, providing complete OGC GeoSPARQL 1.0
 - [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 26, 2026)
 - [x] `GeoPackage`'s SQLite backend migrated from `rusqlite` (bundled C `libsqlite3`) to Pure-Rust `oxisql-core`/`oxisql-sqlite-compat` (COOLJAPAN Pure-Rust Policy v2); new `GeoPackage::checkpoint()` for explicit WAL flush
 - [x] GEOS (`geos`/`geos-sys` C FFI) quarantined out of this crate into the new companion `oxirs-geosparql-adapter-geos` crate (`publish = false`); the `geos-backend` Cargo feature was removed. `eh_meet`/`eh_inside`/`eh_contains` and `rcc8_ec`/`rcc8_tpp`/`rcc8_tppi`/`rcc8_ntpp`/`rcc8_ntppi` now return `GeoSparqlError::UnsupportedOperation` by default and point callers at the adapter crate; their SPARQL functions are excluded from `get_all_geosparql_functions()`
+- [x] **GEOS dependency eliminated entirely.** `geo::algorithm::buffer` (i_overlay-backed, already a transitive dependency) covers every geometry type and the full OGC cap/join styles, which is all GEOS was providing. The `oxirs-geosparql-adapter-geos` crate, the `rust-buffer` feature and the `geo-buffer` dependency are deleted; `buffer`/`boundary` and the 8 boundary-dependent Egenhofer/RCC8 relations are Pure Rust and work by default, and all of them are registered in `get_all_geosparql_functions()` again. `buffer_rust` removed (**breaking**) — `buffer` supersedes it
 - [x] Shapefile writer emits interior rings (holes) for `Polygon`/`MultiPolygon`
 - [x] WKT parser accepts optional Z/M coordinate dimensions (`POINT Z`, `POINT M`, `POINT ZM`)
 - [x] `compressed_storage` round-trip fix: polygon holes and multi-part `MultiLineString`/`MultiPolygon` geometries no longer collapse to a single ring/part (new `ring_counts` field)
@@ -60,4 +61,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GeoSPARQL v0.3.2 - Spatial data support for RDF*
+*OxiRS GeoSPARQL v0.4.1 - Spatial data support for RDF*

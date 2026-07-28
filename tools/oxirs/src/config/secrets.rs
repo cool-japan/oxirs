@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
+// Only the `#[cfg(unix)]` blocks below (chmod 0o700 / 0o600 on the secrets
+// dir and files) need this trait; `std::os::unix` does not exist on Windows.
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 

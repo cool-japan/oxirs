@@ -662,3 +662,183 @@ fn test_constraint_evaluation_result_violated_no_value() {
     assert!(result.violating_value().is_none());
     assert!(result.message().is_some());
 }
+
+// ---- ValidationStrategy has a real effect on validate_store() ----
+
+/// Build a NodeShape targeting `ex:Person` with a linked PropertyShape
+/// requiring `sh:minCount 1` on `ex:name`, plus a store with one conforming
+/// instance (has a name) and one violating instance (no name).
+fn strategy_test_fixture() -> (IndexMap<ShapeId, crate::Shape>, ConcreteStore) {
+    use crate::targets::Target;
+    use crate::Shape;
+    use oxirs_core::model::{GraphName, Object, Predicate, Quad, Subject};
+
+    let person_class = NamedNode::new("http://example.org/Person").expect("valid IRI");
+    let name_pred = NamedNode::new("http://example.org/name").expect("valid IRI");
+    let rdf_type =
+        NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
+
+    let node_shape_id = ShapeId::new("http://example.org/PersonShape");
+    let mut node_shape = Shape::node_shape(node_shape_id.clone());
+    node_shape.add_target(Target::Class(person_class.clone()));
+
+    let prop_shape_id = ShapeId::new("http://example.org/PersonShape/name");
+    let path = PropertyPath::Predicate(name_pred.clone());
+    let mut prop_shape = Shape::property_shape(prop_shape_id.clone(), path);
+    let min_count_constraint = Constraint::MinCount(
+        crate::constraints::cardinality_constraints::MinCountConstraint { min_count: 1 },
+    );
+    prop_shape.add_constraint(min_count_constraint.component_id(), min_count_constraint);
+
+    node_shape.property_shapes.push(prop_shape_id.clone());
+
+    let mut shapes = IndexMap::new();
+    shapes.insert(node_shape_id, node_shape);
+    shapes.insert(prop_shape_id, prop_shape);
+
+    let store = ConcreteStore::new().expect("store creation");
+
+    let alice = NamedNode::new("http://example.org/alice").expect("valid IRI");
+    let bob = NamedNode::new("http://example.org/bob").expect("valid IRI");
+
+    store
+        .insert_quad(Quad::new(
+            Subject::NamedNode(alice.clone()),
+            Predicate::NamedNode(rdf_type.clone()),
+            Object::NamedNode(person_class.clone()),
+            GraphName::DefaultGraph,
+        ))
+        .expect("insert alice type");
+    store
+        .insert_quad(Quad::new(
+            Subject::NamedNode(alice),
+            Predicate::NamedNode(name_pred),
+            Object::Literal(Literal::new("Alice")),
+            GraphName::DefaultGraph,
+        ))
+        .expect("insert alice name");
+    // Bob has no ex:name -> must violate sh:minCount 1.
+    store
+        .insert_quad(Quad::new(
+            Subject::NamedNode(bob),
+            Predicate::NamedNode(rdf_type),
+            Object::NamedNode(person_class),
+            GraphName::DefaultGraph,
+        ))
+        .expect("insert bob type");
+
+    (shapes, store)
+}
+
+#[test]
+fn regression_validation_strategy_sequential_detects_violation() {
+    let (shapes, store) = strategy_test_fixture();
+    let config = ValidationConfig::default();
+    let mut engine = ValidationEngine::new(&shapes, config);
+    engine.set_validation_strategy(crate::ValidationStrategy::Sequential);
+    assert_eq!(
+        *engine.get_validation_strategy(),
+        crate::ValidationStrategy::Sequential
+    );
+
+    let report = engine.validate_store(&store).expect("validation");
+    assert!(!report.conforms(), "Bob's missing ex:name must violate");
+    assert_eq!(report.violation_count(), 1);
+}
+
+#[test]
+fn regression_validation_strategy_parallel_detects_violation() {
+    let (shapes, store) = strategy_test_fixture();
+    let config = ValidationConfig::default();
+    let mut engine = ValidationEngine::new(&shapes, config);
+    engine.set_validation_strategy(crate::ValidationStrategy::Parallel { max_threads: 2 });
+
+    let report = engine.validate_store(&store).expect("validation");
+    assert!(
+        !report.conforms(),
+        "Parallel strategy must detect the same violation as Sequential"
+    );
+    assert_eq!(report.violation_count(), 1);
+}
+
+#[test]
+fn regression_validation_strategy_parallel_default_threads_detects_violation() {
+    let (shapes, store) = strategy_test_fixture();
+    let config = ValidationConfig::default();
+    let mut engine = ValidationEngine::new(&shapes, config);
+    engine.set_validation_strategy(crate::ValidationStrategy::Parallel { max_threads: 0 });
+
+    let report = engine.validate_store(&store).expect("validation");
+    assert!(!report.conforms());
+    assert_eq!(report.violation_count(), 1);
+}
+
+#[test]
+fn regression_validation_strategy_streaming_detects_violation() {
+    let (shapes, store) = strategy_test_fixture();
+    let config = ValidationConfig::default();
+    let mut engine = ValidationEngine::new(&shapes, config);
+    // Deliberately tiny batch size to exercise the batching/cache-clearing path.
+    engine.set_validation_strategy(crate::ValidationStrategy::Streaming { batch_size: 1 });
+
+    let report = engine.validate_store(&store).expect("validation");
+    assert!(!report.conforms());
+    assert_eq!(report.violation_count(), 1);
+}
+
+#[test]
+fn regression_validation_strategy_incremental_detects_violation() {
+    let (shapes, store) = strategy_test_fixture();
+    let config = ValidationConfig::default();
+    let mut engine = ValidationEngine::new(&shapes, config);
+    engine.set_validation_strategy(crate::ValidationStrategy::Incremental {
+        force_revalidate: false,
+    });
+
+    let report = engine.validate_store(&store).expect("validation");
+    assert!(
+        !report.conforms(),
+        "Incremental strategy via validate_store() must still perform a full, \
+         correct revalidation rather than silently skipping nodes"
+    );
+    assert_eq!(report.violation_count(), 1);
+}
+
+#[test]
+fn regression_validation_strategy_optimized_with_engine_enabled_detects_violation() {
+    let (shapes, store) = strategy_test_fixture();
+    let config = ValidationConfig::default();
+    let mut engine = ValidationEngine::new(&shapes, config);
+    engine.enable_optimization();
+    assert_eq!(
+        *engine.get_validation_strategy(),
+        crate::ValidationStrategy::Optimized
+    );
+
+    let report = engine.validate_store(&store).expect("validation");
+    assert!(
+        !report.conforms(),
+        "Optimized strategy with optimization enabled (real parallel path) must \
+         still detect the violation"
+    );
+    assert_eq!(report.violation_count(), 1);
+}
+
+#[test]
+fn regression_validation_strategy_set_get_roundtrip() {
+    let shapes = IndexMap::new();
+    let config = ValidationConfig::default();
+    let mut engine = ValidationEngine::new(&shapes, config);
+
+    for strategy in [
+        crate::ValidationStrategy::Sequential,
+        crate::ValidationStrategy::Parallel { max_threads: 4 },
+        crate::ValidationStrategy::Streaming { batch_size: 100 },
+        crate::ValidationStrategy::Incremental {
+            force_revalidate: true,
+        },
+    ] {
+        engine.set_validation_strategy(strategy.clone());
+        assert_eq!(*engine.get_validation_strategy(), strategy);
+    }
+}

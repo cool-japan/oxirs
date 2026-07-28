@@ -99,7 +99,11 @@ impl SparqlTerm {
                     iri.clone()
                 }
             }
-            SparqlTerm::Literal { value, datatype, lang } => {
+            SparqlTerm::Literal {
+                value,
+                datatype,
+                lang,
+            } => {
                 let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
                 let base = format!("\"{}\"", escaped);
                 if let Some(lang_tag) = lang {
@@ -488,7 +492,9 @@ mod tests {
     fn test_term_literal_typed_absolute() {
         let t = SparqlTerm::typed_literal("42", "http://www.w3.org/2001/XMLSchema#integer");
         assert!(t.to_sparql_string().contains("\"42\""));
-        assert!(t.to_sparql_string().contains("^^<http://www.w3.org/2001/XMLSchema#integer>"));
+        assert!(t
+            .to_sparql_string()
+            .contains("^^<http://www.w3.org/2001/XMLSchema#integer>"));
     }
 
     #[test]
@@ -541,7 +547,11 @@ mod tests {
         let q = QueryBuilder::new()
             .select(&["x"])
             .distinct()
-            .where_triple(SparqlTerm::var("x"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("x"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .build();
         assert!(q.contains("DISTINCT"));
     }
@@ -565,8 +575,16 @@ mod tests {
     #[test]
     fn test_build_multiple_where_triples() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::iri("rdf:type"), SparqlTerm::var("type"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::iri("rdf:type"),
+                SparqlTerm::var("type"),
+            )
             .build();
         assert!(q.contains("rdf:type"));
     }
@@ -576,7 +594,11 @@ mod tests {
     #[test]
     fn test_build_filter() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("x"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("x"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .filter("?x > 0")
             .build();
         assert!(q.contains("FILTER"), "Expected FILTER keyword");
@@ -586,7 +608,11 @@ mod tests {
     #[test]
     fn test_build_multiple_filters() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("x"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("x"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .filter("?x > 0")
             .filter("?x < 100")
             .build();
@@ -604,7 +630,11 @@ mod tests {
             o: SparqlTerm::var("email"),
         }];
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::iri("foaf:name"), SparqlTerm::var("name"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::iri("foaf:name"),
+                SparqlTerm::var("name"),
+            )
             .optional(opt)
             .build();
         assert!(q.contains("OPTIONAL"));
@@ -616,7 +646,11 @@ mod tests {
     #[test]
     fn test_build_order_by_asc() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .order_by("name", OrderDirection::Asc)
             .build();
         assert!(q.contains("ORDER BY"));
@@ -626,7 +660,11 @@ mod tests {
     #[test]
     fn test_build_order_by_desc() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .order_by("score", OrderDirection::Desc)
             .build();
         assert!(q.contains("DESC(?score)"));
@@ -635,7 +673,11 @@ mod tests {
     #[test]
     fn test_build_order_by_multiple() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .order_by("a", OrderDirection::Asc)
             .order_by("b", OrderDirection::Desc)
             .build();
@@ -649,7 +691,11 @@ mod tests {
     fn test_build_group_by() {
         let q = QueryBuilder::new()
             .select(&["type", "count"])
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::iri("rdf:type"), SparqlTerm::var("type"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::iri("rdf:type"),
+                SparqlTerm::var("type"),
+            )
             .group_by("type")
             .build();
         assert!(q.contains("GROUP BY ?type"));
@@ -658,7 +704,11 @@ mod tests {
     #[test]
     fn test_build_having() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .group_by("s")
             .having("COUNT(?o) > 5")
             .build();
@@ -670,7 +720,11 @@ mod tests {
     #[test]
     fn test_build_limit() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .limit(25)
             .build();
         assert!(q.contains("LIMIT 25"));
@@ -679,7 +733,11 @@ mod tests {
     #[test]
     fn test_build_offset() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .offset(100)
             .build();
         assert!(q.contains("OFFSET 100"));
@@ -688,7 +746,11 @@ mod tests {
     #[test]
     fn test_build_limit_and_offset() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .limit(10)
             .offset(20)
             .build();
@@ -702,7 +764,11 @@ mod tests {
     fn test_build_prefix_appears() {
         let q = QueryBuilder::new()
             .prefix("foaf", "http://xmlns.com/foaf/0.1/")
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .build();
         assert!(q.contains("PREFIX foaf: <http://xmlns.com/foaf/0.1/>"));
     }
@@ -712,7 +778,11 @@ mod tests {
         let q = QueryBuilder::new()
             .prefix("foaf", "http://xmlns.com/foaf/0.1/")
             .prefix("schema", "http://schema.org/")
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .build();
         assert!(q.contains("PREFIX foaf:"));
         assert!(q.contains("PREFIX schema:"));
@@ -723,7 +793,11 @@ mod tests {
     #[test]
     fn test_build_ask_contains_ask() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::iri("rdf:type"), SparqlTerm::var("t"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::iri("rdf:type"),
+                SparqlTerm::var("t"),
+            )
             .build_ask();
         assert!(q.contains("ASK"));
         assert!(!q.contains("SELECT"));
@@ -732,7 +806,11 @@ mod tests {
     #[test]
     fn test_build_ask_contains_where() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .build_ask();
         assert!(q.contains("WHERE"));
     }
@@ -741,7 +819,11 @@ mod tests {
     fn test_build_ask_with_prefix() {
         let q = QueryBuilder::new()
             .prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::iri("rdf:type"), SparqlTerm::var("t"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::iri("rdf:type"),
+                SparqlTerm::var("t"),
+            )
             .build_ask();
         assert!(q.contains("PREFIX rdf:"));
         assert!(q.contains("ASK"));
@@ -752,7 +834,11 @@ mod tests {
     #[test]
     fn test_build_count_contains_count() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .build_count("s");
         assert!(q.contains("COUNT(?s)"));
         assert!(q.contains("AS ?count"));
@@ -761,7 +847,11 @@ mod tests {
     #[test]
     fn test_build_count_contains_select() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .build_count("s");
         assert!(q.contains("SELECT"));
     }
@@ -769,7 +859,11 @@ mod tests {
     #[test]
     fn test_build_count_var_with_question_mark() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .build_count("?s");
         // Should not double the ?
         assert!(q.contains("COUNT(?s)"));
@@ -838,7 +932,11 @@ mod tests {
     #[test]
     fn test_build_where_keyword_present() {
         let q = QueryBuilder::new()
-            .where_triple(SparqlTerm::var("s"), SparqlTerm::var("p"), SparqlTerm::var("o"))
+            .where_triple(
+                SparqlTerm::var("s"),
+                SparqlTerm::var("p"),
+                SparqlTerm::var("o"),
+            )
             .build();
         assert!(q.contains("WHERE {"));
     }

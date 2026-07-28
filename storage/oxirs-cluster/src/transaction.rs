@@ -162,9 +162,9 @@ impl TransactionCoordinator {
 
     /// Register (or update) the network address of a participant node so
     /// that this coordinator's prepare/commit/abort RPCs
-    /// ([`TransactionCoordinator::send_prepare_request`],
-    /// [`TransactionCoordinator::send_commit_request`],
-    /// [`TransactionCoordinator::send_abort_request`]) can actually reach it.
+    /// (`TransactionCoordinator::send_prepare_request`,
+    /// `TransactionCoordinator::send_commit_request`,
+    /// `TransactionCoordinator::send_abort_request`) can actually reach it.
     ///
     /// This must be called for every node that can end up as a shard
     /// participant (i.e. every node returned by

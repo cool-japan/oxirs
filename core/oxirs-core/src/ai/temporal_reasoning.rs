@@ -777,15 +777,81 @@ impl TemporalReasoner {
                     }
                 }
             }
-            _ => {
-                // For other query types, return all facts for now
+            TemporalQueryType::TemporalRelations { entity1, entity2 } => {
+                // Retrieve facts that involve either entity (as subject or object).
+                // This is the candidate set over which Allen-interval relations
+                // between the two entities' facts can be computed downstream.
                 for time_facts in self.temporal_kb.facts_by_time.values() {
-                    facts.extend(time_facts.clone());
+                    for fact in time_facts {
+                        let involves_e1 = &fact.subject == entity1 || &fact.object == entity1;
+                        let involves_e2 = &fact.subject == entity2 || &fact.object == entity2;
+                        if involves_e1 || involves_e2 {
+                            facts.push(fact.clone());
+                        }
+                    }
                 }
+            }
+            TemporalQueryType::ChangeDetection { entity, property } => {
+                // Retrieve facts asserting `property` about `entity`, i.e. the
+                // value history whose changes over time we want to detect.
+                for time_facts in self.temporal_kb.facts_by_time.values() {
+                    for fact in time_facts {
+                        if &fact.subject == entity && &fact.predicate == property {
+                            facts.push(fact.clone());
+                        }
+                    }
+                }
+            }
+            TemporalQueryType::EventSequence { pattern } => {
+                // Retrieve facts that match at least one event pattern (by event
+                // type and/or involved entities). An empty pattern list matches
+                // nothing rather than everything.
+                for time_facts in self.temporal_kb.facts_by_time.values() {
+                    for fact in time_facts {
+                        if pattern
+                            .iter()
+                            .any(|p| Self::fact_matches_event_pattern(fact, p))
+                        {
+                            facts.push(fact.clone());
+                        }
+                    }
+                }
+            }
+            TemporalQueryType::Aggregation { function, grouping } => {
+                // Aggregation queries require computing grouped aggregate values
+                // (e.g. counts per day), which the fact-retrieval/ranking pipeline
+                // does not synthesize. Returning the raw underlying facts would
+                // misrepresent them as the aggregate result, so fail loudly.
+                return Err(anyhow::anyhow!(
+                    "Temporal aggregation queries (function {:?}, grouping {:?}) are not \
+                     supported by TemporalReasoner::reason; no aggregate result is computed",
+                    function,
+                    grouping
+                ));
             }
         }
 
         Ok(facts)
+    }
+
+    /// Returns true if `fact` matches the given event pattern.
+    ///
+    /// A fact matches when it is compatible with the pattern's `event_type`
+    /// (checked against the fact's object, predicate, or `event:<type>` subject)
+    /// and, when the pattern names entities, involves at least one of them.
+    fn fact_matches_event_pattern(fact: &TemporalFact, pattern: &EventPattern) -> bool {
+        let type_matches = pattern.event_type.is_empty()
+            || fact.object == pattern.event_type
+            || fact.predicate == pattern.event_type
+            || fact.subject == format!("event:{}", pattern.event_type);
+
+        let entity_matches = pattern.entities.is_empty()
+            || pattern
+                .entities
+                .iter()
+                .any(|e| e == &fact.subject || e == &fact.object);
+
+        type_matches && entity_matches
     }
 
     /// Convert detected event to temporal fact
@@ -1007,5 +1073,114 @@ mod tests {
             .await
             .expect("async operation should succeed");
         assert!(!result.query_id.is_empty());
+    }
+
+    fn fact(subject: &str, predicate: &str, object: &str, start: Timestamp) -> TemporalFact {
+        TemporalFact {
+            subject: subject.to_string(),
+            predicate: predicate.to_string(),
+            object: object.to_string(),
+            validity: TimeInterval {
+                start,
+                end: start + 1000,
+                interval_type: IntervalType::Closed,
+            },
+            confidence: 0.9,
+            source: FactSource::Asserted,
+            annotations: HashMap::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn regression_change_detection_filters_by_entity_and_property() {
+        let config = AiConfig::default();
+        let mut reasoner = TemporalReasoner::new(&config).expect("construction should succeed");
+
+        reasoner
+            .add_fact(fact("ent:a", "prop:title", "Engineer", 1000))
+            .expect("add");
+        reasoner
+            .add_fact(fact("ent:a", "prop:title", "Manager", 2000))
+            .expect("add");
+        reasoner
+            .add_fact(fact("ent:a", "prop:city", "Seattle", 1500))
+            .expect("add");
+        reasoner
+            .add_fact(fact("ent:b", "prop:title", "Director", 1200))
+            .expect("add");
+
+        let query = TemporalQuery {
+            query_type: TemporalQueryType::ChangeDetection {
+                entity: "ent:a".to_string(),
+                property: "prop:title".to_string(),
+            },
+            entities: Vec::new(),
+            constraints: Vec::new(),
+            time_window: None,
+            include_inferred: false,
+        };
+        let result = reasoner.reason(&query).await.expect("reason");
+        // Exactly the two title facts about ent:a, not the city fact nor ent:b.
+        assert_eq!(result.results.len(), 2);
+        assert!(result
+            .results
+            .iter()
+            .all(|f| f.subject == "ent:a" && f.predicate == "prop:title"));
+    }
+
+    #[tokio::test]
+    async fn regression_temporal_relations_filters_by_entity_pair() {
+        let config = AiConfig::default();
+        let mut reasoner = TemporalReasoner::new(&config).expect("construction should succeed");
+
+        reasoner
+            .add_fact(fact("ent:a", "p", "ent:x", 1000))
+            .expect("add");
+        reasoner
+            .add_fact(fact("ent:b", "p", "ent:y", 1000))
+            .expect("add");
+        reasoner
+            .add_fact(fact("ent:c", "p", "ent:z", 1000))
+            .expect("add");
+
+        let query = TemporalQuery {
+            query_type: TemporalQueryType::TemporalRelations {
+                entity1: "ent:a".to_string(),
+                entity2: "ent:b".to_string(),
+            },
+            entities: Vec::new(),
+            constraints: Vec::new(),
+            time_window: None,
+            include_inferred: false,
+        };
+        let result = reasoner.reason(&query).await.expect("reason");
+        // Only facts involving ent:a or ent:b, never the ent:c fact.
+        assert!(!result.results.is_empty());
+        assert!(result
+            .results
+            .iter()
+            .all(|f| f.subject != "ent:c" && f.object != "ent:z"));
+    }
+
+    #[tokio::test]
+    async fn regression_aggregation_query_fails_loud() {
+        let config = AiConfig::default();
+        let mut reasoner = TemporalReasoner::new(&config).expect("construction should succeed");
+        reasoner
+            .add_fact(fact("ent:a", "p", "o", 1000))
+            .expect("add");
+
+        let query = TemporalQuery {
+            query_type: TemporalQueryType::Aggregation {
+                function: AggregationFunction::Count,
+                grouping: TemporalGrouping::ByDay,
+            },
+            entities: Vec::new(),
+            constraints: Vec::new(),
+            time_window: None,
+            include_inferred: false,
+        };
+        // Must not silently return all facts as a fake aggregate result.
+        assert!(reasoner.reason(&query).await.is_err());
     }
 }

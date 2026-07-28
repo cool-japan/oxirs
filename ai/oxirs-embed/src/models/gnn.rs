@@ -3,17 +3,21 @@
 //! This module provides various GNN architectures for knowledge graph embeddings
 //! including GCN, GraphSAGE, GAT, and Graph Transformers.
 
+use crate::models::serialization::{MatrixF32, VectorF32};
 use crate::{
     EmbeddingError, EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector,
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use scirs2_core::ndarray_ext::{Array1, Array2};
 #[allow(unused_imports)]
 use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::path::Path;
 use uuid::Uuid;
 
 /// Type of GNN architecture
@@ -139,6 +143,98 @@ struct LayerNormalization {
     gamma: Array1<f32>,
     beta: Array1<f32>,
     epsilon: f32,
+}
+
+/// Serializable mirror of [`AttentionWeights`].
+#[derive(Debug, Serialize, Deserialize)]
+struct AttentionWeightsSer {
+    query_weights: MatrixF32,
+    key_weights: MatrixF32,
+    value_weights: MatrixF32,
+    num_heads: usize,
+}
+
+/// Serializable mirror of [`LayerNormalization`].
+#[derive(Debug, Serialize, Deserialize)]
+struct LayerNormalizationSer {
+    gamma: VectorF32,
+    beta: VectorF32,
+    epsilon: f32,
+}
+
+/// Serializable mirror of a [`GNNLayer`].
+#[derive(Debug, Serialize, Deserialize)]
+struct GNNLayerSer {
+    weight_matrix: MatrixF32,
+    bias: VectorF32,
+    attention_weights: Option<AttentionWeightsSer>,
+    layer_norm: Option<LayerNormalizationSer>,
+}
+
+impl GNNLayerSer {
+    fn from_layer(layer: &GNNLayer) -> Self {
+        Self {
+            weight_matrix: MatrixF32::from_array(&layer.weight_matrix),
+            bias: VectorF32::from_array(&layer.bias),
+            attention_weights: layer
+                .attention_weights
+                .as_ref()
+                .map(|a| AttentionWeightsSer {
+                    query_weights: MatrixF32::from_array(&a.query_weights),
+                    key_weights: MatrixF32::from_array(&a.key_weights),
+                    value_weights: MatrixF32::from_array(&a.value_weights),
+                    num_heads: a.num_heads,
+                }),
+            layer_norm: layer.layer_norm.as_ref().map(|l| LayerNormalizationSer {
+                gamma: VectorF32::from_array(&l.gamma),
+                beta: VectorF32::from_array(&l.beta),
+                epsilon: l.epsilon,
+            }),
+        }
+    }
+
+    fn into_layer(self) -> Result<GNNLayer> {
+        let attention_weights = match self.attention_weights {
+            Some(a) => Some(AttentionWeights {
+                query_weights: a.query_weights.to_array()?,
+                key_weights: a.key_weights.to_array()?,
+                value_weights: a.value_weights.to_array()?,
+                num_heads: a.num_heads,
+            }),
+            None => None,
+        };
+        let layer_norm = self.layer_norm.map(|l| LayerNormalization {
+            gamma: l.gamma.to_array(),
+            beta: l.beta.to_array(),
+            epsilon: l.epsilon,
+        });
+        Ok(GNNLayer {
+            weight_matrix: self.weight_matrix.to_array()?,
+            bias: self.bias.to_array(),
+            attention_weights,
+            layer_norm,
+        })
+    }
+}
+
+/// Serializable representation of a [`GNNEmbedding`] model for persistence.
+#[derive(Debug, Serialize, Deserialize)]
+struct GNNSerializable {
+    id: Uuid,
+    config: GNNConfig,
+    entity_embeddings: HashMap<String, Vec<f32>>,
+    relation_embeddings: HashMap<String, Vec<f32>>,
+    entity_to_idx: HashMap<String, usize>,
+    relation_to_idx: HashMap<String, usize>,
+    idx_to_entity: HashMap<usize, String>,
+    idx_to_relation: HashMap<usize, String>,
+    adjacency_list: HashMap<usize, HashSet<(usize, usize)>>,
+    reverse_adjacency_list: HashMap<usize, HashSet<(usize, usize)>>,
+    triples: Vec<Triple>,
+    layers: Vec<GNNLayerSer>,
+    is_trained: bool,
+    creation_time: DateTime<Utc>,
+    last_training_time: Option<DateTime<Utc>>,
 }
 
 impl GNNEmbedding {
@@ -859,13 +955,80 @@ impl EmbeddingModel for GNNEmbedding {
         }
     }
 
-    fn save(&self, _path: &str) -> Result<()> {
-        // Implementation would save model weights and configuration
+    fn save(&self, path: &str) -> Result<()> {
+        let serializable = GNNSerializable {
+            id: self.id,
+            config: self.config.clone(),
+            entity_embeddings: self
+                .entity_embeddings
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_vec()))
+                .collect(),
+            relation_embeddings: self
+                .relation_embeddings
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_vec()))
+                .collect(),
+            entity_to_idx: self.entity_to_idx.clone(),
+            relation_to_idx: self.relation_to_idx.clone(),
+            idx_to_entity: self.idx_to_entity.clone(),
+            idx_to_relation: self.idx_to_relation.clone(),
+            adjacency_list: self.adjacency_list.clone(),
+            reverse_adjacency_list: self.reverse_adjacency_list.clone(),
+            triples: self.triples.clone(),
+            layers: self.layers.iter().map(GNNLayerSer::from_layer).collect(),
+            is_trained: self.is_trained,
+            creation_time: self.creation_time,
+            last_training_time: self.last_training_time,
+        };
+
+        let file = File::create(path)
+            .map_err(|e| anyhow!("Failed to create model file {}: {}", path, e))?;
+        let writer = BufWriter::new(file);
+        oxicode::serde::encode_into_std_write(&serializable, writer, oxicode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize GNN model: {}", e))?;
         Ok(())
     }
 
-    fn load(&mut self, _path: &str) -> Result<()> {
-        // Implementation would load model weights and configuration
+    fn load(&mut self, path: &str) -> Result<()> {
+        if !Path::new(path).exists() {
+            return Err(anyhow!("Model file not found: {}", path));
+        }
+
+        let file =
+            File::open(path).map_err(|e| anyhow!("Failed to open model file {}: {}", path, e))?;
+        let reader = BufReader::new(file);
+        let (serializable, _): (GNNSerializable, _) =
+            oxicode::serde::decode_from_std_read(reader, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize GNN model: {}", e))?;
+
+        self.id = serializable.id;
+        self.config = serializable.config;
+        self.entity_embeddings = serializable
+            .entity_embeddings
+            .into_iter()
+            .map(|(k, v)| (k, Array1::from_vec(v)))
+            .collect();
+        self.relation_embeddings = serializable
+            .relation_embeddings
+            .into_iter()
+            .map(|(k, v)| (k, Array1::from_vec(v)))
+            .collect();
+        self.entity_to_idx = serializable.entity_to_idx;
+        self.relation_to_idx = serializable.relation_to_idx;
+        self.idx_to_entity = serializable.idx_to_entity;
+        self.idx_to_relation = serializable.idx_to_relation;
+        self.adjacency_list = serializable.adjacency_list;
+        self.reverse_adjacency_list = serializable.reverse_adjacency_list;
+        self.triples = serializable.triples;
+        self.layers = serializable
+            .layers
+            .into_iter()
+            .map(GNNLayerSer::into_layer)
+            .collect::<Result<Vec<_>>>()?;
+        self.is_trained = serializable.is_trained;
+        self.creation_time = serializable.creation_time;
+        self.last_training_time = serializable.last_training_time;
         Ok(())
     }
 

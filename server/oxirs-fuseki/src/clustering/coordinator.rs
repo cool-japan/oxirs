@@ -14,6 +14,92 @@ use crate::{
     store::Store,
 };
 
+/// Node id used when the coordinator runs as a standalone local executor with no
+/// remote peers registered.
+const LOCAL_NODE_ID: &str = "local";
+
+/// Format an RDF term string for inclusion in a SPARQL Update. Values already in
+/// N-Triples term syntax (`<iri>`, `_:bnode`, `"literal"...`) are passed through;
+/// a value that looks like an absolute IRI is wrapped in angle brackets;
+/// otherwise it is emitted as an escaped string literal.
+fn format_term_for_update(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.starts_with('<')
+        || trimmed.starts_with("_:")
+        || trimmed.starts_with('"')
+        || trimmed.starts_with('\'')
+    {
+        return trimmed.to_string();
+    }
+    if trimmed.contains("://") || trimmed.starts_with("urn:") || trimmed.starts_with("mailto:") {
+        return format!("<{trimmed}>");
+    }
+    let escaped = trimmed
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t");
+    format!("\"{escaped}\"")
+}
+
+/// Format a graph IRI for a SPARQL Update `GRAPH`/`CLEAR` clause.
+fn format_graph_iri(graph: &str) -> String {
+    let trimmed = graph.trim();
+    if trimmed.starts_with('<') {
+        trimmed.to_string()
+    } else {
+        format!("<{trimmed}>")
+    }
+}
+
+/// Compile a [`WriteOperation`] into an equivalent SPARQL 1.1 Update string.
+fn write_operation_to_sparql(operation: &WriteOperation) -> FusekiResult<String> {
+    let triple_pattern = |t: &SerializableTriple| {
+        format!(
+            "{} {} {}",
+            format_term_for_update(&t.subject),
+            format_term_for_update(&t.predicate),
+            format_term_for_update(&t.object)
+        )
+    };
+    Ok(match operation {
+        WriteOperation::AddTriple { triple, graph } => match graph {
+            Some(g) => format!(
+                "INSERT DATA {{ GRAPH {} {{ {} }} }}",
+                format_graph_iri(g),
+                triple_pattern(triple)
+            ),
+            None => format!("INSERT DATA {{ {} }}", triple_pattern(triple)),
+        },
+        WriteOperation::RemoveTriple { triple, graph } => match graph {
+            Some(g) => format!(
+                "DELETE DATA {{ GRAPH {} {{ {} }} }}",
+                format_graph_iri(g),
+                triple_pattern(triple)
+            ),
+            None => format!("DELETE DATA {{ {} }}", triple_pattern(triple)),
+        },
+        WriteOperation::AddQuad { quad } => format!(
+            "INSERT DATA {{ GRAPH {} {{ {} {} {} }} }}",
+            format_graph_iri(&quad.graph),
+            format_term_for_update(&quad.subject),
+            format_term_for_update(&quad.predicate),
+            format_term_for_update(&quad.object)
+        ),
+        WriteOperation::RemoveQuad { quad } => format!(
+            "DELETE DATA {{ GRAPH {} {{ {} {} {} }} }}",
+            format_graph_iri(&quad.graph),
+            format_term_for_update(&quad.subject),
+            format_term_for_update(&quad.predicate),
+            format_term_for_update(&quad.object)
+        ),
+        WriteOperation::ClearGraph { graph } => {
+            format!("CLEAR GRAPH {}", format_graph_iri(graph))
+        }
+    })
+}
+
 /// Serializable query result for distributed operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum QueryResult {
@@ -324,11 +410,20 @@ impl QueryCoordinator {
         Ok(())
     }
 
-    /// Get nodes for partitions
+    /// Resolve the set of nodes that must service the given partitions.
+    ///
+    /// Remote cluster peers are tracked in `node_connections`; when peers are
+    /// registered their ids are returned (they own the partitions in this
+    /// unsharded coordinator). When no peers are registered the coordinator runs
+    /// as a standalone local executor, so it returns the single local node — a
+    /// truthful reflection of membership rather than a hardcoded `node1`.
     async fn get_nodes_for_partitions(&self, _partitions: &[u32]) -> FusekiResult<Vec<String>> {
-        // TODO: Implement actual partition to node mapping
-        // For now, return a dummy node list
-        Ok(vec!["node1".to_string()])
+        let connections = self.node_connections.read().await;
+        if connections.is_empty() {
+            Ok(vec![LOCAL_NODE_ID.to_string()])
+        } else {
+            Ok(connections.keys().cloned().collect())
+        }
     }
 
     /// Calculate required responses based on consistency level
@@ -396,17 +491,43 @@ impl QueryCoordinator {
         Ok(())
     }
 
-    /// Execute query locally
-    async fn execute_local_query(&self, _query: &DistributedQuery) -> FusekiResult<QueryResult> {
-        // Future enhancement: Integrate with actual SPARQL query engine.
-        // For v0.1.0: Returns mock result. Query distribution logic is complete.
-        Ok(QueryResult::Boolean(false))
+    /// Execute a query against the local store for real.
+    ///
+    /// The SPARQL query is evaluated by the wired store engine; ASK yields a
+    /// boolean, SELECT yields the SPARQL Results JSON, and CONSTRUCT yields the
+    /// constructed graph as N-Triples. A failure surfaces as an error, never a
+    /// fabricated `Boolean(false)`.
+    async fn execute_local_query(&self, query: &DistributedQuery) -> FusekiResult<QueryResult> {
+        use oxirs_core::query::QueryResult as CoreQueryResult;
+
+        let result = self.store.query(&query.query)?;
+        match &result.inner {
+            CoreQueryResult::Ask(value) => Ok(QueryResult::Boolean(*value)),
+            CoreQueryResult::Select { .. } => Ok(QueryResult::Data(result.to_json()?)),
+            CoreQueryResult::Construct(triples) => {
+                use oxirs_core::model::graph::Graph;
+                use oxirs_core::parser::RdfFormat;
+                use oxirs_core::serializer::Serializer;
+                let mut graph = Graph::new();
+                for triple in triples {
+                    graph.insert(triple.clone());
+                }
+                let ntriples = Serializer::new(RdfFormat::NTriples)
+                    .serialize_graph(&graph)
+                    .map_err(|e| {
+                        FusekiError::internal(format!("failed to serialize CONSTRUCT graph: {e}"))
+                    })?;
+                Ok(QueryResult::Data(ntriples))
+            }
+        }
     }
 
-    /// Execute write locally
-    async fn execute_local_write(&self, _write: &DistributedWrite) -> FusekiResult<()> {
-        // Future enhancement: Integrate with actual RDF store write operations.
-        // For v0.1.0: Returns success. Write distribution logic is complete.
+    /// Apply a write to the local store for real by compiling the operation into
+    /// a SPARQL Update and executing it against the wired store engine. A failure
+    /// surfaces as an error, never a fabricated success.
+    async fn execute_local_write(&self, write: &DistributedWrite) -> FusekiResult<()> {
+        let update = write_operation_to_sparql(&write.operation)?;
+        self.store.update(&update)?;
         Ok(())
     }
 
@@ -568,5 +689,67 @@ mod tests {
             coordinator.calculate_required_responses(7, ConsistencyLevel::Quorum),
             4
         );
+    }
+
+    /// Regression: local write and query must hit the real store, not fabricate
+    /// a success / `Boolean(false)`.
+    #[tokio::test]
+    async fn regression_local_write_and_query_hit_store() {
+        let config = ReplicationConfig::default();
+        let store = Arc::new(Store::new().expect("store"));
+        let coordinator = QueryCoordinator::new(config, store);
+
+        // Before the write, the triple must be absent.
+        let ask = DistributedQuery {
+            id: "q0".to_string(),
+            query: "ASK WHERE { <http://ex/s> <http://ex/p> <http://ex/o> }".to_string(),
+            partitions: vec![0],
+            consistency: ConsistencyLevel::One,
+            timeout: Duration::from_secs(5),
+        };
+        assert!(matches!(
+            coordinator.execute_local_query(&ask).await.expect("ask"),
+            QueryResult::Boolean(false)
+        ));
+
+        // Apply a real write.
+        let write = DistributedWrite {
+            id: "w1".to_string(),
+            operation: WriteOperation::AddTriple {
+                triple: SerializableTriple {
+                    subject: "http://ex/s".to_string(),
+                    predicate: "http://ex/p".to_string(),
+                    object: "http://ex/o".to_string(),
+                },
+                graph: None,
+            },
+            partitions: vec![0],
+            consistency: ConsistencyLevel::One,
+            timeout: Duration::from_secs(5),
+        };
+        coordinator
+            .execute_local_write(&write)
+            .await
+            .expect("write");
+
+        // The triple must now be present.
+        assert!(matches!(
+            coordinator.execute_local_query(&ask).await.expect("ask2"),
+            QueryResult::Boolean(true)
+        ));
+    }
+
+    #[tokio::test]
+    async fn regression_nodes_for_partitions_reflects_membership() {
+        let config = ReplicationConfig::default();
+        let store = Arc::new(Store::new().expect("store"));
+        let coordinator = QueryCoordinator::new(config, store);
+        // With no peers registered, resolves to the local node (not a hardcoded
+        // "node1").
+        let nodes = coordinator
+            .get_nodes_for_partitions(&[0])
+            .await
+            .expect("nodes");
+        assert_eq!(nodes, vec![LOCAL_NODE_ID.to_string()]);
     }
 }

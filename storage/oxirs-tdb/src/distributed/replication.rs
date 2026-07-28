@@ -394,7 +394,7 @@ impl ReplicationManager {
     async fn replicate_async(&self, changes: Vec<ReplicationChange>) -> Result<()> {
         let replicas = self.replicas.read().clone();
 
-        for (node_id, _replica) in replicas.iter() {
+        for node_id in replicas.keys() {
             // Simulate async replication
             self.send_changes_to_replica(node_id, &changes).await?;
         }
@@ -410,7 +410,7 @@ impl ReplicationManager {
         let replicas = self.replicas.read().clone();
         let mut success_count = 0;
 
-        for (node_id, _replica) in replicas.iter() {
+        for node_id in replicas.keys() {
             match self.send_changes_to_replica(node_id, &changes).await {
                 Ok(_) => success_count += 1,
                 Err(_) => {
@@ -440,7 +440,7 @@ impl ReplicationManager {
         let replicas = self.replicas.read().clone();
         let mut success_count = 0;
 
-        for (node_id, _replica) in replicas.iter() {
+        for node_id in replicas.keys() {
             match self.send_changes_to_replica(node_id, &changes).await {
                 Ok(_) => success_count += 1,
                 Err(_) => {

@@ -1,10 +1,18 @@
 //! Buffer and boundary operations for geometric types.
 //!
-//! Includes CapStyle, JoinStyle, BufferParams, standard 2D buffer,
-//! pure-Rust polygon buffer, 3D buffer, and boundary extraction.
+//! Includes CapStyle, JoinStyle, BufferParams, 2D buffer, 3D buffer, and
+//! boundary extraction — all Pure Rust.
+//!
+//! Buffering runs on [`geo::algorithm::buffer`], which is backed by `i_overlay`
+//! and covers every geometry type plus the full OGC cap/join styles. This
+//! replaced two narrower backends: the `geo-buffer` straight-skeleton crate
+//! (Polygon/MultiPolygon only, behind a `rust-buffer` feature) and a
+//! quarantined GEOS adapter that linked the `libgeos` C library for everything
+//! else. Both are gone; there is now one unconditional Pure-Rust path.
 
 use crate::error::{GeoSparqlError, Result};
 use crate::geometry::Geometry;
+use geo::algorithm::buffer::{Buffer as GeoBuffer, BufferStyle, LineCap, LineJoin};
 use geo::CoordsIter;
 use geo_types::Geometry as GeoGeometry;
 
@@ -54,96 +62,73 @@ impl Default for BufferParams {
     }
 }
 
-/// Create a buffer around a geometry with default parameters
+/// Create a buffer around a geometry with default parameters.
 ///
-/// This function uses different backends based on available features:
-/// - For Polygon/MultiPolygon: uses `rust-buffer` (pure Rust) when that feature is
-///   enabled; otherwise returns an error.
-/// - For Point/LineString and custom cap/join styles: requires GEOS, provided by the
-///   quarantined `oxirs-geosparql-adapter-geos` crate (call its `buffer` /
-///   `buffer_with_params`).
+/// Works on every geometry type (Point, LineString, Polygon, the Multi\* forms,
+/// and GeometryCollection). Positive distances expand, negative distances erode.
+/// The result is always a MultiPolygon.
 pub fn buffer(geom: &Geometry, distance: f64) -> Result<Geometry> {
-    // Try pure Rust implementation first for Polygon/MultiPolygon
-    #[cfg(feature = "rust-buffer")]
-    {
-        match &geom.geom {
-            GeoGeometry::Polygon(_) | GeoGeometry::MultiPolygon(_) => {
-                return buffer_rust(geom, distance);
-            }
-            _ => {
-                // Fall through to GEOS for other geometry types
-            }
-        }
-    }
-
-    // Fall back to GEOS backend or use it for Point/LineString
     buffer_with_params(geom, distance, &BufferParams::default())
 }
 
-/// Create a buffer around a geometry with custom parameters.
-///
-/// This is the GEOS-backed entry point for buffering arbitrary geometry types
-/// (Point/LineString/etc.) and for the full OGC cap/join styles. The GEOS C FFI
-/// has been quarantined into the `oxirs-geosparql-adapter-geos` crate
-/// (publish = false) under the COOLJAPAN Pure Rust Policy v2, so this published
-/// crate keeps a 100% Pure-Rust dependency surface. Call
-/// `oxirs_geosparql_adapter_geos::buffer_with_params` for the working GEOS
-/// implementation. (Pure-Rust Polygon/MultiPolygon buffering is still available
-/// here via the `rust-buffer` feature: see [`buffer`] / `buffer_rust`.)
+/// Create a buffer around a geometry with custom cap/join parameters.
 pub fn buffer_with_params(
-    _geom: &Geometry,
-    _distance: f64,
-    _params: &BufferParams,
+    geom: &Geometry,
+    distance: f64,
+    params: &BufferParams,
 ) -> Result<Geometry> {
-    Err(GeoSparqlError::UnsupportedOperation(
-        "Buffer with custom parameters (Point/LineString buffering, cap/join styles) requires \
-         GEOS; it is provided by the quarantined `oxirs-geosparql-adapter-geos` crate \
-         (oxirs_geosparql_adapter_geos::buffer_with_params). Pure-Rust Polygon/MultiPolygon \
-         buffering is available via the `rust-buffer` feature."
-            .to_string(),
+    let style = buffer_style(distance, params)?;
+    let buffered = geom.geom.buffer_with_style(style);
+    Ok(Geometry::with_crs(
+        GeoGeometry::MultiPolygon(buffered),
+        geom.crs.clone(),
     ))
 }
 
-/// Create a buffer using pure Rust implementation (geo-buffer crate)
+/// Translate our OGC-flavoured [`BufferParams`] into a [`BufferStyle`].
 ///
-/// This implementation uses the straight skeleton algorithm and supports:
-/// - Polygon and MultiPolygon geometries
-/// - Positive buffers (expansion) and negative buffers (erosion)
-/// - Simple polygons, non-convex polygons, and polygons with holes
+/// The two models express curve resolution differently, so the numeric
+/// parameters are converted rather than passed through:
 ///
-/// Note: Only Polygon and MultiPolygon are supported. For other geometry types,
-/// use the GEOS backend.
-#[cfg(feature = "rust-buffer")]
-pub fn buffer_rust(geom: &Geometry, distance: f64) -> Result<Geometry> {
-    use geo_buffer::buffer_polygon;
+/// * `quadrant_segments` (segments per quarter circle, OGC/JTS) becomes an
+///   angle per segment of `(π/2) / quadrant_segments` radians. The JTS default
+///   of 8 segments maps to 0.196 rad, which is what `geo`'s own default of 0.20
+///   approximates.
+/// * `mitre_limit` (max ratio of miter extension to buffer distance) becomes the
+///   sharpest corner angle that still gets a miter, `2·asin(1/mitre_limit)`.
+///   Corners sharper than that fall back to a bevel, which is the same
+///   behaviour the ratio limit produces.
+fn buffer_style(distance: f64, params: &BufferParams) -> Result<BufferStyle<f64>> {
+    if params.quadrant_segments < 1 {
+        return Err(GeoSparqlError::InvalidParameter(format!(
+            "quadrant_segments must be at least 1, got {}",
+            params.quadrant_segments
+        )));
+    }
+    if params.mitre_limit < 1.0 {
+        return Err(GeoSparqlError::InvalidParameter(format!(
+            "mitre_limit must be at least 1.0, got {}",
+            params.mitre_limit
+        )));
+    }
 
-    let result_geom = match &geom.geom {
-        GeoGeometry::Polygon(poly) => {
-            // buffer_polygon returns a MultiPolygon
-            let buffered = buffer_polygon(poly, distance);
-            GeoGeometry::MultiPolygon(buffered)
-        }
-        GeoGeometry::MultiPolygon(mpoly) => {
-            // Buffer each polygon individually and collect results
-            let buffered_polygons: Vec<geo_types::Polygon<f64>> = mpoly
-                .iter()
-                .flat_map(|poly| {
-                    let buffered_multi = buffer_polygon(poly, distance);
-                    buffered_multi.into_iter()
-                })
-                .collect();
+    let segment_angle = std::f64::consts::FRAC_PI_2 / f64::from(params.quadrant_segments);
 
-            GeoGeometry::MultiPolygon(geo_types::MultiPolygon::new(buffered_polygons))
-        }
-        _ => {
-            return Err(GeoSparqlError::UnsupportedOperation(format!(
-                "Pure Rust buffer only supports Polygon and MultiPolygon (got {}). Use the oxirs-geosparql-adapter-geos crate for other types.",
-                geom.geometry_type()
-            )))
-        }
+    let line_cap = match params.cap_style {
+        CapStyle::Round => LineCap::Round(segment_angle),
+        CapStyle::Flat => LineCap::Butt,
+        CapStyle::Square => LineCap::Square,
     };
 
-    Ok(Geometry::with_crs(result_geom, geom.crs.clone()))
+    let line_join = match params.join_style {
+        JoinStyle::Round => LineJoin::Round(segment_angle),
+        JoinStyle::Mitre => LineJoin::Miter(2.0 * (1.0 / params.mitre_limit).asin()),
+        JoinStyle::Bevel => LineJoin::Bevel,
+    };
+
+    Ok(BufferStyle::new(distance)
+        .line_cap(line_cap)
+        .line_join(line_join))
 }
 
 /// Create a 3D buffer around a geometry
@@ -261,17 +246,9 @@ fn create_extended_z_coords(
 /// - Polygon: the exterior and interior rings
 /// - MultiPoint/MultiLineString/MultiPolygon: union of boundaries of components
 ///
-/// The GEOS C FFI that backs this operation has been quarantined into the
-/// `oxirs-geosparql-adapter-geos` crate (publish = false) under the COOLJAPAN
-/// Pure Rust Policy v2. Call `oxirs_geosparql_adapter_geos::boundary` for the
-/// working GEOS implementation. (A Pure-Rust OGC SFA boundary also exists at
-/// [`crate::functions::de9im::boundary`].)
-pub fn boundary(_geom: &Geometry) -> Result<Geometry> {
-    Err(GeoSparqlError::UnsupportedOperation(
-        "Boundary operation requires GEOS; it is provided by the quarantined \
-         `oxirs-geosparql-adapter-geos` crate (oxirs_geosparql_adapter_geos::boundary). \
-         A Pure-Rust OGC SFA boundary is also available at \
-         oxirs_geosparql::functions::de9im::boundary."
-            .to_string(),
-    ))
+/// This forwards to the Pure-Rust OGC SFA implementation in
+/// [`crate::functions::de9im::boundary`], which is where the algorithm lives.
+/// It used to require the GEOS C library via a quarantined adapter crate.
+pub fn boundary(geom: &Geometry) -> Result<Geometry> {
+    crate::functions::de9im::boundary(geom)
 }

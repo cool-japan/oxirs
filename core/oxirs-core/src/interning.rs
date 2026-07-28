@@ -239,20 +239,37 @@ impl StringInterner {
             }
         }
 
-        // Slow path: need to create new entry
+        // Slow path: need to create new entry. Interning the string itself is
+        // already race-safe and dedups the `Arc<str>` allocation, so do that
+        // first; then take the `string_to_id` write lock and re-check under
+        // it before minting a new id -- mirroring `intern()`'s
+        // double-checked-locking pattern. Without this re-check, two
+        // concurrent callers could both miss the fast-path read-lock check
+        // above, each `fetch_add` a *distinct* id for the same string, and
+        // both insert into the maps (last writer wins), leaving
+        // `string_to_id` pointing at one id while `id_to_string` retains a
+        // stale duplicate entry for the other -- violating the interner's
+        // same-string-implies-same-id invariant.
         let arc_str = self.intern(s); // This will handle the string interning
+
+        let mut string_to_id = self
+            .string_to_id
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        // Double-check: another thread may have raced us and already
+        // assigned an id to this string while we were interning it / waiting
+        // for this lock.
+        if let Some(&existing_id) = string_to_id.get(s) {
+            return (arc_str, existing_id);
+        }
+
         let id = self
             .next_id
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        string_to_id.insert(s.to_string(), id);
+        drop(string_to_id);
 
-        // Update the ID mappings
-        {
-            let mut string_to_id = self
-                .string_to_id
-                .write()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            string_to_id.insert(s.to_string(), id);
-        }
         {
             let mut id_to_string = self
                 .id_to_string
@@ -1122,5 +1139,52 @@ mod tests {
 
         // Mixed mode length reporting should work
         assert!(interner.len() >= 2);
+    }
+
+    /// Regression test: concurrent `intern_with_id` calls for the *same*
+    /// string must never assign more than one id to it. Before the
+    /// double-checked-locking fix, two threads that both missed the
+    /// fast-path read-lock check could each `fetch_add` a distinct id and
+    /// both write it into the maps, breaking the same-string-implies-
+    /// same-id invariant.
+    #[test]
+    fn regression_intern_with_id_concurrent_same_string_single_id() {
+        use std::collections::HashSet;
+        use std::sync::Arc;
+        use std::thread;
+
+        for _ in 0..20 {
+            let interner = Arc::new(StringInterner::new());
+            let num_threads = 16;
+
+            let handles: Vec<_> = (0..num_threads)
+                .map(|_| {
+                    let interner = Arc::clone(&interner);
+                    thread::spawn(move || interner.intern_with_id("http://example.org/dup"))
+                })
+                .collect();
+
+            let results: Vec<(Arc<str>, u32)> = handles
+                .into_iter()
+                .map(|h| h.join().expect("thread should not panic"))
+                .collect();
+
+            let unique_ids: HashSet<u32> = results.iter().map(|(_, id)| *id).collect();
+            assert_eq!(
+                unique_ids.len(),
+                1,
+                "all concurrent intern_with_id calls for the same string must return the same id"
+            );
+
+            let id = *unique_ids.iter().next().expect("one id was collected");
+            assert_eq!(interner.get_id("http://example.org/dup"), Some(id));
+            assert_eq!(
+                interner
+                    .get_string(id)
+                    .expect("id should resolve back to the string")
+                    .as_ref(),
+                "http://example.org/dup"
+            );
+        }
     }
 }

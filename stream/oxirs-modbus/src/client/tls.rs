@@ -558,6 +558,81 @@ mod tls_impl {
     use std::io::BufReader;
     use tokio_rustls::TlsConnector;
 
+    /// A `ServerCertVerifier` that accepts *any* server certificate without
+    /// validation.
+    ///
+    /// Installed only when [`TlsConfig::danger_skip_verify`] is explicitly
+    /// set to `true` (documented as an insecure testing-only escape hatch).
+    /// This completely disables authentication of the remote Modbus device:
+    /// it must never be used against a production device or over an
+    /// untrusted network.
+    #[derive(Debug)]
+    struct InsecureNoCertVerification;
+
+    impl rustls::client::danger::ServerCertVerifier for InsecureNoCertVerification {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &rustls::pki_types::CertificateDer<'_>,
+            _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+            _server_name: &rustls::pki_types::ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: rustls::pki_types::UnixTime,
+        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+            Ok(rustls::client::danger::ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            _message: &[u8],
+            _cert: &rustls::pki_types::CertificateDer<'_>,
+            _dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            _message: &[u8],
+            _cert: &rustls::pki_types::CertificateDer<'_>,
+            _dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+            vec![
+                rustls::SignatureScheme::RSA_PKCS1_SHA1,
+                rustls::SignatureScheme::ECDSA_SHA1_Legacy,
+                rustls::SignatureScheme::RSA_PKCS1_SHA256,
+                rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+                rustls::SignatureScheme::RSA_PKCS1_SHA384,
+                rustls::SignatureScheme::ECDSA_NISTP384_SHA384,
+                rustls::SignatureScheme::RSA_PKCS1_SHA512,
+                rustls::SignatureScheme::ECDSA_NISTP521_SHA512,
+                rustls::SignatureScheme::RSA_PSS_SHA256,
+                rustls::SignatureScheme::RSA_PSS_SHA384,
+                rustls::SignatureScheme::RSA_PSS_SHA512,
+                rustls::SignatureScheme::ED25519,
+                rustls::SignatureScheme::ED448,
+            ]
+        }
+    }
+
+    /// Select the set of TLS protocol versions to offer during the
+    /// handshake based on `TlsConfig::min_version`.
+    ///
+    /// `Tls12` means "TLS 1.2 minimum", so both TLS 1.2 and TLS 1.3 remain
+    /// negotiable (the server may still pick 1.3). `Tls13` restricts the
+    /// handshake to TLS 1.3 only, rejecting any server that cannot speak it.
+    fn protocol_versions_for(
+        min_version: TlsMinVersion,
+    ) -> Vec<&'static rustls::SupportedProtocolVersion> {
+        match min_version {
+            TlsMinVersion::Tls12 => vec![&rustls::version::TLS12, &rustls::version::TLS13],
+            TlsMinVersion::Tls13 => vec![&rustls::version::TLS13],
+        }
+    }
+
     /// Connect to a Modbus/TCP Security server using TLS.
     ///
     /// Establishes a TCP connection to `addr`, performs the TLS handshake
@@ -603,29 +678,49 @@ mod tls_impl {
 
         config.validate()?;
 
-        // Build root cert store
-        let mut root_store = RootCertStore::empty();
+        // Restrict the TLS handshake to the protocol versions allowed by
+        // `config.min_version` (TLS 1.2 minimum per the Modbus/TCP Security
+        // spec, or TLS 1.3-only when explicitly requested).
+        let versions = protocol_versions_for(config.min_version);
+        let verifier_builder = ClientConfig::builder_with_protocol_versions(&versions);
 
-        if let Some(ref ca_pem) = config.ca_cert_pem {
-            let mut reader = BufReader::new(ca_pem.as_slice());
-            let certs = rustls_pemfile::certs(&mut reader)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| {
-                    ModbusError::Config(format!("Failed to parse CA certificate: {}", e))
-                })?;
-
-            for cert in certs {
-                root_store.add(cert).map_err(|e| {
-                    ModbusError::Config(format!("Failed to add CA certificate: {}", e))
-                })?;
-            }
+        // Build client config: either a fully-validating root-of-trust
+        // verifier, or (only when explicitly requested) an insecure
+        // verifier that accepts any certificate.
+        let builder = if config.danger_skip_verify {
+            tracing::warn!(
+                "Modbus/TCP Security: server certificate verification is DISABLED \
+                 (danger_skip_verify=true). The connection to {} is NOT authenticated \
+                 and must only be used for testing.",
+                addr
+            );
+            verifier_builder
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(InsecureNoCertVerification))
         } else {
-            // Use WebPKI roots as fallback
-            root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-        }
+            // Build root cert store
+            let mut root_store = RootCertStore::empty();
 
-        // Build client config
-        let builder = ClientConfig::builder().with_root_certificates(root_store);
+            if let Some(ref ca_pem) = config.ca_cert_pem {
+                let mut reader = BufReader::new(ca_pem.as_slice());
+                let certs = rustls_pemfile::certs(&mut reader)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| {
+                        ModbusError::Config(format!("Failed to parse CA certificate: {}", e))
+                    })?;
+
+                for cert in certs {
+                    root_store.add(cert).map_err(|e| {
+                        ModbusError::Config(format!("Failed to add CA certificate: {}", e))
+                    })?;
+                }
+            } else {
+                // Use WebPKI roots as fallback
+                root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+            }
+
+            verifier_builder.with_root_certificates(root_store)
+        };
 
         let tls_config = if config.has_client_auth() {
             let cert_pem = config.client_cert_pem.as_ref().expect("checked above");
@@ -986,5 +1081,149 @@ mod tests {
             client.tls_config().server_name.as_deref(),
             Some("test.example.com")
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Regression tests for the "min_version / danger_skip_verify parsed
+    // but never applied" bug (P2).
+    //
+    // These spin up a *real* local rustls TLS server (self-signed
+    // certificate, generated with the Pure Rust `oxitls-rcgen` crate) and
+    // drive `connect_tls` end-to-end, so they prove the settings actually
+    // change the negotiated handshake rather than merely being stored.
+    // ------------------------------------------------------------------
+    #[cfg(feature = "tls")]
+    mod connect_tls_regression_tests {
+        use super::*;
+        use crate::client::tls::connect_tls;
+        use rustls::ServerConfig;
+        use std::sync::Arc;
+        use tokio::net::TcpListener;
+        use tokio_rustls::TlsAcceptor;
+
+        /// Spawn a minimal TLS server on an ephemeral port: accept one TCP
+        /// connection and perform the TLS handshake using `server_config`.
+        /// The handshake result is intentionally ignored here -- the tests
+        /// only care whether the *client's* `connect_tls` call succeeds or
+        /// fails.
+        async fn spawn_tls_handshake_server(
+            server_config: Arc<ServerConfig>,
+        ) -> std::net::SocketAddr {
+            let listener = TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind mock TLS server");
+            let addr = listener.local_addr().expect("local addr");
+            let acceptor = TlsAcceptor::from(server_config);
+
+            tokio::spawn(async move {
+                if let Ok((tcp, _)) = listener.accept().await {
+                    let _ = acceptor.accept(tcp).await;
+                }
+            });
+
+            addr
+        }
+
+        fn build_server_config(
+            certified_key: &oxitls_rcgen::CertifiedKey,
+            versions: &[&'static rustls::SupportedProtocolVersion],
+        ) -> Arc<ServerConfig> {
+            let (certs, key) = certified_key.to_rustls_cert_and_key();
+            let config = ServerConfig::builder_with_protocol_versions(versions)
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .expect("build server TLS config");
+            Arc::new(config)
+        }
+
+        #[tokio::test]
+        async fn regression_danger_skip_verify_is_actually_applied() {
+            let certified_key =
+                oxitls_rcgen::generate_self_signed_ed25519(&["localhost", "127.0.0.1"])
+                    .expect("generate self-signed cert");
+            let versions: &[&'static rustls::SupportedProtocolVersion] =
+                &[&rustls::version::TLS12, &rustls::version::TLS13];
+
+            // Default config (verification enabled, no CA configured to trust
+            // this self-signed cert): the handshake MUST fail.
+            let addr =
+                spawn_tls_handshake_server(build_server_config(&certified_key, versions)).await;
+            let result = connect_tls(&addr.to_string(), 1, TlsConfig::default()).await;
+            assert!(
+                result.is_err(),
+                "expected handshake to fail against an untrusted self-signed cert \
+                 when danger_skip_verify=false"
+            );
+
+            // With danger_skip_verify=true, the SAME untrusted certificate
+            // MUST now be accepted -- proving the flag is wired into the
+            // rustls ClientConfig instead of being silently ignored.
+            let addr2 =
+                spawn_tls_handshake_server(build_server_config(&certified_key, versions)).await;
+            let insecure_config = TlsConfig::builder()
+                .danger_skip_verify(true)
+                .build()
+                .expect("valid config");
+            let result2 = connect_tls(&addr2.to_string(), 1, insecure_config).await;
+            assert!(
+                result2.is_ok(),
+                "expected handshake to succeed with danger_skip_verify=true, got: {:?}",
+                result2.err()
+            );
+        }
+
+        #[tokio::test]
+        async fn regression_min_version_tls13_rejects_tls12_only_server() {
+            let certified_key =
+                oxitls_rcgen::generate_self_signed_ed25519(&["localhost", "127.0.0.1"])
+                    .expect("generate self-signed cert");
+
+            // Server only supports TLS 1.2.
+            let tls12_only: &[&'static rustls::SupportedProtocolVersion] =
+                &[&rustls::version::TLS12];
+            let addr =
+                spawn_tls_handshake_server(build_server_config(&certified_key, tls12_only)).await;
+
+            // Client requires TLS 1.3 minimum. `danger_skip_verify` is also
+            // set so that certificate trust cannot be the reason for
+            // failure -- isolating exactly what `min_version` controls.
+            let config = TlsConfig::builder()
+                .min_version(TlsMinVersion::Tls13)
+                .danger_skip_verify(true)
+                .build()
+                .expect("valid config");
+
+            let result = connect_tls(&addr.to_string(), 1, config).await;
+            assert!(
+                result.is_err(),
+                "expected a TLS-1.3-only client to fail against a TLS-1.2-only server"
+            );
+        }
+
+        #[tokio::test]
+        async fn regression_min_version_tls12_accepts_tls12_only_server() {
+            let certified_key =
+                oxitls_rcgen::generate_self_signed_ed25519(&["localhost", "127.0.0.1"])
+                    .expect("generate self-signed cert");
+
+            let tls12_only: &[&'static rustls::SupportedProtocolVersion] =
+                &[&rustls::version::TLS12];
+            let addr =
+                spawn_tls_handshake_server(build_server_config(&certified_key, tls12_only)).await;
+
+            // Default min_version (Tls12) permits negotiating down to TLS 1.2.
+            let config = TlsConfig::builder()
+                .danger_skip_verify(true)
+                .build()
+                .expect("valid config");
+
+            let result = connect_tls(&addr.to_string(), 1, config).await;
+            assert!(
+                result.is_ok(),
+                "expected a TLS-1.2-minimum client to succeed against a \
+                 TLS-1.2-only server, got: {:?}",
+                result.err()
+            );
+        }
     }
 }

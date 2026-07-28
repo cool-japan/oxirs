@@ -290,9 +290,9 @@ impl AssemblerBuilder {
             .collect();
 
         for (subject, type_iri) in typed_subjects {
-            match build_dataset_config(&map, &subject, &type_iri) {
-                Ok(cfg) => datasets.push(cfg),
-                Err(e) => return Err(e),
+            {
+                let cfg = build_dataset_config(&map, &subject, &type_iri)?;
+                datasets.push(cfg)
             }
         }
 

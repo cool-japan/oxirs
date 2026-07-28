@@ -27,13 +27,13 @@ wkt.workspace = true
 quick-xml = { workspace = true, optional = true }
 geojson = { workspace = true, optional = true }
 shapefile = { version = "0.9", optional = true }
-# NOTE: the GEOS (geos / geos-sys C FFI) computational-geometry backend has been
-# quarantined into the `oxirs-geosparql-adapter-geos` crate (publish = false) per
-# the COOLJAPAN Pure Rust Policy v2, so this published crate's --all-features
-# dependency surface stays 100% Pure Rust. Use that adapter for GEOS-backed
-# buffering / boundary / Egenhofer & RCC8 boundary predicates.
-oxigdal-proj = { version = "0.1", optional = true }  # Pure Rust CRS transformation (COOLJAPAN)
-geo-buffer = { version = "0.2", optional = true }
+# NOTE: there is no GEOS (geos / geos-sys C FFI) backend any more. Buffering,
+# boundary and the Egenhofer/RCC8 boundary predicates all run on `geo`'s own
+# Pure-Rust algorithms — `geo::algorithm::buffer` (i_overlay-backed) covers every
+# geometry type and the full OGC cap/join styles, which is what GEOS was there
+# for. The `geo-buffer` straight-skeleton crate (Polygon/MultiPolygon only) went
+# with it; both were replaced by that one dependency we already had.
+oxigeo-proj = { version = "0.2.1", optional = true }  # Pure Rust CRS transformation (COOLJAPAN)
 oxisql-core = { workspace = true, optional = true }
 oxisql-sqlite-compat = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
@@ -85,8 +85,7 @@ geopackage = ["oxisql-core", "oxisql-sqlite-compat", "tokio"]
 flatgeobuf-support = ["flatgeobuf", "geo-traits", "geozero", "fallible-streaming-iterator"]
 mvt-support = ["mvt"]
 topojson-support = []
-rust-buffer = ["geo-buffer"]
-proj-support = ["oxigdal-proj"]
+proj-support = ["oxigeo-proj"]
 parallel = ["rayon"]
 gpu = []
 # NOTE (cargo-upgrade sweep, 2026-07-02): scirs2-core removed its `cuda` feature in

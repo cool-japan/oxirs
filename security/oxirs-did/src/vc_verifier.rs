@@ -1,10 +1,24 @@
 //! Verifiable Credential verification (W3C VC Data Model).
 //!
 //! Performs structural verification of VCs: context checks, type checks,
-//! issuer trust checks, and temporal validity.  Cryptographic proof
-//! verification is supported as an optional policy flag.
+//! issuer trust checks, temporal validity, revocation, and — when the issuer
+//! is a `did:key` — genuine Ed25519 cryptographic proof verification.
+//!
+//! # Cryptographic proof verification
+//! When [`VerificationPolicy::check_proof`] is `true`, the proof is verified
+//! cryptographically: the Ed25519 public key is extracted from the proof's
+//! `verificationMethod` (or the `issuer`, both expected to be `did:key`), the
+//! multibase (`z`-prefixed base58btc) `proofValue` is decoded to a 64-byte
+//! signature, and that signature is verified over a canonical hash of the
+//! credential's core fields. This is real cryptography — a forged, unrelated,
+//! or structurally-plausible-but-invalid `proofValue` is rejected. If the proof
+//! cannot be verified cryptographically (unsupported proof type, unresolvable
+//! key, malformed `proofValue`) verification FAILS with
+//! [`VerificationStatus::InvalidProof`] rather than silently passing.
 
 use std::collections::HashMap;
+
+use sha2::{Digest, Sha256};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -138,6 +152,11 @@ pub struct VerificationPolicy {
     pub check_required_types: bool,
     /// Allowed issuer IRIs.  Empty slice means any issuer is accepted.
     pub trusted_issuers: Vec<String>,
+    /// Whether to check the credential against the revoked-id list.
+    pub check_revocation: bool,
+    /// Credential `id`s that are known to be revoked. A credential whose `id`
+    /// appears here yields [`VerificationStatus::Revoked`].
+    pub revoked_credential_ids: Vec<String>,
     /// Current wall-clock time in milliseconds since Unix epoch.
     /// Use `0` to skip time-based checks even when `check_expiry` is `true`.
     pub current_time_ms: u64,
@@ -151,6 +170,8 @@ impl Default for VerificationPolicy {
             check_context: true,
             check_required_types: true,
             trusted_issuers: vec![],
+            check_revocation: true,
+            revoked_credential_ids: vec![],
             current_time_ms: 0,
         }
     }
@@ -242,14 +263,43 @@ impl VcVerifier {
             result.add_pass("temporal_validity");
         }
 
-        // 6. Proof
+        // 6. Revocation
+        if policy.check_revocation {
+            match &vc.id {
+                Some(id) if policy.revoked_credential_ids.iter().any(|r| r == id) => {
+                    result.add_fail("revocation");
+                    result.status = VerificationStatus::Revoked;
+                    return result;
+                }
+                _ => result.add_pass("revocation"),
+            }
+        } else {
+            result.add_pass("revocation_skipped");
+        }
+
+        // 7. Proof — genuine Ed25519 verification (see module docs). A missing,
+        //    forged, or otherwise unverifiable proof is a hard failure; there is
+        //    no structural-only "pass" that could rubber-stamp a bad signature.
         if policy.check_proof {
             match &vc.proof {
-                Some(proof) if !proof.proof_value.is_empty() => {
-                    // Structural check only — no actual crypto in this implementation
-                    result.add_pass("proof_structure");
-                }
-                _ => {
+                Some(proof) => match Self::verify_proof_cryptographically(vc, proof) {
+                    Ok(true) => result.add_pass("proof"),
+                    Ok(false) => {
+                        result.add_fail("proof");
+                        result.status = VerificationStatus::InvalidProof;
+                        return result;
+                    }
+                    Err(reason) => {
+                        // Cryptographic verification could not be performed
+                        // (unsupported type / unresolvable key / malformed value):
+                        // fail loud, never accept.
+                        result.add_fail("proof");
+                        result.add_warning(reason);
+                        result.status = VerificationStatus::InvalidProof;
+                        return result;
+                    }
+                },
+                None => {
                     result.add_fail("proof");
                     result.status = VerificationStatus::InvalidProof;
                     return result;
@@ -265,6 +315,91 @@ impl VcVerifier {
         }
 
         result
+    }
+
+    // -----------------------------------------------------------------------
+    // Cryptographic proof verification
+    // -----------------------------------------------------------------------
+
+    /// Canonical byte encoding of a credential's signed content (everything
+    /// except the proof), used as the message for signature verification.
+    ///
+    /// The encoding is deterministic: multi-valued fields (`type`, `@context`,
+    /// and the subject's claims) are sorted so serialization order cannot change
+    /// the signed bytes.
+    pub fn canonical_signing_input(vc: &VerifiableCredential) -> Vec<u8> {
+        let mut s = String::new();
+        s.push_str(vc.id.as_deref().unwrap_or(""));
+        s.push('\n');
+
+        let mut types = vc.types.clone();
+        types.sort();
+        s.push_str(&types.join(","));
+        s.push('\n');
+
+        s.push_str(&vc.issuer);
+        s.push('\n');
+        s.push_str(&vc.issuance_date);
+        s.push('\n');
+        s.push_str(vc.expiration_date.as_deref().unwrap_or(""));
+        s.push('\n');
+
+        let mut subject: Vec<(&String, &String)> = vc.credential_subject.iter().collect();
+        subject.sort_by(|a, b| a.0.cmp(b.0));
+        for (k, v) in subject {
+            s.push_str(k);
+            s.push('=');
+            s.push_str(v);
+            s.push(';');
+        }
+        s.push('\n');
+
+        let mut context = vc.context.clone();
+        context.sort();
+        s.push_str(&context.join(","));
+
+        s.into_bytes()
+    }
+
+    /// Cryptographically verify `proof` over `vc`.
+    ///
+    /// Returns `Ok(true)` for a valid signature, `Ok(false)` for a well-formed
+    /// but invalid signature, and `Err(reason)` when verification cannot be
+    /// performed at all (unsupported proof type, unresolvable key, malformed
+    /// `proofValue`). Callers treat `Err` as a hard failure.
+    fn verify_proof_cryptographically(
+        vc: &VerifiableCredential,
+        proof: &CredentialProof,
+    ) -> Result<bool, String> {
+        if proof.proof_value.is_empty() {
+            return Err("proofValue is empty".to_string());
+        }
+        if proof.proof_type != "Ed25519Signature2020" {
+            return Err(format!(
+                "unsupported proof type for cryptographic verification: {}",
+                proof.proof_type
+            ));
+        }
+
+        // Resolve the Ed25519 public key from the verificationMethod, falling
+        // back to the issuer. Both are expected to be did:key identifiers.
+        let public_key = extract_ed25519_public_key(&proof.verification_method)
+            .or_else(|| extract_ed25519_public_key(&vc.issuer))
+            .ok_or_else(|| {
+                "cannot resolve an Ed25519 public key from verificationMethod or issuer \
+                 (expected a did:key identifier)"
+                    .to_string()
+            })?;
+
+        let signature = decode_multibase_signature(&proof.proof_value)?;
+        if signature.len() != 64 {
+            // Wrong-length signature is a plain verification failure.
+            return Ok(false);
+        }
+
+        let hash = Sha256::digest(Self::canonical_signing_input(vc));
+        crate::proof::ed25519::verify_ed25519(&public_key, &hash, &signature)
+            .map_err(|e| e.to_string())
     }
 
     // -----------------------------------------------------------------------
@@ -415,6 +550,37 @@ impl VcVerifier {
 // ---------------------------------------------------------------------------
 // Internal date helper
 // ---------------------------------------------------------------------------
+
+/// Extract a 32-byte Ed25519 public key from a `did:key` identifier or a
+/// verification-method URL (`did:key:...#fragment`).
+///
+/// Supports both the multicodec form (`0xed01 || key`, 34 decoded bytes) and a
+/// bare 32-byte multibase encoding. Returns `None` for anything else.
+fn extract_ed25519_public_key(did_or_url: &str) -> Option<Vec<u8>> {
+    let did = did_or_url.split('#').next().unwrap_or(did_or_url);
+    let multibase = did.strip_prefix("did:key:")?;
+    let b58 = multibase.strip_prefix('z')?;
+    let decoded = bs58::decode(b58).into_vec().ok()?;
+    if decoded.len() == 34 && decoded[0] == 0xed && decoded[1] == 0x01 {
+        Some(decoded[2..].to_vec())
+    } else if decoded.len() == 32 {
+        Some(decoded)
+    } else {
+        None
+    }
+}
+
+/// Decode a multibase base58btc (`z`-prefixed) `proofValue` to raw bytes.
+fn decode_multibase_signature(proof_value: &str) -> Result<Vec<u8>, String> {
+    match proof_value.strip_prefix('z') {
+        Some(b58) => bs58::decode(b58)
+            .into_vec()
+            .map_err(|e| format!("invalid base58 proofValue: {e}")),
+        None => Err(
+            "unsupported proofValue encoding (expected multibase base58btc 'z' prefix)".to_string(),
+        ),
+    }
+}
 
 /// Convert a Gregorian date to a Julian Day Number.
 fn julian_day_number(year: i64, month: i64, day: i64) -> Option<i64> {
@@ -671,13 +837,119 @@ mod tests {
         assert_eq!(result.status, VerificationStatus::InvalidProof);
     }
 
+    /// Build a VC signed by a real Ed25519 key whose public half is encoded in a
+    /// `did:key` issuer/verificationMethod, so cryptographic verification passes.
+    fn signed_test_vc() -> VerifiableCredential {
+        use crate::proof::ed25519::Ed25519Signer;
+
+        let signer = Ed25519Signer::generate();
+        let pk = signer.public_key_bytes();
+        // did:key multicodec: 0xed01 || pubkey, multibase base58btc ('z').
+        let mut mc = vec![0xed, 0x01];
+        mc.extend_from_slice(&pk);
+        let did = format!("did:key:z{}", bs58::encode(&mc).into_string());
+
+        let mut subject = HashMap::new();
+        subject.insert("id".to_string(), "did:example:subject".to_string());
+        subject.insert("name".to_string(), "Signed Subject".to_string());
+
+        let mut vc = VerifiableCredential {
+            id: Some("urn:uuid:signed-vc-001".to_string()),
+            types: vec![
+                "VerifiableCredential".to_string(),
+                "TestCredential".to_string(),
+            ],
+            issuer: did.clone(),
+            issuance_date: "2020-01-01T00:00:00Z".to_string(),
+            expiration_date: Some("2099-12-31T23:59:59Z".to_string()),
+            credential_subject: subject,
+            proof: None,
+            context: vec![W3C_VC_CONTEXT.to_string()],
+        };
+
+        // Sign the canonical hash (proof-independent) and attach the proof.
+        let hash = Sha256::digest(VcVerifier::canonical_signing_input(&vc));
+        let signature = signer.sign(&hash);
+        vc.proof = Some(CredentialProof {
+            proof_type: "Ed25519Signature2020".to_string(),
+            created: "2020-01-01T00:00:00Z".to_string(),
+            verification_method: format!("{did}#key-1"),
+            proof_purpose: "assertionMethod".to_string(),
+            proof_value: format!("z{}", bs58::encode(&signature).into_string()),
+        });
+        vc
+    }
+
     #[test]
     fn test_verify_proof_passes_when_present_and_required() {
-        let vc = valid_vc(); // has proof
+        let vc = signed_test_vc(); // real Ed25519 signature over a did:key issuer
         let mut policy = default_policy();
         policy.check_proof = true;
         let result = VcVerifier::verify(&vc, &policy);
+        assert!(result.is_valid(), "status = {:?}", result.status);
+        assert!(result.checks_passed.contains(&"proof".to_string()));
+    }
+
+    #[test]
+    fn regression_forged_proof_value_rejected() {
+        // A structurally-plausible but forged proofValue must NOT pass when
+        // check_proof is enabled (the old code rubber-stamped any non-empty value).
+        let mut vc = signed_test_vc();
+        if let Some(proof) = vc.proof.as_mut() {
+            // Replace the real signature with an unrelated 64-byte value.
+            proof.proof_value = format!("z{}", bs58::encode([0x11u8; 64]).into_string());
+        }
+        let mut policy = default_policy();
+        policy.check_proof = true;
+        let result = VcVerifier::verify(&vc, &policy);
+        assert!(!result.is_valid());
+        assert_eq!(result.status, VerificationStatus::InvalidProof);
+    }
+
+    #[test]
+    fn regression_tampered_claim_rejected() {
+        // Mutating a signed claim after signing must invalidate the proof.
+        let mut vc = signed_test_vc();
+        vc.credential_subject
+            .insert("name".to_string(), "Attacker".to_string());
+        let mut policy = default_policy();
+        policy.check_proof = true;
+        let result = VcVerifier::verify(&vc, &policy);
+        assert!(!result.is_valid());
+        assert_eq!(result.status, VerificationStatus::InvalidProof);
+    }
+
+    #[test]
+    fn regression_non_didkey_issuer_proof_fails_loud() {
+        // The legacy structural VC (issuer "did:example:issuer", random
+        // proofValue) can no longer be cryptographically verified: check_proof
+        // must fail loud rather than accept it.
+        let vc = valid_vc();
+        let mut policy = default_policy();
+        policy.check_proof = true;
+        let result = VcVerifier::verify(&vc, &policy);
+        assert!(!result.is_valid());
+        assert_eq!(result.status, VerificationStatus::InvalidProof);
+    }
+
+    #[test]
+    fn regression_revoked_credential_yields_revoked_status() {
+        let vc = valid_vc();
+        let mut policy = default_policy();
+        policy.revoked_credential_ids = vec![vc.id.clone().expect("test vc has an id")];
+        let result = VcVerifier::verify(&vc, &policy);
+        assert!(!result.is_valid());
+        assert_eq!(result.status, VerificationStatus::Revoked);
+    }
+
+    #[test]
+    fn regression_non_revoked_credential_passes_revocation() {
+        let vc = valid_vc();
+        let mut policy = default_policy();
+        policy.revoked_credential_ids = vec!["urn:uuid:some-other-vc".to_string()];
+        let result = VcVerifier::verify(&vc, &policy);
         assert!(result.is_valid());
+        assert!(result.checks_passed.contains(&"revocation".to_string()));
     }
 
     // --- is_trusted_issuer ---------------------------------------------------

@@ -28,7 +28,7 @@ use super::{
     providers::LLMProvider,
     real_time_adaptation::{AdaptationConfig, InteractionData, RealTimeAdaptation},
     token_budget::{BudgetConfig, TokenBudget},
-    types::{LLMRequest, LLMResponse},
+    types::{LLMRequest, LLMResponse, LLMResponseStream},
 };
 
 use super::manager_types::{
@@ -236,6 +236,67 @@ impl LLMManager {
         }
 
         Err(last_error.unwrap_or_else(|| anyhow!("All providers failed")))
+    }
+
+    /// Generate a response as a real, incremental stream.
+    ///
+    /// Walks the same provider fallback chain as [`Self::generate_response`] but
+    /// invokes each provider's `generate_stream` implementation, returning the
+    /// first provider's live token stream. For providers with genuine
+    /// server-sent-event streaming (OpenAI, Anthropic) tokens are delivered as
+    /// the model produces them; providers without an SSE endpoint frame their
+    /// completed response. This is the single real streaming entry point used by
+    /// the chat streaming API (replacing the previous artificial re-chunking).
+    pub async fn generate_response_stream(&self, request: LLMRequest) -> Result<LLMResponseStream> {
+        let start_time = std::time::Instant::now();
+        let provider_chain = self.get_provider_fallback_chain().await;
+        if provider_chain.is_empty() {
+            return Err(anyhow!("No providers available"));
+        }
+
+        let mut last_error: Option<anyhow::Error> = None;
+        for (provider_name, model_name) in provider_chain {
+            if let Some(circuit_breaker) = self.circuit_breakers.get(&provider_name) {
+                if !circuit_breaker.can_execute().await {
+                    warn!("Circuit breaker is open for provider: {}", provider_name);
+                    continue;
+                }
+            }
+            if !self
+                .health_checker
+                .is_provider_healthy(&provider_name)
+                .await
+            {
+                warn!("Provider {} is unhealthy, skipping", provider_name);
+                continue;
+            }
+
+            let provider = match self.providers.get(&provider_name) {
+                Some(p) => p,
+                None => continue,
+            };
+            if !provider.supports_streaming() {
+                continue;
+            }
+
+            match provider.generate_stream(&model_name, &request).await {
+                Ok(stream) => {
+                    self.record_success(&provider_name, start_time.elapsed())
+                        .await;
+                    info!("Streaming response via provider {}", provider_name);
+                    return Ok(stream);
+                }
+                Err(e) => {
+                    self.record_failure(&provider_name, start_time.elapsed())
+                        .await;
+                    warn!("Provider {} streaming failed: {}", provider_name, e);
+                    last_error = Some(e);
+                    continue;
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow!("All providers failed to stream")))
     }
 
     async fn try_provider(

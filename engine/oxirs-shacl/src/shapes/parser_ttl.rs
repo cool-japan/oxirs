@@ -305,6 +305,98 @@ impl ShapeParser {
             shape.add_target(Target::SubjectsOf(target_subjects_of));
         }
 
+        // SHACL-AF SPARQL target types / functions are recognised but not yet
+        // dispatched by the validation engine. Rather than silently dropping
+        // such a target (which would leave the shape matching no focus nodes and
+        // report spurious conformance), fail loud so authors know the construct
+        // is not applied.
+        self.reject_unsupported_af_targets(graph, &shape_subject)?;
+
+        Ok(())
+    }
+
+    /// Fail loud on SHACL-AF constructs that are parsed-but-not-wired:
+    /// `sh:SPARQLTargetType` parameterized targets, `sh:SPARQLAskValidator`
+    /// custom validators, and `sh:function` references. See sparql_af/* — those
+    /// subsystems exist as standalone APIs but are not reachable from the shape
+    /// validation pipeline, so applying them here would be a silent no-op.
+    fn reject_unsupported_af_targets(&self, graph: &Graph, shape_subject: &Subject) -> Result<()> {
+        const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+        const SH_SPARQL_TARGET_TYPE: &str = "http://www.w3.org/ns/shacl#SPARQLTargetType";
+        const SH_SPARQL_ASK_VALIDATOR: &str = "http://www.w3.org/ns/shacl#SPARQLAskValidator";
+        const SH_FUNCTION: &str = "http://www.w3.org/ns/shacl#function";
+
+        let rdf_type_pred = Predicate::NamedNode(
+            NamedNode::new(RDF_TYPE)
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid rdf:type IRI: {e}")))?,
+        );
+
+        let is_unsupported_type = |iri: &str| -> Option<&'static str> {
+            if iri == SH_SPARQL_TARGET_TYPE {
+                Some("sh:SPARQLTargetType (parameterized SPARQL target)")
+            } else if iri == SH_SPARQL_ASK_VALIDATOR {
+                Some("sh:SPARQLAskValidator (custom ASK validator)")
+            } else {
+                None
+            }
+        };
+
+        // (a) sh:target whose object is typed as an unsupported AF construct.
+        let target_triples = graph.query_triples(
+            Some(shape_subject),
+            Some(&Predicate::NamedNode(SHACL_VOCAB.target.clone())),
+            None,
+        );
+        for triple in target_triples {
+            let target_subject = match triple.object() {
+                Object::NamedNode(n) => Subject::NamedNode(n.clone()),
+                Object::BlankNode(b) => Subject::BlankNode(b.clone()),
+                _ => continue,
+            };
+            let type_triples =
+                graph.query_triples(Some(&target_subject), Some(&rdf_type_pred), None);
+            for t in type_triples {
+                if let Object::NamedNode(tn) = t.object() {
+                    if let Some(kind) = is_unsupported_type(tn.as_str()) {
+                        return Err(ShaclError::UnsupportedOperation(format!(
+                            "SHACL-AF target construct {kind} is recognised but not wired into \
+                             the validation engine; it cannot be applied. Use sh:targetClass/\
+                             sh:targetNode/sh:targetSubjectsOf/sh:targetObjectsOf instead."
+                        )));
+                    }
+                }
+            }
+        }
+
+        // (b) The shape node itself typed as an unsupported AF construct.
+        let self_types = graph.query_triples(Some(shape_subject), Some(&rdf_type_pred), None);
+        for t in self_types {
+            if let Object::NamedNode(tn) = t.object() {
+                if let Some(kind) = is_unsupported_type(tn.as_str()) {
+                    return Err(ShaclError::UnsupportedOperation(format!(
+                        "SHACL-AF construct {kind} is recognised but not wired into the \
+                         validation engine and cannot be applied."
+                    )));
+                }
+            }
+        }
+
+        // (c) sh:function references on the shape.
+        let func_pred = Predicate::NamedNode(
+            NamedNode::new(SH_FUNCTION)
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid sh:function IRI: {e}")))?,
+        );
+        if !graph
+            .query_triples(Some(shape_subject), Some(&func_pred), None)
+            .is_empty()
+        {
+            return Err(ShaclError::UnsupportedOperation(
+                "SHACL-AF sh:function references are recognised but not wired into the \
+                 validation engine and cannot be applied."
+                    .to_string(),
+            ));
+        }
+
         Ok(())
     }
 
@@ -465,5 +557,69 @@ impl ShapeParser {
 impl Default for ShapeParser {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod af_target_tests {
+    use super::*;
+    use oxirs_core::model::Quad;
+    use oxirs_core::ConcreteStore;
+
+    fn quad(s: &str, p: &str, o: &str) -> Quad {
+        Quad::new(
+            Subject::NamedNode(NamedNode::new(s).expect("s")),
+            Predicate::NamedNode(NamedNode::new(p).expect("p")),
+            Object::NamedNode(NamedNode::new(o).expect("o")),
+            GraphName::DefaultGraph,
+        )
+    }
+
+    const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    const SH_NODE_SHAPE: &str = "http://www.w3.org/ns/shacl#NodeShape";
+    const SH_TARGET: &str = "http://www.w3.org/ns/shacl#target";
+    const SH_SPARQL_TARGET_TYPE: &str = "http://www.w3.org/ns/shacl#SPARQLTargetType";
+
+    #[test]
+    fn regression_sparql_target_type_fails_loud() {
+        let store = ConcreteStore::new().expect("store");
+        store
+            .insert_quad(quad("http://ex/Shape", RDF_TYPE, SH_NODE_SHAPE))
+            .expect("insert");
+        store
+            .insert_quad(quad("http://ex/Shape", SH_TARGET, "http://ex/MyTarget"))
+            .expect("insert");
+        store
+            .insert_quad(quad("http://ex/MyTarget", RDF_TYPE, SH_SPARQL_TARGET_TYPE))
+            .expect("insert");
+
+        let mut parser = ShapeParser::new();
+        let result = parser.parse_shapes_from_store(&store, None);
+        assert!(
+            matches!(result, Err(ShaclError::UnsupportedOperation(_))),
+            "sh:SPARQLTargetType must fail loud, not be silently dropped; got {result:?}"
+        );
+    }
+
+    #[test]
+    fn regression_sh_function_fails_loud() {
+        let store = ConcreteStore::new().expect("store");
+        store
+            .insert_quad(quad("http://ex/Shape", RDF_TYPE, SH_NODE_SHAPE))
+            .expect("insert");
+        store
+            .insert_quad(quad(
+                "http://ex/Shape",
+                "http://www.w3.org/ns/shacl#function",
+                "http://ex/myFunc",
+            ))
+            .expect("insert");
+
+        let mut parser = ShapeParser::new();
+        let result = parser.parse_shapes_from_store(&store, None);
+        assert!(
+            matches!(result, Err(ShaclError::UnsupportedOperation(_))),
+            "sh:function must fail loud; got {result:?}"
+        );
     }
 }

@@ -844,7 +844,7 @@ fn feature_stack(
 /// (value in microseconds) under its execution phase, and the model's base
 /// latency becomes a `parse` sample. This maps the profiler's cost
 /// representation directly onto the folded-stack model consumed by
-/// [`FlameGraphGenerator`]. Cost-reducing features are omitted (flame-graph
+/// [`FlameGraphGenerator`](crate::profiling::flamegraph::FlameGraphGenerator). Cost-reducing features are omitted (flame-graph
 /// values are unsigned). The returned generator always carries at least the
 /// base sample, so an SVG can always be produced.
 pub fn build_query_flamegraph(

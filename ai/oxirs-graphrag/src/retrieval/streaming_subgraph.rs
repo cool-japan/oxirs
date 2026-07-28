@@ -4,7 +4,7 @@
 //! expanding outward from a SPARQL query in breadth-first order.
 //! Each batch yields a `SubgraphBatch` with metadata and a `is_final` flag.
 
-use crate::{GraphRAGError, GraphRAGResult, SparqlEngineTrait, Triple};
+use crate::{GraphRAGResult, SparqlEngineTrait, Triple};
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 
@@ -120,25 +120,21 @@ impl<S: SparqlEngineTrait + 'static> StreamingSubgraphRetriever<S> {
     /// Then each distinct object entity in those results is expanded for
     /// subsequent depths, up to `config.max_depth`.
     ///
-    /// This is a synchronous method; it runs a Tokio `block_in_place` internally
-    /// (or the caller must be in a Tokio runtime context).
-    pub fn retrieve_stream(
+    /// This is an `async fn`: it simply awaits the BFS expansion directly.
+    /// (An earlier version fetched the *current* Tokio runtime handle via
+    /// `Handle::try_current()` and then called `rt.block_on(...)` on that
+    /// same handle from within an already-async call site — which always
+    /// panics with "Cannot start a runtime from within a runtime" /
+    /// "cannot block the current thread" for every realistic caller in this
+    /// async-first crate. Making the method itself `async` removes the need
+    /// for a nested runtime entirely.)
+    pub async fn retrieve_stream(
         &self,
         query: &str,
         config: &StreamConfig,
     ) -> GraphRAGResult<SubgraphStream> {
-        // We need an async executor; use a blocking thread via tokio::task::block_in_place
-        // or, since tests always run inside Tokio, call a helper.
-        let rt = tokio::runtime::Handle::try_current()
-            .map_err(|_| GraphRAGError::InternalError("No Tokio runtime available".to_string()))?;
-
         let engine = Arc::clone(&self.engine);
-        let query_owned = query.to_string();
-        let config_owned = config.clone();
-
-        // Run the BFS expansion under the existing Tokio handle
-        let batches = rt.block_on(run_bfs_expansion(engine, &query_owned, &config_owned))?;
-
+        let batches = run_bfs_expansion(engine, query, config).await?;
         Ok(SubgraphStream::new(batches))
     }
 }
@@ -294,9 +290,13 @@ fn package_into_batches(
 
 /// Build a 1-hop CONSTRUCT expansion query for a single entity.
 fn build_entity_expand_query(entity_uri: &str, _hops: usize) -> String {
+    // NOTE: `CONSTRUCT { ... }` and `WHERE {` are kept on the same physical
+    // line deliberately (see `crate::retrieval::streaming_sparql::build_expansion_query`'s
+    // doc comment): this workspace's SPARQL parser fails with "Expected
+    // LeftBrace, found Some(Newline)" if a bare newline separates the
+    // template's closing `}` from the `WHERE` keyword.
     format!(
-        r#"CONSTRUCT {{ <{e}> ?p ?o . ?s ?p2 <{e}> . }}
-WHERE {{ {{ <{e}> ?p ?o . }} UNION {{ ?s ?p2 <{e}> . }} }}"#,
+        r#"CONSTRUCT {{ <{e}> ?p ?o . ?s ?p2 <{e}> . }} WHERE {{ {{ <{e}> ?p ?o . }} UNION {{ ?s ?p2 <{e}> . }} }}"#,
         e = entity_uri,
     )
 }
@@ -599,6 +599,60 @@ mod tests {
         let engine = MockEngine::new(make_triples(5));
         let retriever = StreamingSubgraphRetriever::with_defaults(engine);
         assert_eq!(retriever.config.max_depth, 3);
+    }
+
+    // ── Regression: retrieve_stream must not panic when called from an
+    // ── already-running Tokio task (P1) ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn regression_retrieve_stream_does_not_panic_inside_async_context() {
+        // Prior implementation fetched `Handle::try_current()` and then
+        // called `rt.block_on(...)` on that very handle from within this
+        // already-running `#[tokio::test]` task, which always panics
+        // ("Cannot start a runtime from within a runtime"). Calling
+        // `retrieve_stream` directly from an async test is exactly the
+        // documented, realistic call pattern this crate's own doc comment
+        // claims is safe — so this test would have panicked before the fix.
+        let engine = MockEngine::new(make_triples(7));
+        let retriever = StreamingSubgraphRetriever::with_defaults(engine);
+        let config = StreamConfig {
+            max_triples_per_batch: 100,
+            max_depth: 0,
+            deduplicate: false,
+            max_total_triples: 0,
+            ..Default::default()
+        };
+
+        let stream = retriever
+            .retrieve_stream("CONSTRUCT {}", &config)
+            .await
+            .expect("retrieve_stream should succeed, not panic");
+
+        let total: usize = stream.collect_all().len();
+        assert_eq!(total, 7);
+    }
+
+    #[tokio::test]
+    async fn regression_retrieve_stream_nested_in_spawned_task_does_not_panic() {
+        // Exercise the same call from inside a `tokio::spawn`ed task, which
+        // is a common real-world shape (e.g. a request handler spawning
+        // work) and would have hit the exact same nested-runtime panic.
+        let engine = MockEngine::new(make_triples(3));
+        let retriever = Arc::new(StreamingSubgraphRetriever::with_defaults(engine));
+        let retriever_clone = Arc::clone(&retriever);
+
+        let handle = tokio::spawn(async move {
+            let config = StreamConfig::default();
+            retriever_clone
+                .retrieve_stream("CONSTRUCT {}", &config)
+                .await
+        });
+
+        let stream = handle
+            .await
+            .expect("spawned task should not panic")
+            .expect("retrieve_stream should succeed");
+        assert_eq!(stream.collect_all().len(), 3);
     }
 
     // ── Empty engine returns empty stream ───────────────────────────────────

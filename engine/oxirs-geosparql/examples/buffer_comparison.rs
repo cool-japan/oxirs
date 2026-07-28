@@ -1,98 +1,109 @@
-//! Comparison of Pure Rust buffer vs GEOS backend
+//! Buffer capabilities across geometry types.
 //!
-//! This example demonstrates the buffer strategy where:
-//! - Polygon/MultiPolygon → uses rust-buffer (pure Rust, this crate)
-//! - Point/LineString → requires GEOS, provided by the quarantined
-//!   `oxirs-geosparql-adapter-geos` crate (publish = false)
+//! Buffering is Pure Rust and unconditional — it runs on `geo::algorithm::buffer`
+//! (i_overlay-backed). This example used to contrast a Polygon-only straight-skeleton
+//! path against a GEOS C-library backend for everything else; there is one path now.
 //!
-//! Run with: cargo run --example buffer_comparison --features rust-buffer
+//! Run with: cargo run --example buffer_comparison
 
-use oxirs_geosparql::error::Result;
-use oxirs_geosparql::functions::geometric_operations::buffer;
+use oxirs_geosparql::functions::geometric_operations::{
+    buffer, buffer_with_params, BufferParams, CapStyle, JoinStyle,
+};
 use oxirs_geosparql::geometry::Geometry;
 
-fn main() -> Result<()> {
-    println!("=== OxiRS GeoSPARQL Buffer Backend Comparison ===\n");
+fn main() {
+    println!("=== OxiRS GeoSPARQL Buffer ===\n");
 
-    // Test 1: Polygon buffer - Uses Pure Rust
-    println!("1. POLYGON BUFFER (Pure Rust Backend):");
-    println!("   When you buffer a Polygon, oxirs-geosparql automatically uses");
-    println!("   the pure Rust implementation (geo-buffer crate).\n");
+    println!("Every geometry type buffers, with the full OGC cap/join styles,");
+    println!("with no C library involved.\n");
 
-    let square = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))")?;
-    println!("   Original: {}", square.to_wkt());
+    // ---------------------------------------------------------------------
+    // Geometry type coverage
+    // ---------------------------------------------------------------------
+    println!("--- Geometry type coverage ---\n");
 
-    let buffered_square = buffer(&square, 2.0)?;
-    println!("   After buffer(2.0): {}", buffered_square.to_wkt());
-    println!("   ✅ Used: Pure Rust (geo-buffer)\n");
+    let inputs = [
+        ("Point", "POINT(0 0)"),
+        ("LineString", "LINESTRING(0 0, 5 0, 5 5)"),
+        ("MultiPoint", "MULTIPOINT((0 0), (10 10))"),
+        ("Polygon", "POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))"),
+        (
+            "Polygon with hole",
+            "POLYGON((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))",
+        ),
+        (
+            "MultiPolygon",
+            "MULTIPOLYGON(((0 0, 4 0, 4 4, 0 4, 0 0)), ((6 6, 9 6, 9 9, 6 9, 6 6)))",
+        ),
+    ];
 
-    // Test 2: Point buffer - requires GEOS (quarantined into the adapter crate)
-    println!("2. POINT BUFFER (GEOS adapter):");
-    println!("   Point buffering requires GEOS, which is provided by the");
-    println!("   `oxirs-geosparql-adapter-geos` crate (publish = false). Call");
-    println!("   `oxirs_geosparql_adapter_geos::buffer(&point, 3.0)` there.\n");
-
-    // Test 3: LineString buffer - requires GEOS (quarantined into the adapter crate)
-    println!("3. LINESTRING BUFFER (GEOS adapter):");
-    println!("   LineString buffering likewise requires the");
-    println!("   `oxirs-geosparql-adapter-geos` crate.\n");
-
-    // Test 4: MultiPolygon buffer - Uses Pure Rust
-    println!("4. MULTIPOLYGON BUFFER (Pure Rust Backend):");
-    println!("   MultiPolygon also uses pure Rust implementation.\n");
-
-    let multi = Geometry::from_wkt(
-        "MULTIPOLYGON(((0 0, 5 0, 5 5, 0 5, 0 0)), ((10 10, 15 10, 15 15, 10 15, 10 10)))",
-    )?;
-    println!("   Original: Two separate 5x5 squares");
-
-    let buffered_multi = buffer(&multi, 1.0)?;
-    println!("   After buffer(1.0): {}", buffered_multi.to_wkt());
-    println!("   ✅ Used: Pure Rust (geo-buffer)\n");
-
-    // Test 5: Performance comparison hint
-    println!("\n=== BACKEND SELECTION STRATEGY ===\n");
-    println!("The buffer() function automatically selects the optimal backend:\n");
-
-    println!("📦 PURE RUST (rust-buffer):");
-    println!("   ✅ Polygon, MultiPolygon");
-    println!("   ✅ No C++ dependencies");
-    println!("   ✅ Easy cross-compilation");
-    println!("   ✅ Smaller binary size");
-    println!("   ✅ Fast for polygon operations\n");
-
-    println!("🔧 GEOS BACKEND (geos-backend):");
-    println!("   ✅ Point, LineString, MultiPoint, MultiLineString");
-    println!("   ✅ All geometry types supported");
-    println!("   ✅ Industry-standard (PostGIS uses GEOS)");
-    println!("   ✅ Advanced cap/join styles");
-    println!("   ⚠️  Requires GEOS C++ library installation\n");
-
-    println!("🎯 HYBRID STRATEGY:");
-    println!("   The buffer() function provides the best of both worlds:");
-    println!("   • Polygon/MultiPolygon → Pure Rust (when available)");
-    println!("   • Other geometry types → GEOS backend (when available)");
-    println!("   • Graceful fallback if features are missing\n");
-
-    // Test 6: Feature flag demonstration
-    println!("\n=== FEATURE FLAG CONFIGURATION ===\n");
-
-    #[cfg(feature = "rust-buffer")]
-    {
-        println!("Current configuration: Pure-Rust buffer ENABLED");
-        println!("   • rust-buffer: ENABLED (Pure Rust for Polygon/MultiPolygon)");
-        println!("   • GEOS (Point/LineString, cap/join styles): provided by the");
-        println!("     oxirs-geosparql-adapter-geos crate (publish = false).");
+    for (label, wkt) in inputs {
+        let geom = Geometry::from_wkt(wkt).expect("valid WKT");
+        match buffer(&geom, 1.0) {
+            Ok(buffered) => println!("  {label:20} -> {}", buffered.geometry_type()),
+            Err(e) => println!("  {label:20} -> error: {e}"),
+        }
     }
 
-    #[cfg(not(feature = "rust-buffer"))]
-    {
-        println!("Current configuration: no Pure-Rust buffer feature enabled");
-        println!("   • rust-buffer: DISABLED (enable it for Polygon/MultiPolygon buffering)");
-        println!("   • GEOS buffering: use the oxirs-geosparql-adapter-geos crate.");
+    // ---------------------------------------------------------------------
+    // Negative buffers (erosion)
+    // ---------------------------------------------------------------------
+    println!("\n--- Negative buffer (erosion) ---\n");
+
+    let square = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").expect("valid WKT");
+    for distance in [-1.0, -2.0, -4.0] {
+        match buffer(&square, distance) {
+            Ok(eroded) => println!(
+                "  10x10 square eroded by {distance:>4} -> {}",
+                eroded.to_wkt()
+            ),
+            Err(e) => println!("  10x10 square eroded by {distance:>4} -> error: {e}"),
+        }
     }
 
-    println!("\n=== Example completed successfully! ===");
+    // ---------------------------------------------------------------------
+    // Cap and join styles
+    // ---------------------------------------------------------------------
+    println!("\n--- Cap and join styles ---\n");
 
-    Ok(())
+    let line = Geometry::from_wkt("LINESTRING(0 0, 5 0, 5 5)").expect("valid WKT");
+
+    for cap in [CapStyle::Round, CapStyle::Flat, CapStyle::Square] {
+        for join in [JoinStyle::Round, JoinStyle::Mitre, JoinStyle::Bevel] {
+            let params = BufferParams {
+                cap_style: cap,
+                join_style: join,
+                ..BufferParams::default()
+            };
+            match buffer_with_params(&line, 1.0, &params) {
+                Ok(buffered) => {
+                    let vertices = buffered.to_wkt().matches(',').count() + 1;
+                    println!("  cap={cap:?}  join={join:?}  -> {vertices} vertices");
+                }
+                Err(e) => println!("  cap={cap:?}  join={join:?}  -> error: {e}"),
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Curve resolution
+    // ---------------------------------------------------------------------
+    println!("\n--- Curve resolution (quadrant_segments) ---\n");
+
+    let point = Geometry::from_wkt("POINT(0 0)").expect("valid WKT");
+    for segments in [2, 4, 8, 16] {
+        let params = BufferParams {
+            quadrant_segments: segments,
+            ..BufferParams::default()
+        };
+        match buffer_with_params(&point, 1.0, &params) {
+            Ok(buffered) => {
+                let vertices = buffered.to_wkt().matches(',').count() + 1;
+                println!("  quadrant_segments={segments:>2} -> {vertices} vertices");
+            }
+            Err(e) => println!("  quadrant_segments={segments:>2} -> error: {e}"),
+        }
+    }
+
+    println!("\n=== Done ===");
 }

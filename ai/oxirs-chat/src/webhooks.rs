@@ -2,14 +2,102 @@
 //!
 //! Provides webhook support for event notifications and integrations.
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+
+/// Maximum number of response body bytes retained in delivery history, to bound
+/// per-entry memory regardless of how large a webhook endpoint's response is.
+const MAX_STORED_RESPONSE_BYTES: usize = 64 * 1024;
+
+/// True if `ip` is an internal / non-routable address a webhook must never be
+/// allowed to target (SSRF egress guard: loopback, private, link-local incl. the
+/// cloud metadata endpoint, CGNAT, unspecified, ULA).
+fn is_disallowed_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local() // covers 169.254.0.0/16 (metadata 169.254.169.254)
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                // Carrier-grade NAT 100.64.0.0/10 (not covered by std helpers).
+                || (v4.octets()[0] == 100 && (v4.octets()[1] & 0xc0) == 64)
+        }
+        IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || v6.is_unspecified()
+                // Unique local addresses fc00::/7.
+                || (v6.segments()[0] & 0xfe00) == 0xfc00
+                // Link-local unicast fe80::/10.
+                || (v6.segments()[0] & 0xffc0) == 0xfe80
+                // IPv4-mapped addresses whose embedded v4 is disallowed.
+                || v6
+                    .to_ipv4_mapped()
+                    .map(|v4| is_disallowed_ip(&IpAddr::V4(v4)))
+                    .unwrap_or(false)
+        }
+    }
+}
+
+/// Validate a webhook target URL against the SSRF egress policy.
+///
+/// Rejects non-HTTP(S) schemes, obvious internal names, and any host that
+/// resolves to a loopback/private/link-local/metadata address. Resolution is
+/// performed here (at registration and again at delivery) so both a literal
+/// internal IP and a hostname pointing at one are caught.
+async fn validate_webhook_target(url_str: &str) -> Result<()> {
+    let url = reqwest::Url::parse(url_str).context("invalid webhook URL")?;
+    match url.scheme() {
+        "http" | "https" => {}
+        other => return Err(anyhow!("webhook URL scheme '{other}' is not allowed")),
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| anyhow!("webhook URL has no host"))?;
+    let host_lower = host.to_ascii_lowercase();
+    if host_lower == "localhost"
+        || host_lower.ends_with(".local")
+        || host_lower.ends_with(".internal")
+        || host_lower.ends_with(".localhost")
+    {
+        return Err(anyhow!("webhook host '{host}' is not allowed"));
+    }
+
+    // If the host is an IP literal, check it directly; otherwise resolve it.
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if is_disallowed_ip(&ip) {
+            return Err(anyhow!("webhook host '{host}' is a disallowed address"));
+        }
+        return Ok(());
+    }
+
+    let port = url.port_or_known_default().unwrap_or(0);
+    let addrs = tokio::net::lookup_host((host, port))
+        .await
+        .with_context(|| format!("failed to resolve webhook host '{host}'"))?;
+    let mut any = false;
+    for addr in addrs {
+        any = true;
+        if is_disallowed_ip(&addr.ip()) {
+            return Err(anyhow!(
+                "webhook host '{host}' resolves to a disallowed address {}",
+                addr.ip()
+            ));
+        }
+    }
+    if !any {
+        return Err(anyhow!("webhook host '{host}' did not resolve"));
+    }
+    Ok(())
+}
 
 /// Webhook event types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -151,6 +239,9 @@ impl WebhookManager {
     pub fn new() -> Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
+            // Do not follow redirects: a 3xx to an internal host would bypass
+            // the SSRF egress checks performed against the original URL.
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .context("Failed to create HTTP client")?;
 
@@ -163,9 +254,17 @@ impl WebhookManager {
         })
     }
 
-    /// Register a webhook
+    /// Register a webhook.
+    ///
+    /// The target URL is validated against the SSRF egress policy (no
+    /// loopback/private/link-local/metadata hosts) and rejected fail-loud here
+    /// so an untrusted tenant cannot register an internal target.
     pub async fn register(&self, config: WebhookConfig) -> Result<()> {
         info!("Registering webhook: {} for URL: {}", config.id, config.url);
+
+        validate_webhook_target(&config.url)
+            .await
+            .with_context(|| format!("rejected webhook URL '{}'", config.url))?;
 
         let mut webhooks = self.webhooks.write().await;
         webhooks.insert(config.id.clone(), config);
@@ -246,6 +345,21 @@ impl WebhookManager {
         let mut attempts = 0;
         let mut backoff = webhook.retry_policy.initial_backoff;
 
+        // SSRF egress guard: re-validate the target at delivery time (defends
+        // against records mutated after registration and DNS-rebinding).
+        if let Err(e) = validate_webhook_target(&webhook.url).await {
+            error!("Blocked webhook delivery to {}: {}", webhook.url, e);
+            return WebhookDeliveryResult {
+                webhook_id: webhook.id.clone(),
+                success: false,
+                status_code: None,
+                response_body: None,
+                error: Some(format!("blocked by SSRF egress policy: {e}")),
+                attempts: 0,
+                duration: start.elapsed(),
+            };
+        }
+
         loop {
             attempts += 1;
 
@@ -273,7 +387,10 @@ impl WebhookManager {
             match request.send().await {
                 Ok(response) => {
                     let status = response.status();
-                    let body = response.text().await.ok();
+                    let body = response.bytes().await.ok().map(|bytes| {
+                        let capped = &bytes[..bytes.len().min(MAX_STORED_RESPONSE_BYTES)];
+                        String::from_utf8_lossy(capped).into_owned()
+                    });
 
                     if status.is_success() {
                         info!("Webhook delivered successfully to {}", webhook.url);
@@ -420,7 +537,9 @@ mod tests {
 
         let config = WebhookConfig {
             id: "test-webhook".to_string(),
-            url: "https://example.com/webhook".to_string(),
+            // Public routable IP literal — avoids requiring DNS in the test env
+            // while still passing the SSRF egress policy.
+            url: "https://93.184.216.34/webhook".to_string(),
             events: vec![WebhookEvent::MessageReceived],
             ..Default::default()
         };
@@ -430,6 +549,69 @@ mod tests {
         let webhooks = manager.list_webhooks().await;
         assert_eq!(webhooks.len(), 1);
         assert_eq!(webhooks[0].id, "test-webhook");
+    }
+
+    /// Regression: SSRF egress guard rejects internal webhook targets at
+    /// registration (loopback, private, and cloud-metadata addresses).
+    #[tokio::test]
+    async fn regression_webhook_ssrf_internal_targets_rejected() {
+        let manager = WebhookManager::new().expect("should succeed");
+        for url in [
+            "http://127.0.0.1/hook",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://10.0.0.5/hook",
+            "http://192.168.1.10/hook",
+            "http://localhost:8080/hook",
+            "https://[::1]/hook",
+            "ftp://93.184.216.34/hook",
+        ] {
+            let config = WebhookConfig {
+                id: format!("bad-{url}"),
+                url: url.to_string(),
+                events: vec![WebhookEvent::MessageReceived],
+                ..Default::default()
+            };
+            assert!(
+                manager.register(config).await.is_err(),
+                "internal/invalid target must be rejected: {url}"
+            );
+        }
+        assert!(manager.list_webhooks().await.is_empty());
+    }
+
+    /// Regression: the IP egress classifier flags internal ranges and permits
+    /// public addresses.
+    #[test]
+    fn regression_is_disallowed_ip_classification() {
+        use std::net::IpAddr;
+        for ip in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "192.168.0.1",
+            "172.16.5.5",
+            "169.254.169.254",
+            "100.64.0.1",
+            "0.0.0.0",
+            "::1",
+            "fe80::1",
+            "fc00::1",
+        ] {
+            assert!(
+                is_disallowed_ip(&ip.parse::<IpAddr>().expect("ip")),
+                "{ip} should be disallowed"
+            );
+        }
+        for ip in [
+            "93.184.216.34",
+            "8.8.8.8",
+            "1.1.1.1",
+            "2606:4700:4700::1111",
+        ] {
+            assert!(
+                !is_disallowed_ip(&ip.parse::<IpAddr>().expect("ip")),
+                "{ip} should be allowed"
+            );
+        }
     }
 
     #[tokio::test]

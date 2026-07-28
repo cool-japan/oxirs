@@ -172,18 +172,21 @@ impl GorillaEncoder {
             0 => {
                 self.writer.write_bit(false);
             }
-            -63..=64 => {
+            -64..=63 => {
+                // 7-bit two's complement covers exactly -64..=63.
                 self.writer.write_bit(true);
                 self.writer.write_bit(false);
                 self.writer.write_signed(dod, 7);
             }
-            -255..=256 => {
+            -256..=255 => {
+                // 9-bit two's complement covers exactly -256..=255.
                 self.writer.write_bit(true);
                 self.writer.write_bit(true);
                 self.writer.write_bit(false);
                 self.writer.write_signed(dod, 9);
             }
-            -2047..=2048 => {
+            -2048..=2047 => {
+                // 12-bit two's complement covers exactly -2048..=2047.
                 self.writer.write_bit(true);
                 self.writer.write_bit(true);
                 self.writer.write_bit(true);
@@ -648,6 +651,43 @@ mod tests {
             (10001, 3.5),
             (10002, 4.0),
         ];
+        round_trip(&data);
+    }
+
+    #[test]
+    fn regression_dod_boundary_7_9_12_bit() {
+        // Exercise dod == +64, +256, +2048 exactly (the tier boundaries a
+        // signed N-bit two's-complement field cannot represent), verifying
+        // the timestamp round-trips losslessly and delta propagation is not
+        // desynced by a mis-decoded boundary value.
+        //
+        // delta1 = 1000; dod2 = +64 -> delta2 = 1064;
+        // dod3 = +256 -> delta3 = 1320; dod4 = +2048 -> delta4 = 3368.
+        let base = 1_640_000_000_000i64;
+        let t0 = base;
+        let t1 = t0 + 1000;
+        let t2 = t1 + 1064;
+        let t3 = t2 + 1320;
+        let t4 = t3 + 3368;
+        let data: Vec<(i64, f64)> = vec![(t0, 1.0), (t1, 1.0), (t2, 1.0), (t3, 1.0), (t4, 1.0)];
+        round_trip(&data);
+    }
+
+    #[test]
+    fn regression_dod_boundary_negative_symmetric() {
+        // The negative side (-64, -256, -2048) is exactly representable
+        // under the corrected (symmetric two's-complement) ranges; this
+        // test locks in that the fix didn't regress the negative boundary.
+        //
+        // delta1 = 1000; dod2 = -64 -> delta2 = 936;
+        // dod3 = -256 -> delta3 = 680; dod4 = -2048 -> delta4 = -1368.
+        let base = 1_640_000_000_000i64;
+        let t0 = base;
+        let t1 = t0 + 1000;
+        let t2 = t1 + 936;
+        let t3 = t2 + 680;
+        let t4 = t3 - 1368;
+        let data: Vec<(i64, f64)> = vec![(t0, 2.0), (t1, 2.0), (t2, 2.0), (t3, 2.0), (t4, 2.0)];
         round_trip(&data);
     }
 

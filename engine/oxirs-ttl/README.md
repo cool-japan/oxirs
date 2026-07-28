@@ -1,12 +1,12 @@
 # OxiRS TTL - RDF Turtle Family Parser & Serializer
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
-[![Tests](https://img.shields.io/badge/tests-1%2C817%20passing-green)](https://github.com/cool-japan/oxirs)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Tests](https://img.shields.io/badge/tests-1%2C852%20passing-green)](https://github.com/cool-japan/oxirs)
 [![Compliance](https://img.shields.io/badge/W3C-97%25%20compliant-brightgreen)](https://www.w3.org/TR/turtle/)
 
-**Status**: v0.4.0 - Released 2026-07-19
+**Status**: v0.4.1 - Released 2026-07-26
 
-✨ **Production-Ready**: API-stable with comprehensive testing (1,817 tests), W3C compliance, and performance optimizations.
+✨ **Production-Ready**: API-stable with comprehensive testing (1,852 tests), W3C compliance, and performance optimizations.
 
 High-performance parsers and serializers for RDF formats in the Turtle family including Turtle, N-Triples, TriG, N-Quads, and N3. Ported from Oxigraph's oxttl crate with extensive enhancements for OxiRS.
 
@@ -44,13 +44,13 @@ ex:greeting "مرحبا"@ar--rtl .  # Right-to-left
 The `rdf-12` feature is **enabled by default**, so no extra flag is needed:
 ```toml
 [dependencies]
-oxirs-ttl = "0.3.2"
+oxirs-ttl = "0.4.1"
 ```
 
 To build without RDF 1.2 support, disable default features and re-enable the ones you need:
 ```toml
 [dependencies]
-oxirs-ttl = { version = "0.3.2", default-features = false }
+oxirs-ttl = { version = "0.4.1", default-features = false }
 ```
 
 ### Advanced Features
@@ -71,10 +71,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = "0.3.2"  # rdf-12 (quoted triples, directional language tags) is on by default
+oxirs-ttl = "0.4.1"  # rdf-12 (quoted triples, directional language tags) is on by default
 
 # With all features
-oxirs-ttl = { version = "0.3.2", features = ["async-tokio", "parallel"] }
+oxirs-ttl = { version = "0.4.1", features = ["async-tokio", "parallel"] }
 ```
 
 ## Quick Start
@@ -434,7 +434,7 @@ Measured on Apple M1 with typical RDF datasets:
 
 ### Test Coverage
 
-- **1,817 tests passing**
+- **1,852 tests passing**
 - **Property-based testing** with proptest
 - **Memory leak tests** for production safety
 - **Performance regression tests** for baseline tracking
@@ -518,7 +518,7 @@ let config = SerializationConfig::default()
 
 ## Status
 
-### v0.3.2 (Current Release - July 2026) ✅
+### v0.4.1 (Current Release - July 2026) ✅
 
 Maintenance release: no functional/API changes since v0.3.1. Workspace-wide dependency
 modernization (`lazy_static` → `once_cell::sync::Lazy`) and rustdoc intra-doc link fixes.

@@ -17,6 +17,7 @@
 
 use crate::error::{WasmError, WasmResult};
 use std::collections::HashMap;
+use url::Url;
 
 /// Expand the `PREFIX`/`BASE` prologue of a SPARQL query.
 ///
@@ -206,7 +207,8 @@ fn expand_body(
             // less-than operator of a FILTER expression.
             '<' => match try_read_iri(chars, i) {
                 Some((iri, next)) => {
-                    out.push_str(&format!("<{}>", resolve_against_base(&iri, base)));
+                    let resolved = resolve_against_base(&iri, base)?;
+                    out.push_str(&format!("<{}>", resolved));
                     i = next;
                 }
                 None => {
@@ -242,11 +244,31 @@ fn expand_body(
     Ok(out)
 }
 
-/// Resolve a possibly relative IRI against `BASE`.
-fn resolve_against_base(iri: &str, base: Option<&str>) -> String {
+/// Resolve a possibly relative IRI reference against `BASE`, following RFC
+/// 3986 §5.3 ("Component Recomposition") rather than naive string
+/// concatenation. This correctly handles path-absolute references (`/x`
+/// replaces the entire path), network-path references (`//host/x` replaces
+/// the authority), and dot-segment removal (`../y`, `./y`) — all of which a
+/// plain `format!("{base}{iri}")` gets wrong.
+///
+/// # Errors
+///
+/// Returns [`WasmError::QueryError`] if `base` is not itself a valid absolute
+/// IRI (so it cannot serve as a resolution base at all), or if the relative
+/// reference cannot be resolved against it.
+fn resolve_against_base(iri: &str, base: Option<&str>) -> WasmResult<String> {
     match base {
-        Some(base) if !is_absolute_iri(iri) => format!("{}{}", base, iri),
-        _ => iri.to_string(),
+        Some(base) if !is_absolute_iri(iri) => {
+            let base_url = Url::parse(base)
+                .map_err(|e| WasmError::QueryError(format!("invalid BASE <{base}>: {e}")))?;
+            let resolved = base_url.join(iri).map_err(|e| {
+                WasmError::QueryError(format!(
+                    "cannot resolve relative IRI <{iri}> against BASE <{base}>: {e}"
+                ))
+            })?;
+            Ok(resolved.to_string())
+        }
+        _ => Ok(iri.to_string()),
     }
 }
 
@@ -352,6 +374,43 @@ mod tests {
         let q = "BASE <http://ex/>\nSELECT ?o WHERE { <s> <p> ?o }";
         let out = expand_prologue(q).expect("expand");
         assert!(out.contains("<http://ex/s> <http://ex/p>"), "{out}");
+    }
+
+    #[test]
+    fn regression_resolves_path_absolute_reference_by_replacing_whole_path() {
+        // RFC 3986 §5.3: a reference starting with '/' replaces the base's
+        // entire path, it does not get appended after it.
+        let q = "BASE <http://ex/a/b/>\nSELECT ?o WHERE { </x> <p> ?o }";
+        let out = expand_prologue(q).expect("expand");
+        assert!(out.contains("<http://ex/x>"), "{out}");
+        assert!(!out.contains("http://ex/a/b//x"), "{out}");
+    }
+
+    #[test]
+    fn regression_resolves_dot_dot_segment() {
+        // RFC 3986 §5.3: dot-segments must be removed, not left embedded.
+        let q = "BASE <http://ex/a/b/>\nSELECT ?o WHERE { <../y> <p> ?o }";
+        let out = expand_prologue(q).expect("expand");
+        assert!(out.contains("<http://ex/a/y>"), "{out}");
+        assert!(!out.contains(".."), "{out}");
+    }
+
+    #[test]
+    fn regression_resolves_network_path_reference_by_replacing_authority() {
+        // RFC 3986 §5.3: a reference starting with '//' replaces the base's
+        // authority (and scheme carries over), not a literal concatenation.
+        let q = "BASE <http://ex.org/a/>\nSELECT ?o WHERE { <//other.org/x> <p> ?o }";
+        let out = expand_prologue(q).expect("expand");
+        assert!(out.contains("<http://other.org/x>"), "{out}");
+    }
+
+    #[test]
+    fn regression_invalid_base_iri_fails_loud_instead_of_silently_concatenating() {
+        // A BASE that cannot serve as an RFC 3986 resolution base (no scheme)
+        // must be a reported error, not silently glued onto the reference.
+        let q = "BASE <not-a-valid-base>\nSELECT ?o WHERE { <s> <p> ?o }";
+        let err = expand_prologue(q).expect_err("malformed BASE must fail");
+        assert!(err.to_string().contains("BASE"), "{err}");
     }
 
     #[test]

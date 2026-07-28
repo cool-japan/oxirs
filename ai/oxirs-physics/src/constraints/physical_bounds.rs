@@ -391,6 +391,7 @@ mod tests {
             time_steps: 10,
             material_properties: HashMap::new(),
             constraints: Vec::new(),
+            defaulted_fields: Vec::new(),
         };
 
         assert!(validator.validate_parameters(&params).is_ok());
@@ -410,6 +411,7 @@ mod tests {
             time_steps: 10,
             material_properties: HashMap::new(),
             constraints: Vec::new(),
+            defaulted_fields: Vec::new(),
         };
 
         assert!(validator.validate_parameters(&params).is_err());
@@ -424,6 +426,7 @@ mod tests {
             time_steps: 0, // Invalid
             material_properties: HashMap::new(),
             constraints: Vec::new(),
+            defaulted_fields: Vec::new(),
         };
 
         assert!(validator.validate_parameters(&params).is_err());

@@ -26,7 +26,7 @@
 //! - Instead of continuing to fabricate acknowledgements, every production
 //!   entry point that drives a distributed protocol now **requires** a
 //!   caller-supplied `Arc<dyn NetworkTransport>`. Without one, construction
-//!   fails loudly with [`TdbError::DistributedTransportNotConfigured`] rather
+//!   fails loudly with [`TdbError::DistributedTransportNotConfigured`](crate::error::TdbError::DistributedTransportNotConfigured) rather
 //!   than silently pretending consensus/replication succeeded.
 //! - The only bundled implementation is [`LoopbackSimulationTransport`], which
 //!   is explicitly named and documented as a single-node, in-process

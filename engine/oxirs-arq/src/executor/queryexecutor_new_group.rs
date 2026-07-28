@@ -18,6 +18,35 @@ use std::sync::{Arc, RwLock};
 use super::queryexecutor_type::QueryExecutor;
 use super::types::{ExecutionStrategy, FunctionRegistry, UnknownFunctionError};
 
+/// Whether an evaluated term is an `xsd:integer` (or a derived integer type),
+/// used by `SUM` to decide whether it can keep exact integer typing.
+fn algebra_term_is_integer(term: &crate::algebra::Term) -> bool {
+    let lit = match term {
+        crate::algebra::Term::Literal(lit) => lit,
+        _ => return false,
+    };
+    let datatype = match &lit.datatype {
+        Some(dt) => dt.as_str(),
+        None => return false,
+    };
+    matches!(
+        datatype,
+        "http://www.w3.org/2001/XMLSchema#integer"
+            | "http://www.w3.org/2001/XMLSchema#long"
+            | "http://www.w3.org/2001/XMLSchema#int"
+            | "http://www.w3.org/2001/XMLSchema#short"
+            | "http://www.w3.org/2001/XMLSchema#byte"
+            | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+            | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+            | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+            | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+            | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+            | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+            | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+    ) && lit.value.parse::<i64>().is_ok()
+}
+
 impl QueryExecutor {
     /// Create new query executor with default configuration
     pub fn new() -> Self {
@@ -108,6 +137,23 @@ impl QueryExecutor {
     pub fn budget(&self) -> Option<&std::sync::Arc<crate::query_governor::ExecutionBudget>> {
         self.execution_budget.as_ref()
     }
+    /// Wall-clock budget check for use inside hot evaluation loops.
+    ///
+    /// A no-op when no budget is attached. When a budget *is* attached it
+    /// forwards to [`crate::query_governor::ExecutionBudget::check_time`] and, on
+    /// breach, returns the **typed** [`crate::query_governor::BudgetExceeded`]
+    /// wrapped via [`anyhow::Error::new`] (not stringified) so a caller up the
+    /// stack can `downcast_ref` it and map a wall-time timeout to the correct
+    /// HTTP status. Call it *throttled* (e.g. once every 1024 loop iterations —
+    /// see [`Self::hash_join`], [`Self::execute_minus`], [`Self::apply_left_join`])
+    /// because the underlying `Instant::now()` is not free at O(N*M) scale.
+    #[inline]
+    pub(super) fn budget_check_time(&self) -> Result<()> {
+        if let Some(ref budget) = self.execution_budget {
+            budget.check_time().map_err(anyhow::Error::new)?;
+        }
+        Ok(())
+    }
     /// Execute a query on behalf of `tenant_id`, gated by the attached
     /// [`crate::sla_integration::ArqSlaGate`].
     ///
@@ -144,6 +190,14 @@ impl QueryExecutor {
         algebra: &Algebra,
         dataset: &dyn Dataset,
     ) -> Result<Solution> {
+        // Wall-time budget check at every operator boundary. `execute_serial` is
+        // the single recursive dispatch point for the Serial strategy (the
+        // strategy fuseki forces for every query), so a check here fires between
+        // Union / LeftJoin / Minus / Filter / … sub-evaluations and guarantees a
+        // deeply-nested-but-cheap-per-node tree still gets stopped. The genuinely
+        // hot O(N*M) inner loops (hash_join / execute_minus / apply_left_join)
+        // carry their own throttled checks on top of this.
+        self.budget_check_time()?;
         match algebra {
             Algebra::Bgp(patterns) => self.execute_bgp_index_aware(patterns, dataset),
             Algebra::Join { left, right } => {
@@ -155,6 +209,12 @@ impl QueryExecutor {
                 Ok(self.union_solutions(left_results, right_results))
             }
             Algebra::Filter { pattern, condition } => {
+                // FILTER(?v IN (<iri>, …)) over a BGP is answered with per-IRI
+                // index lookups instead of an unconstrained scan when the
+                // shape allows (see try_filter_in_pushdown's gates).
+                if let Some(result) = self.try_filter_in_pushdown(pattern, condition, dataset)? {
+                    return Ok(result);
+                }
                 let pattern_results = self.execute_serial(pattern, dataset)?;
                 self.apply_filter_with_dataset(pattern_results, condition, dataset)
             }
@@ -315,10 +375,7 @@ impl QueryExecutor {
         streaming_solution.finish();
         let mut result = Solution::new();
         for solution_result in streaming_solution {
-            match solution_result {
-                Ok(solution) => result.extend(solution),
-                Err(e) => return Err(e),
-            }
+            result.extend(solution_result?);
         }
         Ok(result)
     }
@@ -329,7 +386,6 @@ impl QueryExecutor {
         dataset: &dyn Dataset,
         streaming_solution: &mut super::streaming::StreamingSolution,
     ) -> Result<()> {
-        use crate::executor::streaming::SpillableHashJoin;
         match algebra {
             Algebra::Bgp(patterns) => {
                 let bgp_algebra = Algebra::Bgp(patterns.clone());
@@ -339,25 +395,19 @@ impl QueryExecutor {
                 }
                 Ok(())
             }
-            Algebra::Join { left, right } => {
-                let left_solutions = self.execute_serial(left, dataset)?;
-                let right_solutions = self.execute_serial(right, dataset)?;
-                let stream_config = super::streaming::StreamingConfig {
-                    memory_limit: self.context.memory_limit.unwrap_or(1024 * 1024 * 1024),
-                    temp_dir: None,
-                    buffer_size: self.context.streaming.buffer_size,
-                    compress_spills: true,
-                    spill_strategy: super::streaming::SpillStrategy::Adaptive,
-                    adaptive_buffering: true,
-                    parallel_spilling: true,
-                    compression_algorithm: super::streaming::CompressionAlgorithm::Zstd,
-                };
-                let mut hash_join = SpillableHashJoin::new(stream_config);
-                let join_vars = self.extract_join_variables(left, right);
-                let results =
-                    hash_join.execute(vec![left_solutions], vec![right_solutions], &join_vars)?;
-                for result in results {
-                    streaming_solution.add_solution(result)?;
+            Algebra::Join { .. } => {
+                // Delegate to Serial: execute_index_optimized_join carries the
+                // bound-join pushdown and the correct per-binding join
+                // granularity. The previous SpillableHashJoin call fed each
+                // side's WHOLE solution as a single row with join_vars = []
+                // (extract_join_variables was a stub), so any top-level Join
+                // under the Streaming strategy returned at most one — possibly
+                // conflicting — row. As with the Filter arm below,
+                // execute_streaming materializes everything anyway, so no
+                // streaming benefit is lost.
+                let joined = self.execute_serial(algebra, dataset)?;
+                for binding in joined {
+                    streaming_solution.add_solution(vec![binding])?;
                 }
                 Ok(())
             }
@@ -366,11 +416,22 @@ impl QueryExecutor {
                 self.execute_algebra_streaming(right, dataset, streaming_solution)?;
                 Ok(())
             }
-            Algebra::Filter {
-                pattern,
-                condition: _,
-            } => {
-                self.execute_algebra_streaming(pattern, dataset, streaming_solution)?;
+            Algebra::Filter { .. } => {
+                // The FILTER condition MUST be applied. The previous
+                // implementation discarded it (`condition: _`) and streamed the
+                // unfiltered pattern, so every Streaming-strategy FILTER — and
+                // both branches of a `Filter(Union(A, B))` — returned rows that
+                // Serial would have excluded (a silent wrong-answer). Because
+                // `execute_streaming` already materializes the whole solution
+                // before returning (see `execute_streaming`), there is no real
+                // streaming benefit to forgo: evaluate the entire Filter node via
+                // the Serial path so the dataset-aware condition (including
+                // EXISTS / NOT EXISTS and the typed-error propagation) matches
+                // Serial exactly.
+                let filtered = self.execute_serial(algebra, dataset)?;
+                for binding in filtered {
+                    streaming_solution.add_solution(vec![binding])?;
+                }
                 Ok(())
             }
             _ => {
@@ -541,19 +602,59 @@ impl QueryExecutor {
                 }
             }
             crate::algebra::Aggregate::Sum { distinct, expr } => {
-                let mut values = Vec::new();
+                // Collect each operand's (numeric value, integer-ness) so SUM
+                // over xsd:integer operands keeps xsd:integer typing and full
+                // i64 precision (SPARQL type promotion), only widening to
+                // xsd:decimal when a non-integer operand appears.
+                let mut values: Vec<(f64, bool, String)> = Vec::new();
                 for binding in bindings {
                     if let Ok(value) = self.evaluate_expression(expr, binding) {
                         if let Ok(num) = self.extract_numeric_value(&value) {
-                            values.push(num);
+                            let is_int = algebra_term_is_integer(&value);
+                            let lexical = match &value {
+                                crate::algebra::Term::Literal(lit) => lit.value.clone(),
+                                _ => num.to_string(),
+                            };
+                            values.push((num, is_int, lexical));
                         }
                     }
                 }
                 if *distinct {
-                    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                    values.dedup_by(|a, b| a == b);
+                    values
+                        .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+                    values.dedup_by(|a, b| a.0 == b.0);
                 }
-                let sum: f64 = values.iter().sum();
+                let all_integer = !values.is_empty() && values.iter().all(|(_, is_int, _)| *is_int);
+                if all_integer {
+                    // Exact integer accumulation with overflow fallback to f64.
+                    let mut acc: i64 = 0;
+                    let mut overflowed = false;
+                    for (_, _, lexical) in &values {
+                        match lexical.parse::<i64>() {
+                            Ok(i) => match acc.checked_add(i) {
+                                Some(v) => acc = v,
+                                None => {
+                                    overflowed = true;
+                                    break;
+                                }
+                            },
+                            Err(_) => {
+                                overflowed = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !overflowed {
+                        return Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                            value: acc.to_string(),
+                            language: None,
+                            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                                "http://www.w3.org/2001/XMLSchema#integer",
+                            )),
+                        }));
+                    }
+                }
+                let sum: f64 = values.iter().map(|(n, _, _)| *n).sum();
                 Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
                     value: sum.to_string(),
                     language: None,
@@ -563,45 +664,48 @@ impl QueryExecutor {
                 }))
             }
             crate::algebra::Aggregate::Min { distinct: _, expr } => {
-                let mut min_value: Option<f64> = None;
+                // SPARQL 1.1 §18.5.1.9: MIN returns one of the input terms
+                // verbatim (datatype included, e.g. xsd:gYear) — never a
+                // synthesized xsd:decimal like SUM/AVG.
+                let mut min_entry: Option<(f64, crate::algebra::Term)> = None;
                 for binding in bindings {
                     if let Ok(value) = self.evaluate_expression(expr, binding) {
                         if let Ok(num) = self.extract_numeric_value(&value) {
-                            min_value = Some(min_value.map_or(num, |min| min.min(num)));
+                            let replace = match &min_entry {
+                                Some((best, _)) => num < *best,
+                                None => true,
+                            };
+                            if replace {
+                                min_entry = Some((num, value));
+                            }
                         }
                     }
                 }
-                if let Some(min) = min_value {
-                    Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
-                        value: min.to_string(),
-                        language: None,
-                        datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
-                            "http://www.w3.org/2001/XMLSchema#decimal",
-                        )),
-                    }))
-                } else {
-                    Err(anyhow::anyhow!("No numeric values found for MIN aggregate"))
+                match min_entry {
+                    Some((_, term)) => Ok(term),
+                    None => Err(anyhow::anyhow!("No numeric values found for MIN aggregate")),
                 }
             }
             crate::algebra::Aggregate::Max { distinct: _, expr } => {
-                let mut max_value: Option<f64> = None;
+                // SPARQL 1.1 §18.5.1.10: MAX returns one of the input terms
+                // verbatim (datatype included) — see the MIN arm above.
+                let mut max_entry: Option<(f64, crate::algebra::Term)> = None;
                 for binding in bindings {
                     if let Ok(value) = self.evaluate_expression(expr, binding) {
                         if let Ok(num) = self.extract_numeric_value(&value) {
-                            max_value = Some(max_value.map_or(num, |max| max.max(num)));
+                            let replace = match &max_entry {
+                                Some((best, _)) => num > *best,
+                                None => true,
+                            };
+                            if replace {
+                                max_entry = Some((num, value));
+                            }
                         }
                     }
                 }
-                if let Some(max) = max_value {
-                    Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
-                        value: max.to_string(),
-                        language: None,
-                        datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
-                            "http://www.w3.org/2001/XMLSchema#decimal",
-                        )),
-                    }))
-                } else {
-                    Err(anyhow::anyhow!("No numeric values found for MAX aggregate"))
+                match max_entry {
+                    Some((_, term)) => Ok(term),
+                    None => Err(anyhow::anyhow!("No numeric values found for MAX aggregate")),
                 }
             }
             crate::algebra::Aggregate::Avg { distinct, expr } => {
@@ -678,7 +782,7 @@ impl QueryExecutor {
         &self,
         left: Solution,
         right: Solution,
-        _conditions: &Option<crate::algebra::Expression>,
+        conditions: &Option<crate::algebra::Expression>,
     ) -> Result<Solution> {
         use std::collections::{HashMap, HashSet};
         // A no-op right side keeps every left row unbound.
@@ -710,7 +814,16 @@ impl QueryExecutor {
         }
 
         let mut result = Solution::new();
+        // Persistent throttled wall-time check (see [`Self::hash_join`]): an
+        // OPTIONAL against a high-cardinality right side is O(|L|+|R|) in the
+        // common case but degrades toward O(|L|*|R|) when many left rows collide
+        // on the same shared-variable key, so both loops are instrumented.
+        let mut budget_ticks: u64 = 0;
         for left_binding in &left {
+            if budget_ticks & 0x3FF == 0 {
+                self.budget_check_time()?;
+            }
+            budget_ticks += 1;
             let key: Vec<_> = shared_vars
                 .iter()
                 .filter_map(|var| {
@@ -722,6 +835,10 @@ impl QueryExecutor {
             let mut has_join = false;
             if let Some(matching) = hash_table.get(&key) {
                 for &right_binding in matching {
+                    if budget_ticks & 0x3FF == 0 {
+                        self.budget_check_time()?;
+                    }
+                    budget_ticks += 1;
                     let mut is_compatible = true;
                     let mut merged = left_binding.clone();
                     for (var, term) in right_binding {
@@ -735,8 +852,23 @@ impl QueryExecutor {
                         }
                     }
                     if is_compatible {
-                        result.push(merged);
-                        has_join = true;
+                        // SPARQL 1.1 §18.5 LeftJoin: the OPTIONAL FILTER (the
+                        // condition carried on the LeftJoin node) is evaluated
+                        // over the MERGED (left+right) binding. A merged row that
+                        // fails the filter does not count as a match — so a left
+                        // row whose only compatible right rows all fail the filter
+                        // is still emitted with its optional variables unbound.
+                        // This mirrors perform_parallel_left_join so the Serial
+                        // and Parallel strategies agree.
+                        if let Some(condition) = conditions {
+                            if self.left_join_filter_passes(condition, &merged)? {
+                                result.push(merged);
+                                has_join = true;
+                            }
+                        } else {
+                            result.push(merged);
+                            has_join = true;
+                        }
                     }
                 }
             }
@@ -745,6 +877,34 @@ impl QueryExecutor {
             }
         }
         Ok(result)
+    }
+
+    /// Evaluate a LeftJoin (OPTIONAL) FILTER condition over a merged binding.
+    ///
+    /// Truthiness rules mirror [`Self::apply_filter`]: a whole-query fault
+    /// (unknown function / runtime-budget breach) propagates as `Err`, while an
+    /// ordinary per-row evaluation error (unbound variable, type error) yields
+    /// `Ok(false)` so that merged row is simply not treated as a match.
+    fn left_join_filter_passes(
+        &self,
+        condition: &crate::algebra::Expression,
+        merged: &crate::algebra::Binding,
+    ) -> Result<bool> {
+        match self.evaluate_expression(condition, merged) {
+            Ok(crate::algebra::Term::Literal(lit)) => Ok(self.is_truthy(&lit)),
+            Ok(_) => Ok(true),
+            Err(err) => {
+                if err.downcast_ref::<UnknownFunctionError>().is_some()
+                    || err
+                        .downcast_ref::<crate::query_governor::BudgetExceeded>()
+                        .is_some()
+                {
+                    Err(err)
+                } else {
+                    Ok(false)
+                }
+            }
+        }
     }
     /// Hash join implementation
     pub(super) fn hash_join(&self, build_side: Solution, probe_side: Solution) -> Result<Solution> {
@@ -772,7 +932,19 @@ impl QueryExecutor {
             hash_table.entry(key).or_default().push(binding);
         }
         let mut result = Solution::new();
+        // Persistent (not per-probe-row) counter so the throttled wall-time check
+        // fires across the whole join, including the pathological cross join where
+        // every build row lands in a single hash bucket and the inner loop runs
+        // |build|*|probe| times. Checking `& 0x3FF` fires at 0 (immediately) then
+        // every 1024 iterations; the check is incremented in BOTH loops so a
+        // "many probes, few matches" shape (large outer, empty inner) is covered
+        // too. See [`Self::budget_check_time`] for why this is throttled.
+        let mut budget_ticks: u64 = 0;
         for probe_binding in &probe_side {
+            if budget_ticks & 0x3FF == 0 {
+                self.budget_check_time()?;
+            }
+            budget_ticks += 1;
             let probe_key: Vec<_> = shared_vars
                 .iter()
                 .filter_map(|var| {
@@ -783,6 +955,10 @@ impl QueryExecutor {
                 .collect();
             if let Some(matching_bindings) = hash_table.get(&probe_key) {
                 for &build_binding in matching_bindings {
+                    if budget_ticks & 0x3FF == 0 {
+                        self.budget_check_time()?;
+                    }
+                    budget_ticks += 1;
                     let mut is_compatible = true;
                     let mut merged = probe_binding.clone();
                     for (var, term) in build_binding {
@@ -823,11 +999,19 @@ impl QueryExecutor {
                 Err(err) => {
                     // An unknown function is a whole-query fault: fail the entire
                     // filter loudly rather than silently shrinking the result set
-                    // (no-silent-empty contract). Every OTHER error class is a
+                    // (no-silent-empty contract). A runtime budget breach (raised
+                    // by a FILTER (NOT) EXISTS subquery that timed out or blew its
+                    // scan budget) is likewise a whole-query fault and MUST NOT be
+                    // swallowed — doing so would drop the row and return a wrong
+                    // 200 instead of a timeout. Every OTHER error class is a
                     // per-row evaluation error (unbound variable, type error, ...)
                     // which SPARQL 1.1 §17.3 treats as excluding that one row, so
                     // it is swallowed and the row is dropped.
-                    if err.downcast_ref::<UnknownFunctionError>().is_some() {
+                    if err.downcast_ref::<UnknownFunctionError>().is_some()
+                        || err
+                            .downcast_ref::<crate::query_governor::BudgetExceeded>()
+                            .is_some()
+                    {
                         return Err(err);
                     }
                 }
@@ -1571,6 +1755,511 @@ mod serial_executor_tests {
         assert!(
             result.is_err(),
             "triple-scan budget must be enforced during the BGP scan"
+        );
+    }
+
+    fn binding(pairs: &[(&str, Term)]) -> crate::algebra::Binding {
+        let mut b = crate::algebra::Binding::new();
+        for (name, term) in pairs {
+            b.insert(Variable::new_unchecked(*name), term.clone());
+        }
+        b
+    }
+
+    #[test]
+    fn regression_apply_left_join_honors_optional_filter() {
+        // OPTIONAL { ?s :age ?age } FILTER(?age > 25): the LeftJoin FILTER must
+        // be evaluated over the merged binding by the Serial strategy (it was
+        // silently dropped before), matching perform_parallel_left_join.
+        let exec = QueryExecutor::new();
+        let left = vec![binding(&[
+            ("s", iri("http://ex/s1")),
+            ("name", iri("http://ex/alice")),
+        ])];
+        let right = vec![binding(&[
+            ("s", iri("http://ex/s1")),
+            ("age", int_term(30)),
+        ])];
+
+        // Passing filter (?age > 25): merged row with ?age bound is kept.
+        let cond_pass = Some(Expression::Binary {
+            op: BinaryOperator::Greater,
+            left: Box::new(ev("age")),
+            right: Box::new(int_expr(25)),
+        });
+        let sol = exec
+            .apply_left_join(left.clone(), right.clone(), &cond_pass)
+            .expect("left join ok");
+        assert_eq!(sol.len(), 1);
+        assert!(sol[0].contains_key(&Variable::new_unchecked("age")));
+
+        // Failing filter (?age > 40): the compatible right row does not count as
+        // a match, so the left row is emitted with ?age UNBOUND.
+        let cond_fail = Some(Expression::Binary {
+            op: BinaryOperator::Greater,
+            left: Box::new(ev("age")),
+            right: Box::new(int_expr(40)),
+        });
+        let sol = exec
+            .apply_left_join(left, right, &cond_fail)
+            .expect("left join ok");
+        assert_eq!(sol.len(), 1);
+        assert!(!sol[0].contains_key(&Variable::new_unchecked("age")));
+    }
+
+    fn int_term(n: i64) -> Term {
+        Term::Literal(Literal {
+            value: n.to_string(),
+            language: None,
+            datatype: Some(NamedNode::new_unchecked(
+                "http://www.w3.org/2001/XMLSchema#integer",
+            )),
+        })
+    }
+
+    fn str_of(var: &str) -> Expression {
+        Expression::Function {
+            name: "str".to_string(),
+            args: vec![ev(var)],
+        }
+    }
+
+    #[test]
+    fn regression_order_by_expression_key_is_not_a_noop() {
+        // ORDER BY STR(?s) used to evaluate every key to None (only
+        // Expression::Variable was implemented), making the comparator a
+        // no-op that preserved whatever order the pipeline produced.
+        let exec = QueryExecutor::new();
+        let solution = vec![
+            binding(&[("s", iri("http://ex/current-account-gdp"))]),
+            binding(&[("s", iri("http://ex/zeta"))]),
+            binding(&[("s", iri("http://ex/current-account"))]),
+        ];
+        let sorted = exec.apply_order_by(
+            solution,
+            &[crate::algebra::OrderCondition {
+                expr: str_of("s"),
+                ascending: true,
+            }],
+        );
+        let keys: Vec<&str> = sorted
+            .iter()
+            .map(|b| match &b[&Variable::new_unchecked("s")] {
+                Term::Iri(n) => n.as_str(),
+                other => panic!("expected IRI, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            keys,
+            vec![
+                "http://ex/current-account",
+                "http://ex/current-account-gdp",
+                "http://ex/zeta",
+            ],
+            "ORDER BY STR(?s) must actually sort by the evaluated key"
+        );
+    }
+
+    #[test]
+    fn regression_order_by_unbound_key_sorts_lowest_ascending() {
+        // SPARQL 1.1 §15.1: unbound/errored keys rank lowest, so they come
+        // FIRST ascending (and last descending via cmp.reverse()).
+        let exec = QueryExecutor::new();
+        let solution = vec![
+            binding(&[("s", iri("http://ex/a")), ("k", int_term(1))]),
+            binding(&[("s", iri("http://ex/b"))]), // ?k unbound
+        ];
+        let sorted = exec.apply_order_by(
+            solution,
+            &[crate::algebra::OrderCondition {
+                expr: ev("k"),
+                ascending: true,
+            }],
+        );
+        assert!(
+            !sorted[0].contains_key(&Variable::new_unchecked("k")),
+            "the unbound-key row must sort first in ascending order"
+        );
+    }
+
+    #[test]
+    fn regression_order_by_mixed_numeric_and_lexical_keys_total_order() {
+        // Keys 5, 10 (xsd:integer) and plain "3abc": the old per-pair
+        // parse-as-f64 branch produced the cycle 3abc < 5 < 10 < 3abc; the
+        // composite key puts the numeric partition first, in numeric order.
+        let exec = QueryExecutor::new();
+        let plain = Term::Literal(Literal {
+            value: "3abc".to_string(),
+            language: None,
+            datatype: None,
+        });
+        let solution = vec![
+            binding(&[("k", int_term(10))]),
+            binding(&[("k", plain)]),
+            binding(&[("k", int_term(5))]),
+        ];
+        let sorted = exec.apply_order_by(
+            solution,
+            &[crate::algebra::OrderCondition {
+                expr: ev("k"),
+                ascending: true,
+            }],
+        );
+        let keys: Vec<String> = sorted
+            .iter()
+            .map(|b| match &b[&Variable::new_unchecked("k")] {
+                Term::Literal(l) => l.value.clone(),
+                other => panic!("expected literal, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(keys, vec!["5", "10", "3abc"]);
+    }
+
+    #[test]
+    fn regression_max_over_gyear_preserves_input_datatype() {
+        // MAX must return one of the input terms verbatim (SPARQL 1.1
+        // §18.5.1.10); it used to synthesize "2025"^^xsd:decimal instead of
+        // returning "2025"^^xsd:gYear.
+        let gyear = |y: &str| {
+            Term::Literal(Literal {
+                value: y.to_string(),
+                language: None,
+                datatype: Some(NamedNode::new_unchecked(
+                    "http://www.w3.org/2001/XMLSchema#gYear",
+                )),
+            })
+        };
+        let ds = InMemoryDataset::from_triples(vec![
+            (iri("http://ex/o1"), iri("http://ex/y"), gyear("2023")),
+            (iri("http://ex/o2"), iri("http://ex/y"), gyear("2024")),
+            (iri("http://ex/o3"), iri("http://ex/y"), gyear("2025")),
+        ]);
+        let algebra = Algebra::Group {
+            pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
+                subject: v("o"),
+                predicate: iri("http://ex/y"),
+                object: v("y"),
+            }])),
+            variables: vec![],
+            aggregates: vec![(
+                Variable::new_unchecked("m"),
+                crate::algebra::Aggregate::Max {
+                    distinct: false,
+                    expr: ev("y"),
+                },
+            )],
+        };
+        let exec = QueryExecutor::new();
+        let sol = exec.execute_serial(&algebra, &ds).expect("group serial");
+        assert_eq!(sol.len(), 1);
+        match &sol[0][&Variable::new_unchecked("m")] {
+            Term::Literal(lit) => {
+                assert_eq!(lit.value, "2025");
+                assert_eq!(
+                    lit.datatype.as_ref().map(|d| d.as_str()),
+                    Some("http://www.w3.org/2001/XMLSchema#gYear"),
+                    "MAX must preserve the input datatype, not fabricate xsd:decimal"
+                );
+            }
+            other => panic!("expected literal, got {other:?}"),
+        }
+    }
+
+    fn values_join_bgp(target: &str) -> Algebra {
+        Algebra::Join {
+            left: Box::new(Algebra::Values {
+                variables: vec![Variable::new_unchecked("s")],
+                bindings: vec![binding(&[("s", iri(target))])],
+            }),
+            right: Box::new(Algebra::Bgp(vec![TriplePattern {
+                subject: v("s"),
+                predicate: v("p"),
+                object: v("o"),
+            }])),
+        }
+    }
+
+    #[test]
+    fn regression_values_join_uses_index_not_full_scan() {
+        use crate::query_governor::{ExecutionBudget, ResourceBudget};
+
+        // 300 triples, exactly 2 with the target subject. The bound-join path
+        // substitutes the VALUES row into the BGP so the store lookup is
+        // subject-indexed; the old shape scanned all 300 triples and would
+        // blow this 10-triple budget (a result-only assertion passes both
+        // before and after — the budget is the point of this test).
+        let mut triples = Vec::new();
+        for i in 0..149 {
+            triples.push((
+                iri(&format!("http://ex/other{i}")),
+                iri("http://ex/p"),
+                int_term(i),
+            ));
+            triples.push((
+                iri(&format!("http://ex/other{i}")),
+                iri("http://ex/q"),
+                int_term(i),
+            ));
+        }
+        triples.push((iri("http://ex/target"), iri("http://ex/p"), int_term(1)));
+        triples.push((iri("http://ex/target"), iri("http://ex/q"), int_term(2)));
+        let ds = InMemoryDataset::from_triples(triples);
+
+        let budget = ExecutionBudget::new(ResourceBudget {
+            max_wall_time: None,
+            max_result_rows: None,
+            max_triples_scanned: Some(10),
+        });
+        let exec = QueryExecutor::new().with_budget(budget);
+        let sol = exec
+            .execute_serial(&values_join_bgp("http://ex/target"), &ds)
+            .expect("bound join must stay within the scan budget");
+        assert_eq!(sol.len(), 2, "both target triples must be returned");
+        for row in &sol {
+            assert_eq!(
+                row[&Variable::new_unchecked("s")],
+                iri("http://ex/target"),
+                "?s must stay pinned to the VALUES row in the merged result"
+            );
+            assert!(row.contains_key(&Variable::new_unchecked("p")));
+            assert!(row.contains_key(&Variable::new_unchecked("o")));
+        }
+    }
+
+    #[test]
+    fn regression_values_join_multi_row_and_unmatched_rows() {
+        // Two VALUES rows match, one matches nothing: the bound join must
+        // return exactly the union of per-row matches, with no phantom row
+        // for the unmatched binding.
+        let ds = InMemoryDataset::from_triples(vec![
+            (iri("http://ex/a"), iri("http://ex/p"), int_term(1)),
+            (iri("http://ex/b"), iri("http://ex/p"), int_term(2)),
+            (iri("http://ex/c"), iri("http://ex/p"), int_term(3)),
+        ]);
+        let join = Algebra::Join {
+            left: Box::new(Algebra::Values {
+                variables: vec![Variable::new_unchecked("s")],
+                bindings: vec![
+                    binding(&[("s", iri("http://ex/a"))]),
+                    binding(&[("s", iri("http://ex/b"))]),
+                    binding(&[("s", iri("http://ex/missing"))]),
+                ],
+            }),
+            right: Box::new(Algebra::Bgp(vec![TriplePattern {
+                subject: v("s"),
+                predicate: iri("http://ex/p"),
+                object: v("o"),
+            }])),
+        };
+        let exec = QueryExecutor::new();
+        let sol = exec.execute_serial(&join, &ds).expect("values join");
+        assert_eq!(sol.len(), 2, "one row per matched VALUES entry");
+        let objects: Vec<&str> = sol
+            .iter()
+            .map(|b| match &b[&Variable::new_unchecked("o")] {
+                Term::Literal(l) => l.value.as_str(),
+                other => panic!("expected literal, got {other:?}"),
+            })
+            .collect();
+        assert!(objects.contains(&"1") && objects.contains(&"2"));
+    }
+
+    #[test]
+    fn regression_bound_join_falls_back_when_filter_uses_condition_only_var() {
+        // Join(Values(?s ?x), Filter(?o > ?x, Bgp(?s ?p ?o))): ?x occurs only
+        // in the FILTER condition, not in the BGP. On the fallback path the
+        // inner group evaluates alone, ?x is unbound, the condition errors and
+        // every row drops — the join is empty. The bound path would substitute
+        // ?x=5 and let rows THROUGH; Gate 4 must force the fallback so the
+        // result cannot depend on the VALUES row count.
+        let ds = InMemoryDataset::from_triples(vec![(
+            iri("http://ex/a"),
+            iri("http://ex/p"),
+            int_term(10),
+        )]);
+        let join = Algebra::Join {
+            left: Box::new(Algebra::Values {
+                variables: vec![Variable::new_unchecked("s"), Variable::new_unchecked("x")],
+                bindings: vec![binding(&[("s", iri("http://ex/a")), ("x", int_term(5))])],
+            }),
+            right: Box::new(Algebra::Filter {
+                pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
+                    subject: v("s"),
+                    predicate: v("p"),
+                    object: v("o"),
+                }])),
+                condition: Expression::Binary {
+                    op: BinaryOperator::Greater,
+                    left: Box::new(ev("o")),
+                    right: Box::new(ev("x")),
+                },
+            }),
+        };
+        let exec = QueryExecutor::new();
+        let sol = exec.execute_serial(&join, &ds).expect("join executes");
+        assert!(
+            sol.is_empty(),
+            "condition-only variable must take the fallback path (same result \
+             regardless of VALUES size), got {sol:?}"
+        );
+    }
+
+    #[test]
+    fn regression_order_by_integers_beyond_f64_precision() {
+        // 9999999999999999999 and 10000000000000000001 collide as f64 (1e19);
+        // the exact-value tie-break must still order them numerically.
+        let exec = QueryExecutor::new();
+        let big = |s: &str| {
+            Term::Literal(Literal {
+                value: s.to_string(),
+                language: None,
+                datatype: Some(NamedNode::new_unchecked(
+                    "http://www.w3.org/2001/XMLSchema#integer",
+                )),
+            })
+        };
+        let solution = vec![
+            binding(&[("k", big("10000000000000000001"))]),
+            binding(&[("k", big("9999999999999999999"))]),
+        ];
+        let sorted = exec.apply_order_by(
+            solution,
+            &[crate::algebra::OrderCondition {
+                expr: ev("k"),
+                ascending: true,
+            }],
+        );
+        let keys: Vec<String> = sorted
+            .iter()
+            .map(|b| match &b[&Variable::new_unchecked("k")] {
+                Term::Literal(l) => l.value.clone(),
+                other => panic!("expected literal, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            keys,
+            vec!["9999999999999999999", "10000000000000000001"],
+            "integers that collide in f64 must still sort by exact value"
+        );
+    }
+
+    #[test]
+    fn regression_filter_in_iri_list_uses_index_not_full_scan() {
+        use crate::query_governor::{ExecutionBudget, ResourceBudget};
+
+        // 300 triples, 2 subjects in the IN list with one triple each. The
+        // pushdown answers via per-IRI index lookups; the old path scanned all
+        // 300 rows and would blow the 10-triple budget.
+        let mut triples = Vec::new();
+        for i in 0..298 {
+            triples.push((
+                iri(&format!("http://ex/other{i}")),
+                iri("http://ex/p"),
+                int_term(i),
+            ));
+        }
+        triples.push((iri("http://ex/a"), iri("http://ex/p"), int_term(1)));
+        triples.push((iri("http://ex/b"), iri("http://ex/p"), int_term(2)));
+        let ds = InMemoryDataset::from_triples(triples);
+
+        let filter = Algebra::Filter {
+            pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
+                subject: v("s"),
+                predicate: iri("http://ex/p"),
+                object: v("o"),
+            }])),
+            condition: Expression::Binary {
+                op: BinaryOperator::In,
+                left: Box::new(ev("s")),
+                right: Box::new(Expression::Function {
+                    name: "list".to_string(),
+                    args: vec![
+                        Expression::Iri(NamedNode::new_unchecked("http://ex/a")),
+                        Expression::Iri(NamedNode::new_unchecked("http://ex/b")),
+                        // Duplicate entry: IN is a membership test, the row
+                        // for <a> must not appear twice.
+                        Expression::Iri(NamedNode::new_unchecked("http://ex/a")),
+                    ],
+                }),
+            },
+        };
+        let budget = ExecutionBudget::new(ResourceBudget {
+            max_wall_time: None,
+            max_result_rows: None,
+            max_triples_scanned: Some(10),
+        });
+        let exec = QueryExecutor::new().with_budget(budget);
+        let sol = exec
+            .execute_serial(&filter, &ds)
+            .expect("IN pushdown must stay within the scan budget");
+        assert_eq!(sol.len(), 2, "one row per distinct matching IRI: {sol:?}");
+        for row in &sol {
+            assert!(row.contains_key(&Variable::new_unchecked("s")));
+            assert!(row.contains_key(&Variable::new_unchecked("o")));
+        }
+    }
+
+    #[test]
+    fn regression_filter_in_literal_list_falls_back_to_value_equality() {
+        // "1"^^xsd:integer IN ("01"^^xsd:integer) is TRUE under IN's value
+        // equality but the terms differ — literal lists must therefore take
+        // the row-by-row path, never the term-substitution pushdown.
+        let ds = InMemoryDataset::from_triples(vec![(
+            iri("http://ex/a"),
+            iri("http://ex/p"),
+            int_term(1),
+        )]);
+        let filter = Algebra::Filter {
+            pattern: Box::new(Algebra::Bgp(vec![TriplePattern {
+                subject: v("s"),
+                predicate: iri("http://ex/p"),
+                object: v("o"),
+            }])),
+            condition: Expression::Binary {
+                op: BinaryOperator::In,
+                left: Box::new(ev("o")),
+                right: Box::new(Expression::Literal(Literal {
+                    value: "01".to_string(),
+                    language: None,
+                    datatype: Some(NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#integer",
+                    )),
+                })),
+            },
+        };
+        let exec = QueryExecutor::new();
+        let sol = exec.execute_serial(&filter, &ds).expect("filter in");
+        assert_eq!(
+            sol.len(),
+            1,
+            "value equality (1 = 01) must be preserved via the fallback path"
+        );
+    }
+
+    #[test]
+    fn regression_distinct_dedupes_independently_built_bindings() {
+        // apply_distinct used to key off `HashMap::iter()` order, which is
+        // per-instance random — two independently-constructed bindings with
+        // identical content produced different keys ~50% of the time each.
+        // 45 pairs x 2 copies makes a spurious pass astronomically unlikely
+        // (~2^-45); a 1-2 row test would pass half the time regardless.
+        let exec = QueryExecutor::new();
+        let mut solution = crate::algebra::Solution::new();
+        for _copy in 0..2 {
+            for i in 0..45 {
+                // Each copy built as its own HashMap (fresh RandomState).
+                solution.push(binding(&[
+                    ("c", iri(&format!("http://ex/c{}", i % 9))),
+                    ("i", iri(&format!("http://ex/i{}", i / 9))),
+                ]));
+            }
+        }
+        let deduped = exec.apply_distinct(solution);
+        assert_eq!(
+            deduped.len(),
+            45,
+            "DISTINCT must collapse structurally-identical bindings regardless \
+             of each HashMap's iteration order"
         );
     }
 }

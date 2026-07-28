@@ -16,10 +16,10 @@ pub struct HuggingFaceConfig {
     pub max_length: usize,
     pub pooling_strategy: PoolingStrategy,
     pub trust_remote_code: bool,
-    /// HuggingFace Inference API token (https://huggingface.co/settings/tokens).
+    /// HuggingFace Inference API token (<https://huggingface.co/settings/tokens>).
     /// When set and [`HuggingFaceConfig::use_inference_api`] is `true`,
     /// [`HuggingFaceEmbedder`] calls the real HuggingFace Inference API over
-    /// HTTP instead of falling back to [`HuggingFaceEmbedder::deterministic_mock_embedding`].
+    /// HTTP instead of falling back to `HuggingFaceEmbedder::deterministic_mock_embedding`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub api_token: Option<String>,
     /// Whether to call the real HuggingFace Inference API (requires

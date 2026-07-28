@@ -560,7 +560,12 @@ where
     cache_config: CacheConfig,
     /// Graph update counter for adaptive TTL
     graph_update_count: Arc<AtomicU64>,
-    /// Community detector (lazy initialized)
+    /// Community detector, built from `config.community_algorithm` at
+    /// construction time and used by [`Self::detect_communities`]. Always
+    /// `Some` once the engine is constructed via `new` / `with_cache_config`
+    /// — `Option` only because `detect_communities` needs a borrow-checker
+    /// friendly way to report the (unreachable in practice) uninitialized
+    /// case via `GraphRAGResult` rather than panicking.
     community_detector: Option<Arc<CommunityDetector>>,
 }
 
@@ -615,6 +620,20 @@ where
             .and_then(std::num::NonZeroUsize::new)
             .unwrap_or(DEFAULT_CACHE_SIZE);
 
+        // Build the real community detector up front from
+        // `config.community_algorithm` so `detect_communities` always has a
+        // genuine Louvain/Leiden/label-propagation/connected-components
+        // implementation to delegate to (see that method's doc comment).
+        // `min_community_size: 2` (rather than the detector's own default of
+        // 3) matches this engine's historical "communities of >= 2 entities"
+        // behavior for the typically-small subgraphs a single query expands.
+        let community_config = CommunityConfig {
+            algorithm: map_community_algorithm(config.community_algorithm),
+            min_community_size: 2,
+            ..CommunityConfig::default()
+        };
+        let community_detector = Some(Arc::new(CommunityDetector::new(community_config)));
+
         Self {
             vec_index,
             embedding_model,
@@ -624,7 +643,7 @@ where
             cache: Arc::new(RwLock::new(lru::LruCache::new(cache_size))),
             cache_config,
             graph_update_count: Arc::new(AtomicU64::new(0)),
-            community_detector: None,
+            community_detector,
         }
     }
 
@@ -673,17 +692,42 @@ where
             }
         }
 
+        // 0. Consult the query planner. `QueryPlanner::plan` computes stage
+        // ordering, per-stage dependencies, and an estimated cost; here we
+        // actually act on it rather than letting it sit unused: `parallel`
+        // (true whenever vector search and keyword search have no
+        // dependency on each other, which is always for this fixed
+        // pipeline) determines whether steps 2 and 3 below run concurrently
+        // via `tokio::join!` or sequentially.
+        let parsed_query = query::parser::QueryParser::new().parse(query)?;
+        let plan = query::planner::QueryPlanner::new(self.config.clone()).plan(&parsed_query)?;
+        tracing::debug!(
+            estimated_cost = plan.estimated_cost,
+            parallel = plan.parallel,
+            stages = plan.stages.len(),
+            "GraphRAG query execution plan"
+        );
+
         // 1. Embed query
         let query_vec = self.embedding_model.embed(query).await?;
 
-        // 2. Vector retrieval (Top-K)
-        let vector_results = self
-            .vec_index
-            .search_knn(&query_vec, self.config.top_k)
-            .await?;
-
-        // 3. Keyword retrieval (BM25) - simplified for now
-        let keyword_results = self.keyword_search(query).await?;
+        // 2 + 3. Vector retrieval (Top-K) and keyword retrieval (BM25).
+        // These two stages have no dependency on each other in the plan, so
+        // when `plan.parallel` is set they genuinely run concurrently
+        // instead of one `.await` after another.
+        let (vector_results, keyword_results) = if plan.parallel {
+            let vector_fut = self.vec_index.search_knn(&query_vec, self.config.top_k);
+            let keyword_fut = self.keyword_search(query);
+            let (vector_results, keyword_results) = tokio::join!(vector_fut, keyword_fut);
+            (vector_results?, keyword_results?)
+        } else {
+            let vector_results = self
+                .vec_index
+                .search_knn(&query_vec, self.config.top_k)
+                .await?;
+            let keyword_results = self.keyword_search(query).await?;
+            (vector_results, keyword_results)
+        };
 
         // 4. Fusion (RRF)
         let seeds = self.fuse_results(&vector_results, &keyword_results)?;
@@ -842,100 +886,33 @@ where
         }
 
         let seed_uris: Vec<String> = seeds.iter().map(|s| format!("<{}>", s.uri)).collect();
-        let values = seed_uris.join(" ");
-
-        // N-hop neighbor expansion
-        let hops = self.config.expansion_hops;
-        let path_pattern = if hops == 1 {
-            "?seed ?p ?neighbor".to_string()
-        } else {
-            format!("?seed (:|!:){{1,{}}} ?neighbor", hops)
-        };
-
-        let sparql = format!(
-            r#"
-            CONSTRUCT {{
-                ?seed ?p ?o .
-                ?s ?p2 ?seed .
-                ?neighbor ?p3 ?o2 .
-            }}
-            WHERE {{
-                VALUES ?seed {{ {} }}
-                {{
-                    ?seed ?p ?o .
-                }} UNION {{
-                    ?s ?p2 ?seed .
-                }} UNION {{
-                    {}
-                    ?neighbor ?p3 ?o2 .
-                }}
-            }}
-            LIMIT {}
-            "#,
-            values, path_pattern, self.config.max_subgraph_size
+        let sparql = build_expand_graph_query(
+            &seed_uris,
+            self.config.expansion_hops,
+            self.config.max_subgraph_size,
         );
 
         self.sparql_engine.construct(&sparql).await
     }
 
-    /// Detect communities in the subgraph using Louvain algorithm
+    /// Detect communities in the subgraph using the configured algorithm
+    /// (`self.config.community_algorithm`: Louvain / Leiden / Label
+    /// Propagation / Connected Components), delegating to the real
+    /// [`graph::community::CommunityDetector`] so callers get genuine,
+    /// resolution-parameterised community structure and an honest
+    /// Newman-Girvan modularity score instead of a fixed `0.0`.
     fn detect_communities(&self, subgraph: &[Triple]) -> GraphRAGResult<Vec<CommunitySummary>> {
-        use petgraph::graph::UnGraph;
-
         if subgraph.is_empty() {
             return Ok(vec![]);
         }
 
-        // Build undirected graph
-        let mut graph: UnGraph<String, ()> = UnGraph::new_undirected();
-        let mut node_indices: HashMap<String, petgraph::graph::NodeIndex> = HashMap::new();
+        let detector = self.community_detector.as_ref().ok_or_else(|| {
+            GraphRAGError::CommunityDetectionError(
+                "community detector was not initialized".to_string(),
+            )
+        })?;
 
-        for triple in subgraph {
-            let subj_idx = *node_indices
-                .entry(triple.subject.clone())
-                .or_insert_with(|| graph.add_node(triple.subject.clone()));
-            let obj_idx = *node_indices
-                .entry(triple.object.clone())
-                .or_insert_with(|| graph.add_node(triple.object.clone()));
-
-            if subj_idx != obj_idx {
-                graph.add_edge(subj_idx, obj_idx, ());
-            }
-        }
-
-        // Simple community detection based on connected components
-        // (Full Louvain implementation would be more complex)
-        let components = petgraph::algo::kosaraju_scc(&graph);
-
-        let communities: Vec<CommunitySummary> = components
-            .into_iter()
-            .enumerate()
-            .filter(|(_, component)| component.len() >= 2)
-            .map(|(idx, component)| {
-                let entities: Vec<String> = component
-                    .iter()
-                    .filter_map(|&node_idx| graph.node_weight(node_idx).cloned())
-                    .collect();
-
-                let representative_triples: Vec<Triple> = subgraph
-                    .iter()
-                    .filter(|t| entities.contains(&t.subject) || entities.contains(&t.object))
-                    .take(5)
-                    .cloned()
-                    .collect();
-
-                CommunitySummary {
-                    id: format!("community_{}", idx),
-                    summary: format!("Community with {} entities", entities.len()),
-                    entities,
-                    representative_triples,
-                    level: 0,
-                    modularity: 0.0,
-                }
-            })
-            .collect();
-
-        Ok(communities)
+        detector.detect(subgraph)
     }
 
     /// Build context string for LLM from subgraph and communities
@@ -995,6 +972,80 @@ where
     }
 }
 
+/// Build the CONSTRUCT query used by [`GraphRAGEngine::expand_graph`] for
+/// N-hop neighbor expansion from a set of seed IRI terms (already
+/// `<...>`-wrapped).
+///
+/// Pulled out as a free function so it can be exercised (and, in tests,
+/// round-tripped through the real `oxirs-arq` parser) without needing a
+/// live `SparqlEngineTrait` implementation.
+///
+/// Two formatting quirks below are load-bearing, not stylistic (both
+/// verified against the real `oxirs-arq` parser while writing this query
+/// builder — see the round-trip regression tests):
+///
+/// - `CONSTRUCT { ... }` is kept on a single physical line, immediately
+///   followed by `WHERE {` on that *same* line: the parser does not skip a
+///   bare newline between the template's closing `}` and the `WHERE`
+///   keyword, and fails with "Expected LeftBrace, found Some(Newline)" if
+///   one is present.
+/// - The `WHERE` clause's closing `}` is immediately followed by `LIMIT` on
+///   the same line, for the same reason (a newline there instead yields
+///   "Unexpected trailing tokens after query: Some(Limit)" — the modifier
+///   parser doesn't skip a leading newline before checking for `LIMIT`).
+///
+/// The `WHERE` clause body itself has no such restriction and is formatted
+/// multi-line for readability.
+fn build_expand_graph_query(seed_uris: &[String], hops: usize, max_subgraph_size: usize) -> String {
+    let values = seed_uris.join(" ");
+
+    // N-hop neighbor expansion. See `sparql::hop_pattern` for why this is an
+    // explicit UNION of path-free BGP chains rather than a SPARQL property
+    // path: the previous `(:|!:){1,hops}` referenced an undeclared empty
+    // prefix and made every real `query()` call fail at this step for the
+    // (default) multi-hop case.
+    let hop_pattern = crate::sparql::hop_pattern::build_forward_hop_pattern(
+        "?seed",
+        "?neighbor",
+        hops,
+        "hp",
+        "hn",
+    );
+
+    format!(
+        r#"
+        CONSTRUCT {{ ?seed ?p ?o . ?s ?p2 ?seed . ?neighbor ?p3 ?o2 . }} WHERE {{
+            VALUES ?seed {{ {values} }}
+            {{
+                ?seed ?p ?o .
+            }} UNION {{
+                ?s ?p2 ?seed .
+            }} UNION {{
+                {hop_pattern}
+                ?neighbor ?p3 ?o2 .
+            }}
+        }} LIMIT {max_subgraph_size}
+        "#
+    )
+}
+
+/// Map the crate's public [`config::CommunityAlgorithm`] configuration enum
+/// onto the [`graph::community::CommunityAlgorithm`] the real detector
+/// implementation understands. Kept as an explicit mapping (rather than
+/// reusing one enum for both) because `config::CommunityAlgorithm` is a
+/// stable, `serde`-versioned user-facing config surface while
+/// `graph::community::CommunityAlgorithm` also has an internal-only
+/// `Hierarchical` variant that is not (yet) exposed as a top-level engine
+/// config choice.
+fn map_community_algorithm(algorithm: config::CommunityAlgorithm) -> CommunityAlgorithm {
+    match algorithm {
+        config::CommunityAlgorithm::Louvain => CommunityAlgorithm::Louvain,
+        config::CommunityAlgorithm::Leiden => CommunityAlgorithm::Leiden,
+        config::CommunityAlgorithm::LabelPropagation => CommunityAlgorithm::LabelPropagation,
+        config::CommunityAlgorithm::ConnectedComponents => CommunityAlgorithm::ConnectedComponents,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1021,5 +1072,255 @@ mod tests {
         };
         assert_eq!(entity.score, 0.85);
         assert_eq!(entity.source, ScoreSource::Fused);
+    }
+
+    // ── Regression: expand_graph SPARQL must actually parse (P0) ───────────
+
+    #[test]
+    fn regression_expand_graph_query_never_emits_empty_prefix_hack() {
+        for hops in [1usize, 2, 3, 5] {
+            let seed_uris = vec!["<http://example.org/e>".to_string()];
+            let sparql = build_expand_graph_query(&seed_uris, hops, 500);
+            assert!(
+                !sparql.contains(":|!:"),
+                "hops={hops}: must not reference the undeclared empty prefix `:`/`!:`\n{sparql}"
+            );
+            assert!(
+                !sparql.contains("!()"),
+                "hops={hops}: must not use the unsupported empty negated property set\n{sparql}"
+            );
+        }
+    }
+
+    #[test]
+    fn regression_expand_graph_query_round_trips_through_real_arq_parser() {
+        // The actual bug: the previous `(:|!:){1,hops}` property path failed
+        // to parse against the real oxirs-arq engine for any hops > 1 (the
+        // crate's own default config), so every real `GraphRAGEngine::query`
+        // call failed at the graph-expansion step. Assert the generated
+        // query is genuinely valid SPARQL per the workspace's own parser,
+        // not just "doesn't contain a known-bad substring".
+        for hops in [1usize, 2, 3, 5, 10] {
+            let seed_uris = vec![
+                "<http://example.org/seed1>".to_string(),
+                "<http://example.org/seed2>".to_string(),
+            ];
+            let sparql = build_expand_graph_query(&seed_uris, hops, 500);
+            let mut parser = oxirs_arq::query::QueryParser::new();
+            parser
+                .parse(&sparql)
+                .unwrap_or_else(|e| panic!("hops={hops} query failed to parse: {e}\n{sparql}"));
+        }
+    }
+
+    // ── Shared test mocks for GraphRAGEngine ────────────────────────────────
+
+    struct MockVectorIndex;
+
+    #[async_trait]
+    impl VectorIndexTrait for MockVectorIndex {
+        async fn search_knn(
+            &self,
+            _query_vector: &[f32],
+            _k: usize,
+        ) -> GraphRAGResult<Vec<(String, f32)>> {
+            Ok(vec![])
+        }
+
+        async fn search_threshold(
+            &self,
+            _query_vector: &[f32],
+            _threshold: f32,
+        ) -> GraphRAGResult<Vec<(String, f32)>> {
+            Ok(vec![])
+        }
+    }
+
+    struct MockEmbeddingModel;
+
+    #[async_trait]
+    impl EmbeddingModelTrait for MockEmbeddingModel {
+        async fn embed(&self, _text: &str) -> GraphRAGResult<Vec<f32>> {
+            Ok(vec![0.0; 4])
+        }
+
+        async fn embed_batch(&self, texts: &[&str]) -> GraphRAGResult<Vec<Vec<f32>>> {
+            Ok(texts.iter().map(|_| vec![0.0; 4]).collect())
+        }
+    }
+
+    struct MockSparqlEngine;
+
+    #[async_trait]
+    impl SparqlEngineTrait for MockSparqlEngine {
+        async fn select(&self, _query: &str) -> GraphRAGResult<Vec<HashMap<String, String>>> {
+            Ok(vec![])
+        }
+
+        async fn ask(&self, _query: &str) -> GraphRAGResult<bool> {
+            Ok(false)
+        }
+
+        async fn construct(&self, _query: &str) -> GraphRAGResult<Vec<Triple>> {
+            Ok(vec![])
+        }
+    }
+
+    struct MockLlmClient;
+
+    #[async_trait]
+    impl LlmClientTrait for MockLlmClient {
+        async fn generate(&self, _context: &str, _query: &str) -> GraphRAGResult<String> {
+            Ok("mock answer".to_string())
+        }
+
+        async fn generate_stream(
+            &self,
+            _context: &str,
+            _query: &str,
+            _callback: Box<dyn Fn(&str) + Send + Sync>,
+        ) -> GraphRAGResult<String> {
+            Ok("mock answer".to_string())
+        }
+    }
+
+    fn make_test_engine(
+        algorithm: config::CommunityAlgorithm,
+    ) -> GraphRAGEngine<MockVectorIndex, MockEmbeddingModel, MockSparqlEngine, MockLlmClient> {
+        let config = GraphRAGConfig {
+            community_algorithm: algorithm,
+            ..GraphRAGConfig::default()
+        };
+        GraphRAGEngine::new(
+            Arc::new(MockVectorIndex),
+            Arc::new(MockEmbeddingModel),
+            Arc::new(MockSparqlEngine),
+            Arc::new(MockLlmClient),
+            config,
+        )
+    }
+
+    // ── Regression: detect_communities uses real modularity (P1) ───────────
+
+    #[tokio::test]
+    async fn regression_detect_communities_computes_real_modularity_not_hardcoded_zero() {
+        let engine = make_test_engine(config::CommunityAlgorithm::ConnectedComponents);
+
+        // Two disconnected triangles: strong, unambiguous community
+        // structure, so the true partition's modularity must be well above
+        // zero (previously this was hardcoded to `0.0` for every community
+        // regardless of actual graph structure).
+        let subgraph = vec![
+            Triple::new("http://a", "http://rel", "http://b"),
+            Triple::new("http://b", "http://rel", "http://c"),
+            Triple::new("http://c", "http://rel", "http://a"),
+            Triple::new("http://x", "http://rel", "http://y"),
+            Triple::new("http://y", "http://rel", "http://z"),
+            Triple::new("http://z", "http://rel", "http://x"),
+        ];
+
+        let communities = engine
+            .detect_communities(&subgraph)
+            .expect("community detection should succeed");
+
+        assert_eq!(
+            communities.len(),
+            2,
+            "two disconnected triangles should form two communities"
+        );
+        for community in &communities {
+            assert!(
+                community.modularity > 0.4,
+                "modularity must be genuinely computed (expected ~0.5 for two \
+                 disconnected triangles), got {}",
+                community.modularity
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn regression_detect_communities_respects_configured_algorithm() {
+        // Distinct algorithms are wired through to the real detector: this
+        // would previously always run plain connected-components no matter
+        // what `config.community_algorithm` said.
+        let subgraph = vec![
+            Triple::new("http://a", "http://rel", "http://b"),
+            Triple::new("http://b", "http://rel", "http://c"),
+            Triple::new("http://c", "http://rel", "http://a"),
+            Triple::new("http://x", "http://rel", "http://y"),
+            Triple::new("http://y", "http://rel", "http://z"),
+            Triple::new("http://z", "http://rel", "http://x"),
+        ];
+
+        for algorithm in [
+            config::CommunityAlgorithm::Louvain,
+            config::CommunityAlgorithm::Leiden,
+            config::CommunityAlgorithm::LabelPropagation,
+            config::CommunityAlgorithm::ConnectedComponents,
+        ] {
+            let engine = make_test_engine(algorithm);
+            let communities = engine
+                .detect_communities(&subgraph)
+                .unwrap_or_else(|e| panic!("{algorithm:?} community detection failed: {e}"));
+            assert!(
+                !communities.is_empty(),
+                "{algorithm:?} should find the obvious two-triangle community structure"
+            );
+        }
+    }
+
+    // ── Regression: QueryPlanner is actually consulted by query() (P2) ─────
+
+    #[test]
+    fn regression_query_planner_marks_vector_and_keyword_search_independent() {
+        // `GraphRAGEngine::query` uses `plan.parallel` to decide whether to
+        // run vector and keyword search concurrently via `tokio::join!`.
+        // That decision is only honest if the planner's dependency graph
+        // genuinely has no edge between the two stages.
+        let config = GraphRAGConfig::default();
+        let planner = query::planner::QueryPlanner::new(config);
+        let parsed = query::parser::QueryParser::new()
+            .parse("What are the battery safety issues?")
+            .expect("should parse");
+        let plan = planner.plan(&parsed).expect("should plan");
+
+        assert!(plan.parallel);
+
+        let vector_stage = plan
+            .stages
+            .iter()
+            .position(|s| s.stage_type == query::planner::StageType::VectorSearch)
+            .expect("vector search stage present");
+        let keyword_stage = plan
+            .stages
+            .iter()
+            .position(|s| s.stage_type == query::planner::StageType::KeywordSearch)
+            .expect("keyword search stage present");
+
+        assert!(
+            !plan.stages[keyword_stage]
+                .depends_on
+                .contains(&vector_stage),
+            "keyword search must not depend on vector search"
+        );
+        assert!(
+            !plan.stages[vector_stage]
+                .depends_on
+                .contains(&keyword_stage),
+            "vector search must not depend on keyword search"
+        );
+    }
+
+    #[tokio::test]
+    async fn regression_query_actually_consults_planner_and_completes() {
+        // End-to-end: `query()` must build a plan (not just leave
+        // `QueryPlanner` as unreferenced dead code) and still produce a
+        // valid result via the parallel vector+keyword path.
+        let engine = make_test_engine(config::CommunityAlgorithm::ConnectedComponents);
+        let result = engine
+            .query("What are the safety issues?")
+            .await
+            .expect("query should succeed end-to-end with mock backends");
+        assert_eq!(result.answer, "mock answer");
     }
 }

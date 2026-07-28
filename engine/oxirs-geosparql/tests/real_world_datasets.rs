@@ -206,10 +206,8 @@ mod osm_road_network_scenarios {
     /// Simulate road buffering for noise pollution analysis
     /// Real-world use: Environmental impact assessments
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_road_noise_buffer_zone() {
-        // Point/LineString buffering needs GEOS (quarantined into
-        // oxirs-geosparql-adapter-geos), so model the road as a thin polygon corridor
+        // Model the road as a thin polygon corridor
         // and buffer it via the Pure-Rust rust-buffer path.
         let road_area = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 1, 0 1, 0 0))").unwrap();
 
@@ -454,7 +452,6 @@ mod osm_environmental_scenarios {
     /// Simulate flood risk assessment
     /// Real-world use: Disaster preparedness, insurance risk modeling
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_flood_risk_area() {
         // River polygon (flood-prone area)
         let river = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 2, 0 2, 0 0))").unwrap();

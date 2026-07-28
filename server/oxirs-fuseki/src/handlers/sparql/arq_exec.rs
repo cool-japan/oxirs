@@ -28,11 +28,13 @@ use oxirs_arq::executor::{with_dataset_clause, ExecutionStrategy, QueryExecutor,
 use oxirs_arq::query::{
     parse_query, DatasetClause, DescribeTarget, ProjectionItem, Query, QueryType,
 };
+use oxirs_arq::query_governor::{BudgetExceeded, ExecutionBudget};
 use oxirs_arq::{describe, instantiate_construct};
 use oxirs_core::model::{
     BlankNode, Literal as CoreLiteral, Object, Predicate, Subject, Triple as CoreTriple,
 };
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// Parse a SPARQL query string and execute it against the store.
 ///
@@ -52,13 +54,61 @@ pub fn execute_query(query_str: &str, store: &Store) -> FusekiResult<QueryResult
     dispatch(&parsed, store)
 }
 
-/// Dispatch a parsed query to the form-specific executor.
+/// Dispatch a parsed query to the form-specific executor with no resource
+/// budget (unbounded execution). Kept for standalone / test callers; the fuseki
+/// query handler uses [`dispatch_with_budget`] to enforce the query timeout.
 pub fn dispatch(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+    dispatch_with_budget(query, store, None)
+}
+
+/// Dispatch a parsed query, attaching an optional [`ExecutionBudget`] so the
+/// oxirs-arq engine enforces the query's wall-time (and, if configured, row /
+/// scan) limits *during* evaluation. `None` means unbounded — behaviour
+/// identical to the historical [`dispatch`].
+pub fn dispatch_with_budget(
+    query: &Query,
+    store: &Store,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<QueryResult> {
     match query.query_type {
-        QueryType::Select | QueryType::Ask => execute_select_or_ask(query, store),
-        QueryType::Construct => execute_construct(query, store),
-        QueryType::Describe => execute_describe(query, store),
+        QueryType::Select | QueryType::Ask => execute_select_or_ask(query, store, budget),
+        QueryType::Construct => execute_construct(query, store, budget),
+        QueryType::Describe => execute_describe(query, store, budget),
     }
+}
+
+/// Map an oxirs-arq engine error to a fuseki HTTP error, promoting a resource
+/// budget breach to the correct status.
+///
+/// A **wall-time** budget breach is a timeout, mapped to `408 Request Timeout`
+/// (`TimeoutWithMessage`). 408 is chosen deliberately so a client sees the same
+/// status whether the *cooperative* query budget aborts the work or the outer
+/// `TimeoutLayer` safety net trips — both mean "your request exceeded the time
+/// limit". A **row / scan** budget breach is a resource cap the query blew past,
+/// mapped to `503 Service Unavailable`: the server refused to keep spending
+/// resources on it, and blindly retrying the identical query will not help. Any
+/// other engine error keeps its historical `500` (`query_execution`).
+///
+/// Preserving the typed [`BudgetExceeded`] end-to-end depends on the engine
+/// wrapping it with `anyhow::Error::new` (not `anyhow!("{e}")`); see
+/// `QueryExecutor::budget_check_time`.
+fn map_engine_error(context: &str, err: anyhow::Error) -> FusekiError {
+    if let Some(budget_err) = err.downcast_ref::<BudgetExceeded>() {
+        return match budget_err {
+            BudgetExceeded::TimeoutExceeded {
+                elapsed_ms,
+                limit_ms,
+            } => FusekiError::TimeoutWithMessage(format!(
+                "query exceeded its {limit_ms} ms execution-time budget (ran {elapsed_ms} ms) \
+                 and was aborted by the server"
+            )),
+            BudgetExceeded::ResultRowsExceeded { .. }
+            | BudgetExceeded::TriplesScannedExceeded { .. } => {
+                FusekiError::service_unavailable(format!("{context}: {budget_err}"))
+            }
+        };
+    }
+    FusekiError::query_execution(format!("{context}: {err}"))
 }
 
 /// Execute a parsed SELECT or ASK query.
@@ -66,9 +116,13 @@ pub fn dispatch(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
 /// SELECT builds the full solution-modifier stack natively from the parsed
 /// query (grouping/aggregation, HAVING, projected expressions, ORDER BY,
 /// projection, DISTINCT and slicing); ASK reduces to "any match".
-pub fn execute_select_or_ask(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+pub fn execute_select_or_ask(
+    query: &Query,
+    store: &Store,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<QueryResult> {
     let algebra = build_select_algebra(query)?;
-    let solution = run(store, &query.dataset, &algebra)?;
+    let solution = run(store, &query.dataset, &algebra, budget)?;
     match query.query_type {
         QueryType::Ask => Ok(ask_result(!solution.is_empty())),
         _ => select_result(solution),
@@ -81,21 +135,25 @@ pub fn execute_select_or_ask(query: &Query, store: &Store) -> FusekiResult<Query
 /// solution sequence) and instantiates the CONSTRUCT template per row. An empty
 /// template — whether written explicitly (`CONSTRUCT {}`) or produced by an
 /// empty `CONSTRUCT WHERE {}` shorthand — is a 400, never a silent empty graph.
-pub fn execute_construct(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+pub fn execute_construct(
+    query: &Query,
+    store: &Store,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<QueryResult> {
     if query.construct_template.is_empty() {
         return Err(FusekiError::query_parsing(
             "CONSTRUCT template is empty: there is nothing to construct",
         ));
     }
     let algebra = build_graph_where_algebra(query);
-    let solution = run(store, &query.dataset, &algebra)?;
+    let solution = run(store, &query.dataset, &algebra, budget)?;
     // The oxirs-arq engine's `instantiate_construct` accepts path-encoded
     // (length-one `PropertyPath::Iri`/`Variable`) template predicates natively,
     // so the template is passed through unchanged — no caller-side normalization.
     let triples = instantiate_construct(&query.construct_template, &solution).map_err(|e| {
         FusekiError::query_execution(format!("CONSTRUCT instantiation failed: {e}"))
     })?;
-    let graph = serialize_arq_graph(&triples);
+    let graph = serialize_arq_graph(&triples)?;
     Ok(construct_result(graph, triples.len()))
 }
 
@@ -107,7 +165,11 @@ pub fn execute_construct(query: &Query, store: &Store) -> FusekiResult<QueryResu
 /// an empty solution (a plain CBD lookup); `DESCRIBE *` with no WHERE has
 /// nothing in scope and is a 400. The resulting Concise Bounded Description is
 /// serialized like CONSTRUCT.
-pub fn execute_describe(query: &Query, store: &Store) -> FusekiResult<QueryResult> {
+pub fn execute_describe(
+    query: &Query,
+    store: &Store,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<QueryResult> {
     // `Algebra::Zero` is the parser's default when no WHERE block is present;
     // any real WHERE parses to a BGP/Table/... instead.
     let has_where = !matches!(query.where_clause, Algebra::Zero);
@@ -141,9 +203,12 @@ pub fn execute_describe(query: &Query, store: &Store) -> FusekiResult<QueryResul
         let algebra = build_graph_where_algebra(query);
         let mut executor = QueryExecutor::new();
         executor.set_strategy(ExecutionStrategy::Serial);
+        if let Some(budget) = budget {
+            executor = executor.with_budget(budget);
+        }
         let (solution, _stats) = executor
             .execute(&algebra, &view)
-            .map_err(|e| FusekiError::query_execution(format!("DESCRIBE WHERE failed: {e}")))?;
+            .map_err(|e| map_engine_error("DESCRIBE WHERE failed", e))?;
         solution
     } else {
         Vec::new()
@@ -163,7 +228,7 @@ pub fn execute_describe(query: &Query, store: &Store) -> FusekiResult<QueryResul
 
     let triples = describe(&targets, &target_vars, &solution, &view)
         .map_err(|e| FusekiError::query_execution(format!("DESCRIBE failed: {e}")))?;
-    let graph = serialize_arq_graph(&triples);
+    let graph = serialize_arq_graph(&triples)?;
     Ok(describe_result(graph, triples.len()))
 }
 
@@ -175,7 +240,12 @@ pub fn execute_describe(query: &Query, store: &Store) -> FusekiResult<QueryResul
 /// parallel strategies do not reliably evaluate `Group` (aggregation). An empty
 /// `clause` makes the view a transparent passthrough, so wrapping is always
 /// safe.
-fn run(store: &Store, clause: &DatasetClause, algebra: &Algebra) -> FusekiResult<Solution> {
+fn run(
+    store: &Store,
+    clause: &DatasetClause,
+    algebra: &Algebra,
+    budget: Option<Arc<ExecutionBudget>>,
+) -> FusekiResult<Solution> {
     let arc = store.get_dataset(None)?;
     let guard = arc
         .read()
@@ -184,9 +254,15 @@ fn run(store: &Store, clause: &DatasetClause, algebra: &Algebra) -> FusekiResult
     let view = with_dataset_clause(&base, clause);
     let mut executor = QueryExecutor::new();
     executor.set_strategy(ExecutionStrategy::Serial);
+    // Attach the wall-time budget so the engine's throttled `check_time` calls in
+    // hash_join / execute_minus / apply_left_join / execute_serial abort a
+    // runaway before it monopolises this (blocking) thread.
+    if let Some(budget) = budget {
+        executor = executor.with_budget(budget);
+    }
     let (solution, _stats) = executor
         .execute(algebra, &view)
-        .map_err(|e| FusekiError::query_execution(format!("query execution failed: {e}")))?;
+        .map_err(|e| map_engine_error("query execution failed", e))?;
     Ok(solution)
 }
 
@@ -456,47 +532,99 @@ fn term_to_json(term: &ArqTerm) -> FusekiResult<serde_json::Value> {
 /// Serialize a set of arq graph triples (CONSTRUCT / DESCRIBE output) to Turtle,
 /// reusing the shared core serializer after converting to oxirs-core triples.
 ///
-/// Triples that cannot form a well-formed RDF triple in the core model (e.g. an
-/// RDF-star quoted-triple term the serializer does not render) are dropped, so
-/// the serialized graph never contains an ill-formed statement.
-fn serialize_arq_graph(triples: &[ArqTriple]) -> String {
-    let core: Vec<CoreTriple> = triples.iter().filter_map(arq_triple_to_core).collect();
-    serialize_triples_to_turtle(&core)
+/// RDF-star quoted-triple subjects/objects are represented in the output
+/// (Turtle-star `<< s p o >>`), not dropped. A term that genuinely cannot
+/// occupy its position in a well-formed RDF triple — an unbound variable
+/// that survived instantiation, a bare property-path term, or a quoted
+/// triple used as a predicate — is a construction bug, not a value to
+/// silently omit: this returns an explicit error so the caller surfaces a
+/// 500 instead of a silently-incomplete graph.
+fn serialize_arq_graph(triples: &[ArqTriple]) -> FusekiResult<String> {
+    let core: Vec<CoreTriple> = triples
+        .iter()
+        .map(arq_triple_to_core)
+        .collect::<Result<_, String>>()
+        .map_err(|e| {
+            FusekiError::query_execution(format!("cannot serialize constructed triple: {e}"))
+        })?;
+    Ok(serialize_triples_to_turtle(&core))
 }
 
-/// Convert an arq algebra `Triple` into an oxirs-core `Triple`, or `None` when a
-/// term is not valid in its position (dropping the triple).
-fn arq_triple_to_core(triple: &ArqTriple) -> Option<CoreTriple> {
+/// Convert an arq algebra `Triple` into an oxirs-core `Triple`. Returns an
+/// error describing the offending term/position when the triple cannot be
+/// represented in the core RDF-star model.
+fn arq_triple_to_core(triple: &ArqTriple) -> Result<CoreTriple, String> {
     let subject = arq_term_to_subject(&triple.subject)?;
     let predicate = arq_term_to_predicate(&triple.predicate)?;
     let object = arq_term_to_object(&triple.object)?;
-    Some(CoreTriple::new(subject, predicate, object))
+    Ok(CoreTriple::new(subject, predicate, object))
 }
 
-/// Map an arq term to a core subject (IRI or blank node).
-fn arq_term_to_subject(term: &ArqTerm) -> Option<Subject> {
+/// Map an arq term to a core subject (IRI, blank node, or RDF-star quoted triple).
+fn arq_term_to_subject(term: &ArqTerm) -> Result<Subject, String> {
     match term {
-        ArqTerm::Iri(iri) => Some(Subject::NamedNode(iri.clone())),
-        ArqTerm::BlankNode(id) => BlankNode::new(id).ok().map(Subject::BlankNode),
-        _ => None,
+        ArqTerm::Iri(iri) => Ok(Subject::NamedNode(iri.clone())),
+        ArqTerm::BlankNode(id) => BlankNode::new(id)
+            .map(Subject::BlankNode)
+            .map_err(|e| format!("invalid blank node id '{id}': {e}")),
+        ArqTerm::QuotedTriple(inner) => {
+            let core_inner = arq_triple_to_core(inner)?;
+            Ok(Subject::QuotedTriple(Box::new(
+                oxirs_core::model::star::QuotedTriple::new(core_inner),
+            )))
+        }
+        ArqTerm::Variable(v) => Err(format!(
+            "unbound variable ?{} in constructed triple subject position",
+            v.name()
+        )),
+        ArqTerm::Literal(lit) => Err(format!(
+            "literal '{}' cannot be used as a triple subject",
+            lit.value
+        )),
+        ArqTerm::PropertyPath(path) => Err(format!(
+            "property path term cannot be a constructed triple subject: {path}"
+        )),
     }
 }
 
-/// Map an arq term to a core predicate (IRI only).
-fn arq_term_to_predicate(term: &ArqTerm) -> Option<Predicate> {
+/// Map an arq term to a core predicate (IRI only: RDF-star forbids a
+/// quoted triple, literal, or variable in predicate position of a
+/// constructed triple).
+fn arq_term_to_predicate(term: &ArqTerm) -> Result<Predicate, String> {
     match term {
-        ArqTerm::Iri(iri) => Some(Predicate::NamedNode(iri.clone())),
-        _ => None,
+        ArqTerm::Iri(iri) => Ok(Predicate::NamedNode(iri.clone())),
+        ArqTerm::Variable(v) => Err(format!(
+            "unbound variable ?{} in constructed triple predicate position",
+            v.name()
+        )),
+        other => Err(format!(
+            "term cannot be used as a constructed triple predicate: {other}"
+        )),
     }
 }
 
-/// Map an arq term to a core object (IRI, literal or blank node).
-fn arq_term_to_object(term: &ArqTerm) -> Option<Object> {
+/// Map an arq term to a core object (IRI, literal, blank node, or
+/// RDF-star quoted triple).
+fn arq_term_to_object(term: &ArqTerm) -> Result<Object, String> {
     match term {
-        ArqTerm::Iri(iri) => Some(Object::NamedNode(iri.clone())),
-        ArqTerm::BlankNode(id) => BlankNode::new(id).ok().map(Object::BlankNode),
-        ArqTerm::Literal(lit) => Some(Object::Literal(arq_literal_to_core(lit))),
-        _ => None,
+        ArqTerm::Iri(iri) => Ok(Object::NamedNode(iri.clone())),
+        ArqTerm::BlankNode(id) => BlankNode::new(id)
+            .map(Object::BlankNode)
+            .map_err(|e| format!("invalid blank node id '{id}': {e}")),
+        ArqTerm::Literal(lit) => Ok(Object::Literal(arq_literal_to_core(lit))),
+        ArqTerm::QuotedTriple(inner) => {
+            let core_inner = arq_triple_to_core(inner)?;
+            Ok(Object::QuotedTriple(Box::new(
+                oxirs_core::model::star::QuotedTriple::new(core_inner),
+            )))
+        }
+        ArqTerm::Variable(v) => Err(format!(
+            "unbound variable ?{} in constructed triple object position",
+            v.name()
+        )),
+        ArqTerm::PropertyPath(path) => Err(format!(
+            "property path term cannot be a constructed triple object: {path}"
+        )),
     }
 }
 

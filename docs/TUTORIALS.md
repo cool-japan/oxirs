@@ -1242,23 +1242,38 @@ WHERE {
 
 ### Event Streaming Integration
 
-```rust
-// Stream RDF events to Kafka
-use oxirs_stream::{StreamProcessor, KafkaConfig};
+Publish RDF change events to a message bus. Enable the backend you want as a Cargo
+feature (`nats`, `redis`, `rabbitmq`, `mqtt`, `kinesis`); the default is in-memory.
 
-let kafka_config = KafkaConfig {
-    brokers: vec!["localhost:9092".to_string()],
+```rust
+// Cargo.toml: oxirs-stream = { version = "0.4.1", features = ["nats"] }
+use oxirs_stream::{StreamBackendType, StreamConfig, StreamEvent, StreamProducer};
+
+let config = StreamConfig {
+    backend: StreamBackendType::Nats {
+        url: "nats://localhost:4222".to_string(),
+        cluster_urls: None,
+        jetstream_config: None,
+    },
     topic: "rdf-updates".to_string(),
+    ..Default::default()
 };
 
-let mut processor = StreamProcessor::new(kafka_config)?;
+let mut producer = StreamProducer::new(config).await?;
 
-// Stream all INSERT/DELETE operations
-processor.stream_updates(|update| {
-    println!("RDF Update: {:?}", update);
-    // Publish to Kafka
-})?;
+producer
+    .publish(StreamEvent::TripleAdded {
+        subject: "http://example.org/alice".to_string(),
+        predicate: "http://xmlns.com/foaf/0.1/name".to_string(),
+        object: "\"Alice\"".to_string(),
+        graph: None,
+        metadata: Default::default(),
+    })
+    .await?;
 ```
+
+> There is no Kafka backend as of v0.4.1 — see the CHANGELOG. The Confluent Schema
+> Registry client (`oxirs_stream::confluent_registry`) is unaffected and needs no broker.
 
 ---
 

@@ -338,4 +338,62 @@ mod tests {
         assert_eq!(caps.entity_types, vec!["User".to_string()]);
         assert!(caps.estimated_complexity > 0.0);
     }
+
+    fn plan_with_single_step(step_type: crate::planner::StepType) -> crate::planner::ExecutionPlan {
+        crate::planner::ExecutionPlan {
+            query_id: "q".to_string(),
+            steps: vec![crate::planner::ExecutionStep {
+                step_id: "s1".to_string(),
+                step_type,
+                service_id: Some("svc".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "{ field }".to_string(),
+                dependencies: vec![],
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            }],
+            estimated_total_cost: 1.0,
+            max_parallelism: 1,
+            planning_time: std::time::Duration::from_millis(0),
+            cache_key: None,
+            metadata: HashMap::new(),
+            parallelizable_steps: vec![vec!["s1".to_string()]],
+        }
+    }
+
+    /// Regression: previously, GraphQL execution of any non-GraphQLQuery/
+    /// non-SchemaStitch step silently returned an empty `Success` result with
+    /// null data (fail-loud violation). Now such steps must fail or perform real
+    /// work — never fabricate success.
+    #[tokio::test]
+    async fn regression_graphql_step_no_silent_noop_success() {
+        let federation = GraphQLFederation::new();
+
+        // A raw SPARQL ServiceQuery is invalid in a GraphQL plan -> must fail.
+        let plan = plan_with_single_step(crate::planner::StepType::ServiceQuery);
+        let results = federation
+            .execute_federated(&plan)
+            .await
+            .expect("execute_federated returns per-step results");
+        assert_eq!(results.len(), 1);
+        assert!(
+            !results[0].success,
+            "unsupported ServiceQuery step must not report success"
+        );
+
+        // An EntityResolution step with no dependency data must fail loudly
+        // rather than returning an empty success.
+        let plan = plan_with_single_step(crate::planner::StepType::EntityResolution);
+        let results = federation
+            .execute_federated(&plan)
+            .await
+            .expect("execute_federated returns per-step results");
+        assert_eq!(results.len(), 1);
+        assert!(
+            !results[0].success,
+            "EntityResolution with no input must not report success"
+        );
+    }
 }

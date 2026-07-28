@@ -11,7 +11,11 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
-use std::fs::{self, File};
+use std::fs::File;
+// `fs::{metadata, set_permissions}` is only reached from the `#[cfg(unix)]`
+// chmod 0o600 block in `generate_key_file`, plus the tests.
+#[cfg(any(unix, test))]
+use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 

@@ -10,8 +10,8 @@ use crate::load_balancing::{Backend, BackendStatistics, LoadBalancingStrategy};
 use crate::server::AppState;
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
-    response::{IntoResponse, Json},
+    http::{HeaderValue, StatusCode},
+    response::{IntoResponse, Json, Response},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -280,15 +280,19 @@ pub async fn cdn_config() -> Json<CdnConfig> {
     })
 }
 
-/// Serve static asset with CDN headers
-#[instrument(skip(_state))]
+/// Serve static asset with CDN headers.
+///
+/// Files are served from the directory configured at
+/// `server.static_asset_dir`. When no root directory is configured the
+/// endpoint fails loud with `503 Service Unavailable` rather than silently
+/// pretending the asset does not exist. The requested path is resolved and
+/// canonicalized against the configured root and rejected with `400 Bad
+/// Request` if it would escape the root (path traversal).
+#[instrument(skip(state))]
 pub async fn serve_static_asset(
     Path(path): Path<String>,
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    // Static asset serving with CDN-optimized headers
-    // This is a placeholder - actual implementation would serve files from disk
-
     let content_type = match path.rsplit('.').next() {
         Some("css") => "text/css",
         Some("js") => "application/javascript",
@@ -300,21 +304,127 @@ pub async fn serve_static_asset(
         Some("json") => "application/json",
         Some("html") => "text/html",
         _ => "application/octet-stream",
+    }
+    .to_string();
+
+    let cache_control = "public, max-age=86400, stale-while-revalidate=3600".to_string();
+
+    let Some(root) = state.config.server.static_asset_dir.clone() else {
+        return static_asset_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Static asset serving is not configured (server.static_asset_dir is unset)",
+        );
     };
 
-    // CDN-optimized headers
-    let headers = [
-        ("Content-Type", content_type),
-        (
-            "Cache-Control",
-            "public, max-age=86400, stale-while-revalidate=3600",
-        ),
-        ("Vary", "Accept-Encoding"),
-        ("X-Content-Type-Options", "nosniff"),
-    ];
+    match resolve_static_asset_path(&root, &path) {
+        Ok(resolved) => match tokio::fs::read(&resolved).await {
+            Ok(bytes) => {
+                let mut headers = axum::http::HeaderMap::new();
+                if let Ok(v) = HeaderValue::from_str(&content_type) {
+                    headers.insert(axum::http::header::CONTENT_TYPE, v);
+                }
+                if let Ok(v) = HeaderValue::from_str(&cache_control) {
+                    headers.insert(axum::http::header::CACHE_CONTROL, v);
+                }
+                headers.insert(
+                    axum::http::header::VARY,
+                    HeaderValue::from_static("Accept-Encoding"),
+                );
+                headers.insert(
+                    axum::http::header::HeaderName::from_static("x-content-type-options"),
+                    HeaderValue::from_static("nosniff"),
+                );
+                (StatusCode::OK, headers, bytes).into_response()
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                static_asset_error(StatusCode::NOT_FOUND, "Static asset not found")
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, path = %path, "failed to read static asset");
+                static_asset_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to read static asset",
+                )
+            }
+        },
+        Err(StaticAssetPathError::Traversal) => {
+            static_asset_error(StatusCode::BAD_REQUEST, "Invalid asset path")
+        }
+        Err(StaticAssetPathError::IsDirectory) | Err(StaticAssetPathError::NotFound) => {
+            static_asset_error(StatusCode::NOT_FOUND, "Static asset not found")
+        }
+    }
+}
 
-    // Return 404 for now - actual implementation would serve the file
-    (StatusCode::NOT_FOUND, headers, "Static asset not found")
+/// Error resolving a requested static-asset path against the configured root.
+enum StaticAssetPathError {
+    /// The requested path attempted to escape the configured root directory,
+    /// or names a component that cannot possibly resolve under the root
+    /// (e.g. its parent directory does not exist).
+    Traversal,
+    /// The resolved path is a directory, not a servable file.
+    IsDirectory,
+    /// The path does not name an existing entry at all.
+    NotFound,
+}
+
+/// Resolve `requested` (the URL path captured after `/static/`) against
+/// `root`, rejecting any attempt to escape the root via `..`, absolute
+/// paths, or symlink traversal. Returns the resolved absolute filesystem
+/// path on success. The returned path is guaranteed to exist and to live
+/// under the canonicalized root.
+fn resolve_static_asset_path(
+    root: &std::path::Path,
+    requested: &str,
+) -> Result<std::path::PathBuf, StaticAssetPathError> {
+    let mut relative = std::path::PathBuf::new();
+    for component in std::path::Path::new(requested).components() {
+        match component {
+            std::path::Component::Normal(part) => relative.push(part),
+            std::path::Component::CurDir => {}
+            // Any parent-dir, root, or prefix component in a URL-decoded
+            // request path is a traversal attempt (or nonsensical) — reject.
+            std::path::Component::ParentDir
+            | std::path::Component::RootDir
+            | std::path::Component::Prefix(_) => return Err(StaticAssetPathError::Traversal),
+        }
+    }
+
+    let candidate = root.join(&relative);
+    if !candidate.exists() {
+        return Err(StaticAssetPathError::NotFound);
+    }
+    if candidate.is_dir() {
+        return Err(StaticAssetPathError::IsDirectory);
+    }
+
+    // Canonicalize both sides and verify the resolved file still lives
+    // under the root. This also catches traversal performed through
+    // symlinks planted inside the root directory. If the root itself
+    // cannot be canonicalized (e.g. misconfigured/missing), fail loud
+    // rather than silently serving nothing.
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|_| StaticAssetPathError::NotFound)?;
+    let canonical_candidate = candidate
+        .canonicalize()
+        .map_err(|_| StaticAssetPathError::NotFound)?;
+    if !canonical_candidate.starts_with(&canonical_root) {
+        return Err(StaticAssetPathError::Traversal);
+    }
+
+    Ok(canonical_candidate)
+}
+
+/// Build a minimal error response for the static asset endpoint that still
+/// carries CDN-style security headers.
+fn static_asset_error(status: StatusCode, message: &'static str) -> Response {
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::HeaderName::from_static("x-content-type-options"),
+        HeaderValue::from_static("nosniff"),
+    );
+    (status, headers, message).into_response()
 }
 
 // ============================================================================

@@ -1,6 +1,6 @@
 # OxiRS Physics - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
@@ -93,9 +93,9 @@
   - **Tests:** unit per-element-type + DTMI validation + QUDT unit mapping + integration round-trip of sample DTDL docs
 - [x] Long-term support guarantees (policy: docs/policies/lts.md) (completed 2026-05-17 via RFC-001)
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 26, 2026)
 - [x] Rustdoc intra-doc link fixes (`digital_twin::twin_value`, `uom_quantities`)
-- ✅ 1292 tests passing
+- ✅ 1298 tests passing
 
 ## Notes
 
@@ -110,4 +110,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Physics v0.3.2 - Physics-informed digital twin simulation*
+*OxiRS Physics v0.4.1 - Physics-informed digital twin simulation*

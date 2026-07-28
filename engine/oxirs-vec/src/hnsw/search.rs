@@ -43,8 +43,11 @@ impl HnswIndex {
             current_best = self.search_layer(query, &current_best, 1, level, &mut visited)?;
         }
 
-        // Phase 2: Search at level 0 with dynamic beam size (ef parameter)
-        let ef = (k as f32 * 1.5).max(16.0) as usize; // Dynamic ef based on k
+        // Phase 2: Search at level 0 with the dynamic candidate list size `ef`.
+        // Honor the configured `HnswConfig.ef` (the documented recall/latency
+        // knob set by the `optimized()`/`memory_optimized()`/`gpu_optimized()`
+        // presets), but never search a narrower beam than `k` requires.
+        let ef = self.config().ef.max((k as f32 * 1.5).max(16.0) as usize);
         current_best = self.search_layer(query, &current_best, ef, 0, &mut visited)?;
 
         // Phase 3: Extract top k results
@@ -90,13 +93,18 @@ impl HnswIndex {
         // Priority queue for best results so far (min-heap based on distance)
         let mut dynamic_list: BinaryHeap<std::cmp::Reverse<Candidate>> = BinaryHeap::new();
 
-        // Initialize with entry points
+        // Initialize with entry points. Entry points must ALWAYS seed the
+        // candidate set and dynamic result list — they are the starting nodes of
+        // this layer's traversal. They are typically already in `visited`
+        // (either pre-marked by `search_knn`, or carried over as the previous
+        // layer's results, since `visited` is shared across layers); guarding the
+        // seeding on `!visited.contains` therefore left the traversal with an
+        // empty frontier and made searches return no results. Marking `visited`
+        // stays idempotent; the guard only ever belongs on *neighbor* expansion.
         for entry in entry_points {
-            if !visited.contains(&entry.id) {
-                visited.insert(entry.id);
-                candidates.push(*entry);
-                dynamic_list.push(std::cmp::Reverse(*entry));
-            }
+            visited.insert(entry.id);
+            candidates.push(*entry);
+            dynamic_list.push(std::cmp::Reverse(*entry));
         }
 
         // Main search loop
@@ -108,14 +116,35 @@ impl HnswIndex {
                 }
             }
 
-            // Explore neighbors of current node at the specified level
+            // Explore neighbors of current node at the specified level.
+            //
+            // Gather all not-yet-visited neighbors first, then compute their
+            // distances in a single batch. This is what makes the `enable_simd`,
+            // `enable_prefetch`/`prefetch_distance` and `cache_friendly_layout`
+            // config knobs actually govern the query hot path:
+            //   * `cache_friendly_layout` -> visit neighbors in ascending id
+            //     order so `nodes()[id]` accesses (and prefetch) are sequential,
+            //   * `enable_prefetch` -> prefetch the batch's vector data,
+            //   * `enable_simd` -> compute the batch's distances with SIMD.
             if let Some(node) = self.nodes().get(current.id) {
                 if let Some(connections) = node.get_connections(level) {
+                    let mut new_neighbors: Vec<usize> = Vec::with_capacity(connections.len());
                     for &neighbor_id in connections {
-                        if !visited.contains(&neighbor_id) {
-                            visited.insert(neighbor_id);
+                        // `insert` returns true iff the id was not already present.
+                        if visited.insert(neighbor_id) {
+                            new_neighbors.push(neighbor_id);
+                        }
+                    }
 
-                            let distance = self.calculate_distance(query, neighbor_id)?;
+                    if !new_neighbors.is_empty() {
+                        if self.config().cache_friendly_layout {
+                            new_neighbors.sort_unstable();
+                        }
+                        self.prefetch_nodes(&new_neighbors);
+                        let distances = self.simd_distance_calculation(query, &new_neighbors)?;
+
+                        for (idx, &neighbor_id) in new_neighbors.iter().enumerate() {
+                            let distance = distances.get(idx).copied().unwrap_or(f32::INFINITY);
                             let neighbor_candidate = Candidate::new(neighbor_id, distance);
 
                             // Check if this neighbor should be explored further
@@ -374,67 +403,79 @@ impl HnswIndex {
         Ok(results)
     }
 
-    /// Range search - find all neighbors within a distance threshold
+    /// Range search - find all neighbors within a distance `radius`.
+    ///
+    /// This is the standard HNSW range-search algorithm: a greedy descent
+    /// through the upper layers to reach the query's neighborhood, followed by a
+    /// **best-first** (nearest-candidate-first) expansion at level 0. A node's
+    /// neighbors are explored whenever the node is within `radius`, and the
+    /// traversal terminates only once the closest *unexpanded* candidate is
+    /// itself beyond `radius` — at which point every remaining candidate is also
+    /// beyond `radius`. This replaces the previous ad-hoc "expand nodes within
+    /// 10% of the radius" depth-first cutoff, which could prune subgraphs that
+    /// still contained in-radius neighbors and silently under-report matches.
+    ///
+    /// Results are distances (ascending, closest first). This is an inherent
+    /// method; the `VectorIndex::search_threshold` trait wrapper converts the
+    /// output to the similarity contract.
     pub fn range_search(&self, query: &Vector, radius: f32) -> Result<Vec<(String, f32)>> {
-        // Implementation of range search for HNSW
-        // Finds all vectors within a specified distance radius
-
         if self.nodes().is_empty() || self.entry_point().is_none() {
             return Ok(Vec::new());
         }
 
-        let mut results = Vec::new();
-        let mut visited = std::collections::HashSet::new();
-        let mut to_explore = Vec::new();
-
-        // Start from entry point
         let entry_point = self
             .entry_point()
             .expect("entry point should exist when index is non-empty");
-        to_explore.push(entry_point);
+
+        // Phase 1: greedy descent through the upper layers to get a good level-0
+        // entry point near the query (beam size 1, mirroring `search_knn`).
+        let mut visited = std::collections::HashSet::new();
+        let initial_distance = self.calculate_distance(query, entry_point)?;
+        let mut current_best = vec![Candidate::new(entry_point, initial_distance)];
         visited.insert(entry_point);
 
-        // Breadth-first exploration with distance filtering
-        while let Some(current_id) = to_explore.pop() {
-            let distance = self.calculate_distance(query, current_id)?;
+        let start_level = self
+            .nodes()
+            .get(entry_point)
+            .map(|n| n.level())
+            .unwrap_or(0);
+        for level in (1..=start_level).rev() {
+            current_best = self.search_layer(query, &current_best, 1, level, &mut visited)?;
+        }
 
-            // If within radius, add to results
-            if distance <= radius {
-                if let Some(node) = self.nodes().get(current_id) {
-                    results.push((node.uri.clone(), distance));
-                }
+        // Phase 2: best-first expansion at level 0. `candidates` is a min-heap on
+        // distance (via `Reverse`); we pop the nearest unexpanded node, stop once
+        // it exceeds `radius`, otherwise record it (if in radius) and push its
+        // unvisited neighbors.
+        let mut candidates: BinaryHeap<std::cmp::Reverse<Candidate>> = BinaryHeap::new();
+        for c in &current_best {
+            candidates.push(std::cmp::Reverse(*c));
+        }
 
-                // Explore neighbors at level 0
-                if let Some(node) = self.nodes().get(current_id) {
-                    if let Some(connections) = node.get_connections(0) {
-                        for &neighbor_id in connections {
-                            if !visited.contains(&neighbor_id) {
-                                visited.insert(neighbor_id);
-                                to_explore.push(neighbor_id);
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Even if current node is outside radius, explore neighbors
-                // if the current distance is close to the radius (within some tolerance)
-                let tolerance = radius * 0.1; // 10% tolerance
-                if distance <= radius + tolerance {
-                    if let Some(node) = self.nodes().get(current_id) {
-                        if let Some(connections) = node.get_connections(0) {
-                            for &neighbor_id in connections {
-                                if !visited.contains(&neighbor_id) {
-                                    visited.insert(neighbor_id);
-                                    to_explore.push(neighbor_id);
-                                }
-                            }
+        let mut results = Vec::new();
+        while let Some(std::cmp::Reverse(current)) = candidates.pop() {
+            // Best-first: once the nearest remaining candidate is beyond the
+            // radius, no unexplored node can be within it.
+            if current.distance > radius {
+                break;
+            }
+
+            if let Some(node) = self.nodes().get(current.id) {
+                results.push((node.uri.clone(), current.distance));
+
+                if let Some(connections) = node.get_connections(0) {
+                    for &neighbor_id in connections {
+                        if visited.insert(neighbor_id) {
+                            let distance = self.calculate_distance(query, neighbor_id)?;
+                            candidates
+                                .push(std::cmp::Reverse(Candidate::new(neighbor_id, distance)));
                         }
                     }
                 }
             }
         }
 
-        // Sort results by distance
+        // Sort results by distance (ascending, closest first).
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(results)

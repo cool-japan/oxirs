@@ -1,10 +1,10 @@
 # OxiRS Modbus - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
-OxiRS Modbus v0.3.2 provides industrial Modbus protocol support with RDF mapping for factory automation, energy management, and IoT integration.
+OxiRS Modbus v0.4.1 provides industrial Modbus protocol support with RDF mapping for factory automation, energy management, and IoT integration.
 
 ### Features
 - ✅ Modbus TCP client implementation
@@ -27,7 +27,7 @@ OxiRS Modbus v0.3.2 provides industrial Modbus protocol support with RDF mapping
 - ✅ Modbus over TLS (security extensions)
 - ✅ Register watcher for change detection
 - ✅ Register encoder and validator
-- ✅ 1237 tests passing
+- ✅ 1243 tests passing
 
 ## Roadmap
 
@@ -105,7 +105,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Modbus v0.3.2 - Industrial IoT for semantic web*
+*OxiRS Modbus v0.4.1 - Industrial IoT for semantic web*
 
 ## Proposed follow-ups
 

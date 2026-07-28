@@ -1183,7 +1183,7 @@ impl IntrospectionQuery {
 ///
 /// Registering these as real object types -- rather than the opaque
 /// `Scalar` placeholders previously used for the `__schema`/`__type` root
-/// fields -- lets [`crate::execution::QueryExecutor::complete_value`] honor
+/// fields -- lets `QueryExecutor::complete_value` honor
 /// selection sets on introspection queries (`{ __schema { queryType { name
 /// fields { name } } } }`) instead of silently discarding them.
 ///

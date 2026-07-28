@@ -4,14 +4,14 @@
 //! anomaly detection, quality degradation monitoring, and proactive issue identification.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use oxirs_core::Store;
-use oxirs_shacl::{Shape, ValidationReport};
+use oxirs_shacl::{Severity, Shape, ValidationReport};
 
 use super::QualityReport;
-use crate::Result;
+use crate::{Result, ShaclAiError};
 
 /// Quality issue detection engine
 #[derive(Debug)]
@@ -983,10 +983,10 @@ impl QualityIssueDetector {
 
     fn create_quality_snapshot(
         &self,
-        _store: &dyn Store,
-        _shapes: &[Shape],
+        store: &dyn Store,
+        shapes: &[Shape],
         quality_report: &QualityReport,
-        _validation_report: Option<&ValidationReport>,
+        validation_report: Option<&ValidationReport>,
     ) -> Result<QualitySnapshot> {
         // Create snapshot from current data
         let mut quality_dimensions = HashMap::new();
@@ -997,113 +997,393 @@ impl QualityIssueDetector {
         quality_dimensions.insert("consistency".to_string(), quality_report.consistency_score);
         quality_dimensions.insert("accuracy".to_string(), quality_report.accuracy_score);
         quality_dimensions.insert("conformance".to_string(), quality_report.conformance_score);
+        quality_dimensions.insert(
+            "schema_adherence".to_string(),
+            quality_report.schema_adherence_score,
+        );
+
+        let data_characteristics = Self::compute_data_characteristics(store)?;
+        let validation_results =
+            Self::compute_validation_snapshot(shapes, quality_report, validation_report);
+
+        // The error rate is a real signal derived from validation results; the
+        // remaining performance fields are not measured at this call site and
+        // are honestly reported as unknown (0.0) rather than fabricated.
+        let error_rate = if validation_results.total_validations > 0 {
+            validation_results.violation_count as f64 / validation_results.total_validations as f64
+        } else {
+            0.0
+        };
 
         Ok(QualitySnapshot {
             timestamp: chrono::Utc::now(),
             overall_quality_score: quality_report.overall_score,
             quality_dimensions,
             performance_metrics: PerformanceSnapshot {
-                validation_time_ms: 150.0,
-                memory_usage_mb: 256.0,
-                throughput_ops_per_sec: 100.0,
-                error_rate: 0.05,
-                resource_utilization: 0.7,
+                validation_time_ms: 0.0,
+                memory_usage_mb: 0.0,
+                throughput_ops_per_sec: 0.0,
+                error_rate,
+                resource_utilization: 0.0,
             },
-            data_characteristics: DataCharacteristics {
-                total_triples: 10000,
-                unique_subjects: 2000,
-                unique_predicates: 50,
-                unique_objects: 5000,
-                schema_complexity: 0.6,
-                data_density: 0.8,
-            },
-            validation_results: ValidationSnapshot {
-                total_validations: 100,
-                successful_validations: 95,
-                violation_count: 5,
-                average_violation_severity: 0.3,
-                validation_coverage: 0.9,
-            },
+            data_characteristics,
+            validation_results,
         })
     }
 
+    /// Derive real data characteristics by scanning the store's quads.
+    fn compute_data_characteristics(store: &dyn Store) -> Result<DataCharacteristics> {
+        let quads = store.find_quads(None, None, None, None).map_err(|e| {
+            ShaclAiError::QualityAssessment(format!("failed to scan store for snapshot: {e}"))
+        })?;
+
+        let total_triples = quads.len();
+        let mut subjects: HashSet<String> = HashSet::new();
+        let mut predicates: HashSet<String> = HashSet::new();
+        let mut objects: HashSet<String> = HashSet::new();
+        for quad in &quads {
+            subjects.insert(format!("{:?}", quad.subject()));
+            predicates.insert(format!("{:?}", quad.predicate()));
+            objects.insert(format!("{:?}", quad.object()));
+        }
+
+        let unique_subjects = subjects.len();
+        let unique_predicates = predicates.len();
+        let unique_objects = objects.len();
+
+        // Schema complexity: saturating function of the number of distinct
+        // predicates (more predicates -> richer schema), bounded to [0, 1].
+        let schema_complexity = unique_predicates as f64 / (unique_predicates as f64 + 20.0);
+
+        // Data density: how densely the subject x predicate space is populated.
+        let cells = unique_subjects.saturating_mul(unique_predicates);
+        let data_density = if cells > 0 {
+            (total_triples as f64 / cells as f64).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+
+        Ok(DataCharacteristics {
+            total_triples,
+            unique_subjects,
+            unique_predicates,
+            unique_objects,
+            schema_complexity,
+            data_density,
+        })
+    }
+
+    /// Derive a validation snapshot from the validation report when available,
+    /// otherwise from the quality report's conformance score.
+    fn compute_validation_snapshot(
+        shapes: &[Shape],
+        quality_report: &QualityReport,
+        validation_report: Option<&ValidationReport>,
+    ) -> ValidationSnapshot {
+        let total_shapes = shapes.len();
+        match validation_report {
+            Some(report) => {
+                let violations = report.violations();
+                let violation_count = violations.len();
+
+                // Severity as a number: Violation = 1.0, Warning = 0.5, Info = 0.25.
+                let severity_sum: f64 = violations
+                    .iter()
+                    .map(|v| match v.result_severity {
+                        Severity::Violation => 1.0,
+                        Severity::Warning => 0.5,
+                        Severity::Info => 0.25,
+                    })
+                    .sum();
+                let average_violation_severity = if violation_count > 0 {
+                    severity_sum / violation_count as f64
+                } else {
+                    0.0
+                };
+
+                // Shapes that produced at least one violation.
+                let failing_shapes: HashSet<String> = violations
+                    .iter()
+                    .map(|v| format!("{:?}", v.source_shape))
+                    .collect();
+                let total_validations = total_shapes.max(1);
+                let successful_validations = total_validations.saturating_sub(failing_shapes.len());
+                let validation_coverage = if total_shapes > 0 { 1.0 } else { 0.0 };
+
+                ValidationSnapshot {
+                    total_validations,
+                    successful_validations,
+                    violation_count,
+                    average_violation_severity,
+                    validation_coverage,
+                }
+            }
+            None => {
+                // Fall back to the conformance score: estimate how many of the
+                // evaluated shapes conform.
+                let conformance = quality_report.conformance_score.clamp(0.0, 1.0);
+                let total_validations = total_shapes.max(1);
+                let successful_validations =
+                    (conformance * total_validations as f64).round() as usize;
+                let violation_count = total_validations.saturating_sub(successful_validations);
+                ValidationSnapshot {
+                    total_validations,
+                    successful_validations,
+                    violation_count,
+                    average_violation_severity: 1.0 - conformance,
+                    validation_coverage: if total_shapes > 0 { 1.0 } else { 0.0 },
+                }
+            }
+        }
+    }
+
+    /// Detect statistical anomalies by comparing the current snapshot's quality
+    /// signals against the distribution of the accumulated historical baseline.
+    ///
+    /// For the overall score and each tracked dimension, a z-score is computed
+    /// against the historical mean/standard-deviation; a signal whose magnitude
+    /// exceeds a sensitivity-derived threshold is reported as an
+    /// [`StatisticalAnomaly`]. When there is not yet enough history, no anomaly
+    /// is reported (and the overall anomaly score is 0.0), rather than emitting
+    /// a fabricated constant.
     fn detect_anomalies(
         &self,
         current_snapshot: &QualitySnapshot,
     ) -> Result<AnomalyDetectionResult> {
-        // Placeholder implementation for anomaly detection
-        let statistical_anomalies = vec![];
-        let semantic_anomalies = vec![];
-        let structural_anomalies = vec![];
-        let behavioral_anomalies = vec![];
-        let temporal_anomalies = vec![];
-        let cross_reference_anomalies = vec![];
+        let mut statistical_anomalies = Vec::new();
+        let mut max_abs_z = 0.0_f64;
 
-        let overall_anomaly_score = 0.15; // Low anomaly score
+        // Baseline excludes the current snapshot (which detect_quality_issues
+        // has already appended to `historical_data`).
+        let baseline_len = self.historical_data.len().saturating_sub(1);
+        let min_points = self.config.min_historical_points.max(2);
+        let z_threshold = anomaly_z_threshold(self.config.anomaly_sensitivity);
+
+        if baseline_len >= min_points {
+            let baseline = &self.historical_data[..baseline_len];
+
+            // Overall quality score.
+            let overall_hist: Vec<f64> = baseline.iter().map(|s| s.overall_quality_score).collect();
+            if let Some(anomaly) = check_statistical_anomaly(
+                "overall_quality_score",
+                current_snapshot.overall_quality_score,
+                &overall_hist,
+                z_threshold,
+            ) {
+                max_abs_z = max_abs_z.max(anomaly.statistical_measures.z_score.abs());
+                statistical_anomalies.push(anomaly);
+            }
+
+            // Each quality dimension present in the current snapshot.
+            for (dimension, &current_value) in &current_snapshot.quality_dimensions {
+                let hist: Vec<f64> = baseline
+                    .iter()
+                    .filter_map(|s| s.quality_dimensions.get(dimension).copied())
+                    .collect();
+                if hist.len() < min_points {
+                    continue;
+                }
+                if let Some(anomaly) =
+                    check_statistical_anomaly(dimension, current_value, &hist, z_threshold)
+                {
+                    max_abs_z = max_abs_z.max(anomaly.statistical_measures.z_score.abs());
+                    statistical_anomalies.push(anomaly);
+                }
+            }
+
+            // Error rate (higher is worse).
+            let error_hist: Vec<f64> = baseline
+                .iter()
+                .map(|s| s.performance_metrics.error_rate)
+                .collect();
+            if let Some(anomaly) = check_statistical_anomaly(
+                "error_rate",
+                current_snapshot.performance_metrics.error_rate,
+                &error_hist,
+                z_threshold,
+            ) {
+                max_abs_z = max_abs_z.max(anomaly.statistical_measures.z_score.abs());
+                statistical_anomalies.push(anomaly);
+            }
+        }
+
+        // Normalize the strongest deviation to a [0, 1] anomaly score
+        // (z of 6 saturates to 1.0).
+        let overall_anomaly_score = (max_abs_z / 6.0).clamp(0.0, 1.0);
+
+        // Trend of the overall score across the full history.
+        let full_hist: Vec<f64> = self
+            .historical_data
+            .iter()
+            .map(|s| s.overall_quality_score)
+            .collect();
+        let slope = linear_slope(&full_hist);
+        let volatility = mean_std(&full_hist).map(|(_, s)| s).unwrap_or(0.0);
+        let trend_direction = classify_trend(slope, volatility);
+
+        let anomaly_count = statistical_anomalies.len();
+        let anomaly_frequency = if !self.historical_data.is_empty() {
+            anomaly_count as f64 / self.historical_data.len() as f64
+        } else {
+            0.0
+        };
 
         let anomaly_trends = AnomalyTrends {
-            trend_direction: TrendDirection::Stable,
-            anomaly_frequency: 0.05,
-            severity_trend: 0.1,
-            patterns_identified: vec!["Occasional outliers".to_string()],
+            trend_direction,
+            anomaly_frequency,
+            severity_trend: overall_anomaly_score,
+            patterns_identified: statistical_anomalies
+                .iter()
+                .flat_map(|a| a.affected_properties.clone())
+                .collect(),
             forecasted_anomalies: vec![],
         };
 
         Ok(AnomalyDetectionResult {
             statistical_anomalies,
-            semantic_anomalies,
-            structural_anomalies,
-            behavioral_anomalies,
-            temporal_anomalies,
-            cross_reference_anomalies,
+            semantic_anomalies: vec![],
+            structural_anomalies: vec![],
+            behavioral_anomalies: vec![],
+            temporal_anomalies: vec![],
+            cross_reference_anomalies: vec![],
             overall_anomaly_score,
             anomaly_trends,
         })
     }
 
+    /// Detect quality degradation by comparing a recent window of the history
+    /// against an older window. All trends/declines are computed from the
+    /// accumulated [`Self::historical_data`]; with insufficient history the
+    /// result reports no degradation rather than fabricating decline figures.
     fn detect_quality_degradation(&self) -> Result<DegradationDetectionResult> {
-        // Placeholder implementation for degradation detection
+        let history = &self.historical_data;
+
+        // Split history into older vs recent halves for comparison.
+        let (older, recent) = split_windows(history);
+        let older_overall = mean(&window_scores(older, |s| s.overall_quality_score));
+        let recent_overall = mean(&window_scores(recent, |s| s.overall_quality_score));
+
+        // Positive degradation_rate == quality has dropped.
+        let degradation_rate = match (older_overall, recent_overall) {
+            (Some(o), Some(r)) => o - r,
+            _ => 0.0,
+        };
+
+        let overall_scores: Vec<f64> = history.iter().map(|s| s.overall_quality_score).collect();
+        let slope = linear_slope(&overall_scores);
+        let volatility = mean_std(&overall_scores).map(|(_, s)| s).unwrap_or(0.0);
+        let overall_trend = classify_trend(slope, volatility);
+        let trend_strength = slope.abs().clamp(0.0, 1.0);
+
+        // Per-dimension decline (older mean - recent mean, clamped to >= 0).
+        let dim_decline = |dim: &str| -> f64 {
+            let o = mean(&window_scores(older, |s| {
+                s.quality_dimensions.get(dim).copied().unwrap_or(0.0)
+            }));
+            let r = mean(&window_scores(recent, |s| {
+                s.quality_dimensions.get(dim).copied().unwrap_or(0.0)
+            }));
+            match (o, r) {
+                (Some(o), Some(r)) => (o - r).max(0.0),
+                _ => 0.0,
+            }
+        };
+        let completeness_decline = dim_decline("completeness");
+        let accuracy_decline = dim_decline("accuracy");
+        let consistency_decline = dim_decline("consistency");
+        let conformance_decline = dim_decline("conformance");
+
+        let mut affected_dimensions = Vec::new();
+        for (name, decline) in [
+            ("completeness", completeness_decline),
+            ("accuracy", accuracy_decline),
+            ("consistency", consistency_decline),
+            ("conformance", conformance_decline),
+        ] {
+            if decline > self.config.degradation_threshold {
+                affected_dimensions.push(name.to_string());
+            }
+        }
+
+        // Performance trends across snapshots.
+        let error_rate_trend = linear_slope(
+            &history
+                .iter()
+                .map(|s| s.performance_metrics.error_rate)
+                .collect::<Vec<_>>(),
+        );
+        let throughput_trend = linear_slope(
+            &history
+                .iter()
+                .map(|s| s.performance_metrics.throughput_ops_per_sec)
+                .collect::<Vec<_>>(),
+        );
+        let response_time_trend = linear_slope(
+            &history
+                .iter()
+                .map(|s| s.performance_metrics.validation_time_ms)
+                .collect::<Vec<_>>(),
+        );
+        let resource_utilization_trend = linear_slope(
+            &history
+                .iter()
+                .map(|s| s.performance_metrics.resource_utilization)
+                .collect::<Vec<_>>(),
+        );
+        let performance_degradation_detected = error_rate_trend
+            > self
+                .config
+                .alert_thresholds
+                .performance_degradation_threshold
+            || response_time_trend
+                > self
+                    .config
+                    .alert_thresholds
+                    .performance_degradation_threshold;
+
         let quality_trend_analysis = QualityTrendAnalysis {
-            overall_trend: TrendDirection::Stable,
-            trend_strength: 0.3,
-            degradation_rate: 0.02,
-            affected_dimensions: vec![],
+            overall_trend: overall_trend.clone(),
+            trend_strength,
+            degradation_rate,
+            affected_dimensions: affected_dimensions.clone(),
             trend_forecast: TrendForecast {
                 forecast_horizon: chrono::Duration::days(30),
                 predicted_quality_scores: vec![],
                 confidence_intervals: vec![],
-                risk_assessment: 0.2,
+                risk_assessment: degradation_rate.clamp(0.0, 1.0),
             },
         };
 
         let performance_degradation = PerformanceDegradation {
-            degradation_detected: false,
+            degradation_detected: performance_degradation_detected,
             performance_metrics: PerformanceMetrics {
-                response_time_trend: 0.05,
-                throughput_trend: -0.02,
-                error_rate_trend: 0.01,
-                resource_utilization_trend: 0.1,
+                response_time_trend,
+                throughput_trend,
+                error_rate_trend,
+                resource_utilization_trend,
                 availability_trend: 0.0,
             },
             bottlenecks_identified: vec![],
             degradation_causes: vec![],
         };
 
+        let content_deterioration_detected =
+            !affected_dimensions.is_empty() || degradation_rate > self.config.degradation_threshold;
         let content_deterioration = ContentDeterioration {
-            deterioration_detected: false,
+            deterioration_detected: content_deterioration_detected,
             data_quality_decline: DataQualityDecline {
-                completeness_decline: 0.0,
-                accuracy_decline: 0.01,
-                consistency_decline: 0.0,
-                timeliness_decline: 0.05,
-                validity_decline: 0.0,
+                completeness_decline,
+                accuracy_decline,
+                consistency_decline,
+                timeliness_decline: 0.0,
+                validity_decline: conformance_decline,
             },
             schema_evolution_issues: vec![],
             consistency_degradation: ConsistencyDegradation {
-                logical_consistency_decline: 0.0,
-                referential_consistency_decline: 0.02,
+                logical_consistency_decline: consistency_decline,
+                referential_consistency_decline: 0.0,
                 semantic_consistency_decline: 0.0,
-                temporal_consistency_decline: 0.03,
+                temporal_consistency_decline: 0.0,
             },
         };
 
@@ -1114,11 +1394,32 @@ impl QualityIssueDetector {
             validation_pattern_changes: vec![],
         };
 
+        // Health score anchored on the most recent overall quality score,
+        // penalized by the observed degradation.
+        let current_quality = overall_scores.last().copied().unwrap_or(1.0);
+        let overall_health_score = (current_quality - degradation_rate.max(0.0)).clamp(0.0, 1.0);
+
+        let mut critical_issues = Vec::new();
+        if degradation_rate > self.config.alert_thresholds.degradation_rate_threshold {
+            critical_issues.push(CriticalIssue {
+                issue_type: "QualityDegradation".to_string(),
+                severity: degradation_rate.clamp(0.0, 1.0),
+                description: format!(
+                    "Overall quality dropped by {:.3} between the older and recent windows",
+                    degradation_rate
+                ),
+                immediate_actions: vec![
+                    "Investigate recent data ingestion and validation changes".to_string()
+                ],
+                time_to_failure: None,
+            });
+        }
+
         let system_health_status = SystemHealthStatus {
-            overall_health_score: 0.85,
+            overall_health_score,
             health_components: HashMap::new(),
-            critical_issues: vec![],
-            health_trend: TrendDirection::Stable,
+            critical_issues,
+            health_trend: overall_trend,
             recovery_recommendations: vec![],
         };
 
@@ -1139,13 +1440,98 @@ impl QualityIssueDetector {
         })
     }
 
+    /// Emit proactive alerts when the anomaly score or measured degradation
+    /// crosses the configured thresholds. Returns an empty vector only when the
+    /// signals are genuinely below threshold.
     fn generate_proactive_alerts(
         &self,
-        _anomaly_detection: &AnomalyDetectionResult,
-        _degradation_detection: &DegradationDetectionResult,
+        anomaly_detection: &AnomalyDetectionResult,
+        degradation_detection: &DegradationDetectionResult,
     ) -> Result<Vec<ProactiveAlert>> {
-        // Placeholder implementation
-        Ok(vec![])
+        let mut alerts = Vec::new();
+        let thresholds = &self.config.alert_thresholds;
+
+        // Anomaly-based alert.
+        let anomaly_score = anomaly_detection.overall_anomaly_score;
+        if anomaly_score >= thresholds.medium_anomaly_score {
+            let severity = if anomaly_score >= thresholds.critical_anomaly_score {
+                AlertSeverity::Critical
+            } else if anomaly_score >= thresholds.high_anomaly_score {
+                AlertSeverity::High
+            } else {
+                AlertSeverity::Medium
+            };
+            let affected: Vec<String> = anomaly_detection
+                .statistical_anomalies
+                .iter()
+                .flat_map(|a| a.affected_properties.clone())
+                .collect();
+            alerts.push(ProactiveAlert {
+                alert_type: AlertType::DataAnomaly,
+                severity,
+                confidence: anomaly_score,
+                description: format!(
+                    "Statistical anomaly score {anomaly_score:.2} across {} detected signal(s)",
+                    anomaly_detection.statistical_anomalies.len()
+                ),
+                affected_components: affected,
+                predicted_impact: anomaly_score,
+                time_to_criticality: None,
+                recommended_actions: vec![
+                    "Review the flagged quality signals against recent data changes".to_string(),
+                ],
+            });
+        }
+
+        // Degradation-based alert.
+        let degradation_rate = degradation_detection
+            .quality_trend_analysis
+            .degradation_rate;
+        if degradation_rate >= thresholds.degradation_rate_threshold {
+            alerts.push(ProactiveAlert {
+                alert_type: AlertType::QualityDegradation,
+                severity: if degradation_rate >= thresholds.degradation_rate_threshold * 2.0 {
+                    AlertSeverity::High
+                } else {
+                    AlertSeverity::Medium
+                },
+                confidence: degradation_rate.clamp(0.0, 1.0),
+                description: format!(
+                    "Quality degradation rate {degradation_rate:.3} exceeds threshold {:.3}",
+                    thresholds.degradation_rate_threshold
+                ),
+                affected_components: degradation_detection
+                    .quality_trend_analysis
+                    .affected_dimensions
+                    .clone(),
+                predicted_impact: degradation_rate.clamp(0.0, 1.0),
+                time_to_criticality: None,
+                recommended_actions: vec![
+                    "Investigate the declining quality dimensions".to_string()
+                ],
+            });
+        }
+
+        // Performance-based alert.
+        if degradation_detection
+            .performance_degradation
+            .degradation_detected
+        {
+            alerts.push(ProactiveAlert {
+                alert_type: AlertType::PerformanceIssue,
+                severity: AlertSeverity::Medium,
+                confidence: 0.7,
+                description: "Performance degradation trend detected across snapshots".to_string(),
+                affected_components: vec!["validation-pipeline".to_string()],
+                predicted_impact: 0.5,
+                time_to_criticality: None,
+                recommended_actions: vec![
+                    "Profile validation throughput and error rate trends".to_string()
+                ],
+            });
+        }
+
+        Ok(alerts)
     }
 
     fn generate_issue_summary(
@@ -1203,8 +1589,13 @@ impl QualityIssueDetector {
             critical_issues,
             high_priority_issues,
             issue_categories,
-            trend_direction: TrendDirection::Stable,
-            overall_health_score: 0.85,
+            trend_direction: degradation_detection
+                .quality_trend_analysis
+                .overall_trend
+                .clone(),
+            overall_health_score: degradation_detection
+                .system_health_status
+                .overall_health_score,
         }
     }
 
@@ -1386,6 +1777,172 @@ impl DetectionModels {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Statistical helpers for anomaly / degradation detection
+// ---------------------------------------------------------------------------
+
+/// Map an anomaly sensitivity in `[0, 1]` to a z-score threshold: higher
+/// sensitivity means a lower threshold (flags smaller deviations).
+fn anomaly_z_threshold(sensitivity: f64) -> f64 {
+    // sensitivity 0.0 -> 3.0 sigma, 1.0 -> 1.0 sigma.
+    (3.0 - 2.0 * sensitivity.clamp(0.0, 1.0)).max(0.5)
+}
+
+/// Mean of a slice, or `None` if empty.
+fn mean(values: &[f64]) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    Some(values.iter().sum::<f64>() / values.len() as f64)
+}
+
+/// Mean and population standard deviation, or `None` if empty.
+fn mean_std(values: &[f64]) -> Option<(f64, f64)> {
+    let m = mean(values)?;
+    let variance = values.iter().map(|v| (v - m) * (v - m)).sum::<f64>() / values.len() as f64;
+    Some((m, variance.sqrt()))
+}
+
+/// Least-squares slope of `values` against their indices (0, 1, 2, ...).
+/// Returns 0.0 for fewer than two points.
+fn linear_slope(values: &[f64]) -> f64 {
+    let n = values.len();
+    if n < 2 {
+        return 0.0;
+    }
+    let n_f = n as f64;
+    let mean_x = (n_f - 1.0) / 2.0;
+    let mean_y = values.iter().sum::<f64>() / n_f;
+    let mut num = 0.0;
+    let mut den = 0.0;
+    for (i, &y) in values.iter().enumerate() {
+        let dx = i as f64 - mean_x;
+        num += dx * (y - mean_y);
+        den += dx * dx;
+    }
+    if den.abs() < 1e-12 {
+        0.0
+    } else {
+        num / den
+    }
+}
+
+/// Classify a trend from its slope and volatility.
+fn classify_trend(slope: f64, volatility: f64) -> TrendDirection {
+    // High volatility with a shallow slope reads as volatile rather than a
+    // directional trend.
+    if volatility > 0.15 && slope.abs() < 0.01 {
+        return TrendDirection::Volatile;
+    }
+    if slope > 0.005 {
+        TrendDirection::Improving
+    } else if slope < -0.005 {
+        TrendDirection::Declining
+    } else {
+        TrendDirection::Stable
+    }
+}
+
+/// Split a history slice into (older, recent) halves for window comparison.
+fn split_windows<T>(history: &[T]) -> (&[T], &[T]) {
+    let mid = history.len() / 2;
+    (&history[..mid], &history[mid..])
+}
+
+/// Project a window of snapshots onto a scalar via `f`.
+fn window_scores<F>(window: &[QualitySnapshot], f: F) -> Vec<f64>
+where
+    F: Fn(&QualitySnapshot) -> f64,
+{
+    window.iter().map(f).collect()
+}
+
+/// Build a [`StatisticalAnomaly`] when `current` deviates from the historical
+/// distribution by more than `z_threshold` standard deviations.
+fn check_statistical_anomaly(
+    property: &str,
+    current: f64,
+    history: &[f64],
+    z_threshold: f64,
+) -> Option<StatisticalAnomaly> {
+    let (m, std) = mean_std(history)?;
+    if std < 1e-9 {
+        // No variance in the baseline: only a differing value is anomalous.
+        if (current - m).abs() < 1e-9 {
+            return None;
+        }
+        return Some(build_statistical_anomaly(
+            property,
+            current,
+            m,
+            6.0,
+            z_threshold,
+        ));
+    }
+    let z = (current - m) / std;
+    if z.abs() < z_threshold {
+        return None;
+    }
+    Some(build_statistical_anomaly(
+        property,
+        current,
+        m,
+        z,
+        z_threshold,
+    ))
+}
+
+fn build_statistical_anomaly(
+    property: &str,
+    current: f64,
+    baseline_mean: f64,
+    z: f64,
+    z_threshold: f64,
+) -> StatisticalAnomaly {
+    let abs_z = z.abs();
+    // Confidence grows with how far the z-score exceeds the threshold.
+    let confidence = (abs_z / (abs_z + z_threshold)).clamp(0.0, 1.0);
+    StatisticalAnomaly {
+        anomaly_type: StatisticalAnomalyType::OutlierValues,
+        anomaly_score: (abs_z / 6.0).clamp(0.0, 1.0),
+        confidence,
+        affected_properties: vec![property.to_string()],
+        statistical_measures: StatisticalMeasures {
+            z_score: z,
+            // Two-sided normal tail approximation of the p-value.
+            p_value: normal_two_sided_p_value(abs_z),
+            deviation_magnitude: (current - baseline_mean).abs(),
+            percentile_rank: normal_cdf(z),
+        },
+        context: format!(
+            "'{property}' = {current:.4} deviates {z:.2}σ from baseline mean {baseline_mean:.4}"
+        ),
+    }
+}
+
+/// Standard-normal CDF via the error function approximation.
+fn normal_cdf(z: f64) -> f64 {
+    0.5 * (1.0 + erf(z / std::f64::consts::SQRT_2))
+}
+
+/// Two-sided p-value for a standard-normal z-score.
+fn normal_two_sided_p_value(abs_z: f64) -> f64 {
+    (2.0 * (1.0 - normal_cdf(abs_z))).clamp(0.0, 1.0)
+}
+
+/// Abramowitz & Stegun 7.1.26 approximation of the error function.
+fn erf(x: f64) -> f64 {
+    let sign = if x < 0.0 { -1.0 } else { 1.0 };
+    let x = x.abs();
+    let t = 1.0 / (1.0 + 0.3275911 * x);
+    let y = 1.0
+        - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t
+            + 0.254829592)
+            * t
+            * (-x * x).exp();
+    sign * y
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1448,3 +2005,6 @@ mod tests {
         assert_eq!(snapshot.data_characteristics.total_triples, 5000);
     }
 }
+
+#[cfg(test)]
+mod regression_tests;

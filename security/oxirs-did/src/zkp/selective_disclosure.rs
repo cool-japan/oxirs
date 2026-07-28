@@ -345,6 +345,30 @@ impl SelectiveDisclosureProof {
     /// 3. Disclosed attribute commitments match their proofs
     /// 4. Nonce binding prevents replay attacks
     pub fn verify(&self, issuer_public_key: &[u8], request: &ZkpProofRequest) -> DidResult<bool> {
+        // 0. Enforce the request policy: EVERY attribute the verifier required
+        //    must actually be disclosed (with a matching disclosure proof). Without
+        //    this check a holder could present an empty (or under-populated)
+        //    disclosure set — the per-attribute loop and the index-set equality
+        //    below both hold trivially for an empty set — and still verify against
+        //    a request that demanded specific claims. That would let a holder prove
+        //    nothing while appearing to satisfy the verifier's requirements.
+        let disclosed_names: HashSet<&str> = self
+            .disclosed_attributes
+            .iter()
+            .map(|a| a.name.as_str())
+            .collect();
+        for required in &request.required_attributes {
+            if !disclosed_names.contains(required.as_str()) {
+                return Ok(false);
+            }
+        }
+
+        // Every disclosed attribute must additionally carry a disclosure proof
+        // (guards against a disclosed_attributes entry with no backing proof).
+        if self.disclosed_attributes.len() != self.disclosure_proofs.len() {
+            return Ok(false);
+        }
+
         // 1. Verify nonce binding
         let expected_nonce_binding = compute_nonce_binding(
             &request.challenge,
@@ -989,6 +1013,65 @@ mod tests {
         let root1 = compute_root_commitment(&[c1.clone(), c2.clone()]);
         let root2 = compute_root_commitment(&[c2, c1]);
         assert_ne!(root1, root2, "Order of commitments should matter");
+    }
+
+    #[test]
+    fn regression_verify_rejects_empty_disclosure_for_required_attribute() {
+        // A holder must not be able to strip the disclosed attributes yet still
+        // pass verification against a request that demanded specific claims.
+        let (secret, public) = create_test_keypair();
+        let cred = create_test_credential(&secret);
+        let challenge = b"fresh_challenge_regression".to_vec();
+        let request =
+            ZkpProofRequest::new(vec!["name".to_string()], challenge, "did:key:z6MkVerifier");
+
+        // Honest proof discloses "name" and verifies.
+        let mut proof = SelectiveDisclosureProof::create(&cred, &request).unwrap();
+        assert!(proof.verify(&public, &request).unwrap());
+
+        // Attacker keeps the issuer-signed root commitment + nonce binding but
+        // strips every disclosed attribute and its proof.
+        proof.disclosed_attributes.clear();
+        proof.disclosed_indices.clear();
+        proof.disclosure_proofs.clear();
+
+        assert!(
+            !proof.verify(&public, &request).unwrap(),
+            "empty disclosure must not satisfy a request requiring 'name'"
+        );
+    }
+
+    #[test]
+    fn regression_verify_rejects_partial_disclosure_for_required_attributes() {
+        // Requesting two attributes but disclosing only one must fail.
+        let (secret, public) = create_test_keypair();
+        let cred = create_test_credential(&secret);
+        let challenge = b"partial_challenge".to_vec();
+        let request = ZkpProofRequest::new(
+            vec!["name".to_string(), "country".to_string()],
+            challenge,
+            "did:key:z6MkVerifier",
+        );
+
+        let mut proof = SelectiveDisclosureProof::create(&cred, &request).unwrap();
+        assert!(proof.verify(&public, &request).unwrap());
+
+        // Drop the "country" disclosure (and its proof) — leaving only "name".
+        if let Some(pos) = proof
+            .disclosed_attributes
+            .iter()
+            .position(|a| a.name == "country")
+        {
+            let removed_index = proof.disclosed_attributes[pos].index;
+            proof.disclosed_attributes.remove(pos);
+            proof.disclosed_indices.retain(|&i| i != removed_index);
+            proof.disclosure_proofs.retain(|p| p.index != removed_index);
+        }
+
+        assert!(
+            !proof.verify(&public, &request).unwrap(),
+            "partial disclosure must not satisfy a request requiring both attributes"
+        );
     }
 
     #[test]

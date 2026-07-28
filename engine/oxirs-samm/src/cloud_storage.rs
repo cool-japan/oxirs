@@ -79,11 +79,22 @@ use crate::metamodel::Aspect;
 use crate::parser::parse_aspect_from_string;
 use crate::serializer::serialize_aspect_to_string;
 use async_trait::async_trait;
+use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tracing::{debug, error, info};
+
+/// Default maximum number of distinct model keys retained by the in-process
+/// [`ModelCache`] before the least-recently-used entry is evicted.
+///
+/// Without a bound, a long-running service (e.g. a model registry) that
+/// uploads or downloads many distinct model keys over its lifetime would
+/// accumulate cache entries indefinitely — this caps memory usage
+/// independent of read pattern.
+const DEFAULT_MAX_CACHE_ENTRIES: usize = 1000;
 
 /// Trait for cloud storage backends
 ///
@@ -122,40 +133,73 @@ pub struct CloudModelStorage {
     cache: Option<Arc<Mutex<ModelCache>>>,
 }
 
-/// Local cache for cloud models
+/// Local cache for cloud models.
+///
+/// Bounded by a maximum entry count with least-recently-used eviction (via
+/// the [`lru`] crate), in addition to the existing per-entry TTL expiry —
+/// so cache memory stays bounded regardless of how many distinct keys a
+/// long-running caller touches over its lifetime, not just how many are
+/// re-read after expiry.
 #[derive(Debug)]
 struct ModelCache {
-    models: HashMap<String, (Aspect, SystemTime)>,
+    models: LruCache<String, (Aspect, SystemTime)>,
     ttl: Duration,
 }
 
 impl ModelCache {
     fn new(ttl: Duration) -> Self {
+        Self::with_capacity(ttl, DEFAULT_MAX_CACHE_ENTRIES)
+    }
+
+    /// Create a cache with an explicit maximum entry count. `max_entries`
+    /// of `0` is treated as `1` (a cache must always hold a positive
+    /// capacity).
+    fn with_capacity(ttl: Duration, max_entries: usize) -> Self {
+        let capacity = NonZeroUsize::new(max_entries).unwrap_or(NonZeroUsize::MIN);
         Self {
-            models: HashMap::new(),
+            models: LruCache::new(capacity),
             ttl,
         }
     }
 
     fn get(&mut self, key: &str) -> Option<Aspect> {
-        if let Some((model, timestamp)) = self.models.get(key) {
-            if timestamp.elapsed().unwrap_or(Duration::MAX) < self.ttl {
-                debug!("Cache hit for model: {}", key);
-                return Some(model.clone());
-            } else {
-                debug!("Cache expired for model: {}", key);
-                self.models.remove(key);
-            }
+        let is_expired = match self.models.get(key) {
+            Some((_, timestamp)) => timestamp.elapsed().unwrap_or(Duration::MAX) >= self.ttl,
+            None => return None,
+        };
+        if is_expired {
+            debug!("Cache expired for model: {}", key);
+            self.models.pop(key);
+            return None;
         }
-        None
+        debug!("Cache hit for model: {}", key);
+        self.models.get(key).map(|(model, _)| model.clone())
     }
 
     fn put(&mut self, key: String, model: Aspect) {
-        self.models.insert(key, (model, SystemTime::now()));
+        // `push` (rather than `put`) both inserts/refreshes recency AND
+        // returns the previous entry for `key` if one existed, or the
+        // entry evicted to stay within capacity otherwise — so eviction is
+        // an explicit, observable part of the LRU cache's own bookkeeping
+        // rather than something the caller must separately trigger.
+        let inserted_key = key.clone();
+        if let Some((displaced_key, _)) = self.models.push(key, (model, SystemTime::now())) {
+            if displaced_key != inserted_key {
+                debug!(
+                    "Evicted least-recently-used cached model: {}",
+                    displaced_key
+                );
+            }
+        }
     }
 
     fn clear(&mut self) {
         self.models.clear();
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.models.len()
     }
 }
 
@@ -274,7 +318,7 @@ impl CloudModelStorage {
         // Remove from cache
         if let Some(cache) = &self.cache {
             if let Ok(mut cache_guard) = cache.lock() {
-                cache_guard.models.remove(key);
+                cache_guard.models.pop(key);
             }
         }
 
@@ -654,5 +698,105 @@ mod tests {
         storage.clear_cache();
         let stats_after_clear = storage.cache_stats().expect("clear should succeed");
         assert_eq!(stats_after_clear.entries, 0);
+    }
+
+    // ─── ModelCache bounded-eviction regression tests ──────────────────────
+
+    #[test]
+    fn regression_model_cache_evicts_least_recently_used_beyond_capacity() {
+        let mut cache = ModelCache::with_capacity(Duration::from_secs(3600), 2);
+
+        cache.put(
+            "a".to_string(),
+            Aspect::new("urn:samm:org.example:1.0.0#A".to_string()),
+        );
+        cache.put(
+            "b".to_string(),
+            Aspect::new("urn:samm:org.example:1.0.0#B".to_string()),
+        );
+        assert_eq!(cache.len(), 2);
+
+        // A third distinct key beyond capacity must evict the
+        // least-recently-used entry ("a"), not grow the cache unbounded.
+        cache.put(
+            "c".to_string(),
+            Aspect::new("urn:samm:org.example:1.0.0#C".to_string()),
+        );
+        assert_eq!(cache.len(), 2, "cache must stay bounded at max_entries");
+        assert!(
+            cache.get("a").is_none(),
+            "least-recently-used entry must be evicted"
+        );
+        assert!(cache.get("b").is_some());
+        assert!(cache.get("c").is_some());
+    }
+
+    #[test]
+    fn regression_model_cache_recently_accessed_entry_survives_eviction() {
+        let mut cache = ModelCache::with_capacity(Duration::from_secs(3600), 2);
+        cache.put(
+            "a".to_string(),
+            Aspect::new("urn:samm:org.example:1.0.0#A".to_string()),
+        );
+        cache.put(
+            "b".to_string(),
+            Aspect::new("urn:samm:org.example:1.0.0#B".to_string()),
+        );
+
+        // Touching "a" makes "b" the least-recently-used entry.
+        assert!(cache.get("a").is_some());
+
+        cache.put(
+            "c".to_string(),
+            Aspect::new("urn:samm:org.example:1.0.0#C".to_string()),
+        );
+        assert!(
+            cache.get("b").is_none(),
+            "b should have been evicted as LRU"
+        );
+        assert!(cache.get("a").is_some(), "recently-touched a must survive");
+        assert!(cache.get("c").is_some());
+    }
+
+    #[test]
+    fn regression_model_cache_zero_capacity_falls_back_to_one() {
+        // Requesting a zero-sized cache must not panic; it falls back to a
+        // minimum capacity of 1 rather than being rejected.
+        let mut cache = ModelCache::with_capacity(Duration::from_secs(3600), 0);
+        cache.put(
+            "a".to_string(),
+            Aspect::new("urn:samm:org.example:1.0.0#A".to_string()),
+        );
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn regression_cloud_model_storage_cache_stays_bounded_across_many_keys() {
+        let backend = MemoryBackend::new();
+        let mut storage = CloudModelStorage::new(Box::new(backend));
+
+        // Swap in a small, deterministic cache capacity for this test.
+        storage.cache = Some(Arc::new(Mutex::new(ModelCache::with_capacity(
+            Duration::from_secs(3600),
+            3,
+        ))));
+
+        // Upload far more distinct keys than the cache's capacity.
+        for i in 0..20 {
+            let key = format!("models/model-{i}.ttl");
+            let aspect = Aspect::new(format!("urn:samm:org.example:1.0.0#Model{i}"));
+            storage
+                .upload_model(&key, &aspect)
+                .await
+                .expect("upload should succeed");
+        }
+
+        let stats = storage.cache_stats().expect("cache should be enabled");
+        assert!(
+            stats.entries <= 3,
+            "cache must stay bounded at its configured capacity regardless of how many \
+             distinct keys are written, got {} entries",
+            stats.entries
+        );
     }
 }

@@ -50,8 +50,9 @@ pub async fn clear_memory_events() {
 
 /// Backend-agnostic producer wrapper (crate-private)
 pub(crate) enum BackendProducer {
-    // Kafka/Pulsar variants removed: those backends were quarantined into the
-    // publish=false oxirs-stream-adapter-{rdkafka,pulsar} crates (Pure Rust Policy v2).
+    // No Pulsar variant: that backend is quarantined in the publish=false
+    // oxirs-stream-adapter-pulsar crate (Pure Rust Policy v2). No Kafka variant
+    // either — that backend was removed outright in 0.4.1.
     #[cfg(feature = "nats")]
     Nats(Box<backend::nats::NatsProducer>),
     #[cfg(feature = "redis")]
@@ -185,13 +186,6 @@ impl StreamProducer {
 
     async fn build_backend_producer(config: &StreamConfig) -> Result<BackendProducer> {
         match &config.backend {
-            // Kafka backend quarantined into the publish=false `oxirs-stream-adapter-rdkafka`
-            // crate (Pure Rust Policy v2): build `KafkaBackend` there via the `StreamBackend` trait.
-            StreamBackendType::Kafka { .. } => Err(anyhow!(
-                "Kafka backend moved to the publish=false `oxirs-stream-adapter-rdkafka` crate \
-                 (COOLJAPAN Pure Rust Policy v2). Construct `oxirs_stream_adapter_rdkafka::KafkaBackend` \
-                 and drive it via the `oxirs_stream::backend::StreamBackend` trait."
-            )),
             #[cfg(feature = "nats")]
             StreamBackendType::Nats {
                 url,

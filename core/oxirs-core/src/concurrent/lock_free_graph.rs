@@ -84,13 +84,23 @@ impl ConcurrentGraph {
                 .ok_or_else(|| OxirsError::Store("Graph not initialized".to_string()))?
         };
 
-        // Check if triple already exists (wait-free read)
-        if graph_node.triples.contains_key(&triple_id) {
+        // Insert into main storage and use DashMap's return value as the
+        // atomic novelty test: `insert` returning `Some(_)` means another
+        // thread already inserted this exact triple id first. A prior
+        // `contains_key()`-then-`insert()` pair here was racy -- two threads
+        // could both observe `contains_key() == false`, both fall through,
+        // and both increment `triple_count` / update the indexes for what
+        // ends up being a single DashMap entry, permanently over-reporting
+        // `len()`. Treating the insert call itself as the single point of
+        // truth closes that window: only the thread that actually stores the
+        // new entry touches the counter and indexes.
+        if graph_node
+            .triples
+            .insert(triple_id, triple.clone())
+            .is_some()
+        {
             return Ok(false);
         }
-
-        // Insert into main storage
-        graph_node.triples.insert(triple_id, triple.clone());
 
         // Update indices
         self.update_indices_insert(graph_node, &triple);
@@ -676,6 +686,50 @@ mod tests {
         }
 
         assert_eq!(graph.len(), num_threads * ops_per_thread);
+    }
+
+    /// Regression test for the insert() check-then-act race: many threads
+    /// concurrently inserting the *same* triple must result in exactly one
+    /// logical insert (triple_count == 1, exactly one `Ok(true)` among all
+    /// callers), never an over-counted `len()` from a duplicate id that
+    /// collapsed to a single DashMap entry.
+    #[test]
+    fn regression_concurrent_duplicate_insert_count_consistency() {
+        use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+        use std::thread;
+
+        for _ in 0..20 {
+            let graph = Arc::new(ConcurrentGraph::new());
+            let triple = create_test_triple("http://dup-s", "http://dup-p", "http://dup-o");
+            let num_threads = 16;
+            let successes = Arc::new(AtomicUsize::new(0));
+
+            let handles: Vec<_> = (0..num_threads)
+                .map(|_| {
+                    let graph = Arc::clone(&graph);
+                    let triple = triple.clone();
+                    let successes = Arc::clone(&successes);
+                    thread::spawn(move || {
+                        if graph.insert(triple).expect("graph insert should succeed") {
+                            successes.fetch_add(1, AtomicOrdering::SeqCst);
+                        }
+                    })
+                })
+                .collect();
+
+            for handle in handles {
+                handle.join().expect("thread should not panic");
+            }
+
+            // Exactly one thread should have won the race and reported a
+            // genuine novel insert.
+            assert_eq!(successes.load(AtomicOrdering::SeqCst), 1);
+            // The counter must match the single logical entry, not the
+            // number of threads that raced through the old check-then-act
+            // window.
+            assert_eq!(graph.len(), 1);
+            assert!(graph.contains(&triple));
+        }
     }
 
     #[test]

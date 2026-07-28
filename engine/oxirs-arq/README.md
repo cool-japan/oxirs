@@ -1,10 +1,10 @@
 # OxiRS ARQ
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL query engine with algebra and optimization**
 
-**Status**: v0.4.0 - Released 2026-07-19
+**Status**: v0.4.1 - Released 2026-07-26
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-arq = "0.3.2"
+oxirs-arq = "0.4.1"
 ```
 
 ## Quick Start
@@ -443,7 +443,7 @@ Licensed under:
 
 ## Status
 
-🚀 **Production Release (v0.4.0)** - 2026-07-19
+🚀 **Production Release (v0.4.1)** - 2026-07-26
 
 Current implementation status:
 - ✅ Full SPARQL 1.1/1.2 parsing and execution across persisted datasets
@@ -451,7 +451,7 @@ Current implementation status:
 - ✅ Parallel execution framework instrumented with SciRS2 metrics
 - ✅ Custom function framework with dynamic registration
 - ✅ Total-order float terms (`TotalF32`/`TotalF64` in `total_float.rs`) for SPARQL numeric comparison and ordering, replacing the external `ordered-float` dependency with identical NaN-equality and zero-sign semantics
-- ✅ 3,210 tests passing (`--all-features`)
+- ✅ 3,361 tests passing (`--all-features`)
 - 🚧 Adaptive cardinality estimation (in progress)
 
 APIs follow semantic versioning. See CHANGELOG.md for details.

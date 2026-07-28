@@ -1,3 +1,8 @@
+//! OxiRS desktop application (Tauri): chat UI, visual SPARQL query builder,
+//! and CAN bus monitor, bridging the native Rust backend commands in the
+//! `chat`, `query_builder`, and `canbus` modules to the Tauri webview
+//! frontend.
+
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod canbus;

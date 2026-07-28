@@ -214,6 +214,10 @@ pub struct GraphQLFederation {
     pub schemas: Arc<RwLock<HashMap<String, FederatedSchema>>>,
     pub config: GraphQLFederationConfig,
     pub cache: Option<Arc<crate::cache::FederationCache>>,
+    /// Maps a registered service id to its GraphQL HTTP endpoint URL. Populated
+    /// via `register_service_endpoint` so entity resolution can issue real
+    /// `_entities` requests against the owning service.
+    pub service_endpoints: Arc<RwLock<HashMap<String, String>>>,
 }
 
 /// Federated schema definition

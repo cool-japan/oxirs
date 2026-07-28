@@ -140,21 +140,16 @@ impl StreamBackend for MemoryBackend {
 
         let mut data = topic_data.write().await;
 
-        let start_offset = if let Some(group) = consumer_group {
-            let group_name = group.name();
-            let current_offset = data.consumer_offsets.get(group_name).copied().unwrap_or(0);
-
-            match position {
-                StreamPosition::Beginning => current_offset, // Use consumer group's current offset
-                StreamPosition::End => data.next_offset,
-                StreamPosition::Offset(offset) => offset,
-            }
-        } else {
-            match position {
-                StreamPosition::Beginning => 0,
-                StreamPosition::End => data.next_offset,
-                StreamPosition::Offset(offset) => offset,
-            }
+        // `Beginning` means offset 0 (a full replay) regardless of whether a
+        // consumer group is supplied. This matches the no-group branch and
+        // avoids silently degrading an explicit full-replay request into a
+        // partial replay from the group's last committed offset. To resume from
+        // a committed offset, callers pass an explicit `StreamPosition::Offset`
+        // (e.g. obtained via `get_consumer_lag`) or use `seek`.
+        let start_offset = match position {
+            StreamPosition::Beginning => 0,
+            StreamPosition::End => data.next_offset,
+            StreamPosition::Offset(offset) => offset,
         };
 
         let mut events = Vec::new();
@@ -341,16 +336,18 @@ mod tests {
         // Create consumer group
         let group = ConsumerGroup::new("test-group".to_string());
 
-        // First read - should get all events
+        // First read from the beginning - should get the first 3 events and
+        // advance the group's committed offset to 3.
         let events = backend
             .receive_events(&topic, Some(&group), StreamPosition::Beginning, 3)
             .await
             .unwrap();
         assert_eq!(events.len(), 3);
 
-        // Second read - should get remaining events
+        // Second read - resume from the committed offset (3) via an explicit
+        // offset position to get the remaining events.
         let events = backend
-            .receive_events(&topic, Some(&group), StreamPosition::Beginning, 10)
+            .receive_events(&topic, Some(&group), StreamPosition::Offset(3), 10)
             .await
             .unwrap();
         assert_eq!(events.len(), 2);
@@ -358,5 +355,42 @@ mod tests {
         // Check consumer lag
         let lag = backend.get_consumer_lag(&topic, &group).await.unwrap();
         assert_eq!(lag.get(&PartitionId::new(0)), Some(&0));
+    }
+
+    #[tokio::test]
+    async fn regression_beginning_forces_full_replay_with_group() {
+        clear_memory_storage().await;
+
+        let mut backend = MemoryBackend::new();
+        backend.connect().await.unwrap();
+
+        let topic = TopicName::new(format!("test-topic-replay-{}", uuid::Uuid::new_v4()));
+        backend.create_topic(&topic, 1).await.unwrap();
+
+        for i in 0..5 {
+            let event = StreamEvent::GraphCreated {
+                graph: format!("http://example.org/graph{i}"),
+                metadata: crate::event::EventMetadata::default(),
+            };
+            backend.send_event(&topic, event).await.unwrap();
+        }
+
+        let group = ConsumerGroup::new("replay-group".to_string());
+
+        // Consume 3 events, advancing the committed offset.
+        let first = backend
+            .receive_events(&topic, Some(&group), StreamPosition::Beginning, 3)
+            .await
+            .unwrap();
+        assert_eq!(first.len(), 3);
+
+        // Explicitly requesting Beginning again MUST replay from offset 0,
+        // returning all 5 events (not just the 2 uncommitted ones).
+        let replay = backend
+            .receive_events(&topic, Some(&group), StreamPosition::Beginning, 10)
+            .await
+            .unwrap();
+        assert_eq!(replay.len(), 5);
+        assert_eq!(replay[0].1.value(), 0);
     }
 }

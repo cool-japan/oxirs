@@ -176,6 +176,67 @@ pub struct TdbConfig {
     pub sync_mode: Option<String>,
 }
 
+impl TdbConfig {
+    /// Translate this profile-level TDB configuration into a real
+    /// `oxirs_tdb::TdbConfig` ready to open a store at `data_dir`.
+    ///
+    /// Every field that is actually `Some(..)` is threaded through to the
+    /// storage engine instead of being silently discarded:
+    ///
+    /// * `cache_size` → [`oxirs_tdb::TdbConfig::buffer_pool_size`] (via
+    ///   `with_buffer_pool_size`).
+    /// * `sync_mode` → [`oxirs_tdb::TdbConfig::wal_sync_on_commit`] (via
+    ///   `with_wal_sync_on_commit`): `"sync"`/`"fsync"`/`"durable"` fsyncs the
+    ///   WAL on every commit; `"async"`/`"none"`/`"amortized"` keeps the
+    ///   default amortized-to-checkpoint durability.
+    /// * `file_mode` → [`oxirs_tdb::TdbConfig::enable_direct_io`]:
+    ///   `"direct"` opts into O_DIRECT-style page-cache-bypassing I/O;
+    ///   `"buffered"`/`"normal"`/`"default"` keeps the default buffered path.
+    ///
+    /// An operator who explicitly set `sync_mode`/`file_mode` to a value this
+    /// tool does not recognize gets an explicit error rather than having the
+    /// setting silently ignored (fail-loud on user-authored configuration).
+    pub fn to_oxirs_tdb_config(&self, data_dir: &Path) -> Result<oxirs_tdb::TdbConfig, String> {
+        let mut config = oxirs_tdb::TdbConfig::new(data_dir);
+
+        if let Some(cache_size) = self.cache_size {
+            if cache_size == 0 {
+                return Err("tools.tdb.cache_size must be greater than 0".to_string());
+            }
+            config = config.with_buffer_pool_size(cache_size);
+        }
+
+        if let Some(ref mode) = self.sync_mode {
+            let fsync_each_commit = match mode.to_ascii_lowercase().as_str() {
+                "sync" | "fsync" | "durable" => true,
+                "async" | "none" | "amortized" => false,
+                other => {
+                    return Err(format!(
+                        "tools.tdb.sync_mode: unrecognized value '{other}' (expected \
+                         'sync'/'fsync'/'durable' or 'async'/'none'/'amortized')"
+                    ));
+                }
+            };
+            config = config.with_wal_sync_on_commit(fsync_each_commit);
+        }
+
+        if let Some(ref mode) = self.file_mode {
+            match mode.to_ascii_lowercase().as_str() {
+                "direct" => config.enable_direct_io = true,
+                "buffered" | "normal" | "default" => config.enable_direct_io = false,
+                other => {
+                    return Err(format!(
+                        "tools.tdb.file_mode: unrecognized value '{other}' (expected 'direct' \
+                         or 'buffered'/'normal'/'default')"
+                    ));
+                }
+            }
+        }
+
+        Ok(config)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ValidationConfig {
     pub abort_on_error: bool,
@@ -472,5 +533,106 @@ mod tests {
         // Clean up - safe because we still have exclusive access via mutex
         std::env::remove_var("OXIRS_DEFAULT_FORMAT");
         std::env::remove_var("OXIRS_SERVER_PORT");
+    }
+
+    /// `cache_size`/`sync_mode`/`file_mode` must actually reach the engine
+    /// `oxirs_tdb::TdbConfig`, not just be validated and discarded.
+    #[test]
+    fn regression_tdb_config_translates_cache_size_sync_and_file_mode() {
+        let cli_cfg = TdbConfig {
+            cache_size: Some(4096),
+            file_mode: Some("direct".to_string()),
+            sync_mode: Some("sync".to_string()),
+        };
+        let dir = std::env::temp_dir().join("oxirs_tdb_config_translate_regr_1");
+        let engine_cfg = cli_cfg
+            .to_oxirs_tdb_config(&dir)
+            .expect("valid config must translate");
+        assert_eq!(
+            engine_cfg.buffer_pool_size, 4096,
+            "cache_size must reach buffer_pool_size"
+        );
+        assert!(
+            engine_cfg.wal_sync_on_commit,
+            "sync_mode = 'sync' must enable per-commit WAL fsync"
+        );
+        assert!(
+            engine_cfg.enable_direct_io,
+            "file_mode = 'direct' must enable direct I/O"
+        );
+    }
+
+    /// The inverse values must also translate correctly (not just always-true).
+    #[test]
+    fn regression_tdb_config_translates_async_and_buffered_modes() {
+        let cli_cfg = TdbConfig {
+            cache_size: None,
+            file_mode: Some("buffered".to_string()),
+            sync_mode: Some("async".to_string()),
+        };
+        let dir = std::env::temp_dir().join("oxirs_tdb_config_translate_regr_2");
+        let engine_cfg = cli_cfg
+            .to_oxirs_tdb_config(&dir)
+            .expect("valid config must translate");
+        assert!(!engine_cfg.wal_sync_on_commit);
+        assert!(!engine_cfg.enable_direct_io);
+    }
+
+    /// An operator-set but unrecognized `sync_mode`/`file_mode` must fail
+    /// loud rather than being silently ignored.
+    #[test]
+    fn regression_tdb_config_rejects_unknown_sync_mode() {
+        let cli_cfg = TdbConfig {
+            sync_mode: Some("bogus".to_string()),
+            ..Default::default()
+        };
+        let dir = std::env::temp_dir().join("oxirs_tdb_config_translate_regr_3");
+        let result = cli_cfg.to_oxirs_tdb_config(&dir);
+        assert!(
+            result.is_err(),
+            "unknown sync_mode must be a fail-loud error"
+        );
+        assert!(result.unwrap_err().contains("sync_mode"));
+    }
+
+    #[test]
+    fn regression_tdb_config_rejects_unknown_file_mode() {
+        let cli_cfg = TdbConfig {
+            file_mode: Some("bogus".to_string()),
+            ..Default::default()
+        };
+        let dir = std::env::temp_dir().join("oxirs_tdb_config_translate_regr_4");
+        let result = cli_cfg.to_oxirs_tdb_config(&dir);
+        assert!(
+            result.is_err(),
+            "unknown file_mode must be a fail-loud error"
+        );
+        assert!(result.unwrap_err().contains("file_mode"));
+    }
+
+    #[test]
+    fn regression_tdb_config_rejects_zero_cache_size() {
+        let cli_cfg = TdbConfig {
+            cache_size: Some(0),
+            ..Default::default()
+        };
+        let dir = std::env::temp_dir().join("oxirs_tdb_config_translate_regr_5");
+        assert!(cli_cfg.to_oxirs_tdb_config(&dir).is_err());
+    }
+
+    /// An unset profile (all `None`) must translate to the engine's own
+    /// unmodified defaults, so opening a store with no `[tools.tdb]` section
+    /// configured behaves exactly as before this fix.
+    #[test]
+    fn regression_tdb_config_defaults_are_unchanged() {
+        let cli_cfg = TdbConfig::default();
+        let dir = std::env::temp_dir().join("oxirs_tdb_config_translate_regr_6");
+        let engine_cfg = cli_cfg
+            .to_oxirs_tdb_config(&dir)
+            .expect("defaults translate");
+        let baseline = oxirs_tdb::TdbConfig::new(&dir);
+        assert_eq!(engine_cfg.buffer_pool_size, baseline.buffer_pool_size);
+        assert_eq!(engine_cfg.wal_sync_on_commit, baseline.wal_sync_on_commit);
+        assert_eq!(engine_cfg.enable_direct_io, baseline.enable_direct_io);
     }
 }

@@ -817,7 +817,7 @@ impl QuerySanitizer {
     fn sanitize_variables(&self, variables: &mut HashMap<String, serde_json::Value>) -> bool {
         let mut modified = false;
 
-        for (_key, value) in variables.iter_mut() {
+        for value in variables.values_mut() {
             if let Some(s) = value.as_str() {
                 // Remove null bytes
                 if s.contains('\0') {

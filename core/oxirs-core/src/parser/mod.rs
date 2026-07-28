@@ -556,12 +556,18 @@ impl Parser {
             ));
         }
 
-        // Find the closing quote
+        // Find the closing quote. We scan via `char_indices` so that
+        // `end_quote_pos` is a *byte* offset into `token` from the start —
+        // matching the byte-indexed slicing below. The previous
+        // implementation collected into `Vec<char>` and used the resulting
+        // *char* index to slice the original `&str`, which panics on any
+        // literal containing multi-byte UTF-8 characters (e.g. Japanese
+        // text, emoji, accented Latin) once the char index diverges from
+        // the byte offset.
         let mut end_quote_pos = None;
         let mut escaped = false;
-        let chars: Vec<char> = token.chars().collect();
 
-        for (i, &ch) in chars.iter().enumerate().skip(1) {
+        for (i, ch) in token.char_indices().skip(1) {
             if escaped {
                 escaped = false;
                 continue;
@@ -578,9 +584,13 @@ impl Parser {
         let end_quote_pos =
             end_quote_pos.ok_or_else(|| OxirsError::Parse("Unterminated literal".to_string()))?;
 
-        // Extract the literal value (without quotes) and unescape
-        let raw_value: String = chars[1..end_quote_pos].iter().collect();
-        let literal_value = self.unescape_literal_value(&raw_value)?;
+        // Extract the literal value (without quotes) and unescape.
+        // `1` and `end_quote_pos` are both valid char-boundary byte offsets
+        // (the opening quote and closing quote are each a single ASCII
+        // byte), so this slice is safe even when the value itself contains
+        // multi-byte characters.
+        let raw_value = &token[1..end_quote_pos];
+        let literal_value = self.unescape_literal_value(raw_value)?;
 
         // Check for language tag or datatype
         let remaining = &token[end_quote_pos + 1..];

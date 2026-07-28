@@ -560,8 +560,7 @@ mod tests {
 
     #[test]
     fn test_wasm_error_is_std_error() {
-        let e: Box<dyn std::error::Error> =
-            Box::new(WasmError::new(ErrorCode::ParseError, "x"));
+        let e: Box<dyn std::error::Error> = Box::new(WasmError::new(ErrorCode::ParseError, "x"));
         assert!(e.to_string().contains("ParseError"));
     }
 }

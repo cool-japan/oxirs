@@ -560,6 +560,44 @@ mod tests {
         env::temp_dir().join(format!("{prefix}_{}", uuid::Uuid::new_v4()))
     }
 
+    /// Regression: single-statement writes never checkpoint on their own, so
+    /// without an automatic checkpoint the WAL (file + in-memory buffer) grows
+    /// with every insert. With a low `wal_checkpoint_op_threshold`, the retained
+    /// WAL record count must stay bounded, and the data must remain intact and
+    /// survive a reopen.
+    #[test]
+    fn regression_wal_auto_checkpoint_bounds_log_growth() {
+        let dir = unique_dir("oxirs_tdb_wal_autockpt");
+        let config = TdbConfig::new(&dir).with_wal_checkpoint_op_threshold(16);
+        let mut store = TdbStore::open_with_config(config).unwrap();
+
+        for i in 0..200 {
+            store
+                .insert(
+                    &format!("http://example.org/s{i}"),
+                    "http://example.org/p",
+                    &format!("http://example.org/o{i}"),
+                )
+                .unwrap();
+        }
+
+        let retained = store.txn_manager.wal().all_entries().len();
+        // Without auto-checkpoint this would be ~600 (3 records * 200 ops).
+        // Bounded to a small multiple of the 16-op threshold.
+        assert!(
+            retained < 3 * 16 * 3,
+            "WAL retained {retained} records; auto-checkpoint should bound growth"
+        );
+
+        assert_eq!(store.count(), 200);
+        drop(store);
+
+        let store = TdbStore::open_with_config(TdbConfig::new(&dir)).unwrap();
+        assert_eq!(store.count(), 200, "checkpointed data must survive reopen");
+        drop(store);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// open -> insert mixed terms -> sync -> drop -> reopen returns exactly them.
     #[test]
     fn test_persistence_round_trip_small_mixed_terms() {

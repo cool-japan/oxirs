@@ -1,0 +1,400 @@
+# This template contains all of the possible sections and their default values
+
+# Note that all fields that take a lint level have these possible values:
+# * deny - An error will be produced and the check will fail
+# * warn - A warning will be produced, but the check will not fail
+# * allow - No warning or error will be produced, though in some cases a note
+# will be
+
+# The values provided in this template are the default values that will be used
+# when any section or field is not specified in your own configuration
+
+# Root options
+
+# The graph table configures how the dependency graph is constructed and thus
+# which crates the checks are performed against
+[graph]
+# If 1 or more target triples (and optionally, target_features) are specified,
+# only the specified targets will be checked when running `cargo deny check`.
+# This means, if a particular package is only ever used as a target specific
+# dependency, such as, for example, the `nix` crate only being used via the
+# `target_family = "unix"` configuration, that only having windows targets in
+# this list would mean the nix crate, as well as any of its exclusive
+# dependencies not shared by any other crates, would be ignored, as the target
+# list here is effectively saying which targets you are building for.
+targets = [
+    # The triple can be any string, but only the target triples built in to
+    # rustc (as of 1.40) can be checked against actual config expressions
+    #"x86_64-unknown-linux-musl",
+    # You can also specify which target_features you promise are enabled for a
+    # particular target. target_features are currently not validated against
+    # the actual valid features supported by the target architecture.
+    #{ triple = "wasm32-unknown-unknown", features = ["atomics"] },
+]
+# When creating the dependency graph used as the source of truth when checks are
+# executed, this field can be used to prune crates from the graph, removing them
+# from the view of cargo-deny. This is an extremely heavy hammer, as if a crate
+# is pruned from the graph, all of its dependencies will also be pruned unless
+# they are connected to another crate in the graph that hasn't been pruned,
+# so it should be used with care. The identifiers are [Package ID Specifications]
+# (https://doc.rust-lang.org/cargo/reference/pkgid-spec.html)
+#exclude = []
+# If true, metadata will be collected with `--all-features`. Note that this can't
+# be toggled off if true, if you want to conditionally enable `--all-features` it
+# is recommended to pass `--all-features` on the cmd line instead
+all-features = false
+# If true, metadata will be collected with `--no-default-features`. The same
+# caveat with `all-features` applies
+no-default-features = false
+# If set, these feature will be enabled when collecting metadata. If `--features`
+# is specified on the cmd line they will take precedence over this option.
+#features = []
+
+# The output table provides options for how/if diagnostics are outputted
+[output]
+# When outputting inclusion graphs in diagnostics that include features, this
+# option can be used to specify the depth at which feature edges will be added.
+# This option is included since the graphs can be quite large and the addition
+# of features from the crate(s) to all of the graph roots can be far too verbose.
+# This option can be overridden via `--feature-depth` on the cmd line
+feature-depth = 1
+
+# This section is considered when running `cargo deny check advisories`
+# More documentation for the advisories section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
+[advisories]
+# Scope of the `unmaintained` lint: only flag advisories on crates we actually chose
+# ourselves (workspace members' direct dependencies), not on every transitive crate in
+# the resolved graph. [possible values: "all", "workspace", "transitive", "none"].
+# Verified 2026-07-22 (cargo-deny 0.19.0): the default "all" flags 21 unmaintained
+# advisories, almost all of them in dependency chains we don't control and can't
+# unilaterally swap out (the gtk-rs/tauri chain, hyphenation's unic-* chain, async-std
+# via pulsar, instant/paste/proc-macro-error, etc.). "workspace" narrows this to exactly
+# the 2 direct-dependency hits we can actually act on (backoff, rustls-pemfile -- see
+# their dedicated ignore entries below), while still catching any *future* unmaintained
+# crate we choose to depend on directly.
+unmaintained = "workspace"
+# The path where the advisory databases are cloned/fetched into
+#db-path = "$CARGO_HOME/advisory-dbs"
+# The url(s) of the advisory databases to use
+#db-urls = ["https://github.com/rustsec/advisory-db"]
+# A list of advisory IDs to ignore. Note that ignored advisories will still
+# output a note when they are encountered.
+ignore = [
+    # RUSTSEC-2023-0071 (rsa 0.9.10, Marvin Attack timing side-channel in PKCS#1v1.5 decryption).
+    # Investigated 2026-07-22: oxirs never performs RSA decryption anywhere in the workspace
+    # (zero hits for Pkcs1v15Encrypt/Oaep/rsa-backed .decrypt()). All JWT/SAML/OIDC/cert-verify
+    # call sites (fuseki auth, oxirs-chat SSO, oxirs-stream wasm) use RsaPublicKey/verify only.
+    # The one production RsaPrivateKey use (oxirs-did's Rs256Signer, security/oxirs-did/src/signatures/rs256.rs)
+    # only signs (deterministic padding from a hash, no attacker-controlled depadding oracle) --
+    # outside the decrypt-padding-oracle this advisory's upstream tracking issue
+    # (github.com/RustCrypto/RSA/issues/626) actually covers. No patched rsa release exists.
+    # Do not drop RS256 support: DAPS/IDS federation and common external SAML/OIDC IdPs default
+    # to RSA; removing it breaks real interop for no verify-side security benefit.
+    "RUSTSEC-2023-0071",
+
+    # RUSTSEC-2026-0194 / RUSTSEC-2026-0195 (quick-xml 0.37.5 DoS, reached via oxrdfxml -> oxirs-core).
+    # Investigated 2026-07-22: reachable via SPARQL LOAD and file/GSP upload of RDF/XML, but bounded
+    # by oxirs' own independent mitigations (LOAD is SSRF-hardened with a 64MB MAX_LOAD_BYTES cap;
+    # upload is bounded by axum's DefaultBodyLimit). oxrdfxml 0.2.3 is the latest published version;
+    # upstream (oxigraph) already fixed this on their unreleased master (issues #1793/#1794) but that
+    # requires simultaneously pinning oxrdfxml+oxrdf+oxttl+oxjsonld+oxiri to unreleased git revs, which
+    # would NOT even help downstream consumers of the published oxirs-core crate (cargo [patch] isn't
+    # retained in an uploaded crates.io manifest). oxigraph's own maintainer downgraded severity,
+    # noting RDF/XML DoS has many other vectors regardless. Revisit when oxrdfxml ships 0.3.0.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+
+    # RUSTSEC-2026-0098 / RUSTSEC-2026-0099 / RUSTSEC-2026-0104 / RUSTSEC-2026-0049
+    # (rustls-webpki cert-validation bugs, reached via rumqttc 0.25.1 -> oxirs-stream's optional
+    # "mqtt" feature, which is NOT enabled by default). Investigated 2026-07-22: rumqttc 0.25.1 is
+    # tip-of-development (no newer release fixes this); tracked upstream at
+    # github.com/bytebeamio/rumqtt#1046 (open, fix PR #1037 unmerged). oxirs-stream's MQTT client
+    # (stream/oxirs-stream/src/backend/mqtt/client.rs) never actually calls set_transport/Transport::Tls,
+    # so TLS is not wired up at runtime today, further reducing exposure. mqtt is an opt-in Cargo
+    # feature (not in oxirs-stream's default set), so the published default crate is unaffected.
+    # No clean pure-Rust MQTT alternative exists today (mqtt-async-client abandoned, paho-mqtt has C
+    # bindings, ntex-mqtt is an architecturally-heavy actor-framework port). Revisit if MQTT+TLS
+    # becomes a hard requirement (candidate: a rust-mqtt port, ~2-4 engineer-days per 2026-07-22 estimate).
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
+    "RUSTSEC-2026-0049",
+
+    # RUSTSEC-2025-0012 (backoff, unmaintained -- not a vulnerability).
+    # Direct dependency of oxirs-federate (stream/oxirs-federate/src/service_client.rs, 11 call
+    # sites: backoff::future::retry + ExponentialBackoff + Error::{transient,permanent}). A
+    # maintained alternative (e.g. backon) exists but has a different API shape (future-extension
+    # trait vs standalone retry(), no direct transient/permanent split) -- a real port, not a
+    # mechanical swap. Deferred to a dedicated dependency-refresh pass; revisit then.
+    "RUSTSEC-2025-0012",
+
+    # RUSTSEC-2025-0134 (rustls-pemfile, unmaintained -- not a vulnerability).
+    # Direct dependency (workspace-pinned "2.2") used for TLS certificate/private-key PEM parsing
+    # across storage/oxirs-cluster/src/tls.rs, server/oxirs-fuseki/src/tls.rs, and
+    # stream/oxirs-modbus/src/client/tls.rs. Security-critical code touched in 3 crates -- porting
+    # to a successor is real work, disproportionate to a routine release pass for an
+    # "unmaintained, not vulnerable" finding. Deferred to a dedicated dependency-refresh pass.
+    "RUSTSEC-2025-0134",
+
+    # RUSTSEC-2024-0380 / RUSTSEC-2026-0165 / RUSTSEC-2024-0381 / RUSTSEC-2026-0160 / RUSTSEC-2026-0162
+    # (pqcrypto-dilithium, pqcrypto-falcon, pqcrypto-kyber, pqcrypto-sphincsplus, pqcrypto-traits --
+    # all unmaintained, not vulnerabilities; upstream PQClean project archived). Direct dependencies
+    # of oxirs-stream's optional "post-quantum" feature (stream/oxirs-stream/Cargo.toml:90-94), not in
+    # default = ["memory"] and not pulled in by "all-backends" -- only surfaces under --all-features.
+    # These are C-FFI (PQClean's C implementations), which is precisely why this feature is already
+    # non-default per the Pure Rust policy. Pure-Rust successors exist (pqcrypto-mldsa, fn-dsa,
+    # pqcrypto-mlkem, slh-dsa) as a migration path for a dedicated future post-quantum-crypto
+    # refresh pass; deferred here as out of scope for a routine release pipeline pass.
+    "RUSTSEC-2024-0380",
+    "RUSTSEC-2026-0165",
+    "RUSTSEC-2024-0381",
+    "RUSTSEC-2026-0160",
+    "RUSTSEC-2026-0162",
+]
+# If this is true, then cargo deny will use the git executable to fetch advisory database.
+# If this is false, then it uses a built-in git library.
+# Setting this to true can be helpful if you have special authentication requirements that cargo-deny does not support.
+# See Git Authentication for more information about setting up git authentication.
+#git-fetch-with-cli = true
+
+# This section is considered when running `cargo deny check licenses`
+# More documentation for the licenses section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
+[licenses]
+# List of explicitly allowed licenses
+# See https://spdx.org/licenses/ for list of possible licenses
+# [possible values: any SPDX 3.11 short identifier (+ optional exception)].
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "ISC",
+    "Zlib",
+    "BSL-1.0",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "CDLA-Permissive-2.0",
+]
+# The confidence threshold for detecting a license from license text.
+# The higher the value, the more closely the license text must be to the
+# canonical license text of a valid SPDX license file.
+# [possible values: any between 0.0 and 1.0].
+confidence-threshold = 0.8
+# Allow 1 or more licenses on a per-crate basis, so that particular licenses
+# aren't accepted for every possible crate as with the normal allow list
+exceptions = [
+    # Each entry is the crate and version constraint, and its specific allow
+    # list
+    #{ allow = ["Zlib"], crate = "adler32" },
+]
+
+# Some crates don't have (easily) machine readable licensing information,
+# adding a clarification entry for it allows you to manually specify the
+# licensing information
+#[[licenses.clarify]]
+# The package spec the clarification applies to
+#crate = "ring"
+# The SPDX expression for the license requirements of the crate
+#expression = "MIT AND ISC AND OpenSSL"
+# One or more files in the crate's source used as the "source of truth" for
+# the license expression. If the contents match, the clarification will be used
+# when running the license check, otherwise the clarification will be ignored
+# and the crate will be checked normally, which may produce warnings or errors
+# depending on the rest of your configuration
+#license-files = [
+# Each entry is a crate relative path, and the (opaque) hash of its contents
+#{ path = "LICENSE", hash = 0xbd0eed23 }
+#]
+
+[licenses.private]
+# If true, ignores workspace crates that aren't published, or are only
+# published to private registries.
+# To see how to mark a crate as unpublished (to the official registry),
+# visit https://doc.rust-lang.org/cargo/reference/manifest.html#the-publish-field.
+ignore = false
+# One or more private registries that you might publish crates to, if a crate
+# is only published to private registries, and ignore is true, the crate will
+# not have its license(s) checked
+registries = [
+    #"https://sekretz.com/registry
+]
+
+# This section is considered when running `cargo deny check bans`.
+# More documentation about the 'bans' section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/bans/cfg.html
+[bans]
+# Lint level for when multiple versions of the same crate are detected.
+# Kept at "warn" (not "deny") deliberately: this workspace currently has ~292
+# duplicate-version groups (crypto crates mostly, from two different COOLJAPAN
+# adapter crates pinning different RustCrypto versions independently). Treating
+# that as a hard error would be a much bigger separate cleanup, out of scope here.
+multiple-versions = "warn"
+# Lint level for when a crate version requirement is `*`
+wildcards = "allow"
+# The graph highlighting used when creating dotgraphs for crates
+# with multiple versions
+# * lowest-version - The path to the lowest versioned duplicate is highlighted
+# * simplest-path - The path to the version with the fewest edges is highlighted
+# * all - Both lowest-version and simplest-path are used
+highlight = "all"
+# The default lint level for `default` features for crates that are members of
+# the workspace that is being checked. This can be overridden by allowing/denying
+# `default` on a crate-by-crate basis if desired.
+workspace-default-features = "allow"
+# The default lint level for `default` features for external crates that are not
+# members of the workspace. This can be overridden by allowing/denying `default`
+# on a crate-by-crate basis if desired.
+external-default-features = "allow"
+# List of crates that are allowed. Use with care!
+allow = [
+    #"ansi_term@0.11.0",
+    #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason it is allowed" },
+]
+# If true, workspace members are automatically allowed even when using deny-by-default
+# This is useful for organizations that want to deny all external dependencies by default
+# but allow their own workspace crates without having to explicitly list them
+allow-workspace = false
+# List of crates to deny
+#
+# --- COOLJAPAN dependency-replacement table (CLAUDE.md) ---
+# Direct bans below map 1:1 onto CLAUDE.md's replacement table. None of these names
+# appear as a direct [dependencies]/[workspace.dependencies] entry in any oxirs-owned
+# Cargo.toml (verified 2026-07-22 by grepping every workspace member manifest) -- every
+# hit in the resolved graph is transitive through an external crate, so wrapper
+# exceptions are added only where a real pre-existing transitive path was confirmed via
+# `cargo tree -i <name> --workspace --all-features`.
+deny = [
+    # openblas / openblas-src: use `oxiblas` instead. Not present anywhere in the
+    # resolved graph today (verified via `cargo tree -i openblas[-src]`); banned
+    # pre-emptively so a future direct dependency is caught immediately.
+    { crate = "openblas", reason = "COOLJAPAN policy: use `oxiblas` (Pure Rust) instead of openblas." },
+    { crate = "openblas-src", reason = "COOLJAPAN policy: use `oxiblas` (Pure Rust) instead of openblas-src." },
+
+    # bincode: use `oxicode` instead. Exception: pulled in transitively via
+    # `hyphenation` (confirmed chain: bincode <- hyphenation <- azul-layout <- printpdf
+    # <- tools/oxirs, the `oxirs` CLI crate, which is `publish = false`). This is
+    # pre-existing, accepted, not something oxirs chose directly.
+    { crate = "bincode", reason = "COOLJAPAN policy: use `oxicode` instead. Transitively pulled in via hyphenation <- azul-layout <- printpdf <- tools/oxirs (publish = false); pre-existing, accepted, not something oxirs chose directly.", wrappers = ["hyphenation"] },
+
+    # rustfft: use `oxifft` instead. Not present anywhere in the resolved graph today
+    # (verified via `cargo tree -i rustfft`); banned pre-emptively.
+    { crate = "rustfft", reason = "COOLJAPAN policy: use `oxifft` (Pure Rust FFT) instead of rustfft." },
+
+    # z3 / z3-sys: use `oxiz` instead. Not present anywhere in the resolved graph today
+    # (verified via `cargo tree -i z3` / `cargo tree -i z3-sys`); banned pre-emptively.
+    { crate = "z3", reason = "COOLJAPAN policy: use `oxiz` instead of z3 (C++ FFI)." },
+    { crate = "z3-sys", reason = "COOLJAPAN policy: use `oxiz` instead of z3-sys (C++ FFI)." },
+
+    # rusqlite: use `oxisql-sqlite-compat` instead. Not present anywhere in the
+    # resolved graph today (verified via `cargo tree -i rusqlite`; the workspace
+    # already resolves `oxisqlite` instead). Banned pre-emptively.
+    { crate = "rusqlite", reason = "COOLJAPAN policy: use `oxisql-sqlite-compat` instead of rusqlite." },
+
+    # --- Pre-existing accepted transitive archive/compression dependencies ---
+    # No COOLJAPAN direct replacement is required here since these are already
+    # pre-existing accepted transitive deps per project history -- they are banned by
+    # name only so that any *new* direct usage by an oxirs-owned crate is still caught,
+    # while the already-resolved transitive paths (verified 2026-07-22 via
+    # `cargo tree -i <name> --workspace --all-features`) keep working via `wrappers`.
+
+    { crate = "zip", reason = "Pure Rust, COOLJAPAN-naming-discouraged (prefer oxiarc-*), pre-existing transitive dependency, not a direct project choice.", wrappers = ["rust_xlsxwriter"] },
+
+    { crate = "flate2", reason = "Pure Rust, COOLJAPAN-naming-discouraged (prefer oxiarc-*), pre-existing transitive dependency, not a direct project choice.", wrappers = ["allsorts-azul", "compression-codecs", "lopdf", "parquet", "png", "printpdf", "pulsar", "tiff", "zip"] },
+
+    # zstd: already [patch.crates-io]'d workspace-wide (see bottom of this file's sibling
+    # Cargo.toml) to a local Pure-Rust shim (crates/zstd-shim) backed by oxiarc-zstd, so
+    # every instance below is already Pure Rust in practice; this entry only blocks a
+    # *new* Cargo.toml from bypassing that patch by depending on the real C-FFI
+    # zstd/zstd-safe directly.
+    { crate = "zstd", reason = "Pure Rust, COOLJAPAN-naming-discouraged (prefer oxiarc-*), pre-existing transitive dependency, not a direct project choice.", wrappers = ["parquet", "pulsar", "tantivy-sstable", "wasmtime-internal-cache"] },
+
+    # bzip2: not currently present anywhere in the resolved graph (verified 2026-07-22
+    # via `cargo tree -i bzip2` -- no match). Banned pre-emptively per CLAUDE.md's table;
+    # no wrappers needed today.
+    { crate = "bzip2", reason = "Pure Rust, COOLJAPAN-naming-discouraged (prefer oxiarc-*), pre-existing transitive dependency, not a direct project choice." },
+
+    # lz4: pulled in transitively via pulsar only. NOTE (flagged, not fixed here): unlike
+    # its siblings in this block, the resolved `lz4` crate (v1.28.1) is NOT Pure Rust --
+    # it wraps `lz4-sys` (bundled C liblz4) via FFI (verified via
+    # `cargo tree -i lz4-sys`). Reported back to the requester rather than silently
+    # relabelled; see task report.
+    { crate = "lz4", reason = "COOLJAPAN-naming-discouraged (prefer oxiarc-*), pre-existing transitive dependency via pulsar, not a direct project choice. NOTE: unlike its siblings in this ban block, this crate is NOT Pure Rust (wraps lz4-sys / bundled C liblz4).", wrappers = ["pulsar"] },
+
+
+    { crate = "snap", reason = "Pure Rust, COOLJAPAN-naming-discouraged (prefer oxiarc-*), pre-existing transitive dependency, not a direct project choice.", wrappers = ["parquet", "pulsar"] },
+
+    { crate = "brotli", reason = "Pure Rust, COOLJAPAN-naming-discouraged (prefer oxiarc-*), pre-existing transitive dependency, not a direct project choice.", wrappers = ["compression-codecs", "parquet", "tauri-codegen", "tauri-utils"] },
+
+    { crate = "miniz_oxide", reason = "Pure Rust, COOLJAPAN-naming-discouraged (prefer oxiarc-*), pre-existing transitive dependency, not a direct project choice.", wrappers = ["apache-avro", "backtrace", "exr", "flate2", "png"] },
+
+    # Wrapper crates can optionally be specified to allow the crate when it
+    # is a direct dependency of the otherwise banned crate
+    #{ crate = "ansi_term@0.11.0", wrappers = ["this-crate-directly-depends-on-ansi_term"] },
+]
+
+# List of features to allow/deny
+# Each entry the name of a crate and a version range. If version is
+# not specified, all versions will be matched.
+#[[bans.features]]
+#crate = "reqwest"
+# Features to not allow
+#deny = ["json"]
+# Features to allow
+#allow = [
+#    "rustls",
+#    "__rustls",
+#    "__tls",
+#    "hyper-rustls",
+#    "rustls",
+#    "rustls-pemfile",
+#    "rustls-tls-webpki-roots",
+#    "tokio-rustls",
+#    "webpki-roots",
+#]
+# If true, the allowed features must exactly match the enabled feature set. If
+# this is set there is no point setting `deny`
+#exact = true
+
+# Certain crates/versions that will be skipped when doing duplicate detection.
+skip = [
+    #"ansi_term@0.11.0",
+    #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
+]
+# Similarly to `skip` allows you to skip certain crates during duplicate
+# detection. Unlike skip, it also includes the entire tree of transitive
+# dependencies starting at the specified crate, up to a certain depth, which is
+# by default infinite.
+skip-tree = [
+    #"ansi_term@0.11.0", # will be skipped along with _all_ of its direct and transitive dependencies
+    #{ crate = "ansi_term@0.11.0", depth = 20 },
+]
+
+# This section is considered when running `cargo deny check sources`.
+# More documentation about the 'sources' section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/sources/cfg.html
+[sources]
+# Lint level for what to happen when a crate from a crate registry that is not
+# in the allow list is encountered
+unknown-registry = "warn"
+# Lint level for what to happen when a crate from a git repository that is not
+# in the allow list is encountered
+unknown-git = "warn"
+# List of URLs for allowed crate registries. Defaults to the crates.io index
+# if not specified. If it is specified but empty, no registries are allowed.
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# List of URLs for allowed Git repositories
+allow-git = []
+
+[sources.allow-org]
+# github.com organizations to allow git sources for
+github = []
+# gitlab.com organizations to allow git sources for
+gitlab = []
+# bitbucket.org organizations to allow git sources for
+bitbucket = []

@@ -70,6 +70,16 @@ pub struct FileUploadConfig {
     pub upload_dir: PathBuf,
     /// Enable virus scanning
     pub enable_virus_scan: bool,
+    /// Optional ClamAV daemon (`clamd`) TCP address (e.g. `"127.0.0.1:3310"`).
+    /// When set, uploaded files are streamed to clamd via the INSTREAM protocol
+    /// for full antivirus scanning. When unset, the built-in pure-Rust
+    /// signature scanner is used (which always detects the EICAR test file plus
+    /// any `malware_signatures` configured below).
+    pub clamd_address: Option<String>,
+    /// Extra hex-encoded byte signatures the built-in scanner treats as
+    /// malicious (matched anywhere in the file). The EICAR test signature is
+    /// always included regardless of this list.
+    pub malware_signatures: Vec<String>,
     /// Cloud storage configuration
     pub cloud_storage: Option<CloudStorageConfig>,
     /// Enable progress tracking
@@ -85,6 +95,8 @@ impl Default for FileUploadConfig {
             allowed_extensions: None,
             upload_dir: std::env::temp_dir().join("oxirs-uploads"),
             enable_virus_scan: false,
+            clamd_address: None,
+            malware_signatures: Vec::new(),
             cloud_storage: None,
             enable_progress_tracking: true,
         }
@@ -498,14 +510,21 @@ impl FileUploadManager {
         }
     }
 
-    /// Scan file for viruses
+    /// Scan a file for malware.
     ///
-    /// This method provides a framework for virus scanning integration.
-    /// To enable actual scanning, integrate with:
-    /// - ClamAV: Open-source antivirus engine
-    /// - VirusTotal API: Multi-scanner service
-    /// - AWS Macie: Cloud-native malware detection
-    /// - Google Cloud DLP: Data loss prevention with malware detection
+    /// When `enable_virus_scan` is false this is a no-op. When enabled it
+    /// performs a *real* scan — never a no-op that merely claims success:
+    ///
+    /// - If `clamd_address` is configured, the file is streamed to a ClamAV
+    ///   daemon over the INSTREAM protocol and a `FOUND` verdict (or any
+    ///   inability to reach/interpret clamd) is an error (fail-closed).
+    /// - Otherwise the built-in pure-Rust signature scanner inspects the file
+    ///   bytes against the EICAR test signature and any configured
+    ///   `malware_signatures`, returning an error on a match.
+    ///
+    /// A file that exceeds the scanner's size budget is *rejected*, not waved
+    /// through, so `enable_virus_scan = true` can never silently pass unscanned
+    /// data.
     async fn scan_file(&self, path: &Path) -> Result<()> {
         if !self.config.enable_virus_scan {
             return Ok(());
@@ -514,36 +533,44 @@ impl FileUploadManager {
         let timer = Timer::new("file_scan_duration".to_string());
         let _timer_guard = timer.start();
 
-        // Basic file validation
         if !path.exists() {
             tracing::error!("File not found for scanning: {:?}", path);
             return Err(anyhow!("File not found for scanning: {:?}", path));
         }
 
-        // Check file size for scanning (files > 500MB might timeout)
+        // Upper bound on how much data we will scan in one pass. Anything larger
+        // is rejected rather than skipped — the alternative (accepting it
+        // unscanned) would defeat the purpose of enabling scanning.
+        const MAX_SCAN_BYTES: u64 = 500 * 1024 * 1024;
         let metadata = fs::metadata(path).await?;
-        if metadata.len() > 500 * 1024 * 1024 {
+        if metadata.len() > MAX_SCAN_BYTES {
             tracing::warn!(
-                "File too large for virus scanning: {:?} ({} bytes)",
+                "File too large for virus scanning: {:?} ({} bytes); rejecting",
                 path,
                 metadata.len()
             );
-            // Skip scanning for very large files, but don't fail
+            return Err(anyhow!(
+                "File exceeds the {} byte virus-scanning limit and cannot be verified",
+                MAX_SCAN_BYTES
+            ));
+        }
+
+        let data = fs::read(path).await?;
+
+        // Prefer a real ClamAV daemon when configured.
+        if let Some(addr) = &self.config.clamd_address {
+            scan_with_clamd(addr, &data).await?;
+            tracing::info!("clamd virus scan clean for: {:?}", path);
             return Ok(());
         }
 
-        // Placeholder for actual virus scanning integration
-        // Example ClamAV integration:
-        // let scan_result = clamav_scan(path).await?;
-        // if scan_result.is_infected() {
-        //     tracing::warn!("Virus detected in file: {:?} - {}", path, scan_result.virus_name);
-        //     return Err(anyhow!("Virus detected: {}", scan_result.virus_name));
-        // }
+        // Built-in signature scanner.
+        if let Some(name) = builtin_signature_scan(&data, &self.config.malware_signatures)? {
+            tracing::warn!("Malware signature '{}' detected in file: {:?}", name, path);
+            return Err(anyhow!("Virus detected: {name}"));
+        }
 
-        // For now, just log and return Ok
-        tracing::info!("Virus scan completed for: {:?}", path);
-        // Timer guard will automatically record duration when dropped
-
+        tracing::info!("Signature virus scan clean for: {:?}", path);
         Ok(())
     }
 
@@ -1119,6 +1146,114 @@ impl Upload {
     }
 }
 
+/// The industry-standard EICAR antivirus test signature. Any conforming
+/// scanner must flag a file containing this exact byte string; the built-in
+/// scanner uses it as its baseline detection.
+const EICAR_SIGNATURE: &[u8] =
+    br#"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"#;
+
+/// Built-in pure-Rust signature scanner.
+///
+/// Returns `Ok(Some(name))` when a malicious signature is found (the caller
+/// then rejects the file), `Ok(None)` when no configured signature matches, and
+/// `Err` only for a malformed configuration (a non-hex custom signature) — a
+/// misconfiguration must surface loudly rather than silently disable a rule.
+fn builtin_signature_scan(data: &[u8], extra_signatures: &[String]) -> Result<Option<String>> {
+    if contains_subslice(data, EICAR_SIGNATURE) {
+        return Ok(Some("EICAR-Test-Signature".to_string()));
+    }
+
+    for (idx, sig_hex) in extra_signatures.iter().enumerate() {
+        let sig = hex::decode(sig_hex.trim()).map_err(|e| {
+            anyhow!("Invalid hex malware signature at index {idx} ('{sig_hex}'): {e}")
+        })?;
+        if sig.is_empty() {
+            continue;
+        }
+        if contains_subslice(data, &sig) {
+            return Ok(Some(format!("Custom-Signature-{idx}")));
+        }
+    }
+
+    Ok(None)
+}
+
+/// Naive substring search over bytes (Rabin-Karp is overkill for the small
+/// signature set involved here).
+fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return false;
+    }
+    haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+/// Stream `data` to a ClamAV daemon (`clamd`) over the INSTREAM protocol and
+/// return `Ok(())` only for a clean verdict.
+///
+/// Any inability to reach clamd, malformed response, or `FOUND` verdict is an
+/// error so a scanning outage fails closed instead of accepting unscanned data.
+async fn scan_with_clamd(address: &str, data: &[u8]) -> Result<()> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+
+    let mut stream = TcpStream::connect(address)
+        .await
+        .map_err(|e| anyhow!("Failed to connect to clamd at {address}: {e}"))?;
+
+    // Begin an INSTREAM session.
+    stream
+        .write_all(b"zINSTREAM\0")
+        .await
+        .map_err(|e| anyhow!("clamd write (INSTREAM) failed: {e}"))?;
+
+    // Send the payload in bounded chunks: each chunk is a 4-byte big-endian
+    // length prefix followed by the bytes. A zero-length chunk terminates.
+    const CHUNK: usize = 64 * 1024;
+    for chunk in data.chunks(CHUNK) {
+        let len = u32::try_from(chunk.len()).map_err(|_| anyhow!("clamd chunk length overflow"))?;
+        stream
+            .write_all(&len.to_be_bytes())
+            .await
+            .map_err(|e| anyhow!("clamd write (chunk len) failed: {e}"))?;
+        stream
+            .write_all(chunk)
+            .await
+            .map_err(|e| anyhow!("clamd write (chunk) failed: {e}"))?;
+    }
+    // Zero-length terminator.
+    stream
+        .write_all(&0u32.to_be_bytes())
+        .await
+        .map_err(|e| anyhow!("clamd write (terminator) failed: {e}"))?;
+    stream
+        .flush()
+        .await
+        .map_err(|e| anyhow!("clamd flush failed: {e}"))?;
+
+    // Read the verdict, e.g. "stream: OK" or "stream: <Name> FOUND".
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .await
+        .map_err(|e| anyhow!("clamd read failed: {e}"))?;
+    let response = String::from_utf8_lossy(&response);
+    let response = response.trim().trim_end_matches('\0').trim();
+
+    if response.ends_with("OK") && !response.contains("FOUND") {
+        Ok(())
+    } else if let Some(rest) = response.strip_suffix("FOUND") {
+        let name = rest
+            .trim()
+            .strip_prefix("stream:")
+            .unwrap_or(rest)
+            .trim()
+            .to_string();
+        Err(anyhow!("Virus detected by clamd: {name}"))
+    } else {
+        Err(anyhow!("Unexpected clamd response: '{response}'"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1266,5 +1401,69 @@ mod tests {
 
         let result = manager.process_batch_upload(files).await;
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn regression_builtin_scanner_detects_eicar() {
+        let mut data = b"harmless prefix ".to_vec();
+        data.extend_from_slice(EICAR_SIGNATURE);
+        let found = builtin_signature_scan(&data, &[]).expect("scan ok");
+        assert_eq!(found.as_deref(), Some("EICAR-Test-Signature"));
+    }
+
+    #[test]
+    fn regression_builtin_scanner_clean_file_passes() {
+        let data = b"a perfectly ordinary text file with no malware".to_vec();
+        assert!(builtin_signature_scan(&data, &[])
+            .expect("scan ok")
+            .is_none());
+    }
+
+    #[test]
+    fn regression_builtin_scanner_custom_signature() {
+        // Custom signature: the bytes "DEADBEEF".
+        let sig_hex = "deadbeef";
+        let mut data = vec![0u8, 1, 2];
+        data.extend_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
+        let found = builtin_signature_scan(&data, &[sig_hex.to_string()]).expect("scan ok");
+        assert_eq!(found.as_deref(), Some("Custom-Signature-0"));
+    }
+
+    #[test]
+    fn regression_builtin_scanner_bad_hex_signature_fails_loud() {
+        let data = b"whatever".to_vec();
+        // Not valid hex => configuration error must surface.
+        assert!(builtin_signature_scan(&data, &["nothex!!".to_string()]).is_err());
+    }
+
+    #[tokio::test]
+    async fn regression_scan_file_rejects_eicar_when_enabled() {
+        let dir = std::env::temp_dir().join(format!("oxirs-gql-scan-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(&dir).await.expect("mkdir");
+        let file = dir.join("eicar.txt");
+        tokio::fs::write(&file, EICAR_SIGNATURE)
+            .await
+            .expect("write eicar");
+
+        let config = FileUploadConfig {
+            enable_virus_scan: true,
+            upload_dir: dir.clone(),
+            ..Default::default()
+        };
+        let manager = FileUploadManager::new(config).expect("manager");
+        let result = manager.scan_file(&file).await;
+        assert!(
+            result.is_err(),
+            "an EICAR file must be rejected when virus scanning is enabled"
+        );
+
+        // A clean file must pass.
+        let clean = dir.join("clean.txt");
+        tokio::fs::write(&clean, b"totally clean content")
+            .await
+            .expect("write clean");
+        assert!(manager.scan_file(&clean).await.is_ok());
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 }

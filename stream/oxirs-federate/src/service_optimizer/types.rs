@@ -1,7 +1,7 @@
 //! Type definitions for service optimization
 
 #[cfg(feature = "caching")]
-use bloom::BloomFilter as ExternalBloomFilter;
+use fastbloom::BloomFilter as ExternalBloomFilter;
 
 #[cfg(not(feature = "caching"))]
 mod cache_stubs {
@@ -510,8 +510,11 @@ impl std::fmt::Debug for ServiceBloomFilter {
 
 impl Clone for ServiceBloomFilter {
     fn clone(&self) -> Self {
-        // Note: bloom::BloomFilter doesn't implement Clone, so we create new ones
-        // This is a limitation - in practice you might want to use a different bloom filter crate
+        // Note: this intentionally creates fresh, empty filters rather than
+        // deep-cloning the bit sets (matching this type's prior behavior under
+        // the `bloom` crate, which lacked a `Clone` impl entirely). fastbloom's
+        // `BloomFilter` does implement `Clone` if a true deep-clone is wanted
+        // in the future.
         Self {
             service_id: self.service_id.clone(),
             predicate: self.predicate.clone(),
@@ -519,8 +522,8 @@ impl Clone for ServiceBloomFilter {
             hash_functions: self.hash_functions,
             false_positive_rate: self.false_positive_rate,
             estimated_cardinality: self.estimated_cardinality,
-            predicate_filter: ExternalBloomFilter::with_rate(0.01, 1000), // Create new filter with default params
-            resource_filter: ExternalBloomFilter::with_rate(0.01, 1000), // Create new filter with default params
+            predicate_filter: ExternalBloomFilter::with_false_pos(0.01).expected_items(1000), // Create new filter with default params
+            resource_filter: ExternalBloomFilter::with_false_pos(0.01).expected_items(1000), // Create new filter with default params
             last_updated: self.last_updated,
             estimated_elements: self.estimated_elements,
         }

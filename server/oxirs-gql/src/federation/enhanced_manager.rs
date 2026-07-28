@@ -1170,93 +1170,161 @@ impl EnhancedFederationManager {
         })
     }
 
-    /// Merge results from multiple services
+    /// Merge results from multiple subgraph services into a single response.
+    ///
+    /// A flat top-level key union (the previous behaviour) silently dropped an
+    /// entire subgraph's contribution whenever two subgraphs shared a top-level
+    /// field name (e.g. both wrap their payload under `data`, or both expose an
+    /// extended entity), because one `insert` clobbered the other in
+    /// unordered `HashMap` iteration order.
+    ///
+    /// Instead we deterministically (sorted by endpoint id) *deep*-merge each
+    /// subgraph's object payload: disjoint fields are unioned, and objects that
+    /// appear at the same path in multiple subgraphs (the Apollo Federation
+    /// entity-extension case) have their fields merged recursively rather than
+    /// one replacing the other.
     async fn merge_results(
         &self,
         results: &HashMap<String, serde_json::Value>,
         _plan: &QueryPlan,
     ) -> Result<serde_json::Value> {
-        // Simple merge for now - in a real implementation this would be more sophisticated
         if results.len() == 1 {
-            Ok(results
+            return results
                 .values()
                 .next()
-                .expect("results should not be empty when len == 1")
-                .clone())
-        } else {
-            // Merge multiple results
-            let mut merged = serde_json::Map::new();
-            for result in results.values() {
-                if let Some(obj) = result.as_object() {
-                    for (key, value) in obj {
-                        merged.insert(key.clone(), value.clone());
+                .cloned()
+                .ok_or_else(|| anyhow!("federated result map was unexpectedly empty"));
+        }
+
+        // Deterministic merge order so the output is reproducible.
+        let mut endpoint_ids: Vec<&String> = results.keys().collect();
+        endpoint_ids.sort();
+
+        let mut merged = serde_json::Value::Object(serde_json::Map::new());
+        for id in endpoint_ids {
+            if let Some(value) = results.get(id) {
+                Self::deep_merge_json(&mut merged, value);
+            }
+        }
+        Ok(merged)
+    }
+
+    /// Recursively merge `source` into `target`.
+    ///
+    /// - Two objects: merge key-by-key, recursing into shared keys.
+    /// - Two arrays: concatenate.
+    /// - Otherwise (`target` empty/null, or a leaf conflict): `source` fills an
+    ///   absent/null slot but never overwrites an existing non-null leaf, so no
+    ///   subgraph's data is silently discarded.
+    fn deep_merge_json(target: &mut serde_json::Value, source: &serde_json::Value) {
+        use serde_json::Value;
+        match (target, source) {
+            (Value::Object(t), Value::Object(s)) => {
+                for (k, v) in s {
+                    match t.get_mut(k) {
+                        Some(existing) => Self::deep_merge_json(existing, v),
+                        None => {
+                            t.insert(k.clone(), v.clone());
+                        }
                     }
                 }
             }
-            Ok(serde_json::Value::Object(merged))
+            (Value::Array(t), Value::Array(s)) => {
+                t.extend(s.iter().cloned());
+            }
+            (t @ Value::Null, s) => {
+                *t = s.clone();
+            }
+            // Leaf-vs-leaf (or type mismatch): keep the first non-null value we
+            // saw to stay deterministic; do not clobber established data.
+            _ => {}
         }
     }
 
     /// Rebuild the merged schema from all discovered services
     async fn rebuild_schema(&self) -> Result<()> {
-        info!("Rebuilding federated schema");
-
-        let services = self.service_discovery.get_healthy_services().await;
-        let endpoints: Vec<RemoteEndpoint> = services
-            .into_iter()
-            .map(|service| RemoteEndpoint {
-                id: service.id,
-                url: service.url,
-                namespace: Some(service.name),
-                auth_header: None,
-                timeout_secs: 30,
-                max_retries: 3,
-                retry_strategy: RetryStrategy::ExponentialBackoff {
-                    initial_delay_ms: 100,
-                    max_delay_ms: 5000,
-                    multiplier: 2.0,
-                },
-                health_check_url: None,
-                priority: 0,
-                schema_version: service.federation_version,
-                min_compatible_version: None,
-            })
-            .collect();
-
-        let merged_schema = self.schema_stitcher.merge_schemas(&endpoints).await?;
-
-        {
-            let mut schema_guard = self.merged_schema.write().await;
-            *schema_guard = Some(merged_schema);
-        }
-
-        info!("Schema rebuilt successfully");
-        Ok(())
+        rebuild_federated_schema(
+            &self.service_discovery,
+            &self.schema_stitcher,
+            &self.merged_schema,
+        )
+        .await
     }
 
-    /// Set up event handling for service discovery
+    /// Set up event handling for service discovery.
+    ///
+    /// Registers a [`SchemaRebuildHandler`] with the service-discovery engine so
+    /// that a subgraph registering, deregistering, or changing health triggers a
+    /// real rebuild of the merged federated schema. The handler holds `Arc`
+    /// clones of exactly the shared state `rebuild_schema` needs
+    /// (`service_discovery`, `schema_stitcher`, `merged_schema`) — no raw
+    /// pointer to `self`, so there is no lifetime hazard and no `unsafe`.
     async fn setup_event_handling(&self) -> Result<()> {
-        let _schema_rebuild_handler = SchemaRebuildHandler {
-            manager: self as *const Self,
+        let handler = SchemaRebuildHandler {
+            service_discovery: Arc::clone(&self.service_discovery),
+            schema_stitcher: Arc::clone(&self.schema_stitcher),
+            merged_schema: Arc::clone(&self.merged_schema),
         };
-
-        // Note: In a real implementation, we'd need to properly handle the lifetime
-        // This is a simplified version for demonstration
-        info!("Service discovery event handling configured");
+        self.service_discovery
+            .add_event_handler(Box::new(handler))
+            .await;
+        info!("Service discovery event handling configured (dynamic re-federation active)");
         Ok(())
     }
 }
 
-/// Handler for schema rebuild events
-#[allow(dead_code)]
-struct SchemaRebuildHandler {
-    #[allow(dead_code)]
-    manager: *const EnhancedFederationManager,
+/// Rebuild the merged federated schema from all currently-healthy services.
+///
+/// Shared by [`EnhancedFederationManager::rebuild_schema`] and the
+/// discovery-event [`SchemaRebuildHandler`], so both paths produce identical
+/// results.
+async fn rebuild_federated_schema(
+    service_discovery: &Arc<ServiceDiscovery>,
+    schema_stitcher: &Arc<SchemaStitcher>,
+    merged_schema: &Arc<RwLock<Option<Schema>>>,
+) -> Result<()> {
+    info!("Rebuilding federated schema");
+
+    let services = service_discovery.get_healthy_services().await;
+    let endpoints: Vec<RemoteEndpoint> = services
+        .into_iter()
+        .map(|service| RemoteEndpoint {
+            id: service.id,
+            url: service.url,
+            namespace: Some(service.name),
+            auth_header: None,
+            timeout_secs: 30,
+            max_retries: 3,
+            retry_strategy: RetryStrategy::ExponentialBackoff {
+                initial_delay_ms: 100,
+                max_delay_ms: 5000,
+                multiplier: 2.0,
+            },
+            health_check_url: None,
+            priority: 0,
+            schema_version: service.federation_version,
+            min_compatible_version: None,
+        })
+        .collect();
+
+    let schema = schema_stitcher.merge_schemas(&endpoints).await?;
+
+    {
+        let mut schema_guard = merged_schema.write().await;
+        *schema_guard = Some(schema);
+    }
+
+    info!("Schema rebuilt successfully");
+    Ok(())
 }
 
-// Note: This is not safe in practice - just for demonstration
-unsafe impl Send for SchemaRebuildHandler {}
-unsafe impl Sync for SchemaRebuildHandler {}
+/// Handler that rebuilds the merged federated schema in response to
+/// service-discovery topology / health changes.
+struct SchemaRebuildHandler {
+    service_discovery: Arc<ServiceDiscovery>,
+    schema_stitcher: Arc<SchemaStitcher>,
+    merged_schema: Arc<RwLock<Option<Schema>>>,
+}
 
 #[async_trait]
 impl ServiceDiscoveryEventHandler for SchemaRebuildHandler {
@@ -1265,8 +1333,17 @@ impl ServiceDiscoveryEventHandler for SchemaRebuildHandler {
             DiscoveryEvent::ServiceRegistered(_)
             | DiscoveryEvent::ServiceDeregistered(_)
             | DiscoveryEvent::HealthChanged { .. } => {
-                // In a real implementation, we'd safely access the manager
-                info!("Service discovery event received, would trigger schema rebuild");
+                info!("Service discovery event received; rebuilding federated schema");
+                if let Err(e) = rebuild_federated_schema(
+                    &self.service_discovery,
+                    &self.schema_stitcher,
+                    &self.merged_schema,
+                )
+                .await
+                {
+                    warn!("Failed to rebuild federated schema after discovery event: {e}");
+                    return Err(e);
+                }
                 Ok(())
             }
             _ => Ok(()),
@@ -1341,5 +1418,41 @@ mod tests {
         breaker.record_failure();
         assert!(!breaker.can_execute());
         assert_eq!(breaker.state(), CircuitBreakerState::Open);
+    }
+
+    #[test]
+    fn regression_deep_merge_preserves_both_subgraphs_under_shared_key() {
+        // Two subgraphs both wrap payload under `data` with disjoint fields.
+        let mut merged = serde_json::json!({});
+        let a = serde_json::json!({"data": {"product": {"id": "1"}}});
+        let b = serde_json::json!({"data": {"review": {"stars": 5}}});
+        EnhancedFederationManager::deep_merge_json(&mut merged, &a);
+        EnhancedFederationManager::deep_merge_json(&mut merged, &b);
+
+        // Neither subgraph's contribution may be lost.
+        assert_eq!(merged["data"]["product"]["id"], serde_json::json!("1"));
+        assert_eq!(merged["data"]["review"]["stars"], serde_json::json!(5));
+    }
+
+    #[test]
+    fn regression_deep_merge_entity_extension_merges_fields() {
+        // Apollo Federation entity extension: same entity, different fields.
+        let mut merged = serde_json::json!({});
+        let base = serde_json::json!({"product": {"id": "1", "name": "Widget"}});
+        let ext = serde_json::json!({"product": {"id": "1", "price": 9.99}});
+        EnhancedFederationManager::deep_merge_json(&mut merged, &base);
+        EnhancedFederationManager::deep_merge_json(&mut merged, &ext);
+
+        assert_eq!(merged["product"]["name"], serde_json::json!("Widget"));
+        assert_eq!(merged["product"]["price"], serde_json::json!(9.99));
+        assert_eq!(merged["product"]["id"], serde_json::json!("1"));
+    }
+
+    #[test]
+    fn regression_deep_merge_concatenates_arrays() {
+        let mut merged = serde_json::json!({"items": [1, 2]});
+        let more = serde_json::json!({"items": [3, 4]});
+        EnhancedFederationManager::deep_merge_json(&mut merged, &more);
+        assert_eq!(merged["items"], serde_json::json!([1, 2, 3, 4]));
     }
 }

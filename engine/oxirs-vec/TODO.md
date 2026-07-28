@@ -1,6 +1,6 @@
 # OxiRS Vec - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
@@ -29,7 +29,7 @@ OxiRS Vec provides comprehensive vector search infrastructure for semantic simil
 - **Write-Ahead Logging** - Crash recovery with WAL support
 - **Persistence** - Zstd compression, incremental checkpointing
 - **Monitoring** - Performance metrics, alerting, health monitoring
-- **1754 tests passing** with zero warnings
+- **1790 tests passing** with zero warnings
 
 ### Key Capabilities
 
@@ -92,7 +92,7 @@ Production-ready guides available in `/docs`:
 - [x] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein) (completed 2026-05-17 via RFC-002)
 - [x] Comprehensive benchmarks (completed 2026-04-29)
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 26, 2026)
 - [x] `real_time_embedding_pipeline` gains a full consistency/versioning/monitoring stack: `consistency` (inconsistency repair engine with severity-based outcomes), `versioning` (per-ID embedding version history with configurable retention), rewritten `monitoring` (metrics collection, health checks, severity-throttled alerting) — all four submodules (`consistency`, `versioning`, `monitoring`, `coordination`) now compiled and wired live into `RealTimeEmbeddingPipeline`, previously declared but commented out as unimplemented
 - [x] CUDA backend quarantined into the companion `oxirs-vec-adapter-cuda` crate (`publish = false`) per the COOLJAPAN Pure Rust Policy v2; the `cuda` and `gpu-full` Cargo features were removed, and the legacy duplicate `gpu_acceleration` module (945 lines) was deleted in favor of the `gpu` module
 
@@ -102,4 +102,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Vec v0.3.2 - Vector search infrastructure*
+*OxiRS Vec v0.4.1 - Vector search infrastructure*

@@ -42,7 +42,12 @@ mod tests {
         assert_eq!(dst.len(), pre + n);
 
         let mut dec = crate::bulk::Decompressor::new().expect("dec");
-        let mut out = Vec::new();
+        // `Decompressor::decompress_to_buffer` bounds allocation by the spare
+        // capacity already reserved in `destination` (decompression-bomb
+        // guard), mirroring the real `zstd::bulk::Decompressor` contract, so
+        // callers must reserve up front rather than relying on unbounded
+        // auto-growth.
+        let mut out = Vec::with_capacity(data.len());
         dec.decompress_to_buffer(&dst[pre..], &mut out).expect("decompress");
         assert_eq!(out, data);
 

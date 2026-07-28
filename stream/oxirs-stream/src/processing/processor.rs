@@ -6,10 +6,7 @@
 //! - Watermark handling
 //! - Late event processing
 
-use super::{
-    aggregation::AggregationManager,
-    window::{EventWindow, Watermark, WindowConfig, WindowResult},
-};
+use super::window::{EventWindow, Watermark, WindowConfig, WindowResult};
 use crate::StreamEvent;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
@@ -92,7 +89,6 @@ pub struct EventProcessor {
     stats: ProcessorStats,
     config: ProcessorConfig,
     watermark_manager: Watermark,
-    aggregation_manager: AggregationManager,
 }
 
 impl EventProcessor {
@@ -105,7 +101,6 @@ impl EventProcessor {
             stats: ProcessorStats::default(),
             config,
             watermark_manager: Watermark::default(),
-            aggregation_manager: AggregationManager::default(),
         }
     }
 
@@ -182,8 +177,10 @@ impl EventProcessor {
             .get(window_id)
             .ok_or_else(|| anyhow!("Window not found: {}", window_id))?;
 
-        // Calculate aggregations
-        let aggregations = self.aggregation_manager.results()?;
+        // Calculate aggregations from the window that is actually triggering.
+        // Each window maintains its own aggregation state (populated as events
+        // are added), so results reflect the events that fell into this window.
+        let aggregations = window.aggregation_results()?;
 
         let result = WindowResult {
             window_id: window_id.to_string(),

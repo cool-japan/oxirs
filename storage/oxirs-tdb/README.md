@@ -1,10 +1,10 @@
 # OxiRS TDB - High-Performance RDF Storage Engine
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status**: v0.4.0 - Release preparation 2026-07-19 (2155 tests passing)
+**Status**: v0.4.1 - Released 2026-07-26 (2166 tests passing)
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -19,7 +19,7 @@ A high-performance, ACID-compliant RDF storage engine with multi-version concurr
 - **Advanced Page Management**: LRU buffer pools with efficient memory management
 - **Crash Recovery**: ARIES-style write-ahead logging with analysis/redo/undo phases
 
-### Durability & Crash Recovery (v0.4.0)
+### Durability & Crash Recovery (v0.4.1)
 
 `TdbStore` mutations are now durable through an integrated write-ahead log
 (`TdbConfig.enable_wal`, **default `true`**):
@@ -102,7 +102,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-tdb = "0.4.0"
+oxirs-tdb = "0.4.1"
 ```
 
 ### Basic Usage

@@ -1,8 +1,8 @@
 # OxiRS Federate - Federated Query Processing
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.4.0 - Released 2026-07-19
+**Status**: v0.4.1 - Released 2026-07-28
 
 ✨ **Features Complete!** All Release Targets implemented. APIs stable. Ready for promotion.
 
@@ -39,10 +39,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Features complete - APIs stable
 [dependencies]
-oxirs-federate = "0.3.2"
+oxirs-federate = "0.4.1"
 
 # Optional: Pure-Rust GPU acceleration for query processing (off by default)
-oxirs-federate = { version = "0.3.2", features = ["gpu"] }
+oxirs-federate = { version = "0.4.1", features = ["gpu"] }
 ```
 
 > **Note on the sections below:** "Quick Start" through "Service Discovery" sketch a
@@ -477,7 +477,7 @@ println!("SPARQL endpoint: {}", description.sparql_endpoint);
 
 ## Status
 
-### Production Release (v0.3.2) - Features Complete!
+### Production Release (v0.4.1) - Features Complete!
 - ✅ **Distributed Transactions** - 2PC and Saga patterns with automatic compensation
 - ✅ **Advanced Authentication** - OAuth2, SAML, JWT, API keys, Basic, Service-to-Service
 - ✅ **ML-Driven Optimization** - Intelligent source selection and query planning
@@ -487,7 +487,7 @@ println!("SPARQL endpoint: {}", description.sparql_endpoint);
 - ✅ **NATS Federation Messaging** - Type-based dispatch of inbound `FederationMessage`s to registered `FederationMessageHandler`s via `register_handler()`
 - ✅ **GPU-Accelerated Query Processing** - Optional Pure-Rust `gpu` feature (`scirs2-core/gpu`), off by default
 - ✅ **Load Balancing** - Adaptive algorithms with health-aware routing
-- ✅ **1,555 Passing Tests** - Comprehensive test coverage with zero warnings
+- ✅ **1,576 Passing Tests** - Comprehensive test coverage with zero warnings
 
 ## Contributing
 

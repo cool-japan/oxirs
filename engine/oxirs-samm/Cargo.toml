@@ -54,6 +54,7 @@ tracing-subscriber = { workspace = true, features = ["json", "env-filter"] }
 url.workspace = true
 once_cell.workspace = true
 regex.workspace = true
+lru.workspace = true
 bytecount = "0.6"
 reqwest.workspace = true
 sha2.workspace = true

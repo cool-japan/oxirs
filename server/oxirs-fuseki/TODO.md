@@ -1,10 +1,10 @@
 # OxiRS Fuseki - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Current Status
 
-OxiRS Fuseki v0.3.2 is production-ready, providing a complete SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility and modern enhancements.
+OxiRS Fuseki v0.4.1 is production-ready, providing a complete SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility and modern enhancements.
 
 ### Production Features
 - ✅ **SPARQL 1.1/1.2 Protocol** - Full W3C compliance with query and update support
@@ -22,7 +22,7 @@ OxiRS Fuseki v0.3.2 is production-ready, providing a complete SPARQL 1.1/1.2 HTT
 - ✅ **OAuth2 Refresh Token Rotation** - Replay detection and secure rotation
 - ✅ **Query Logger** - Structured query audit logging
 - ✅ **Audit Log Export** - `GET /$/audit/log` and `/$/audit/log/stats` (JSON/JSONL/CSV, filtered)
-- ✅ **2350 tests passing** with zero warnings
+- ✅ **2548 tests passing** with zero warnings
 
 ## Roadmap
 
@@ -87,7 +87,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Fuseki v0.3.2 - Production-ready SPARQL server*
+*OxiRS Fuseki v0.4.1 - Production-ready SPARQL server*
 
 ## Proposed follow-ups
 

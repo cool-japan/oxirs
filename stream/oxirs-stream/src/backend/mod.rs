@@ -121,10 +121,11 @@ pub mod memory;
 #[cfg(feature = "redis")]
 pub mod redis;
 
-// NOTE: the Kafka (`kafka`, `kafka_schema_registry`) and Pulsar (`pulsar`) backend
-// modules were quarantined into the publish=false `oxirs-stream-adapter-rdkafka` and
-// `oxirs-stream-adapter-pulsar` crates per COOLJAPAN Pure Rust Policy v2 (they pulled
-// rdkafka-sys/libz-sys and native-tls/lz4-sys respectively).
+// NOTE: the Pulsar (`pulsar`) backend module was quarantined into the publish=false
+// `oxirs-stream-adapter-pulsar` crate per COOLJAPAN Pure Rust Policy v2 (native-tls
+// and lz4-sys). The Kafka backend went through the same quarantine and was then
+// removed outright in 0.4.1; its Schema Registry client survives as the Pure-Rust
+// `crate::confluent_registry`.
 
 #[cfg(feature = "nats")]
 pub mod nats;

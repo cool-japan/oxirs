@@ -85,6 +85,15 @@ impl GdprService {
     /// | `actor.ip_address` | [`AuditActor`](super::event::AuditActor) |
     /// | `actor.session_id` | [`AuditActor`](super::event::AuditActor) |
     /// | `data_subject_id` | [`AuditEvent`] |
+    /// | every value in `metadata` | [`AuditEvent`] |
+    ///
+    /// The `metadata` map is documented to hold arbitrary free-form context
+    /// (e.g. SPARQL query text) which can embed the very PII — names, emails,
+    /// identifiers used in `FILTER` clauses — that Article 17 must erase. Since
+    /// the service cannot know which values are PII, **all** metadata values are
+    /// redacted to `"[redacted]"` while the keys are preserved so the audit
+    /// skeleton (which context fields existed) remains intact. Callers needing
+    /// selective scrubbing should use [`pseudonymise_with`](Self::pseudonymise_with).
     ///
     /// The event itself is **not deleted** — deleting records would break the
     /// audit chain required by SOC2. Instead, PII is replaced in-place while
@@ -93,6 +102,31 @@ impl GdprService {
     ///
     /// Returns the count of events that were modified.
     pub fn pseudonymise(events: &mut [AuditEvent], data_subject_id: &str) -> usize {
+        // Default policy: redact every metadata value (fail-safe erasure).
+        Self::pseudonymise_with(events, data_subject_id, |_key, _value| {
+            "[redacted]".to_string()
+        })
+    }
+
+    /// **GDPR Article 17** — Pseudonymise PII fields with a caller-supplied
+    /// metadata scrubber.
+    ///
+    /// Behaves like [`pseudonymise`](Self::pseudonymise) for the fixed actor and
+    /// subject fields, but delegates the treatment of each `metadata` entry to
+    /// `scrub_metadata`, invoked as `scrub_metadata(key, current_value)` and
+    /// expected to return the replacement value. This lets a caller preserve
+    /// non-PII operational metadata (e.g. `bytes_transferred`) while redacting
+    /// free-form fields (e.g. `query_text`).
+    ///
+    /// Returns the count of events that were modified.
+    pub fn pseudonymise_with<F>(
+        events: &mut [AuditEvent],
+        data_subject_id: &str,
+        mut scrub_metadata: F,
+    ) -> usize
+    where
+        F: FnMut(&str, &str) -> String,
+    {
         let mut count = 0usize;
         for event in events.iter_mut() {
             if event.data_subject_id.as_deref() == Some(data_subject_id) {
@@ -100,9 +134,95 @@ impl GdprService {
                 event.actor.ip_address = Some("[redacted]".to_string());
                 event.actor.session_id = Some("[redacted]".to_string());
                 event.data_subject_id = Some("[redacted]".to_string());
+                for (key, value) in event.metadata.iter_mut() {
+                    *value = scrub_metadata(key, value);
+                }
                 count += 1;
             }
         }
         count
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audit::event::{ActorType, AuditActor, AuditEventKind, AuditOutcome, AuditResource};
+
+    fn sample_event(subject: &str, query_text: &str) -> AuditEvent {
+        AuditEvent::new(
+            AuditEventKind::DataAccess,
+            "sparql.select",
+            AuditActor {
+                actor_id: "admin-1".to_string(),
+                actor_type: ActorType::User,
+                ip_address: Some("203.0.113.7".to_string()),
+                session_id: Some("sess-abc".to_string()),
+            },
+            AuditResource {
+                resource_type: "query".to_string(),
+                resource_id: "q-1".to_string(),
+                tenant_id: None,
+            },
+            AuditOutcome::Success,
+        )
+        .with_metadata("query_text", query_text)
+        .with_metadata("bytes_transferred", "4096")
+        .with_data_subject(subject)
+    }
+
+    #[test]
+    fn regression_pseudonymise_scrubs_metadata_pii() {
+        // Metadata carries the subject's PII inside SPARQL query text.
+        let mut events = vec![sample_event(
+            "alice@example.org",
+            "SELECT ?x WHERE { ?x <mbox> \"alice@example.org\" }",
+        )];
+
+        let modified = GdprService::pseudonymise(&mut events, "alice@example.org");
+        assert_eq!(modified, 1);
+
+        let ev = &events[0];
+        // Fixed PII fields redacted.
+        assert_eq!(ev.actor.actor_id, "[redacted]");
+        assert_eq!(ev.actor.ip_address.as_deref(), Some("[redacted]"));
+        assert_eq!(ev.data_subject_id.as_deref(), Some("[redacted]"));
+
+        // Every metadata value must be redacted so embedded PII cannot survive.
+        for (key, value) in &ev.metadata {
+            assert_eq!(value, "[redacted]", "metadata[{key}] was not scrubbed");
+        }
+        // Keys are preserved so the audit skeleton remains.
+        assert!(ev.metadata.contains_key("query_text"));
+        assert!(ev.metadata.contains_key("bytes_transferred"));
+    }
+
+    #[test]
+    fn regression_pseudonymise_with_selective_scrubber() {
+        let mut events = vec![sample_event(
+            "bob@example.org",
+            "SELECT * WHERE { ?s ?p ?o }",
+        )];
+
+        // Preserve non-PII operational metadata, redact free-form query text.
+        let modified =
+            GdprService::pseudonymise_with(&mut events, "bob@example.org", |key, value| {
+                if key == "bytes_transferred" {
+                    value.to_string()
+                } else {
+                    "[redacted]".to_string()
+                }
+            });
+        assert_eq!(modified, 1);
+
+        let ev = &events[0];
+        assert_eq!(
+            ev.metadata.get("query_text").map(String::as_str),
+            Some("[redacted]")
+        );
+        assert_eq!(
+            ev.metadata.get("bytes_transferred").map(String::as_str),
+            Some("4096")
+        );
     }
 }

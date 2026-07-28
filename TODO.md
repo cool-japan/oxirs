@@ -1,10 +1,22 @@
 # OxiRS Development Roadmap
 
-*Version: 0.4.0 | Last Updated: July 19, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
-## Current Status: v0.4.0 - Release preparation (July 19, 2026)
+## Current Status: v0.4.1 - Released (July 28, 2026)
 
 **OxiRS** is an advanced AI-augmented semantic web platform built in Rust, delivering a production-ready alternative to Apache Jena + Fuseki with cutting-edge AI/ML capabilities.
+
+### Release Metrics (v0.4.1, July 28, 2026)
+- **Version**: 0.4.1
+- **Architecture**: 27-crate workspace (25 published library crates + the `oxirs` CLI + the `oxirs-tauri` desktop app; plus 3 opt-in `publish = false` C-FFI quarantine adapter crates and 1 internal `performance_validation` crate, neither counted above)
+- **Build Status**: Clean compilation - zero errors/warnings (`cargo clippy --workspace --all-targets -- -D warnings` clean; full workspace compiles clean)
+- **Test Status**: 46,255 tests passing with `--all-features` (45,408 with default features), 100% pass rate, 0 failed either way (up from 45,199 at v0.4.0)
+- **SLoC**: ~2.57M total lines / ~2.12M code lines across 5,532 Rust files (tokei)
+- **Headline change**: a workspace-wide production-readiness hardening pass — a 38-scope multi-agent audit surfaced 308 verified findings (62 P0, 131 P1, 115 P2); ~300 were implemented across 38 work packages, plus 74 test regressions caught by the full-suite gate and fixed, plus a follow-up chain of SPARQL-parser and storage fixes
+- **Also shipped**: (a) **SECURITY**: closed a full fuseki auth/authorization bypass (the `AuthUser` extractor never authenticated; `route_based_rbac` failed open; `/update` had no auth) — now correctly gated on `config.security.auth_required`; fixed X.509 client-cert trust to verify signatures, not just DN strings; fixed SPARQL injection in REST v2; added SSRF guards on SPARQL `LOAD`; GraphQL's "AES" cache encryption was a plaintext passthrough and its token validation always granted access — both fixed; DID/VC now checks revocation, consumes the auth challenge (anti-replay), and verifies ZKP selective-disclosure; SAML signature verification hardened against XML Signature Wrapping. (b) CORRECTNESS / no silent data loss: the core SPARQL parser no longer drops `FILTER` clauses; `Store::flush()` actually flushes; KGE model save/load is implemented (was a no-op); TransE/RotatE training loss sign corrected; the NATS consumer no longer acks before processing. (c) DE-FAKING: removed fabricated results from the W3C SHACL conformance harness, shacl-ai quality metrics, AutoML "training", and federated query planning (now really decomposes); the NATS producer fails loud instead of silent no-op; the jena-parity checker no longer advertises a native Kafka consumer/producer (that backend is gone). (d) SPARQL ENGINE: unified onto the real oxirs-arq path; multi-line `CONSTRUCT`/`SELECT`/`ASK`/`DESCRIBE` and `UPDATE` (newline before `WHERE`/braces, multi-`PREFIX` prologue) now parse correctly. (e) STORAGE: `oxirs-cluster` durable state-machine checkpointing (O(n²) → amortized O(1)); `oxirs-star` tiered-storage default directories are now instance-unique (fixed cross-process data leakage)
+- **C-FFI retired**: three of the six quarantine adapters are gone rather than merely opt-in. `oxirs-geosparql-adapter-geos` (GEOS) was replaced by `geo::algorithm::buffer` — an i_overlay-backed Pure-Rust path already in the tree that covers every geometry type and the full OGC cap/join styles — so `buffer`/`boundary` and the 8 boundary-dependent Egenhofer/RCC8 relations now work in the published crate and are registered in the SPARQL function registry by default (previously they errored). `oxirs-tsdb-adapter-duckdb` (DuckDB) was dropped with no replacement, together with the CLI's `tsdb-duckdb` feature and `oxirs tsdb duckdb` subcommand; export to Parquet via `arrow-export` and query with an external DuckDB. Also removed: oxirs-geosparql's `rust-buffer` feature, the `geo-buffer` dependency and `buffer_rust` (**breaking**). `oxirs-stream-adapter-rdkafka` was also retired together with the `StreamBackendType::Kafka` config variant — being `publish = false` it was unreachable from any release and nothing depended on it; its Confluent Schema Registry client never actually used `rdkafka` and now ships in `oxirs-stream` as `confluent_registry`.
+- **protoc removed**: oxirs-stream's `sparkplug` build script moved from `prost-build` to `oxiproto-build` (COOLJAPAN OxiProto), so building it no longer needs a separately installed `protoc`; generated types are unchanged
+- **Known follow-ups**: SPARQL `UPDATE USING`/`USING NAMED` is tokenized but not yet implemented (currently a fail-loud parse error); `storage/oxirs-cluster/src/raft.rs` is ~2457 lines (>2000-line policy) and is a refactor candidate
 
 ### Release Metrics (v0.4.0, July 19, 2026)
 - **Version**: 0.4.0

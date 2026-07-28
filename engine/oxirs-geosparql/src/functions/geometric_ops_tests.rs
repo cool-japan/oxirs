@@ -10,9 +10,6 @@ mod tests {
     use crate::geometry::Geometry;
     use geo_types::{Coord, Geometry as GeoGeometry, LineString, Point};
 
-    #[cfg(feature = "rust-buffer")]
-    use crate::functions::geometric_operations::buffer_rust;
-
     #[test]
     fn test_distance() {
         let p1 = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
@@ -245,21 +242,72 @@ mod tests {
     }
 
     #[test]
-    fn test_buffer_without_geos() {
+    fn test_buffer_point() {
+        use geo::Area;
+
         let point = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
 
-        // Point buffering needs GEOS (quarantined into oxirs-geosparql-adapter-geos),
-        // so the default Pure-Rust build returns an error pointing at the adapter.
-        let result = buffer(&point, 1.0);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("oxirs-geosparql-adapter-geos"));
+        // Point buffering used to require GEOS; geo::algorithm::buffer handles it.
+        let buffered = buffer(&point, 1.0).expect("point buffer should succeed");
+        assert_eq!(buffered.geometry_type(), "MultiPolygon");
+
+        // A unit-radius disc, within the tolerance of a segmented approximation.
+        if let GeoGeometry::MultiPolygon(mp) = buffered.geom {
+            let area = mp.unsigned_area();
+            assert!(
+                (area - std::f64::consts::PI).abs() < 0.05,
+                "buffered point area {area} should approximate PI"
+            );
+        }
     }
 
     #[test]
-    fn test_boundary_without_geos() {
+    fn test_buffer_with_cap_and_join_styles() {
+        use crate::functions::geometric_operations::{
+            buffer_with_params, BufferParams, CapStyle, JoinStyle,
+        };
+
+        let ls = Geometry::new(GeoGeometry::LineString(LineString::new(vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 5.0, y: 0.0 },
+            Coord { x: 5.0, y: 5.0 },
+        ])));
+
+        for cap in [CapStyle::Round, CapStyle::Flat, CapStyle::Square] {
+            for join in [JoinStyle::Round, JoinStyle::Mitre, JoinStyle::Bevel] {
+                let params = BufferParams {
+                    cap_style: cap,
+                    join_style: join,
+                    ..BufferParams::default()
+                };
+                let buffered = buffer_with_params(&ls, 1.0, &params)
+                    .unwrap_or_else(|e| panic!("buffer with {cap:?}/{join:?} failed: {e}"));
+                assert_eq!(buffered.geometry_type(), "MultiPolygon");
+            }
+        }
+    }
+
+    #[test]
+    fn test_buffer_rejects_invalid_params() {
+        use crate::functions::geometric_operations::{buffer_with_params, BufferParams};
+
+        let point = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
+
+        let bad_segments = BufferParams {
+            quadrant_segments: 0,
+            ..BufferParams::default()
+        };
+        assert!(buffer_with_params(&point, 1.0, &bad_segments).is_err());
+
+        let bad_mitre = BufferParams {
+            mitre_limit: 0.5,
+            ..BufferParams::default()
+        };
+        assert!(buffer_with_params(&point, 1.0, &bad_mitre).is_err());
+    }
+
+    #[test]
+    fn test_boundary_linestring() {
         use crate::functions::geometric_operations::boundary;
 
         let ls = Geometry::new(GeoGeometry::LineString(LineString::new(vec![
@@ -267,18 +315,14 @@ mod tests {
             Coord { x: 5.0, y: 5.0 },
         ])));
 
-        // The facade boundary() needs GEOS (quarantined into the adapter), so the
-        // default Pure-Rust build returns an error pointing at the adapter.
-        let result = boundary(&ls);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("oxirs-geosparql-adapter-geos"));
+        // The facade boundary() used to require GEOS; it now forwards to the
+        // Pure-Rust OGC SFA implementation, whose LineString boundary is the
+        // pair of endpoints.
+        let bound = boundary(&ls).expect("boundary should succeed");
+        assert_eq!(bound.geometry_type(), "MultiPoint");
     }
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_buffer_rust_polygon() {
         use geo_types::Polygon;
 
@@ -294,16 +338,15 @@ mod tests {
         )));
 
         // Positive buffer (expansion)
-        let expanded = buffer_rust(&poly, 1.0).expect("should succeed");
+        let expanded = buffer(&poly, 1.0).expect("should succeed");
         assert_eq!(expanded.geometry_type(), "MultiPolygon");
 
         // Negative buffer (erosion)
-        let shrunk = buffer_rust(&poly, -1.0).expect("should succeed");
+        let shrunk = buffer(&poly, -1.0).expect("should succeed");
         assert_eq!(shrunk.geometry_type(), "MultiPolygon");
     }
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_buffer_rust_multipolygon() {
         use geo_types::{MultiPolygon, Polygon};
 
@@ -333,12 +376,11 @@ mod tests {
             poly1, poly2,
         ])));
 
-        let buffered = buffer_rust(&mpoly, 1.0).expect("should succeed");
+        let buffered = buffer(&mpoly, 1.0).expect("should succeed");
         assert_eq!(buffered.geometry_type(), "MultiPolygon");
     }
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_buffer_rust_polygon_with_hole() {
         use geo_types::Polygon;
 
@@ -361,25 +403,30 @@ mod tests {
 
         let poly = Geometry::new(GeoGeometry::Polygon(Polygon::new(exterior, vec![interior])));
 
-        let buffered = buffer_rust(&poly, 1.0).expect("should succeed");
+        let buffered = buffer(&poly, 1.0).expect("should succeed");
         assert_eq!(buffered.geometry_type(), "MultiPolygon");
     }
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
-    fn test_buffer_rust_unsupported_type() {
-        let point = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
-
-        let result = buffer_rust(&point, 1.0);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Pure Rust buffer only supports Polygon"));
+    fn test_buffer_every_geometry_type() {
+        // The old straight-skeleton buffer rejected everything but Polygon and
+        // MultiPolygon; geo::algorithm::buffer covers the full set.
+        for wkt in [
+            "POINT(0 0)",
+            "LINESTRING(0 0, 5 0, 5 5)",
+            "MULTIPOINT((0 0), (10 10))",
+            "MULTILINESTRING((0 0, 5 0), (0 5, 5 5))",
+            "POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))",
+            "MULTIPOLYGON(((0 0, 4 0, 4 4, 0 4, 0 0)))",
+        ] {
+            let geom = Geometry::from_wkt(wkt).expect("valid WKT");
+            let buffered = buffer(&geom, 1.0)
+                .unwrap_or_else(|e| panic!("buffering {wkt} should succeed, got {e}"));
+            assert_eq!(buffered.geometry_type(), "MultiPolygon");
+        }
     }
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_buffer_hybrid_polygon_uses_rust() {
         use geo_types::Polygon;
 
@@ -400,13 +447,18 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
-    fn test_buffer_hybrid_point_fails_without_geos() {
-        let point = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
+    fn test_buffer_negative_distance_erodes_polygon() {
+        use geo::Area;
 
-        // Point buffer needs GEOS (the adapter), so it should fail in the pure build
-        let result = buffer(&point, 1.0);
-        assert!(result.is_err());
+        let poly = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").expect("valid");
+        let eroded = buffer(&poly, -1.0).expect("negative buffer should succeed");
+
+        if let GeoGeometry::MultiPolygon(mp) = eroded.geom {
+            // A 10x10 square eroded by 1 leaves an 8x8 square.
+            assert!((mp.unsigned_area() - 64.0).abs() < 0.5);
+        } else {
+            panic!("buffer must return a MultiPolygon");
+        }
     }
 
     // === 3D Distance Tests ===
@@ -662,14 +714,12 @@ mod tests {
     // 3D Buffer Tests
     // ========================================================================
 
-    // NOTE: 3D buffering of Point/LineString geometries routes through the GEOS 2D
-    // buffer, which is quarantined into `oxirs-geosparql-adapter-geos`; those tests
-    // moved with the capability. Polygon/MultiPolygon 3D buffering still works here
-    // because `buffer_3d` -> `buffer()` uses the Pure-Rust `rust-buffer` path for
+    // 3D buffering routes through the 2D `buffer()`, which is Pure Rust for every
+    // geometry type, so Point/LineString cases work here alongside Polygon and
+    // MultiPolygon. `buffer_3d` -> `buffer()` handles the XY step for
     // polygons.
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_buffer_3d_polygon() {
         let poly = Geometry::from_wkt("POLYGON Z((0 0 5, 10 0 5, 10 10 5, 0 10 5, 0 0 5))")
             .expect("should succeed");
@@ -686,7 +736,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_buffer_3d_z_range_extension() {
         // Test that Z coordinates are extended by the buffer distance
         let poly = Geometry::from_wkt("POLYGON Z((0 0 10, 5 0 10, 5 5 10, 0 5 10, 0 0 10))")
@@ -709,9 +758,6 @@ mod tests {
         }
     }
 
-    // (test_buffer_3d_varying_z used a LineString and needed the GEOS 2D buffer; it
-    // moved to oxirs-geosparql-adapter-geos with the capability.)
-
     #[test]
     fn test_buffer_3d_requires_z_coordinates() {
         let point = Geometry::from_wkt("POINT(0 0)").expect("should succeed"); // 2D point
@@ -727,7 +773,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_buffer_3d_negative_distance() {
         // Negative buffer (erosion) in 3D
         let poly = Geometry::from_wkt("POLYGON Z((0 0 10, 20 0 10, 20 20 10, 0 20 10, 0 0 10))")
@@ -746,7 +791,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "rust-buffer")]
     fn test_buffer_3d_multipolygon() {
         let mpoly = Geometry::from_wkt(
             "MULTIPOLYGON Z(((0 0 5, 5 0 5, 5 5 5, 0 5 5, 0 0 5)), \

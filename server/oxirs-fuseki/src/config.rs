@@ -18,7 +18,7 @@ pub use config_server::*;
 
 use crate::error::{FusekiError, FusekiResult};
 use figment::{
-    providers::{Env, Format, Toml, Yaml},
+    providers::{Env, Format, Serialized, Toml, Yaml},
     Figment,
 };
 #[cfg(feature = "hot-reload")]
@@ -79,10 +79,23 @@ impl Default for ServerConfig {
                 admin_ui: true,
                 cors: true,
                 max_connections: 1000,
-                request_timeout_secs: 30,
+                // Coarse whole-request deadline for the axum `TimeoutLayer`. It
+                // must sit ABOVE the per-query execution budget so the budget is
+                // what normally fires (a precise 408 carrying the query's own
+                // message) and this layer only guarantees the connection is not
+                // held forever. The invariant enforced at startup
+                // (`Runtime::build_router`) is:
+                //   request_timeout_secs > max_query_time_secs + QUERY_TIMEOUT_GRACE_SECS
+                // With the shipped defaults 300 (max_query_time) + 5 (grace) that
+                // is 305, so 310 leaves the budget a clear margin to fire first.
+                // The previous default of 30 inverted the relationship: the
+                // TimeoutLayer preempted the budget at 30 s with a generic 408
+                // while the detached blocking task kept running up to 300 s.
+                request_timeout_secs: 310,
                 graceful_shutdown_timeout_secs: 30,
                 tls: None,
                 backup_directory: None,
+                static_asset_dir: None,
                 config_file: None,
             },
             datasets: HashMap::new(),
@@ -186,9 +199,14 @@ impl Default for ServerConfig {
 }
 
 impl ServerConfig {
-    /// Load configuration using Figment (supports TOML, YAML, env vars)
+    /// Load configuration using Figment (supports TOML, YAML, env vars).
+    ///
+    /// Seeded with `ServerConfig::default()` so a config file only has to
+    /// state what it overrides — without the seed, adding any new required
+    /// field to a config struct silently breaks every existing partial
+    /// config file in the wild.
     pub fn load() -> FusekiResult<Self> {
-        let config: Self = Figment::new()
+        let config: Self = Figment::from(Serialized::defaults(ServerConfig::default()))
             .merge(Toml::file("oxirs-fuseki.toml"))
             .merge(Yaml::file("oxirs-fuseki.yaml"))
             .merge(Yaml::file("oxirs-fuseki.yml"))
@@ -202,6 +220,7 @@ impl ServerConfig {
         config.validate().map_err(|e| {
             FusekiError::validation(format!("Configuration validation failed: {e}"))
         })?;
+        config.validate_auth_reachable()?;
 
         Ok(config)
     }
@@ -211,13 +230,15 @@ impl ServerConfig {
         let path = path.as_ref();
         let config: Self = match path.extension().and_then(|ext| ext.to_str()) {
             Some("toml") => {
-                let figment = Figment::new()
+                // Seeded with defaults for the same reason as `load()`: a
+                // partial file overrides, never has to restate the world.
+                let figment = Figment::from(Serialized::defaults(ServerConfig::default()))
                     .merge(Toml::file(path))
                     .merge(Env::prefixed("OXIRS_FUSEKI_"));
                 figment.extract()
             }
             Some("yaml") | Some("yml") => {
-                let figment = Figment::new()
+                let figment = Figment::from(Serialized::defaults(ServerConfig::default()))
                     .merge(Yaml::file(path))
                     .merge(Env::prefixed("OXIRS_FUSEKI_"));
                 figment.extract()
@@ -236,9 +257,55 @@ impl ServerConfig {
         config.validate().map_err(|e| {
             FusekiError::validation(format!("Configuration validation failed: {e}"))
         })?;
+        config.validate_auth_reachable()?;
 
         info!("Configuration loaded from {:?}", path);
         Ok(config)
+    }
+
+    /// Fail loud when `security.auth_required` is set but no authentication
+    /// backend is actually reachable — i.e. no static users, OAuth, LDAP,
+    /// enabled SAML, enabled API keys, or enabled client-certificate auth is
+    /// configured. Such a configuration would start successfully and then
+    /// reject every single request forever (the auth-enforcing middleware
+    /// layers are only ever wired in when `auth_required` is true), which is
+    /// indistinguishable from a broken deployment. Per the fail-loud
+    /// contract this must refuse to start rather than silently deploy a
+    /// server nobody can use.
+    pub fn validate_auth_reachable(&self) -> FusekiResult<()> {
+        if !self.security.auth_required {
+            return Ok(());
+        }
+        let has_static_users = !self.security.users.is_empty();
+        let has_oauth = self.security.oauth.is_some();
+        let has_ldap = self.security.ldap.is_some();
+        let has_saml = self.security.saml.as_ref().is_some_and(|saml| saml.enabled);
+        let has_api_keys = self
+            .security
+            .api_keys
+            .as_ref()
+            .is_some_and(|keys| keys.enabled);
+        let has_certificate_auth = self
+            .security
+            .certificate
+            .as_ref()
+            .is_some_and(|cert| cert.enabled);
+
+        if !(has_static_users
+            || has_oauth
+            || has_ldap
+            || has_saml
+            || has_api_keys
+            || has_certificate_auth)
+        {
+            return Err(FusekiError::configuration(
+                "security.auth_required is true but no authentication backend is configured \
+                 (no static users, OAuth, LDAP, enabled SAML, enabled API keys, or enabled \
+                 client-certificate auth); every request would be permanently rejected. \
+                 Configure at least one authentication method, or set auth_required = false",
+            ));
+        }
+        Ok(())
     }
 
     /// Save configuration to YAML file
@@ -542,6 +609,49 @@ mod tests {
     }
 
     #[test]
+    fn regression_auth_required_with_no_backend_fails_loud() {
+        // auth_required = true with the default empty security config (no
+        // static users, OAuth, LDAP, SAML, API keys, or certificate auth)
+        // must be rejected at startup rather than silently deployed as a
+        // server that rejects every request forever.
+        let mut config = ServerConfig::default();
+        config.security.auth_required = true;
+        assert!(
+            config.validate_auth_reachable().is_err(),
+            "auth_required=true with no reachable auth backend must fail loud"
+        );
+    }
+
+    #[test]
+    fn regression_auth_required_with_static_users_passes() {
+        let mut config = ServerConfig::default();
+        config.security.auth_required = true;
+        config.security.users.insert(
+            "admin".to_string(),
+            UserConfig {
+                password_hash: "$argon2id$dummy".to_string(),
+                roles: vec!["admin".to_string()],
+                permissions: vec![],
+                enabled: true,
+                email: None,
+                full_name: None,
+                last_login: None,
+                failed_login_attempts: 0,
+                locked_until: None,
+            },
+        );
+        assert!(config.validate_auth_reachable().is_ok());
+    }
+
+    #[test]
+    fn regression_auth_not_required_skips_backend_check() {
+        // The default (auth_required = false) must never be rejected by
+        // this check regardless of how empty the security config is.
+        let config = ServerConfig::default();
+        assert!(config.validate_auth_reachable().is_ok());
+    }
+
+    #[test]
     fn test_socket_addr() {
         let config = ServerConfig::default();
         let addr = config.socket_addr().unwrap();
@@ -551,7 +661,9 @@ mod tests {
     #[test]
     fn test_timeouts() {
         let config = ServerConfig::default();
-        assert_eq!(config.request_timeout().as_secs(), 30);
+        // request_timeout_secs must exceed max_query_time_secs (300) + grace (5)
+        // so the per-query budget fires before the coarse HTTP TimeoutLayer.
+        assert_eq!(config.request_timeout().as_secs(), 310);
         assert_eq!(config.graceful_shutdown_timeout().as_secs(), 30);
     }
 

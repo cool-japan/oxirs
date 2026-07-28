@@ -7,9 +7,11 @@
 //!
 //! ## Security model
 //!
-//! [`OidcValidator::validate_id_token`] **fails closed**: unless the validator
-//! was constructed with a verification key set via [`OidcValidator::with_jwks`],
-//! every token is rejected with [`SsoError::SignatureVerificationUnavailable`].
+//! [`OidcValidator::validate_id_token`](crate::sso::oidc::OidcValidator::validate_id_token)
+//! **fails closed**: unless the validator was constructed with a verification
+//! key set via [`OidcValidator::with_jwks`](crate::sso::oidc::OidcValidator::with_jwks),
+//! every token is rejected with
+//! [`SsoError::SignatureVerificationUnavailable`](crate::sso::oidc::SsoError::SignatureVerificationUnavailable).
 //! Supported signature algorithms are `RS256` (RSASSA-PKCS1-v1_5 + SHA-256, via
 //! the Pure-Rust `rsa` crate) and `ES256` (ECDSA over P-256 + SHA-256, via the
 //! Pure-Rust `p256` crate). The `none` algorithm and every unknown/unsupported

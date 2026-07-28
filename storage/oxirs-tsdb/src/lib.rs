@@ -1,6 +1,6 @@
 //! Time-series optimizations for OxiRS
 //!
-//! **Status**: Production Ready (v0.3.3)
+//! **Status**: Production Ready (v0.4.1)
 //!
 //! This crate provides high-performance time-series storage and query
 //! capabilities for IoT-scale RDF data.
@@ -18,7 +18,13 @@
 //! - Columnar storage - Disk-backed binary format
 //! - Series indexing - Efficient chunk lookups
 //! - Raft replication - Distributed consensus with quorum commits
-//! - Arrow/Parquet export - Analytics interoperability
+//! - Arrow/Parquet export - Genuine Analytics interoperability with real
+//!   Arrow/Parquet tooling (`ArrowExporter`/`ParquetExporter`, gated behind
+//!   the `arrow-export` feature, backed by the real `arrow`/`parquet` crates)
+//! - OxiRS-native IPC export (`OxirsIpcWriter`/`OxirsIpcReader`,
+//!   `analytics::parquet_export`) - a lightweight always-available binary
+//!   format for OxiRS-to-OxiRS interchange; **not** Apache Arrow/Parquet
+//!   wire-compatible and not intended for external analytics tooling
 //!
 //! # Architecture
 //!
@@ -172,13 +178,16 @@ pub use analytics::{
     sum_column, GpuAggError,
 };
 
-// Arrow IPC re-exports
+// OxiRS-native IPC re-exports (NOT Apache Arrow-compatible; see
+// `analytics::arrow_ipc` module docs — use `ArrowExporter`/`ParquetExporter`
+// below for genuine Arrow/Parquet interoperability).
 pub use analytics::{
-    ArrowColumn, ArrowDataType, ArrowField, ArrowIpcReader, ArrowIpcWriter, ArrowRecordBatch,
-    ArrowSchema, TaggedDataPoint, TimeUnit,
+    OxirsIpcColumn, OxirsIpcDataType, OxirsIpcField, OxirsIpcReader, OxirsIpcRecordBatch,
+    OxirsIpcSchema, OxirsIpcTimeUnit, OxirsIpcWriter, TaggedDataPoint,
 };
 
-// Parquet export re-exports
+// OxiRS-native Parquet-inspired export re-exports (NOT real Parquet-file
+// compatible; see `analytics::parquet_export` module docs).
 pub use analytics::{
     ParquetColumn, ParquetIpcCompression, ParquetReader, ParquetValues, ParquetWriter,
 };
@@ -238,7 +247,7 @@ pub use multi_region::{
 };
 
 // NOTE: The DuckDB ↔ TSDB chunk bridge (formerly `duckdb_bridge`, gated behind
-// the `duckdb` feature) has been quarantined into the `publish = false` crate
-// `oxirs-tsdb-adapter-duckdb` per COOLJAPAN Pure Rust Policy v2 — it pulled
-// `libduckdb-sys` (C FFI). Depend on that adapter crate directly to inspect
-// TSDB chunks through embedded DuckDB SQL.
+// the `duckdb` feature) has been removed — it pulled `libduckdb-sys` (C FFI),
+// which COOLJAPAN Pure Rust Policy v2 does not allow. Export chunks to Parquet
+// via `arrow-export` and query them with an external DuckDB instead; the
+// Pure-Rust `analytics::DuckDbQueryAdapter` builds the SQL for that.

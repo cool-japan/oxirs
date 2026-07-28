@@ -6,6 +6,7 @@
 //!
 //! Reference: Sun et al. "RotatE: Knowledge Graph Embedding by Relational Rotation in Complex Space" (2019)
 
+use crate::models::serialization::{BaseModelSnapshot, MatrixF64};
 use crate::models::{common::*, BaseModel};
 use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
@@ -13,9 +14,25 @@ use async_trait::async_trait;
 use scirs2_core::ndarray_ext::Array2;
 #[allow(unused_imports)]
 use scirs2_core::random::{Random, RngExt};
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;
+
+/// Serializable representation of a RotatE model for persistence.
+#[derive(Debug, Serialize, Deserialize)]
+struct RotatESerializable {
+    base: BaseModelSnapshot,
+    entity_embeddings_real: MatrixF64,
+    entity_embeddings_imag: MatrixF64,
+    relation_phases: MatrixF64,
+    embeddings_initialized: bool,
+    adversarial_temperature: f64,
+    modulus_constraint: bool,
+}
 
 /// RotatE embedding model using complex rotations
 #[derive(Debug)]
@@ -431,7 +448,12 @@ impl RotatE {
                         .get("margin")
                         .copied()
                         .unwrap_or(6.0);
-                    let loss = margin_loss(pos_distance, neg_distance, margin);
+                    // margin_loss(positive_score, negative_score, margin)
+                    // = max(0, margin + negative_score - positive_score). RotatE's hinge loss is
+                    // max(0, margin + pos_distance - neg_distance), so pass neg_distance in the
+                    // positive-score slot and pos_distance in the negative-score slot to match
+                    // compute_gradients' `margin + (-pos_score) - (-neg_score)`.
+                    let loss = margin_loss(neg_distance, pos_distance, margin);
                     batch_loss += loss;
 
                     if loss > 0.0 {
@@ -738,11 +760,50 @@ impl EmbeddingModel for RotatE {
 
     fn save(&self, path: &str) -> Result<()> {
         info!("Saving RotatE model to {}", path);
+
+        let serializable = RotatESerializable {
+            base: BaseModelSnapshot::capture(&self.base),
+            entity_embeddings_real: MatrixF64::from_array(&self.entity_embeddings_real),
+            entity_embeddings_imag: MatrixF64::from_array(&self.entity_embeddings_imag),
+            relation_phases: MatrixF64::from_array(&self.relation_phases),
+            embeddings_initialized: self.embeddings_initialized,
+            adversarial_temperature: self.adversarial_temperature,
+            modulus_constraint: self.modulus_constraint,
+        };
+
+        let file = File::create(path)
+            .map_err(|e| anyhow!("Failed to create model file {}: {}", path, e))?;
+        let writer = BufWriter::new(file);
+        oxicode::serde::encode_into_std_write(&serializable, writer, oxicode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize RotatE model: {}", e))?;
+
+        info!("RotatE model saved successfully");
         Ok(())
     }
 
     fn load(&mut self, path: &str) -> Result<()> {
         info!("Loading RotatE model from {}", path);
+
+        if !Path::new(path).exists() {
+            return Err(anyhow!("Model file not found: {}", path));
+        }
+
+        let file =
+            File::open(path).map_err(|e| anyhow!("Failed to open model file {}: {}", path, e))?;
+        let reader = BufReader::new(file);
+        let (serializable, _): (RotatESerializable, _) =
+            oxicode::serde::decode_from_std_read(reader, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize RotatE model: {}", e))?;
+
+        self.entity_embeddings_real = serializable.entity_embeddings_real.to_array()?;
+        self.entity_embeddings_imag = serializable.entity_embeddings_imag.to_array()?;
+        self.relation_phases = serializable.relation_phases.to_array()?;
+        self.embeddings_initialized = serializable.embeddings_initialized;
+        self.adversarial_temperature = serializable.adversarial_temperature;
+        self.modulus_constraint = serializable.modulus_constraint;
+        serializable.base.restore_into(&mut self.base);
+
+        info!("RotatE model loaded successfully");
         Ok(())
     }
 
@@ -802,6 +863,62 @@ mod tests {
 
         assert!(score.is_finite());
 
+        Ok(())
+    }
+
+    /// Regression: RotatE shared the inverted-margin-loss bug with TransE. The
+    /// hinge loss must be `max(0, margin + pos_distance - neg_distance)` so that
+    /// violated triples produce a positive loss and trigger a gradient step.
+    #[test]
+    fn regression_rotate_margin_loss_orientation() {
+        use crate::models::common::margin_loss;
+        let margin = 6.0;
+        let pos_distance = 9.0;
+        let neg_distance = 2.0;
+        let loss = margin_loss(neg_distance, pos_distance, margin);
+        assert!(
+            loss > 0.0,
+            "violated triple must yield positive hinge loss, got {loss}"
+        );
+        assert!((loss - (margin + pos_distance - neg_distance)).abs() < 1e-9);
+
+        let good = margin_loss(20.0, 0.0, margin);
+        assert_eq!(good, 0.0, "well-separated triple must yield zero loss");
+    }
+
+    /// Regression: RotatE save()/load() were no-ops; a disk round-trip must
+    /// reproduce identical entity embeddings.
+    #[tokio::test]
+    async fn regression_rotate_save_load_roundtrip() -> Result<()> {
+        let config = ModelConfig::default()
+            .with_dimensions(8)
+            .with_max_epochs(4)
+            .with_seed(11);
+        let mut model = RotatE::new(config);
+
+        let alice = crate::NamedNode::new("http://example.org/alice")?;
+        let knows = crate::NamedNode::new("http://example.org/knows")?;
+        let bob = crate::NamedNode::new("http://example.org/bob")?;
+        model.add_triple(Triple::new(alice.clone(), knows.clone(), bob.clone()))?;
+        model.add_triple(Triple::new(bob.clone(), knows.clone(), alice.clone()))?;
+        model.train(Some(4)).await?;
+
+        let before = model.get_entity_embedding("http://example.org/alice")?;
+
+        let path = std::env::temp_dir().join(format!("rotate-roundtrip-{}.bin", Uuid::new_v4()));
+        let path_str = path.to_string_lossy().to_string();
+        model.save(&path_str)?;
+
+        let mut restored = RotatE::new(ModelConfig::default());
+        restored.load(&path_str)?;
+        assert!(restored.is_trained());
+        let after = restored.get_entity_embedding("http://example.org/alice")?;
+        assert_eq!(before.dimensions, after.dimensions);
+        for (x, y) in before.values.iter().zip(after.values.iter()) {
+            assert!((x - y).abs() < 1e-9, "embedding mismatch after load");
+        }
+
+        let _ = std::fs::remove_file(&path);
         Ok(())
     }
 }

@@ -457,7 +457,7 @@ impl HealthMonitor {
     ) {
         use tracing::warn;
         let endpoints = manager.endpoints.read().await;
-        for (url, _endpoint) in endpoints.iter() {
+        for url in endpoints.keys() {
             match self.check_endpoint_health(url).await {
                 Ok(health) => {
                     if let Err(e) = manager.update_endpoint_health(url, health).await {

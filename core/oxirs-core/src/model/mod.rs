@@ -223,7 +223,23 @@ pub use term::{Object, Predicate, Subject, Term, Variable};
 
 /// A trait for all RDF terms
 pub trait RdfTerm {
-    /// Returns the string representation of this term
+    /// Returns the string representation of this term.
+    ///
+    /// # Quoted triples (RDF-star)
+    ///
+    /// A quoted triple (`Term::QuotedTriple`/`Subject::QuotedTriple`/
+    /// `Object::QuotedTriple`) is a synthesized nested statement, not a
+    /// single lexical token, so there is no borrowed slice of the *original*
+    /// input that identifies it. Implementations therefore return the fixed
+    /// placeholder `"<<quoted-triple>>"` for every quoted triple, regardless
+    /// of its content. **This placeholder is not unique** -- two distinct
+    /// quoted triples produce the identical string -- so `as_str()` must
+    /// never be used as an identity, dedup, or lookup key for a quoted
+    /// triple (e.g. as a `HashMap`/index key, or to intern one for later
+    /// exact retrieval). Callers that need to distinguish or round-trip
+    /// quoted triples should format the full term (its `Display` impl
+    /// serializes the actual `<< s p o >>` content) or otherwise operate on
+    /// the underlying `Triple` directly instead of relying on this string.
     fn as_str(&self) -> &str;
 
     /// Returns true if this is a named node (IRI)

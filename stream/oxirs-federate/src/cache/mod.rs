@@ -16,7 +16,7 @@ pub use endpoint_cache::{
 
 use anyhow::{anyhow, Result};
 #[cfg(feature = "caching")]
-use bloom::{BloomFilter, ASMS};
+use fastbloom::BloomFilter;
 #[cfg(feature = "caching")]
 use lru::LruCache;
 #[cfg(feature = "caching")]
@@ -240,10 +240,9 @@ impl FederationCache {
             .build();
 
         // Initialize bloom filter for cache existence checks
-        let bloom_filter = Arc::new(RwLock::new(BloomFilter::with_rate(
-            0.01,
-            config.bloom_capacity as u32,
-        )));
+        let bloom_filter = Arc::new(RwLock::new(
+            BloomFilter::with_false_pos(0.01).expected_items(config.bloom_capacity),
+        ));
 
         // Initialize Redis cache if enabled
         #[cfg(feature = "redis-cache")]
@@ -457,7 +456,13 @@ impl FederationCache {
         self.put_query_result(cache_key, query_result, ttl).await;
     }
 
-    /// Invalidate all cache entries for a service
+    /// Invalidate all cache entries for a service.
+    ///
+    /// This purges the service's metadata/schema/capabilities entries and, since
+    /// query result entries are not individually keyed by contributing endpoint
+    /// in this cache, conservatively purges all cached query results so that no
+    /// stale/now-invalid federated result computed through the removed service is
+    /// served after deregistration.
     pub async fn invalidate_service(&self, service_id: &str) {
         let prefixes = vec![
             format!("service_meta:{service_id}"),
@@ -468,6 +473,12 @@ impl FederationCache {
         for prefix in prefixes {
             self.remove(&prefix).await;
         }
+
+        // Query results may have been federated through this service; without
+        // per-entry endpoint tracking here, purge them all to guarantee
+        // correctness. Precise, endpoint-scoped purging is handled by the
+        // multi-level cache in the federation engine.
+        self.invalidate_queries().await;
 
         info!("Invalidated cache for service: {}", service_id);
     }

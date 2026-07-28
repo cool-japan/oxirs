@@ -11,42 +11,75 @@ use std::path::Path;
 /// historical `flate2::Compression::default()` which maps to level 6).
 const GZIP_DEFAULT_LEVEL: u8 = 6;
 
-/// Streaming gzip writer adapter backed by [`oxiarc_deflate`].
+/// Default bzip2 block-size level (1-9; 9 = libbzip2's own default 900k
+/// blocks, matching the reference `bzip2` CLI's default `-9`).
+const BZIP2_DEFAULT_LEVEL: u8 = 9;
+
+/// Default xz/LZMA2 compression level (0-9; matches the reference `xz` CLI's
+/// default `-6`).
+const XZ_DEFAULT_LEVEL: u8 = 6;
+
+/// Which one-shot Pure-Rust OxiARC codec a [`BufferedCompressWriter`] should
+/// use to flush its buffered bytes.
+enum CompressAlgo {
+    Gzip { level: u8 },
+    Bzip2 { level: u8 },
+    Xz { level: u8 },
+}
+
+/// Streaming compressed-writer adapter backed by the one-shot OxiARC codecs
+/// (`oxiarc-deflate`, `oxiarc-bzip2`, `oxiarc-archive::xz`).
 ///
-/// `oxiarc-deflate` exposes a one-shot `gzip_compress` API rather than an
-/// incremental encoder, so this adapter buffers all written bytes in memory
-/// and compresses them into the underlying file when [`flush`](Write::flush)
-/// is called (and once more on drop, in case the caller forgot to flush).
-struct GzipBufWriter {
+/// None of those crates expose an incremental encoder, so this adapter
+/// buffers all written bytes in memory and compresses them into the
+/// underlying file when [`flush`](Write::flush) is called (and once more on
+/// drop, in case the caller forgot to flush).
+struct BufferedCompressWriter {
     inner: File,
     buffer: Vec<u8>,
-    level: u8,
+    algo: CompressAlgo,
     /// Set once the buffered data has been compressed and written so that a
-    /// `flush()` followed by `drop` does not emit the gzip stream twice.
+    /// `flush()` followed by `drop` does not emit the compressed stream twice.
     finished: bool,
 }
 
-impl GzipBufWriter {
-    fn new(inner: File, level: u8) -> Self {
+impl BufferedCompressWriter {
+    fn new(inner: File, algo: CompressAlgo) -> Self {
         Self {
             inner,
             buffer: Vec::new(),
-            level,
+            algo,
             finished: false,
         }
     }
 
-    /// Compress the accumulated buffer and write the gzip stream to the file.
+    /// Compress the accumulated buffer and write the stream to the file.
     fn finish(&mut self) -> io::Result<()> {
         if self.finished {
             return Ok(());
         }
-        let compressed = oxiarc_deflate::gzip_compress(&self.buffer, self.level).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("gzip compression failed: {e}"),
-            )
-        })?;
+        let compressed = match &self.algo {
+            CompressAlgo::Gzip { level } => oxiarc_deflate::gzip_compress(&self.buffer, *level)
+                .map_err(|e| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("gzip compression failed: {e}"),
+                    )
+                })?,
+            CompressAlgo::Bzip2 { level } => {
+                oxiarc_bzip2::compress(&self.buffer, oxiarc_bzip2::CompressionLevel::new(*level))
+                    .map_err(|e| {
+                        io::Error::new(
+                            io::ErrorKind::Other,
+                            format!("bzip2 compression failed: {e}"),
+                        )
+                    })?
+            }
+            CompressAlgo::Xz { level } => oxiarc_archive::xz::compress(&self.buffer, *level)
+                .map_err(|e| {
+                    io::Error::new(io::ErrorKind::Other, format!("xz compression failed: {e}"))
+                })?,
+        };
         self.inner.write_all(&compressed)?;
         self.inner.flush()?;
         self.finished = true;
@@ -54,7 +87,7 @@ impl GzipBufWriter {
     }
 }
 
-impl Write for GzipBufWriter {
+impl Write for BufferedCompressWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.buffer.extend_from_slice(buf);
         Ok(buf.len())
@@ -65,7 +98,7 @@ impl Write for GzipBufWriter {
     }
 }
 
-impl Drop for GzipBufWriter {
+impl Drop for BufferedCompressWriter {
     fn drop(&mut self) {
         // Best-effort: ensure buffered data is emitted even without an explicit
         // flush. Errors during drop cannot be propagated, so they are ignored;
@@ -192,15 +225,24 @@ pub fn open_reader(path: &Path) -> ToolResult<CompressedReader> {
         }
 
         CompressionFormat::Bzip2 => {
-            // Simulate bzip2 decompression (in production, use bzip2 crate)
-            let reader = BufReader::new(file);
-            Ok(CompressedReader::Bzip2(Box::new(reader)))
+            // Pure-Rust bzip2 decompression via oxiarc-bzip2. Like the gzip
+            // path above, the whole file is read and inflated up front, then
+            // served from an in-memory cursor.
+            let mut compressed = Vec::new();
+            BufReader::new(file).read_to_end(&mut compressed)?;
+            let decompressed = oxiarc_bzip2::decompress(&compressed[..])
+                .map_err(|e| format!("bzip2 decompression failed: {e}"))?;
+            Ok(CompressedReader::Bzip2(Box::new(Cursor::new(decompressed))))
         }
 
         CompressionFormat::Xz => {
-            // Simulate xz decompression (in production, use xz2 crate)
-            let reader = BufReader::new(file);
-            Ok(CompressedReader::Xz(Box::new(reader)))
+            // Pure-Rust xz (LZMA2 container) decompression via oxiarc-archive.
+            let mut compressed = Vec::new();
+            BufReader::new(file).read_to_end(&mut compressed)?;
+            let mut cursor = Cursor::new(compressed);
+            let decompressed = oxiarc_archive::xz::decompress(&mut cursor)
+                .map_err(|e| format!("xz decompression failed: {e}"))?;
+            Ok(CompressedReader::Xz(Box::new(Cursor::new(decompressed))))
         }
     }
 }
@@ -238,19 +280,37 @@ pub fn open_writer(path: &Path, format: CompressionFormat) -> ToolResult<Compres
             // Pure-Rust gzip compression via oxiarc-deflate. The adapter buffers
             // writes and emits the gzip stream on flush/drop (level 6, matching
             // the previous flate2 default).
-            let writer = GzipBufWriter::new(file, GZIP_DEFAULT_LEVEL);
+            let writer = BufferedCompressWriter::new(
+                file,
+                CompressAlgo::Gzip {
+                    level: GZIP_DEFAULT_LEVEL,
+                },
+            );
             Ok(CompressedWriter::Gzip(Box::new(writer)))
         }
 
         CompressionFormat::Bzip2 => {
-            // Simulate bzip2 compression (in production, use bzip2 crate)
-            let writer = BufWriter::new(file);
+            // Pure-Rust bzip2 compression via oxiarc-bzip2 (real BZh-framed
+            // output, readable by any standard bzip2 implementation).
+            let writer = BufferedCompressWriter::new(
+                file,
+                CompressAlgo::Bzip2 {
+                    level: BZIP2_DEFAULT_LEVEL,
+                },
+            );
             Ok(CompressedWriter::Bzip2(Box::new(writer)))
         }
 
         CompressionFormat::Xz => {
-            // Simulate xz compression (in production, use xz2 crate)
-            let writer = BufWriter::new(file);
+            // Pure-Rust xz compression via oxiarc-archive's real XZ container
+            // (stream header/footer + LZMA2 blocks + index), readable by the
+            // reference `xz` CLI.
+            let writer = BufferedCompressWriter::new(
+                file,
+                CompressAlgo::Xz {
+                    level: XZ_DEFAULT_LEVEL,
+                },
+            );
             Ok(CompressedWriter::Xz(Box::new(writer)))
         }
     }
@@ -671,6 +731,159 @@ mod tests {
         let decompressed =
             oxiarc_deflate::gzip_decompress(&raw).expect("oxiarc failed to decompress");
         assert_eq!(decompressed, payload);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Round-trip through the bzip2 writer/reader and confirm the on-disk
+    /// bytes are a real "BZh" bzip2 stream that both a fresh `open_reader`
+    /// and `oxiarc_bzip2::decompress` directly can inflate back to the
+    /// original payload (P2 finding: bzip2 was a silent passthrough before
+    /// this fix).
+    #[test]
+    fn regression_bzip2_writer_reader_round_trip_is_real_bzip2() {
+        use std::env::temp_dir;
+
+        let unique = format!(
+            "{}_{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let path = temp_dir().join(format!("oxirs_bzip2_rt_{unique}.ttl.bz2"));
+        let payload = "<urn:s> <urn:p> <urn:o> .\n".repeat(2000);
+
+        {
+            let mut writer =
+                open_writer(&path, CompressionFormat::Bzip2).expect("failed to open bzip2 writer");
+            writer
+                .write_all(payload.as_bytes())
+                .expect("failed to write payload");
+            writer.flush().expect("failed to flush bzip2 writer");
+        }
+
+        let raw = std::fs::read(&path).expect("failed to read bzip2 file");
+        assert!(raw.len() >= 3, "bzip2 output too small");
+        assert_eq!(
+            &raw[..3],
+            b"BZh",
+            "missing bzip2 magic header (not real bzip2 framing)"
+        );
+        assert!(
+            raw.len() < payload.len(),
+            "compressed output ({}) should be smaller than input ({})",
+            raw.len(),
+            payload.len()
+        );
+
+        // Directly via oxiarc_bzip2 (independent of this crate's reader path).
+        let direct = oxiarc_bzip2::decompress(&raw[..]).expect("oxiarc_bzip2 failed to decompress");
+        assert_eq!(direct, payload.as_bytes());
+
+        // And via this crate's own reader.
+        let mut reader = open_reader(&path).expect("failed to open bzip2 reader");
+        let mut decompressed = String::new();
+        reader
+            .read_to_string(&mut decompressed)
+            .expect("failed to read decompressed payload");
+        assert_eq!(decompressed, payload, "round-trip payload mismatch");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Round-trip through the xz writer/reader and confirm the on-disk bytes
+    /// are a real XZ container (magic `FD 37 7A 58 5A 00`) that both a fresh
+    /// `open_reader` and `oxiarc_archive::xz::decompress` directly can
+    /// inflate back to the original payload (P2 finding: xz was a silent
+    /// passthrough before this fix).
+    #[test]
+    fn regression_xz_writer_reader_round_trip_is_real_xz() {
+        use std::env::temp_dir;
+
+        let unique = format!(
+            "{}_{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let path = temp_dir().join(format!("oxirs_xz_rt_{unique}.ttl.xz"));
+        let payload = "<urn:s> <urn:p> <urn:o> .\n".repeat(2000);
+
+        {
+            let mut writer =
+                open_writer(&path, CompressionFormat::Xz).expect("failed to open xz writer");
+            writer
+                .write_all(payload.as_bytes())
+                .expect("failed to write payload");
+            writer.flush().expect("failed to flush xz writer");
+        }
+
+        let raw = std::fs::read(&path).expect("failed to read xz file");
+        const XZ_MAGIC: [u8; 6] = [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00];
+        assert!(raw.len() >= 6, "xz output too small");
+        assert_eq!(
+            &raw[..6],
+            &XZ_MAGIC,
+            "missing xz magic header (not real xz framing)"
+        );
+        assert!(
+            raw.len() < payload.len(),
+            "compressed output ({}) should be smaller than input ({})",
+            raw.len(),
+            payload.len()
+        );
+
+        // Directly via oxiarc_archive::xz (independent of this crate's reader path).
+        let mut cursor = Cursor::new(raw.clone());
+        let direct =
+            oxiarc_archive::xz::decompress(&mut cursor).expect("oxiarc xz failed to decompress");
+        assert_eq!(direct, payload.as_bytes());
+
+        // And via this crate's own reader.
+        let mut reader = open_reader(&path).expect("failed to open xz reader");
+        let mut decompressed = String::new();
+        reader
+            .read_to_string(&mut decompressed)
+            .expect("failed to read decompressed payload");
+        assert_eq!(decompressed, payload, "round-trip payload mismatch");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Corrupt bzip2 input must surface an explicit decompression error
+    /// rather than returning empty/garbage data (fail-loud contract).
+    #[test]
+    fn regression_corrupt_bzip2_input_errors() {
+        use std::env::temp_dir;
+
+        let unique = format!(
+            "{}_{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let path = temp_dir().join(format!("oxirs_bzip2_corrupt_{unique}.ttl.bz2"));
+        std::fs::write(&path, b"BZh9garbagegarbagegarbage")
+            .expect("failed to write corrupt bzip2 file");
+
+        let result = open_reader(&path);
+        match result {
+            Err(_) => { /* explicit error at open time: good */ }
+            Ok(mut reader) => {
+                let mut buf = Vec::new();
+                let read_result = reader.read_to_end(&mut buf);
+                assert!(
+                    read_result.is_err(),
+                    "corrupt bzip2 must produce an explicit read error, not fabricated content"
+                );
+            }
+        }
 
         let _ = std::fs::remove_file(&path);
     }

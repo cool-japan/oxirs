@@ -248,15 +248,37 @@ impl VectorIndex for HnswIndex {
     }
 
     fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
-        // Use the proper HNSW search algorithm from search.rs
-        // This implements hierarchical navigable small world graph traversal
-        HnswIndex::search_knn(self, query, k)
+        // Use the proper HNSW search algorithm from search.rs (returns raw
+        // distances), then convert to the trait's similarity contract:
+        // similarity = 1 / (1 + distance), larger = closer. The inherent
+        // `HnswIndex::search_knn` already returns results ordered by ascending
+        // distance == descending similarity, so ordering is preserved.
+        let raw = HnswIndex::search_knn(self, query, k)?;
+        Ok(raw
+            .into_iter()
+            .map(|(uri, distance)| (uri, 1.0 / (1.0 + distance)))
+            .collect())
     }
 
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
-        // Use the proper HNSW range search algorithm from search.rs
-        // This implements distance-based filtering with graph traversal
-        HnswIndex::range_search(self, query, threshold)
+        // Trait contract: return all vectors with similarity >= threshold, where
+        // similarity = 1 / (1 + distance). Convert the similarity threshold into
+        // the equivalent distance radius for the underlying graph range search:
+        //   1/(1+d) >= threshold  <=>  d <= 1/threshold - 1  (for threshold > 0).
+        if threshold > 1.0 {
+            // Similarity can never exceed 1.0, so nothing qualifies.
+            return Ok(Vec::new());
+        }
+        let radius = if threshold <= 0.0 {
+            f32::MAX
+        } else {
+            1.0 / threshold - 1.0
+        };
+        let raw = HnswIndex::range_search(self, query, radius)?;
+        Ok(raw
+            .into_iter()
+            .map(|(uri, distance)| (uri, 1.0 / (1.0 + distance)))
+            .collect())
     }
 
     fn get_vector(&self, uri: &str) -> Option<&Vector> {

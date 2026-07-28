@@ -950,7 +950,7 @@ impl StorageEngine for VirtualStorage {
         let mut total_triples = 0u64;
         let mut total_size = 0u64;
 
-        for (_, backend) in backends.iter() {
+        for backend in backends.values() {
             if let Ok(backend_stats) = backend.stats().await {
                 total_triples += backend_stats.total_triples;
                 total_size += backend_stats.total_size_bytes;

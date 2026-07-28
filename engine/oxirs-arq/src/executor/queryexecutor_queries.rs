@@ -291,9 +291,53 @@ impl QueryExecutor {
                     }
                     Err(anyhow::anyhow!("COALESCE: no argument could be evaluated"))
                 }
-                _ => Err(anyhow::Error::new(super::types::UnknownFunctionError(
-                    name.clone(),
-                ))),
+                // Numeric unary functions (SPARQL 1.1 §17.4.4). Previously these
+                // fell through to the unknown-function arm, so a `BIND(ROUND(?x) AS
+                // ?y)` (or `(ABS(?x) AS ?y)` projection) silently left the target
+                // variable unbound and dropped it from the result — a wrong 200
+                // answer. Each evaluates its single numeric argument and returns a
+                // numeric literal.
+                "abs" | "ABS" => self.numeric_unary_function(args, binding, "abs"),
+                "round" | "ROUND" => self.numeric_unary_function(args, binding, "round"),
+                "ceil" | "CEIL" => self.numeric_unary_function(args, binding, "ceil"),
+                "floor" | "FLOOR" => self.numeric_unary_function(args, binding, "floor"),
+                // XSD constructor/cast functions (SPARQL 1.1 §17.5). The parser
+                // resolves `xsd:integer(...)` to the full IRI when `PREFIX xsd:`
+                // is declared but leaves the raw `xsd:integer` spelling when it
+                // is not — match both. These used to fall through to the
+                // unknown-function arm, so `BIND(xsd:integer(?x) AS ?n)`
+                // silently left ?n unbound.
+                "http://www.w3.org/2001/XMLSchema#string" | "xsd:string" => {
+                    self.xsd_cast_function(args, binding, "string")
+                }
+                "http://www.w3.org/2001/XMLSchema#integer" | "xsd:integer" => {
+                    self.xsd_cast_function(args, binding, "integer")
+                }
+                "http://www.w3.org/2001/XMLSchema#decimal" | "xsd:decimal" => {
+                    self.xsd_cast_function(args, binding, "decimal")
+                }
+                "http://www.w3.org/2001/XMLSchema#float" | "xsd:float" => {
+                    self.xsd_cast_function(args, binding, "float")
+                }
+                "http://www.w3.org/2001/XMLSchema#double" | "xsd:double" => {
+                    self.xsd_cast_function(args, binding, "double")
+                }
+                "http://www.w3.org/2001/XMLSchema#boolean" | "xsd:boolean" => {
+                    self.xsd_cast_function(args, binding, "boolean")
+                }
+                "http://www.w3.org/2001/XMLSchema#dateTime" | "xsd:dateTime" => {
+                    self.xsd_cast_function(args, binding, "dateTime")
+                }
+                // GeoSPARQL / OxiRS geo extension functions are matched by their
+                // full IRI (the parser expands `geof:`/`oxgeo:` CURIEs). A
+                // recognised geo function returns `Some(..)`; anything else is a
+                // genuinely unknown function.
+                _ => match self.try_geosparql_function(name, args, binding) {
+                    Some(result) => result,
+                    None => Err(anyhow::Error::new(super::types::UnknownFunctionError(
+                        name.clone(),
+                    ))),
+                },
             },
             Expression::Exists(algebra) => match self.evaluate_exists_subquery(algebra, binding) {
                 Ok(has_solutions) => Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
@@ -304,6 +348,18 @@ impl QueryExecutor {
                     )),
                 })),
                 Err(e) => {
+                    // A runtime budget breach inside the EXISTS subquery is a
+                    // hard stop for the whole query, NOT a "no match" — collapsing
+                    // it to `false` would turn a timed-out FILTER EXISTS into a
+                    // silent 200 with a wrong (over-inclusive) result set. Detect
+                    // the typed error and propagate it so the timeout surfaces as
+                    // the correct HTTP status. Every other error class stays a
+                    // per-row "EXISTS evaluated to false".
+                    if e.downcast_ref::<crate::query_governor::BudgetExceeded>()
+                        .is_some()
+                    {
+                        return Err(e);
+                    }
                     debug!("EXISTS subquery evaluation failed: {}", e);
                     Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
                         value: "false".to_string(),
@@ -326,6 +382,15 @@ impl QueryExecutor {
                         }))
                     }
                     Err(e) => {
+                        // Same as EXISTS above: a budget breach must propagate
+                        // rather than collapse to `true` (which would wrongly keep
+                        // rows a timed-out NOT EXISTS should have been able to
+                        // reject).
+                        if e.downcast_ref::<crate::query_governor::BudgetExceeded>()
+                            .is_some()
+                        {
+                            return Err(e);
+                        }
                         debug!("NOT EXISTS subquery evaluation failed: {}", e);
                         Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
                             value: "true".to_string(),
@@ -434,6 +499,237 @@ impl QueryExecutor {
                 Ok(out)
             }
             _ => Ok(vec![self.evaluate_expression(expr, binding)?]),
+        }
+    }
+
+    /// Evaluate a SPARQL numeric unary function (`ABS`/`ROUND`/`CEIL`/`FLOOR`).
+    ///
+    /// The single argument is evaluated to a number; the result is returned as an
+    /// `xsd:integer` literal when it has no fractional part and `xsd:decimal`
+    /// otherwise — the same numeric-literal idiom [`evaluate_binary_operation`]
+    /// uses for `+`/`-`/`*`. `ROUND` rounds halves toward positive infinity
+    /// (SPARQL 1.1 §17.4.4.3), so `ROUND(2.5) = 3` and `ROUND(-2.5) = -2`.
+    pub(super) fn numeric_unary_function(
+        &self,
+        args: &[crate::algebra::Expression],
+        binding: &crate::algebra::Binding,
+        op: &str,
+    ) -> Result<crate::algebra::Term> {
+        if args.len() != 1 {
+            return Err(anyhow::anyhow!("{op}() requires exactly 1 argument"));
+        }
+        let arg = self.evaluate_expression(&args[0], binding)?;
+        let value = self.extract_numeric_value(&arg)?;
+        let result = match op {
+            "abs" => value.abs(),
+            "round" => (value + 0.5).floor(),
+            "ceil" => value.ceil(),
+            "floor" => value.floor(),
+            _ => return Err(anyhow::anyhow!("unsupported numeric function: {op}")),
+        };
+        let (value_str, datatype) = if result.fract() == 0.0 {
+            (
+                format!("{}", result as i64),
+                "http://www.w3.org/2001/XMLSchema#integer",
+            )
+        } else {
+            (
+                format!("{result}"),
+                "http://www.w3.org/2001/XMLSchema#decimal",
+            )
+        };
+        Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+            value: value_str,
+            language: None,
+            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(datatype)),
+        }))
+    }
+
+    /// XSD constructor/cast function (SPARQL 1.1 §17.5, XPath casting rules).
+    ///
+    /// A failed cast returns `Err`, which the callers already give the
+    /// spec-mandated meaning: unbound target in `BIND`/projection, dropped
+    /// row in `FILTER`.
+    pub(super) fn xsd_cast_function(
+        &self,
+        args: &[crate::algebra::Expression],
+        binding: &crate::algebra::Binding,
+        target: &str,
+    ) -> Result<crate::algebra::Term> {
+        if args.len() != 1 {
+            return Err(anyhow::anyhow!(
+                "xsd:{target}() requires exactly 1 argument"
+            ));
+        }
+        let arg = self.evaluate_expression(&args[0], binding)?;
+        let make = |value: String, datatype: &str| {
+            Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                value,
+                language: None,
+                datatype: Some(oxirs_core::model::NamedNode::new_unchecked(datatype)),
+            }))
+        };
+        const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
+        let lit = match &arg {
+            crate::algebra::Term::Iri(iri) => {
+                // Only xsd:string is castable from an IRI (§17.5 cast table).
+                return if target == "string" {
+                    make(
+                        iri.as_str().to_string(),
+                        "http://www.w3.org/2001/XMLSchema#string",
+                    )
+                } else {
+                    Err(anyhow::anyhow!("cannot cast an IRI to xsd:{target}"))
+                };
+            }
+            crate::algebra::Term::Literal(lit) => lit,
+            other => {
+                return Err(anyhow::anyhow!(
+                    "cannot cast non-literal term to xsd:{target}: {other:?}"
+                ))
+            }
+        };
+        // §17.5's cast table has no rdf:langString source row: a
+        // language-tagged literal is not castable, not even to xsd:string
+        // (that is STR()'s job).
+        if lit.language.is_some() {
+            return Err(anyhow::anyhow!(
+                "cannot cast a language-tagged literal to xsd:{target}"
+            ));
+        }
+        let source_dt = lit.datatype.as_ref().map(|d| d.as_str());
+        let source_is_boolean = source_dt == Some("http://www.w3.org/2001/XMLSchema#boolean");
+        let lexical = lit.value.trim();
+        match target {
+            // The lexical form is kept verbatim (no whitespace trim): casting
+            // to xsd:string is defined as the source's lexical form.
+            "string" => make(lit.value.clone(), "http://www.w3.org/2001/XMLSchema#string"),
+            "integer" => {
+                let value = if source_is_boolean {
+                    match lexical {
+                        "true" | "1" => 1_i64,
+                        "false" | "0" => 0_i64,
+                        _ => return Err(anyhow::anyhow!("invalid xsd:boolean lexical: {lexical}")),
+                    }
+                } else if let Ok(n) = lexical.parse::<i64>() {
+                    n
+                } else if is_numeric_xsd_datatype(source_dt) {
+                    // decimal/float/double → integer truncates toward zero.
+                    // Plain decimal forms are truncated TEXTUALLY so every
+                    // digit survives (an f64 round-trip corrupts integers
+                    // above 2^53); only exponent forms go through f64. A
+                    // value outside i64 fails loud instead of being silently
+                    // mangled.
+                    if lexical.contains(['e', 'E']) {
+                        let f = lexical.parse::<f64>().map_err(|_| {
+                            anyhow::anyhow!("cannot cast '{lexical}' to xsd:integer")
+                        })?;
+                        if !f.is_finite() {
+                            return Err(anyhow::anyhow!("cannot cast '{lexical}' to xsd:integer"));
+                        }
+                        f.trunc() as i64
+                    } else {
+                        let int_part = lexical.split_once('.').map_or(lexical, |(i, _)| i);
+                        let int_part = match int_part {
+                            "" | "-" | "+" => "0",
+                            s => s,
+                        };
+                        int_part.parse::<i64>().map_err(|_| {
+                            anyhow::anyhow!(
+                                "cannot cast '{lexical}' to xsd:integer (out of i64 range)"
+                            )
+                        })?
+                    }
+                } else {
+                    return Err(anyhow::anyhow!("cannot cast '{lexical}' to xsd:integer"));
+                };
+                make(value.to_string(), &format!("{XSD}integer"))
+            }
+            "decimal" => {
+                let value = if source_is_boolean {
+                    match lexical {
+                        "true" | "1" => "1".to_string(),
+                        "false" | "0" => "0".to_string(),
+                        _ => return Err(anyhow::anyhow!("invalid xsd:boolean lexical: {lexical}")),
+                    }
+                } else if is_valid_decimal_lexical(lexical) {
+                    // Keep the lexical form verbatim: xsd:decimal is
+                    // arbitrary-precision, an f64 round-trip would drop
+                    // digits past ~2^53.
+                    lexical.to_string()
+                } else {
+                    // Exponent forms (float/double sources) have no decimal
+                    // lexical; expand via f64 — lossless for those sources,
+                    // which only carry f64 precision to begin with.
+                    let f = lexical
+                        .parse::<f64>()
+                        .map_err(|_| anyhow::anyhow!("cannot cast '{lexical}' to xsd:decimal"))?;
+                    // xsd:decimal has no NaN/INF lexical space.
+                    if !f.is_finite() {
+                        return Err(anyhow::anyhow!("cannot cast '{lexical}' to xsd:decimal"));
+                    }
+                    f.to_string()
+                };
+                make(value, &format!("{XSD}decimal"))
+            }
+            "float" | "double" => {
+                let value = if source_is_boolean {
+                    match lexical {
+                        "true" | "1" => "1".to_string(),
+                        "false" | "0" => "0".to_string(),
+                        _ => return Err(anyhow::anyhow!("invalid xsd:boolean lexical: {lexical}")),
+                    }
+                } else if matches!(lexical, "NaN" | "INF" | "+INF" | "-INF") {
+                    // Special float/double lexicals (not accepted by f64::parse
+                    // in the "INF" spelling); keep them verbatim.
+                    lexical.to_string()
+                } else {
+                    let f = lexical
+                        .parse::<f64>()
+                        .map_err(|_| anyhow::anyhow!("cannot cast '{lexical}' to xsd:{target}"))?;
+                    // Rust's parser accepts "inf"/"infinity"/"nan" spellings
+                    // case-insensitively, but XSD's lexical space only admits
+                    // the four canonical forms matched above — reject the rest.
+                    if !f.is_finite() {
+                        return Err(anyhow::anyhow!("cannot cast '{lexical}' to xsd:{target}"));
+                    }
+                    lexical.to_string()
+                };
+                make(value, &format!("{XSD}{target}"))
+            }
+            "boolean" => {
+                let value = if is_numeric_xsd_datatype(source_dt) {
+                    let f = lexical
+                        .parse::<f64>()
+                        .map_err(|_| anyhow::anyhow!("cannot cast '{lexical}' to xsd:boolean"))?;
+                    // XPath: NaN casts to false, any other non-zero to true.
+                    !f.is_nan() && f != 0.0
+                } else {
+                    match lexical {
+                        "true" | "1" => true,
+                        "false" | "0" => false,
+                        _ => return Err(anyhow::anyhow!("cannot cast '{lexical}' to xsd:boolean")),
+                    }
+                };
+                make(value.to_string(), &format!("{XSD}boolean"))
+            }
+            "dateTime" => {
+                // Light shape validation: "YYYY-MM-DDThh:mm:ss..." — enough to
+                // reject non-dateTime garbage without re-implementing XSD's
+                // full grammar (timezone/fraction suffixes pass through).
+                let bytes = lexical.as_bytes();
+                let shape_ok = bytes.len() >= 19
+                    && bytes[4] == b'-'
+                    && bytes[7] == b'-'
+                    && bytes[10] == b'T'
+                    && bytes[13] == b':'
+                    && bytes[16] == b':';
+                if !shape_ok {
+                    return Err(anyhow::anyhow!("cannot cast '{lexical}' to xsd:dateTime"));
+                }
+                make(lexical.to_string(), &format!("{XSD}dateTime"))
+            }
+            _ => Err(anyhow::anyhow!("unsupported XSD cast target: xsd:{target}")),
         }
     }
 
@@ -1073,7 +1369,7 @@ impl QueryExecutor {
 /// `FILTER(?e = ?outer)` now see the outer value), substitution constrains the
 /// pattern so a bound subject/object becomes a point lookup instead of a full
 /// store scan per outer row.
-fn substitute_algebra_binding(
+pub(super) fn substitute_algebra_binding(
     algebra: &crate::algebra::Algebra,
     binding: &crate::algebra::Binding,
 ) -> crate::algebra::Algebra {
@@ -1225,4 +1521,49 @@ fn term_to_expression(term: &crate::algebra::Term) -> Option<crate::algebra::Exp
         }
         _ => None,
     }
+}
+
+/// Whether `s` is a valid xsd:decimal lexical form: optional sign, digits
+/// with at most one decimal point, at least one digit overall.
+fn is_valid_decimal_lexical(s: &str) -> bool {
+    let digits = s.strip_prefix(['-', '+']).unwrap_or(s);
+    if digits.is_empty() {
+        return false;
+    }
+    let mut seen_dot = false;
+    let mut seen_digit = false;
+    for c in digits.bytes() {
+        match c {
+            b'0'..=b'9' => seen_digit = true,
+            b'.' if !seen_dot => seen_dot = true,
+            _ => return false,
+        }
+    }
+    seen_digit
+}
+
+/// Whether `dt` is one of the XSD numeric datatypes (the primitive numerics
+/// plus the xsd:integer-derived family), for cast source-type decisions.
+fn is_numeric_xsd_datatype(dt: Option<&str>) -> bool {
+    matches!(
+        dt,
+        Some(
+            "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#decimal"
+                | "http://www.w3.org/2001/XMLSchema#float"
+                | "http://www.w3.org/2001/XMLSchema#double"
+                | "http://www.w3.org/2001/XMLSchema#long"
+                | "http://www.w3.org/2001/XMLSchema#int"
+                | "http://www.w3.org/2001/XMLSchema#short"
+                | "http://www.w3.org/2001/XMLSchema#byte"
+                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+        )
+    )
 }

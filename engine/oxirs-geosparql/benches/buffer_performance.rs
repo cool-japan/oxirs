@@ -1,21 +1,18 @@
-//! Benchmark comparing Pure Rust buffer vs GEOS backend
+//! Buffer benchmarks.
 //!
-//! Run with: cargo bench --bench buffer_performance --features rust-buffer,geos-backend
+//! Run with: cargo bench --bench buffer_performance
+//!
+//! Buffering is unconditional Pure Rust (`geo::algorithm::buffer`), so there is
+//! nothing to feature-gate here any more. This benchmark used to compare a
+//! `rust-buffer` straight-skeleton path against a GEOS C-library backend; both
+//! are gone.
 
-#[allow(unused_imports)]
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use oxirs_geosparql::functions::geometric_operations::buffer;
 use oxirs_geosparql::geometry::Geometry;
-#[allow(unused_imports)]
 use std::hint::black_box;
 
-#[cfg(feature = "rust-buffer")]
-use oxirs_geosparql::functions::geometric_operations::buffer_rust;
-
-// NOTE: the GEOS buffer benchmarks were removed when the GEOS backend was
-// quarantined into the `oxirs-geosparql-adapter-geos` crate (Pure Rust Policy v2).
-
 /// Create test polygons of various sizes
-#[allow(dead_code)]
 fn create_test_polygons() -> Vec<(String, Geometry)> {
     vec![
         (
@@ -53,9 +50,26 @@ fn create_test_polygons() -> Vec<(String, Geometry)> {
     ]
 }
 
-#[cfg(feature = "rust-buffer")]
-fn bench_pure_rust_buffer(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Pure Rust Buffer");
+/// Geometry types the old straight-skeleton buffer could not handle at all.
+fn create_non_polygon_geometries() -> Vec<(String, Geometry)> {
+    vec![
+        (
+            "Point".to_string(),
+            Geometry::from_wkt("POINT(0 0)").unwrap(),
+        ),
+        (
+            "LineString (3 vertices)".to_string(),
+            Geometry::from_wkt("LINESTRING(0 0, 50 0, 50 50)").unwrap(),
+        ),
+        (
+            "MultiPoint (4 points)".to_string(),
+            Geometry::from_wkt("MULTIPOINT((0 0), (10 10), (20 0), (30 10))").unwrap(),
+        ),
+    ]
+}
+
+fn bench_polygon_buffer(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Polygon Buffer");
 
     for (name, geom) in create_test_polygons() {
         group.bench_with_input(
@@ -63,7 +77,7 @@ fn bench_pure_rust_buffer(c: &mut Criterion) {
             &geom,
             |b, geom| {
                 b.iter(|| {
-                    buffer_rust(black_box(geom), black_box(2.0)).unwrap();
+                    buffer(black_box(geom), black_box(2.0)).unwrap();
                 });
             },
         );
@@ -73,7 +87,7 @@ fn bench_pure_rust_buffer(c: &mut Criterion) {
             &geom,
             |b, geom| {
                 b.iter(|| {
-                    buffer_rust(black_box(geom), black_box(-2.0)).unwrap();
+                    buffer(black_box(geom), black_box(-2.0)).unwrap();
                 });
             },
         );
@@ -82,15 +96,32 @@ fn bench_pure_rust_buffer(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(feature = "rust-buffer")]
+fn bench_non_polygon_buffer(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Non-Polygon Buffer");
+
+    for (name, geom) in create_non_polygon_geometries() {
+        group.bench_with_input(
+            BenchmarkId::new("Positive Buffer (2.0)", &name),
+            &geom,
+            |b, geom| {
+                b.iter(|| {
+                    buffer(black_box(geom), black_box(2.0)).unwrap();
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 fn bench_wkt_roundtrip(c: &mut Criterion) {
     let mut group = c.benchmark_group("WKT Round-trip with Buffer");
 
     let polygon = Geometry::from_wkt("POLYGON((0 0, 50 0, 50 50, 0 50, 0 0))").unwrap();
 
-    group.bench_function("Pure Rust Buffer + WKT Round-trip", |b| {
+    group.bench_function("Buffer + WKT Round-trip", |b| {
         b.iter(|| {
-            let buffered = buffer_rust(black_box(&polygon), black_box(3.0)).unwrap();
+            let buffered = buffer(black_box(&polygon), black_box(3.0)).unwrap();
             let wkt = buffered.to_wkt();
             Geometry::from_wkt(&wkt).unwrap();
         });
@@ -99,17 +130,10 @@ fn bench_wkt_roundtrip(c: &mut Criterion) {
     group.finish();
 }
 
-#[cfg(not(feature = "rust-buffer"))]
-fn bench_no_features(_c: &mut Criterion) {
-    eprintln!("❌ The rust-buffer feature is not enabled!");
-    eprintln!("Enable rust-buffer to run the Pure-Rust buffer benchmarks.");
-}
-
-// Configure benchmark groups based on available features
-#[cfg(feature = "rust-buffer")]
-criterion_group!(benches, bench_pure_rust_buffer, bench_wkt_roundtrip);
-
-#[cfg(not(feature = "rust-buffer"))]
-criterion_group!(benches, bench_no_features);
-
+criterion_group!(
+    benches,
+    bench_polygon_buffer,
+    bench_non_polygon_buffer,
+    bench_wkt_roundtrip
+);
 criterion_main!(benches);

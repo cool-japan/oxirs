@@ -33,8 +33,11 @@ impl QueryExecutor {
         dataset: &dyn Dataset,
     ) -> Result<(Solution, super::stats::ExecutionStats)> {
         // ── Budget: pre-execution wall-time check ────────────────────────
+        // Preserve the typed `BudgetExceeded` (via `anyhow::Error::new`, not a
+        // stringified `anyhow!("{e}")`) so the fuseki handler can `downcast_ref`
+        // it and map a wall-time breach to HTTP 408 rather than a generic 500.
         if let Some(ref budget) = self.execution_budget {
-            budget.check_time().map_err(|e| anyhow::anyhow!("{e}"))?;
+            budget.check_time().map_err(anyhow::Error::new)?;
         }
 
         let start_time = std::time::Instant::now();
@@ -57,9 +60,7 @@ impl QueryExecutor {
         // ── Budget: post-execution per-row accounting ────────────────────
         if let Some(ref budget) = self.execution_budget {
             for _ in &result {
-                budget
-                    .record_result_row()
-                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+                budget.record_result_row().map_err(anyhow::Error::new)?;
             }
         }
 
@@ -78,17 +79,76 @@ impl QueryExecutor {
         };
         Ok((result, stats))
     }
-    /// Execute using parallel strategy
+    /// Execute using parallel strategy.
+    ///
+    /// Solution modifiers (ORDER BY / GROUP BY / HAVING / DISTINCT / REDUCED /
+    /// PROJECT / SLICE) are evaluated by the same Serial methods the Serial
+    /// strategy uses: they run once over an already-materialized solution, so
+    /// parallelizing them buys nothing, while the parallel engine's own copies
+    /// diverged from SPARQL semantics (datatype-IRI-first ordering, inverted
+    /// unbound placement, expression-less GROUP BY keys, fabricated aggregate
+    /// datatypes, no XSD casts). Pattern-level nodes still run on the parallel
+    /// engine; Join first tries the same bound-join pushdown as Serial.
     pub(super) fn execute_parallel(
         &self,
         algebra: &Algebra,
         dataset: &dyn Dataset,
     ) -> Result<Solution> {
-        if let Some(ref parallel_executor) = self.parallel_executor {
-            let mut stats = super::stats::ExecutionStats::default();
-            parallel_executor.execute(algebra, dataset, &self.context, &mut stats)
-        } else {
-            self.execute_serial(algebra, dataset)
+        let Some(ref parallel_executor) = self.parallel_executor else {
+            return self.execute_serial(algebra, dataset);
+        };
+        match algebra {
+            Algebra::OrderBy {
+                pattern,
+                conditions,
+            } => {
+                let solution = self.execute_parallel(pattern, dataset)?;
+                Ok(self.apply_order_by(solution, conditions))
+            }
+            Algebra::Group {
+                pattern,
+                variables,
+                aggregates,
+            } => {
+                let solution = self.execute_parallel(pattern, dataset)?;
+                self.apply_group_by(solution, variables, aggregates)
+            }
+            Algebra::Distinct { pattern } => {
+                let solution = self.execute_parallel(pattern, dataset)?;
+                Ok(self.apply_distinct(solution))
+            }
+            // REDUCED is a passthrough on the Serial path; keep row counts
+            // strategy-independent.
+            Algebra::Reduced { pattern } => self.execute_parallel(pattern, dataset),
+            Algebra::Project { pattern, variables } => {
+                let solution = self.execute_parallel(pattern, dataset)?;
+                self.apply_projection(solution, variables)
+            }
+            Algebra::Slice {
+                pattern,
+                offset,
+                limit,
+            } => {
+                let solution = self.execute_parallel(pattern, dataset)?;
+                Ok(self.apply_slice(solution, *offset, *limit))
+            }
+            // HAVING needs the dataset-aware Serial condition evaluator
+            // (EXISTS, casts, typed errors); delegate the whole node.
+            Algebra::Having { .. } => self.execute_serial(algebra, dataset),
+            Algebra::Join { left, right } => {
+                if let Some(result) = self.try_bound_join(left, right, dataset)? {
+                    return Ok(result);
+                }
+                if let Some(result) = self.try_bound_join(right, left, dataset)? {
+                    return Ok(result);
+                }
+                let mut stats = super::stats::ExecutionStats::default();
+                parallel_executor.execute(algebra, dataset, &self.context, &mut stats)
+            }
+            _ => {
+                let mut stats = super::stats::ExecutionStats::default();
+                parallel_executor.execute(algebra, dataset, &self.context, &mut stats)
+            }
         }
     }
     /// Choose optimal execution strategy

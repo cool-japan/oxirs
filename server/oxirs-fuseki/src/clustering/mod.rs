@@ -395,7 +395,7 @@ impl ClusterManager {
                 let now = chrono::Utc::now().timestamp_millis();
                 let mut view = cluster_view.write().await;
 
-                for (_, node) in view.members.iter_mut() {
+                for node in view.members.values_mut() {
                     if node.state == NodeState::Active {
                         let elapsed = now - node.last_heartbeat;
                         if elapsed > 30000 {

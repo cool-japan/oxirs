@@ -1,6 +1,6 @@
 # OxiRS GraphRAG - TODO
 
-*Version: 0.3.2 | Last Updated: July 12, 2026*
+*Version: 0.4.1 | Last Updated: July 28, 2026*
 
 ## Status: Production Ready
 
@@ -106,11 +106,11 @@
   - **Risk:** docs drift from API. Mitigation: keep all examples as runnable
     integration tests; doctests in lib.rs cover the public API.
 
-### v0.3.2 - Current Release (July 12, 2026)
+### v0.4.1 - Current Release (July 26, 2026)
 - [x] Deterministic community detection — `graph::community::CommunityDetector` (Louvain + Leiden) no longer depends on HashMap/HashSet iteration order; node processing order and tie-breaking are now a pure function of `CommunityConfig::random_seed` via `scirs2_core::random::seeded_rng`
 - [x] Modularity floor guarantee — Louvain/Leiden now compare their greedy result against the trivial single-community partition's modularity and fall back to it when the greedy result would score lower, so community detection never returns a partition worse than "no structure"
 - [x] Modularity calculation bug fix — `calculate_modularity` rewritten to the standard per-community Newman-Girvan form (O(edges + nodes)); the duplicate, diverging O(n²) computation in hierarchical detection now delegates to the same function
-- ✅ 1125 tests passing
+- ✅ 1148 tests passing
 
 ## Contributing
 
@@ -118,7 +118,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GraphRAG v0.3.2 - Graph-based RAG for knowledge graphs*
+*OxiRS GraphRAG v0.4.1 - Graph-based RAG for knowledge graphs*
 
 ## Proposed follow-ups
 

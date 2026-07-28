@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 #[cfg(feature = "caching")]
-use bloom::{BloomFilter, ASMS};
+use fastbloom::BloomFilter;
 
 #[cfg(not(feature = "caching"))]
 use super::types::cache_stubs::BloomFilter;
@@ -75,11 +75,11 @@ impl PredicateBasedFilter {
         service_endpoint: &str,
         triples: &[(String, String, String)],
     ) -> Result<()> {
-        let capacity = triples.len().max(1000) as u32;
-        let mut predicate_filter = BloomFilter::with_rate(0.01, capacity);
-        let mut subject_filter = BloomFilter::with_rate(0.01, capacity);
-        let mut object_filter = BloomFilter::with_rate(0.01, capacity);
-        let mut type_filter = BloomFilter::with_rate(0.01, capacity);
+        let capacity = triples.len().max(1000);
+        let mut predicate_filter = BloomFilter::with_false_pos(0.01).expected_items(capacity);
+        let mut subject_filter = BloomFilter::with_false_pos(0.01).expected_items(capacity);
+        let mut object_filter = BloomFilter::with_false_pos(0.01).expected_items(capacity);
+        let mut type_filter = BloomFilter::with_false_pos(0.01).expected_items(capacity);
 
         for (s, p, o) in triples {
             predicate_filter.insert(p);

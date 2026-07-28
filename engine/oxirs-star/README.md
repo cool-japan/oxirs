@@ -1,13 +1,13 @@
 # OxiRS-Star ⭐
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
-[![Tests](https://img.shields.io/badge/tests-1%2C702%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
+[![Tests](https://img.shields.io/badge/tests-1%2C708%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
 
-**Status**: v0.4.0 - Released 2026-07-19
+**Status**: v0.4.1 - Released 2026-07-26
 
-✅ **Production Ready**: Feature-complete with 1,702 passing tests. Enterprise-ready RDF-star capabilities with comprehensive tooling for compliance, migration, distributed processing, and analysis.
+✅ **Production Ready**: Feature-complete with 1,708 passing tests. Enterprise-ready RDF-star capabilities with comprehensive tooling for compliance, migration, distributed processing, and analysis.
 
 **RDF-star and SPARQL-star implementation providing support for quoted triples, reification, and advanced semantic metadata processing.**
 
@@ -22,11 +22,11 @@ OxiRS-Star extends the standard RDF model with complete RDF-star capabilities, e
 - **📄 Multi-format Support** - All major RDF-star serialization formats (Turtle-star, N-Triples-star, TriG-star, N-Quads-star, JSON-LD-star)
 - **🚀 High Performance** - SIMD-optimized indexing, parallel query execution, memory-efficient storage
 - **🔗 Ecosystem Integration** - Seamless integration with 8 major RDF platforms (Jena, RDF4J, Stardog, Neptune, etc.)
-- **⚡ Production Ready** - 100% feature complete with 1,680 passing tests
+- **⚡ Production Ready** - 100% feature complete with 1,708 passing tests
 - **🏢 Enterprise Features** - Compliance reporting (GDPR, HIPAA, SOC2), audit logging, distributed clustering
 - **🔧 Developer Tools** - Graph diff, migration helpers, validation framework, testing utilities
 - **📊 Observability** - Comprehensive metrics, monitoring, and performance profiling
-- **🧪 Comprehensive Testing** - 1,680 unit tests covering all production features
+- **🧪 Comprehensive Testing** - 1,708 unit tests covering all production features
 
 ## Features
 
@@ -88,7 +88,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-star = "0.3.2"
+oxirs-star = "0.4.1"
 ```
 
 ### Basic Usage
@@ -232,8 +232,8 @@ cargo nextest run --features "reification,sparql-star" --no-fail-fast
 
 ## Roadmap
 
-### v0.4.0 (Current Release - Feature Complete ✅)
-All core features implemented and tested (1,702/1,702 tests passing):
+### v0.4.1 (Current Release - Feature Complete ✅)
+All core features implemented and tested (1,708/1,708 tests passing):
 - ✅ Complete RDF-star specification compliance
 - ✅ All serialization formats (Turtle-star, N-Triples-star, TriG-star, N-Quads-star, JSON-LD-star)
 - ✅ Advanced annotation and provenance features

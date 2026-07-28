@@ -377,21 +377,24 @@ impl DeltaOfDeltaCompressor {
                 // No change: single '0' bit
                 self.bits.push(false);
             }
-            -63..=64 => {
+            -64..=63 => {
                 // Small delta: '10' + 7-bit signed value
+                // 7-bit two's complement covers exactly -64..=63.
                 self.bits.push(true);
                 self.bits.push(false);
                 self.encode_signed(delta_of_delta, 7);
             }
-            -255..=256 => {
+            -256..=255 => {
                 // Medium delta: '110' + 9-bit signed value
+                // 9-bit two's complement covers exactly -256..=255.
                 self.bits.push(true);
                 self.bits.push(true);
                 self.bits.push(false);
                 self.encode_signed(delta_of_delta, 9);
             }
-            -2047..=2048 => {
+            -2048..=2047 => {
                 // Large delta: '1110' + 12-bit signed value
+                // 12-bit two's complement covers exactly -2048..=2047.
                 self.bits.push(true);
                 self.bits.push(true);
                 self.bits.push(true);
@@ -747,6 +750,81 @@ mod tests {
             DeltaOfDeltaDecompressor::new(&compressed).expect("construction should succeed");
         let decompressed = decompressor.decompress_all();
 
+        assert_eq!(timestamps, decompressed);
+    }
+
+    #[test]
+    fn regression_delta_of_delta_boundary_7bit() {
+        // dod = +64 must round-trip losslessly (tier boundary: 7-bit two's
+        // complement can only represent -64..=63, so +64 must use the wider
+        // 9-bit tier rather than corrupt-encode as -64).
+        let base = 1_640_000_000_000i64;
+        let timestamps = vec![base, base + 1000, base + 2000 + 64]; // dod sequence: 0(delta=1000), then dod=64
+        let mut compressor = DeltaOfDeltaCompressor::new(timestamps[0]);
+        for &ts in &timestamps[1..] {
+            compressor.compress(ts);
+        }
+        let compressed = compressor.finish();
+        let decompressor =
+            DeltaOfDeltaDecompressor::new(&compressed).expect("construction should succeed");
+        let decompressed = decompressor.decompress_all();
+        assert_eq!(timestamps, decompressed);
+    }
+
+    #[test]
+    fn regression_delta_of_delta_boundary_9bit() {
+        // dod = +256 must round-trip losslessly (9-bit two's complement can
+        // only represent -256..=255).
+        let base = 1_640_000_000_000i64;
+        let timestamps = vec![base, base + 1000, base + 2000 + 256];
+        let mut compressor = DeltaOfDeltaCompressor::new(timestamps[0]);
+        for &ts in &timestamps[1..] {
+            compressor.compress(ts);
+        }
+        let compressed = compressor.finish();
+        let decompressor =
+            DeltaOfDeltaDecompressor::new(&compressed).expect("construction should succeed");
+        let decompressed = decompressor.decompress_all();
+        assert_eq!(timestamps, decompressed);
+    }
+
+    #[test]
+    fn regression_delta_of_delta_boundary_12bit() {
+        // dod = +2048 must round-trip losslessly (12-bit two's complement
+        // can only represent -2048..=2047).
+        let base = 1_640_000_000_000i64;
+        let timestamps = vec![base, base + 1000, base + 2000 + 2048];
+        let mut compressor = DeltaOfDeltaCompressor::new(timestamps[0]);
+        for &ts in &timestamps[1..] {
+            compressor.compress(ts);
+        }
+        let compressed = compressor.finish();
+        let decompressor =
+            DeltaOfDeltaDecompressor::new(&compressed).expect("construction should succeed");
+        let decompressed = decompressor.decompress_all();
+        assert_eq!(timestamps, decompressed);
+    }
+
+    #[test]
+    fn regression_delta_of_delta_boundary_propagates_correctly() {
+        // After a boundary dod, subsequent deltas must continue to
+        // accumulate correctly (verifies prev_delta wasn't desynced).
+        let base = 1_640_000_000_000i64;
+        let timestamps = vec![
+            base,
+            base + 1000,
+            base + 2000 + 64, // dod = +64 (boundary)
+            base + 3000 + 128,
+            base + 4000 + 128,
+        ];
+        let mut compressor = DeltaOfDeltaCompressor::new(timestamps[0]);
+        for &ts in &timestamps[1..] {
+            compressor.compress(ts);
+        }
+        let compressed = compressor.finish();
+        let decompressor =
+            DeltaOfDeltaDecompressor::new(&compressed).expect("construction should succeed");
+        let decompressed = decompressor.decompress_all();
         assert_eq!(timestamps, decompressed);
     }
 

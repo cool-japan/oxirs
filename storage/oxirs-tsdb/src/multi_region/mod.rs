@@ -4,9 +4,9 @@
 //!
 //! **This module is an in-process simulation / test harness**, not a
 //! networked multi-region deployment. All "regions" below are logical
-//! partitions inside one process's memory; [`replication::CrossRegionReplicator::drain_pending`]
+//! partitions inside one process's memory; [`replication::CrossRegionReplicator::drain_pending`](crate::multi_region::replication::CrossRegionReplicator::drain_pending)
 //! *simulates* shipping a write to a peer region by re-applying the same
-//! [`RegionWriteRecord`](replication::RegionWriteRecord) against that
+//! [`RegionWriteRecord`](crate::multi_region::replication::RegionWriteRecord) against that
 //! region's in-process view instead of sending it over any network/RPC
 //! transport. There is currently no wire protocol, no cross-process/cross-host
 //! communication, and no failure modes from a real network (partitions,

@@ -35,10 +35,15 @@ impl QueryExecutor {
         let mut seen = HashSet::new();
         let mut result = Solution::new();
         for binding in solution {
-            let key: Vec<_> = binding
+            // Canonicalize the key by variable order: `HashMap::iter()` order
+            // differs between instances (per-instance RandomState), so two
+            // bindings with identical content would otherwise produce unequal
+            // keys and both survive DISTINCT.
+            let mut key: Vec<_> = binding
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect();
+            key.sort_by(|a, b| a.0.cmp(&b.0));
             if seen.insert(key) {
                 result.push(binding);
             }

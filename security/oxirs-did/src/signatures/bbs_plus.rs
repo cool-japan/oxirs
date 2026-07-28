@@ -402,7 +402,7 @@ impl BbsProof {
     /// zero-knowledge proof of knowledge of the undisclosed messages against the
     /// signature and public key. That protocol is **not implemented** here:
     /// [`BbsProof::create`] currently produces only a hash commitment
-    /// ([`compute_proof_commitment`]), which is not a verifiable ZKP.
+    /// (`compute_proof_commitment`), which is not a verifiable ZKP.
     ///
     /// Rather than fabricate success (the previous behaviour returned
     /// `Ok(true)` after only structural checks — a critical security defect),
