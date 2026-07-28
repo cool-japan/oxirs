@@ -1,6 +1,6 @@
 # OxiRS-Star ⭐
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 [![Tests](https://img.shields.io/badge/tests-1%2C708%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
@@ -88,7 +88,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-star = "0.4.1"
+oxirs-star = "0.4.2"
 ```
 
 ### Basic Usage
@@ -232,7 +232,7 @@ cargo nextest run --features "reification,sparql-star" --no-fail-fast
 
 ## Roadmap
 
-### v0.4.1 (Current Release - Feature Complete ✅)
+### v0.4.2 (Current Release - Feature Complete ✅)
 All core features implemented and tested (1,708/1,708 tests passing):
 - ✅ Complete RDF-star specification compliance
 - ✅ All serialization formats (Turtle-star, N-Triples-star, TriG-star, N-Quads-star, JSON-LD-star)

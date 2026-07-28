@@ -1,6 +1,6 @@
 # OxiRS Stream - Real-time RDF Streaming
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Status**: v0.4.1 - Released 2026-07-28
 
@@ -37,10 +37,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-stream = "0.4.1"
+oxirs-stream = "0.4.2"
 
 # Default features enable only the in-memory backend. Turn on the backends you need:
-oxirs-stream = { version = "0.4.1", features = ["mqtt", "nats"] }
+oxirs-stream = { version = "0.4.2", features = ["mqtt", "nats"] }
 
 # `industry40` bundles mqtt + opcua + sparkplug for Industry 4.0 deployments.
 # `all-backends` bundles nats + kinesis + redis + rabbitmq + mqtt + opcua.
@@ -443,7 +443,7 @@ let processor = StreamProcessor::builder()
 
 ## Status
 
-### Production Release (v0.4.1)
+### Production Release (v0.4.2)
 - ✅ MQTT 5.0 property codec (`backend::mqtt::properties`) — encode/decode for the PUBLISH-relevant
   property set (Payload Format Indicator, Message Expiry Interval, Content Type, Response Topic,
   Correlation Data, Subscription Identifier, Topic Alias, repeatable User Properties), wired into

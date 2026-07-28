@@ -1,10 +1,10 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: v0.4.1 — release preparation on branch `0.4.1`, last verified 2026-07-28
+**Status**: v0.4.2 — release preparation on branch `0.4.1`, last verified 2026-07-28
 
 **Tests**: 1311 passed, 0 failed (`cargo nextest run -p oxirs`)
 
@@ -739,4 +739,4 @@ RUST_LOG=oxirs_core=debug,oxirs_arq=trace oxirs query mydata query.sparql
 
 ---
 
-**OxiRS CLI v0.4.1** - Production-ready command-line interface for semantic web operations
+**OxiRS CLI v0.4.2** - Production-ready command-line interface for semantic web operations

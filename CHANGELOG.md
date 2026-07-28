@@ -5,6 +5,8 @@ All notable changes to OxiRS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - Unreleased
+
 ## [0.4.1] - 2026-07-28
 
 A workspace-wide production-readiness hardening pass: a 38-scope multi-agent audit surfaced 308 verified findings (62 P0, 131 P1, 115 P2), of which roughly 300 were fixed across 38 work packages, plus 74 test regressions caught by the full-suite gate and a follow-up chain of SPARQL-parser, storage-durability, and CLI/DID data-integrity fixes.

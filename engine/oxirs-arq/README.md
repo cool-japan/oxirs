@@ -1,6 +1,6 @@
 # OxiRS ARQ
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL query engine with algebra and optimization**
 
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-arq = "0.4.1"
+oxirs-arq = "0.4.2"
 ```
 
 ## Quick Start

@@ -1,6 +1,6 @@
 # OxiRS SHACL 🔍
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
@@ -40,8 +40,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-shacl = "0.4.1"
-oxirs-core = "0.4.1"
+oxirs-shacl = "0.4.2"
+oxirs-core = "0.4.2"
 ```
 
 ### Basic Usage

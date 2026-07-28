@@ -1,6 +1,6 @@
 # OxiRS SAMM - Semantic Aspect Meta Model for Rust
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](../../../LICENSE)
 [![Tests](https://img.shields.io/badge/tests-1%2C609%20passing-brightgreen)](./TODO.md)
 [![Documentation](https://img.shields.io/badge/docs-100%25-brightgreen)](./src/lib.rs)
@@ -47,7 +47,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-samm = "0.4.1"
+oxirs-samm = "0.4.2"
 ```
 
 ### Basic Usage
@@ -514,7 +514,7 @@ Robust fuzz testing for parser resilience:
 
 ## Development Status
 
-### ✅ v0.4.1 Production-Ready
+### ✅ v0.4.2 Production-Ready
 
 **All major features complete and tested**:
 - [x] SAMM 2.0.0-2.3.0 full specification support

@@ -1,6 +1,6 @@
 # OxiRS Fuseki
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility**
 
@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-oxirs-fuseki = "0.4.1"
+oxirs-fuseki = "0.4.2"
 ```
 
 ### As a Binary
@@ -347,7 +347,7 @@ GET /health
 ```json
 {
   "status": "healthy",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "uptime": "2h 15m 30s",
   "datasets": {
     "example": {

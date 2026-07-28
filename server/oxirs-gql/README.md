@@ -1,6 +1,6 @@
 # OxiRS GraphQL
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **High-performance GraphQL server for RDF data with automatic schema generation**
 
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-gql = "0.4.1"
+oxirs-gql = "0.4.2"
 ```
 
 ## Quick Start

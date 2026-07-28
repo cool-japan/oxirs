@@ -1,6 +1,6 @@
 # OxiRS Vec - Vector Search Engine
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Status**: v0.4.1 - Released 2026-07-26
 
@@ -36,7 +36,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-vec = "0.4.1"
+oxirs-vec = "0.4.2"
 ```
 
 ## Quick Start
@@ -272,7 +272,7 @@ runtime.block_on(async {
 
 ## Status
 
-### Production Release (v0.4.1)
+### Production Release (v0.4.2)
 - ✅ HNSW/IVF/Flat indices with persisted dataset support
 - ✅ SPARQL/GraphQL integration enhanced with federation-aware vector filters
 - ✅ CLI pipelines for batch embedding import/export and monitoring

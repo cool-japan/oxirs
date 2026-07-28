@@ -1,10 +1,10 @@
 # OxiRS Tauri Desktop App
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Desktop GUI for OxiRS: chat interface, visual SPARQL query builder, and CAN bus monitor**
 
-**Status**: v0.4.1 — in development on branch `0.4.1`, last verified 2026-07-28
+**Status**: v0.4.2 — in development on branch `0.4.1`, last verified 2026-07-28
 
 **Tests**: 61 passed, 0 failed (`cargo nextest run -p oxirs-tauri`)
 
@@ -131,4 +131,4 @@ Licensed under:
 
 ---
 
-**OxiRS Tauri Desktop App v0.4.1** — chat UI, visual SPARQL query builder, and CAN bus monitor shell
+**OxiRS Tauri Desktop App v0.4.2** — chat UI, visual SPARQL query builder, and CAN bus monitor shell

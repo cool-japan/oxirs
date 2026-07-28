@@ -1,6 +1,6 @@
 # OxiRS Federate - Federated Query Processing
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Status**: v0.4.1 - Released 2026-07-28
 
@@ -39,10 +39,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Features complete - APIs stable
 [dependencies]
-oxirs-federate = "0.4.1"
+oxirs-federate = "0.4.2"
 
 # Optional: Pure-Rust GPU acceleration for query processing (off by default)
-oxirs-federate = { version = "0.4.1", features = ["gpu"] }
+oxirs-federate = { version = "0.4.2", features = ["gpu"] }
 ```
 
 > **Note on the sections below:** "Quick Start" through "Service Discovery" sketch a
@@ -477,7 +477,7 @@ println!("SPARQL endpoint: {}", description.sparql_endpoint);
 
 ## Status
 
-### Production Release (v0.4.1) - Features Complete!
+### Production Release (v0.4.2) - Features Complete!
 - ✅ **Distributed Transactions** - 2PC and Saga patterns with automatic compensation
 - ✅ **Advanced Authentication** - OAuth2, SAML, JWT, API keys, Basic, Service-to-Service
 - ✅ **ML-Driven Optimization** - Intelligent source selection and query planning

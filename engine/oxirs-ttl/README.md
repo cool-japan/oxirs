@@ -1,6 +1,6 @@
 # OxiRS TTL - RDF Turtle Family Parser & Serializer
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Tests](https://img.shields.io/badge/tests-1%2C852%20passing-green)](https://github.com/cool-japan/oxirs)
 [![Compliance](https://img.shields.io/badge/W3C-97%25%20compliant-brightgreen)](https://www.w3.org/TR/turtle/)
 
@@ -44,13 +44,13 @@ ex:greeting "مرحبا"@ar--rtl .  # Right-to-left
 The `rdf-12` feature is **enabled by default**, so no extra flag is needed:
 ```toml
 [dependencies]
-oxirs-ttl = "0.4.1"
+oxirs-ttl = "0.4.2"
 ```
 
 To build without RDF 1.2 support, disable default features and re-enable the ones you need:
 ```toml
 [dependencies]
-oxirs-ttl = { version = "0.4.1", default-features = false }
+oxirs-ttl = { version = "0.4.2", default-features = false }
 ```
 
 ### Advanced Features
@@ -71,10 +71,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = "0.4.1"  # rdf-12 (quoted triples, directional language tags) is on by default
+oxirs-ttl = "0.4.2"  # rdf-12 (quoted triples, directional language tags) is on by default
 
 # With all features
-oxirs-ttl = { version = "0.4.1", features = ["async-tokio", "parallel"] }
+oxirs-ttl = { version = "0.4.2", features = ["async-tokio", "parallel"] }
 ```
 
 ## Quick Start

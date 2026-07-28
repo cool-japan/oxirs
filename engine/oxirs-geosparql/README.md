@@ -1,6 +1,6 @@
 # oxirs-geosparql
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
 
@@ -31,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-geosparql = "0.4.1"
+oxirs-geosparql = "0.4.2"
 ```
 
 ## Usage
@@ -302,7 +302,7 @@ files — SQLite-based vector feature storage. The backend is the Pure-Rust
 
 ```toml
 [dependencies]
-oxirs-geosparql = { version = "0.4.1", features = ["geopackage"] }
+oxirs-geosparql = { version = "0.4.2", features = ["geopackage"] }
 ```
 
 ```rust,ignore

@@ -1,6 +1,6 @@
 # OxiRS Embed - Knowledge Graph Embeddings
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Status**: v0.4.1 - Released 2026-07-26
 
@@ -74,10 +74,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-embed = "0.4.1"
+oxirs-embed = "0.4.2"
 
 # Enable optional feature groups (advanced models, GPU acceleration, API server, ...)
-oxirs-embed = { version = "0.4.1", features = ["advanced-models", "gpu"] }
+oxirs-embed = { version = "0.4.2", features = ["advanced-models", "gpu"] }
 ```
 
 ## Quick Start
@@ -621,7 +621,7 @@ provided by `oxirs_embed::gpu_acceleration::{GpuAccelerationConfig, GpuAccelerat
 
 ## Status
 
-### Production Release (v0.4.1)
+### Production Release (v0.4.2)
 - ✅ Structural KG embedding models: TransE, DistMult, ComplEx, RotatE, HoLE, ConvE, TuckER, QuatE
 - ✅ Specialized domain text embeddings: SciBERT, CodeBERT, BioBERT, LegalBERT, FinBERT, ClinicalBERT, ChemBERT
 - ✅ Link prediction, entity clustering, community detection, vector search, visualization, interpretability

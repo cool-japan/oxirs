@@ -1,6 +1,6 @@
 # OxiRS Engine 🚀
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
@@ -198,13 +198,13 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # Individual modules (stable features)
-oxirs-arq = "0.4.1"
-oxirs-shacl = "0.4.1"
+oxirs-arq = "0.4.2"
+oxirs-shacl = "0.4.2"
 
 # Individual modules (experimental features)
-oxirs-vec = "0.4.1"
-oxirs-rule = "0.4.1"
-oxirs-star = "0.4.1"
+oxirs-vec = "0.4.2"
+oxirs-rule = "0.4.2"
+oxirs-star = "0.4.2"
 ```
 
 Note: There is no single `oxirs-engine` crate. Use individual modules as needed.

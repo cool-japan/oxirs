@@ -1,6 +1,6 @@
 # OxiRS TDB - High-Performance RDF Storage Engine
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
@@ -102,7 +102,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-tdb = "0.4.1"
+oxirs-tdb = "0.4.2"
 ```
 
 ### Basic Usage

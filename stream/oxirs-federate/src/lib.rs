@@ -1,9 +1,9 @@
 //! # OxiRS Federation - Federated Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-federate/badge.svg)](https://docs.rs/oxirs-federate)
 //!
-//! **Status**: Production Release (v0.4.1)
+//! **Status**: Production Release (v0.4.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Federated query processing capabilities for SPARQL and GraphQL with service discovery,

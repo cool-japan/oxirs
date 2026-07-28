@@ -35,7 +35,7 @@ npm install oxirs-wasm
 
 ```toml
 [dependencies]
-oxirs-wasm = "0.4.1"
+oxirs-wasm = "0.4.2"
 ```
 
 ## Quick Start

@@ -1,6 +1,6 @@
 # OxiRS Core
 
-[![Version](https://img.shields.io/badge/version-0.4.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 
 **Foundational, Rust-native RDF data model and SPARQL engine for the OxiRS semantic web platform**
@@ -75,10 +75,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.4.1"
+oxirs-core = "0.4.2"
 
 # Optional: enable async streaming support
-oxirs-core = { version = "0.4.1", features = ["async"] }
+oxirs-core = { version = "0.4.2", features = ["async"] }
 ```
 
 ### Feature Flags
@@ -347,7 +347,7 @@ Licensed under the Apache License, Version 2.0 ([LICENSE](../../LICENSE) or http
 
 ## Status
 
-🚀 **Production Release (v0.4.1)** — 2,764 tests passing, zero `clippy` warnings, zero rustdoc errors.
+🚀 **Production Release (v0.4.2)** — 2,764 tests passing, zero `clippy` warnings, zero rustdoc errors.
 
 ### Current Highlights
 - **RDF/SPARQL core**: RDF 1.2 data model, SPARQL 1.1/1.2 query and update, federation via `SERVICE`
