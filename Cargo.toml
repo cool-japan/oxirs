@@ -325,7 +325,7 @@ oxisql-core = "0.4.0"
 oxisql-sqlite-compat = "0.4.0"
 
 # OxiCode - modern binary serialization (replaces bincode per COOLJAPAN Policy)
-oxicode = { version = "0.2.5", features = ["serde", "derive"] }
+oxicode = { version = "0.2.6", features = ["serde", "derive"] }
 
 # OxiArc - Pure Rust archive handling (replaces zip crate per COOLJAPAN Policy)
 oxiarc-archive = "0.4.1"
