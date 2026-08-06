@@ -389,12 +389,12 @@ md5 = "0.8"
 hmac = "0.13.0"
 hex = "0.4.3"
 base64 = "0.22"
-oxicrypto-core = "0.2.1"  # Aead/Rng traits + CryptoError (OxiCrypto subcrate)
-oxicrypto-aead = "0.2.1"  # AES-256-GCM / ChaCha20-Poly1305 (OxiCrypto subcrate)
-oxicrypto-rand = "0.2.1"  # CSPRNG: random_bytes / random_nonce (OxiCrypto subcrate)
-oxicrypto-mac  = "0.2.1"  # HMAC-SHA256/384 (OxiCrypto subcrate)
-oxicrypto-hash = "0.2.1"  # SHA-256/384/512 incremental hashing (OxiCrypto subcrate)
-oxicrypto-kdf  = "0.2.1"  # PBKDF2-SHA256 (OxiCrypto subcrate)
+oxicrypto-core = "0.3.0"  # Aead/Rng traits + CryptoError (OxiCrypto subcrate)
+oxicrypto-aead = "0.3.0"  # AES-256-GCM / ChaCha20-Poly1305 (OxiCrypto subcrate)
+oxicrypto-rand = "0.3.0"  # CSPRNG: random_bytes / random_nonce (OxiCrypto subcrate)
+oxicrypto-mac  = "0.3.0"  # HMAC-SHA256/384 (OxiCrypto subcrate)
+oxicrypto-hash = "0.3.0"  # SHA-256/384/512 incremental hashing (OxiCrypto subcrate)
+oxicrypto-kdf  = "0.3.0"  # PBKDF2-SHA256 (OxiCrypto subcrate)
 oxitls         = { version = "0.2.1", features = ["pure", "webpki-roots"] }  # Pure Rust TLS facade
 oxitls-rcgen   = "0.2.1"  # Pure Rust certificate generation for OxiTLS
 jsonwebtoken = { version = "10.4", features = ["rust_crypto"] }
