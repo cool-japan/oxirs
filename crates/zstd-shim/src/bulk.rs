@@ -6,6 +6,8 @@
 
 use std::marker::PhantomData;
 
+pub use crate::zstd_safe::WriteBuf;
+
 /// Reject a frame whose declared `Frame_Content_Size` exceeds `capacity`
 /// *before* any decompression work happens.
 ///
@@ -102,12 +104,17 @@ impl<'a> Compressor<'a> {
         if self.level <= 0 { crate::DEFAULT_COMPRESSION_LEVEL } else { self.level }
     }
 
-    /// Compress `source` and APPEND the resulting frame to `destination`.
+    /// Compress `source` and write the resulting frame to `destination`,
+    /// starting at its current write position.
     ///
-    /// Returns the number of bytes appended.
-    pub fn compress_to_buffer(&mut self, source: &[u8], destination: &mut Vec<u8>) -> std::io::Result<usize> {
+    /// Returns the number of bytes written. `destination` may be a plain
+    /// `Vec<u8>` (bytes are appended) or a `Cursor` positioned via
+    /// `Cursor::set_position` — e.g. `parquet`'s `Codec::compress`, which
+    /// pre-`reserve`s a shared buffer and hands out a `Cursor` positioned at
+    /// its prior length so pages land contiguously in one allocation.
+    pub fn compress_to_buffer<C: WriteBuf + ?Sized>(&mut self, source: &[u8], destination: &mut C) -> std::io::Result<usize> {
         let out = oxiarc_zstd::compress_with_level(source, self.effective_level()).map_err(std::io::Error::other)?;
-        destination.extend_from_slice(&out);
+        destination.write_at_pos(&out);
         Ok(out.len())
     }
 
@@ -136,21 +143,26 @@ impl Default for Decompressor<'static> {
 }
 
 impl<'a> Decompressor<'a> {
-    /// Decompress `source` and APPEND the resulting payload to `destination`.
+    /// Decompress `source` and write the resulting payload to `destination`,
+    /// starting at its current write position.
     ///
-    /// Returns the number of bytes appended. The spare capacity already
-    /// reserved in `destination` (`destination.capacity() - destination.len()`)
-    /// is treated as the caller's bound: if the frame's declared
-    /// `Frame_Content_Size` exceeds it, this returns
-    /// [`std::io::ErrorKind::InvalidData`] immediately, before any
-    /// decompression work happens (decompression-bomb guard). Callers that
-    /// want to accept arbitrarily large output should `reserve` a generous
-    /// bound up front, mirroring the real `zstd::bulk::Decompressor` contract.
-    pub fn decompress_to_buffer(&mut self, source: &[u8], destination: &mut Vec<u8>) -> std::io::Result<usize> {
-        let spare_capacity = destination.capacity().saturating_sub(destination.len());
-        reject_oversized_frame(source, spare_capacity)?;
+    /// Returns the number of bytes written. `destination` may be a plain
+    /// `Vec<u8>` (bytes are appended) or a `Cursor` positioned via
+    /// `Cursor::set_position` — e.g. `parquet`'s `Codec::decompress`, which
+    /// pre-`reserve`s a shared buffer and hands out a `Cursor` positioned at
+    /// its prior length. `destination.spare_capacity()` (capacity already
+    /// provisioned at/after the write position — `capacity() - len()` for a
+    /// plain `Vec`, `capacity() - position()` for a `Cursor`) is treated as
+    /// the caller's bound: if the frame's declared `Frame_Content_Size`
+    /// exceeds it, this returns [`std::io::ErrorKind::InvalidData`]
+    /// immediately, before any decompression work happens
+    /// (decompression-bomb guard). Callers that want to accept arbitrarily
+    /// large output should `reserve` a generous bound up front, mirroring
+    /// the real `zstd::bulk::Decompressor` contract.
+    pub fn decompress_to_buffer<C: WriteBuf + ?Sized>(&mut self, source: &[u8], destination: &mut C) -> std::io::Result<usize> {
+        reject_oversized_frame(source, destination.spare_capacity())?;
         let out = oxiarc_zstd::decode_all(source).map_err(std::io::Error::other)?;
-        destination.extend_from_slice(&out);
+        destination.write_at_pos(&out);
         Ok(out.len())
     }
 
@@ -248,5 +260,44 @@ mod tests {
         assert!(reject_oversized_frame(&bogus, 0).is_ok());
         // The subsequent real decode still fails, just not via the guard.
         assert!(decompress(&bogus, 0).is_err());
+    }
+
+    #[test]
+    fn regression_compress_decompress_to_buffer_accept_positioned_cursor() {
+        // Mirrors `parquet::compression::ZSTDCodec::compress`/`decompress`
+        // exactly (parquet >= 59.2): reserve a shared buffer, wrap the
+        // existing `&mut Vec<u8>` in a `Cursor`, position it at the
+        // pre-reserve length, and pass `&mut cursor` to `compress_to_buffer`
+        // / `decompress_to_buffer`. Prior to the `WriteBuf` generalization
+        // this failed to type-check (`expected &mut Vec<u8>, found
+        // &mut Cursor<&mut Vec<u8>>`).
+        use std::io::Cursor;
+
+        let data = b"the quick brown fox jumps over the lazy dog, repeated".repeat(20);
+
+        let mut comp = Compressor::new(3).expect("new");
+        let mut cbuf: Vec<u8> = vec![0xAA, 0xBB]; // pre-existing unrelated prefix
+        let coffset = cbuf.len();
+        cbuf.reserve(crate::zstd_safe::compress_bound(data.len()));
+        let compressed_len = {
+            let mut cursor = Cursor::new(&mut cbuf);
+            cursor.set_position(coffset as u64);
+            comp.compress_to_buffer(&data, &mut cursor).expect("compress via cursor")
+        };
+        assert_eq!(cbuf.len(), coffset + compressed_len);
+        assert_eq!(&cbuf[..coffset], &[0xAA, 0xBB]); // prefix untouched
+
+        let mut dec = Decompressor::new().expect("new");
+        let mut dbuf: Vec<u8> = vec![0xCC]; // pre-existing unrelated prefix
+        let doffset = dbuf.len();
+        dbuf.reserve(data.len());
+        let decompressed_len = {
+            let mut cursor = Cursor::new(&mut dbuf);
+            cursor.set_position(doffset as u64);
+            dec.decompress_to_buffer(&cbuf[coffset..], &mut cursor).expect("decompress via cursor")
+        };
+        assert_eq!(decompressed_len, data.len());
+        assert_eq!(&dbuf[doffset..], &data[..]);
+        assert_eq!(&dbuf[..doffset], &[0xCC]); // prefix untouched
     }
 }

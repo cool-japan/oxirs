@@ -121,3 +121,152 @@ pub fn get_frame_content_size(src: &[u8]) -> Result<Option<u64>, ContentSizeErro
 
     Ok(Some(value))
 }
+
+/// A growable byte-sink destination for [`crate::bulk`]'s buffer-taking
+/// `compress_to_buffer`/`decompress_to_buffer` methods.
+///
+/// The real `zstd_safe::WriteBuf` is an `unsafe trait` built around raw
+/// pointers into possibly-uninitialized memory (`as_mut_ptr` +
+/// `filled_until`). This is a **safe** reimplementation of just the
+/// observable contract — "write starting at the current fill position,
+/// growing storage as needed" plus "how much spare capacity is already
+/// provisioned" for the decompression-bomb guard — scoped to what downstream
+/// consumers of this shim (parquet, tantivy, pulsar, wasmtime) actually pass:
+/// a plain `Vec<u8>`, or a `Cursor` wrapping one that's been positioned via
+/// `Cursor::set_position` to mark "start writing here" against an
+/// already-`reserve`d buffer (parquet's `Codec::compress`/`decompress` do
+/// exactly this to write compressed pages at an offset inside a shared
+/// buffer). Growth uses safe `Vec::resize` + slice copy rather than an
+/// unsafe uninitialized-memory write, at a small, acceptable extra-copy cost.
+pub trait WriteBuf {
+    /// Capacity available for writing at (and beyond) the current write
+    /// position without the destination needing to reallocate — i.e. how
+    /// many bytes the caller already provisioned. Used as the
+    /// decompression-bomb guard bound in [`crate::bulk::Decompressor`].
+    fn spare_capacity(&self) -> usize;
+
+    /// Write `data` starting at the destination's current write position
+    /// (appending, for a plain growable buffer; at `Cursor::position()` for
+    /// a `Cursor`), growing the underlying storage if `data` extends past
+    /// what was already provisioned. Advances the write position by
+    /// `data.len()`.
+    fn write_at_pos(&mut self, data: &[u8]);
+}
+
+impl WriteBuf for Vec<u8> {
+    fn spare_capacity(&self) -> usize {
+        self.capacity().saturating_sub(self.len())
+    }
+
+    fn write_at_pos(&mut self, data: &[u8]) {
+        self.extend_from_slice(data);
+    }
+}
+
+impl WriteBuf for &mut Vec<u8> {
+    fn spare_capacity(&self) -> usize {
+        (**self).capacity().saturating_sub((**self).len())
+    }
+
+    fn write_at_pos(&mut self, data: &[u8]) {
+        (**self).extend_from_slice(data);
+    }
+}
+
+/// Write `data` into `vec` at byte offset `pos`, growing `vec` (zero-padding
+/// any gap before `pos`, matching the real trait's implicit "already
+/// reserved, may be unfilled" contract without leaving anything actually
+/// uninitialized) so that `vec.len() >= pos + data.len()` afterward.
+fn write_vec_at_pos(vec: &mut Vec<u8>, pos: usize, data: &[u8]) {
+    let end = pos.saturating_add(data.len());
+    if vec.len() < pos {
+        vec.resize(pos, 0);
+    }
+    if vec.len() < end {
+        vec.resize(end, 0);
+    }
+    vec[pos..end].copy_from_slice(data);
+}
+
+impl WriteBuf for std::io::Cursor<&mut Vec<u8>> {
+    fn spare_capacity(&self) -> usize {
+        let pos = self.position() as usize;
+        self.get_ref().capacity().saturating_sub(pos)
+    }
+
+    fn write_at_pos(&mut self, data: &[u8]) {
+        let pos = self.position() as usize;
+        write_vec_at_pos(self.get_mut(), pos, data);
+        self.set_position((pos as u64).saturating_add(data.len() as u64));
+    }
+}
+
+impl WriteBuf for std::io::Cursor<Vec<u8>> {
+    fn spare_capacity(&self) -> usize {
+        let pos = self.position() as usize;
+        self.get_ref().capacity().saturating_sub(pos)
+    }
+
+    fn write_at_pos(&mut self, data: &[u8]) {
+        let pos = self.position() as usize;
+        write_vec_at_pos(self.get_mut(), pos, data);
+        self.set_position((pos as u64).saturating_add(data.len() as u64));
+    }
+}
+
+#[cfg(test)]
+mod write_buf_tests {
+    use super::WriteBuf;
+    use std::io::Cursor;
+
+    #[test]
+    fn vec_write_at_pos_appends() {
+        let mut v: Vec<u8> = vec![1, 2, 3];
+        v.write_at_pos(&[4, 5]);
+        assert_eq!(v, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn cursor_owned_vec_write_at_pos_appends_when_positioned_at_end() {
+        let mut cur = Cursor::new(vec![1u8, 2, 3]);
+        cur.set_position(3);
+        cur.write_at_pos(&[4, 5]);
+        assert_eq!(cur.into_inner(), vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn cursor_borrowed_vec_write_at_pos_appends_when_positioned_at_end() {
+        // Mirrors parquet's Codec::compress/decompress exactly: reserve, wrap
+        // the existing Vec in a Cursor, position it at the pre-reserve length.
+        let mut buf: Vec<u8> = vec![0xAA, 0xBB];
+        let offset = buf.len();
+        buf.reserve(16);
+        {
+            let mut cur = Cursor::new(&mut buf);
+            cur.set_position(offset as u64);
+            cur.write_at_pos(&[1, 2, 3]);
+        }
+        assert_eq!(buf, vec![0xAA, 0xBB, 1, 2, 3]);
+    }
+
+    #[test]
+    fn cursor_borrowed_vec_write_at_pos_overwrites_in_place_when_repositioned() {
+        let mut buf: Vec<u8> = vec![0, 0, 0, 0, 0];
+        {
+            let mut cur = Cursor::new(&mut buf);
+            cur.set_position(1);
+            cur.write_at_pos(&[9, 9]);
+        }
+        assert_eq!(buf, vec![0, 9, 9, 0, 0]);
+    }
+
+    #[test]
+    fn spare_capacity_reflects_reservation_from_cursor_position() {
+        let mut buf: Vec<u8> = Vec::with_capacity(10);
+        buf.extend_from_slice(&[1, 2]);
+        let offset = buf.len();
+        let mut cur = Cursor::new(&mut buf);
+        cur.set_position(offset as u64);
+        assert_eq!(cur.spare_capacity(), 8);
+    }
+}
