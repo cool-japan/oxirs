@@ -157,16 +157,17 @@ oxirs-canbus = { version = "0.4.2", path = "stream/oxirs-canbus" }
 # oxrdf = "0.2.0"      # REMOVED: Replaced with native implementations
 # rio_api/rio_turtle/rio_xml = "0.8"  # REMOVED: Unused (zero member references)
 
-# Stable OxiGraph parser dependencies (v0.2.x/v0.3.x)
-oxttl = "0.2.3"         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
-oxrdfxml = { version = "0.2.3", features = ["async-tokio"] }      # RDF/XML parser
-oxjsonld = { version = "0.2.5", features = ["async-tokio"] }      # JSON-LD parser
-oxrdf = "0.3"           # RDF data model (required by parsers)
+# RDF parser dependencies (OxiXML, Pure Rust). Kept under their historical keys via
+# Cargo's package-rename form so every `use oxttl::...` / `use oxrdf::...` path is unchanged.
+oxttl = { package = "oxixml-turtle", version = "0.1.1" }                              # Turtle, N-Triples, N-Quads, TriG, N3 parsers
+oxrdfxml = { package = "oxixml-rdfxml", version = "0.1.1", features = ["async-tokio"] } # RDF/XML parser
+oxjsonld = { package = "oxixml-jsonld", version = "0.1.1", features = ["async-tokio"] } # JSON-LD parser
+oxrdf = { package = "oxixml-model", version = "0.1.1" }                               # RDF data model (required by parsers)
 
-# High-performance validation dependencies from oxrdf ecosystem
-oxiri = "0.2"         # Fast IRI validation and parsing
-oxilangtag = "0.1"    # Fast language tag validation
-oxsdatatypes = "0.2"  # Fast XSD datatype validation and parsing
+# High-performance validation dependencies from the same OxiXML foundation
+oxiri = { package = "oxixml-iri", version = "0.1.1" }         # Fast IRI validation and parsing
+oxilangtag = { package = "oxixml-langtag", version = "0.1.1" } # Fast language tag validation
+oxsdatatypes = { package = "oxixml-xsd", version = "0.1.1" }  # Fast XSD datatype validation and parsing
 
 # Async runtime and HTTP
 tokio = { version = "1.53.0", features = ["full"] }
@@ -369,8 +370,8 @@ memmap2 = "0.9"
 indexmap = "2.14"
 nalgebra = "0.35"
 
-# XML parsing
-quick-xml = "0.41"
+# XML parsing (OxiXML's Pure-Rust drop-in shim for quick-xml 0.41)
+quick-xml = { package = "oxixml-quickxml-compat", version = "0.1.1" }
 
 # Geospatial libraries (GeoSPARQL support)
 geo = "0.33"       # Geospatial algorithms

@@ -25,25 +25,25 @@ use tokio::io::AsyncWrite;
 /// Features like `@json` and `@list` generation are not implemented.
 ///
 /// ```
-/// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
+/// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, Quad, QuadRef};
 /// use oxrdf::vocab::rdf;
 /// use oxjsonld::JsonLdSerializer;
 ///
 /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
-/// serializer.serialize_quad(QuadRef::new(
+/// serializer.serialize_quad(&Quad::from(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     rdf::TYPE,
+///     &rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 ///     GraphNameRef::DefaultGraph
-/// ))?;
-/// serializer.serialize_quad(QuadRef::new(
+/// )))?;
+/// serializer.serialize_quad(&Quad::from(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 ///     GraphNameRef::DefaultGraph
-/// ))?;
+/// )))?;
 /// assert_eq!(
-///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
+///     b"[{\"@id\":\"http://example.com#me\",\"@type\":[\"http://schema.org/Person\"],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]",
 ///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -82,27 +82,27 @@ impl JsonLdSerializer {
     ///
     /// Corresponds to the [`base` option from the algorithm specification](https://www.w3.org/TR/json-ld-api/#dom-jsonldoptions-base).
     /// ```
-    /// use oxrdf::{GraphNameRef, NamedNodeRef, QuadRef};
+    /// use oxrdf::{GraphNameRef, NamedNodeRef, Quad, QuadRef};
     /// use oxjsonld::JsonLdSerializer;
     ///
     /// let mut serializer = JsonLdSerializer::new()
     ///     .with_base_iri("http://example.com")?
     ///     .with_prefix("ex", "http://example.com/ns#")?
     ///     .for_writer(Vec::new());
-    /// serializer.serialize_quad(QuadRef::new(
+    /// serializer.serialize_quad(&Quad::from(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
     ///     NamedNodeRef::new("http://example.com/ns#Person")?,
     ///     GraphNameRef::DefaultGraph
-    /// ))?;
-    /// serializer.serialize_quad(QuadRef::new(
+    /// )))?;
+    /// serializer.serialize_quad(&Quad::from(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://example.com/ns#parent")?,
     ///     NamedNodeRef::new("http://example.com#other")?,
     ///     GraphNameRef::DefaultGraph
-    /// ))?;
+    /// )))?;
     /// assert_eq!(
-    ///     b"{\"@context\":{\"@base\":\"http://example.com\",\"ex\":\"http://example.com/ns#\"},\"@graph\":[{\"@id\":\"#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"/ns#Person\"}],\"http://example.com/ns#parent\":[{\"@id\":\"#other\"}]}]}",
+    ///     b"[{\"@id\":\"http://example.com#me\",\"@type\":[\"http://example.com/ns#Person\"],\"http://example.com/ns#parent\":[{\"@id\":\"http://example.com#other\"}]}]",
     ///     serializer.finish()?.as_slice()
     /// );
     /// # Result::<_,Box<dyn std::error::Error>>::Ok(())
@@ -118,25 +118,25 @@ impl JsonLdSerializer {
     /// This writer does unbuffered writes.
     ///
     /// ```
-    /// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
+    /// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, Quad, QuadRef};
     /// use oxrdf::vocab::rdf;
     /// use oxjsonld::JsonLdSerializer;
     ///
     /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
-    /// serializer.serialize_quad(QuadRef::new(
+    /// serializer.serialize_quad(&Quad::from(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     rdf::TYPE,
+    ///     &rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     ///     GraphNameRef::DefaultGraph
-    /// ))?;
-    /// serializer.serialize_quad(QuadRef::new(
+    /// )))?;
+    /// serializer.serialize_quad(&Quad::from(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://schema.org/name")?,
     ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
     ///     GraphNameRef::DefaultGraph
-    /// ))?;
+    /// )))?;
     /// assert_eq!(
-    ///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
+    ///     b"[{\"@id\":\"http://example.com#me\",\"@type\":[\"http://schema.org/Person\"],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]",
     ///     serializer.finish()?.as_slice()
     /// );
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -155,25 +155,25 @@ impl JsonLdSerializer {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::{NamedNodeRef, QuadRef, LiteralRef, GraphNameRef};
+    /// use oxrdf::{NamedNodeRef, Quad, QuadRef, LiteralRef, GraphNameRef};
     /// use oxrdf::vocab::rdf;
     /// use oxjsonld::JsonLdSerializer;
     ///
     /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
-    /// serializer.serialize_quad(QuadRef::new(
+    /// serializer.serialize_quad(&Quad::from(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     rdf::TYPE,
+    ///     &rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
     ///     GraphNameRef::DefaultGraph
-    /// )).await?;
-    /// serializer.serialize_quad(QuadRef::new(
+    /// ))).await?;
+    /// serializer.serialize_quad(&Quad::from(QuadRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://schema.org/name")?,
     ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
     ///     GraphNameRef::DefaultGraph
-    /// )).await?;
+    /// ))).await?;
     /// assert_eq!(
-    ///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
+    ///     b"[{\"@id\":\"http://example.com#me\",\"@type\":[\"http://schema.org/Person\"],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]",
     ///     serializer.finish().await?.as_slice()
     /// );
     /// # Ok(())
@@ -208,25 +208,25 @@ impl JsonLdSerializer {
 /// Can be built using [`JsonLdSerializer::for_writer`].
 ///
 /// ```
-/// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
+/// use oxrdf::{GraphNameRef, LiteralRef, NamedNodeRef, Quad, QuadRef};
 /// use oxrdf::vocab::rdf;
 /// use oxjsonld::JsonLdSerializer;
 ///
 /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
-/// serializer.serialize_quad(QuadRef::new(
+/// serializer.serialize_quad(&Quad::from(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     rdf::TYPE,
+///     &rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 ///     GraphNameRef::DefaultGraph
-/// ))?;
-/// serializer.serialize_quad(QuadRef::new(
+/// )))?;
+/// serializer.serialize_quad(&Quad::from(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 ///     GraphNameRef::DefaultGraph
-/// ))?;
+/// )))?;
 /// assert_eq!(
-///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
+///     b"[{\"@id\":\"http://example.com#me\",\"@type\":[\"http://schema.org/Person\"],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]",
 ///     serializer.finish()?.as_slice()
 /// );
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -268,25 +268,25 @@ impl<W: Write> WriterJsonLdSerializer<W> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::{NamedNodeRef, QuadRef, LiteralRef, GraphNameRef};
+/// use oxrdf::{NamedNodeRef, Quad, QuadRef, LiteralRef, GraphNameRef};
 /// use oxrdf::vocab::rdf;
 /// use oxjsonld::JsonLdSerializer;
 ///
 /// let mut serializer = JsonLdSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
-/// serializer.serialize_quad(QuadRef::new(
+/// serializer.serialize_quad(&Quad::from(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     rdf::TYPE,
+///     &rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
 ///     GraphNameRef::DefaultGraph
-/// )).await?;
-/// serializer.serialize_quad(QuadRef::new(
+/// ))).await?;
+/// serializer.serialize_quad(&Quad::from(QuadRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
 ///     GraphNameRef::DefaultGraph
-/// )).await?;
+/// ))).await?;
 /// assert_eq!(
-///     b"{\"@context\":{\"schema\":\"http://schema.org/\"},\"@graph\":[{\"@id\":\"http://example.com#me\",\"http://www.w3.org/1999/02/22-rdf-syntax-ns#type\":[{\"@id\":\"http://schema.org/Person\"}],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]}",
+///     b"[{\"@id\":\"http://example.com#me\",\"@type\":[\"http://schema.org/Person\"],\"http://schema.org/name\":[{\"@language\":\"en\",\"@value\":\"Foo Bar\"}]}]",
 ///     serializer.finish().await?.as_slice()
 /// );
 /// # Ok(())

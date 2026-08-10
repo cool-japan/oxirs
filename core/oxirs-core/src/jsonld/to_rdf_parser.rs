@@ -32,7 +32,7 @@ use tokio::io::AsyncRead;
 /// Count the number of people:
 /// ```
 /// use oxjsonld::JsonLdParser;
-/// use oxrdf::NamedNodeRef;
+/// use oxrdf::{NamedNodeRef, Term};
 /// use oxrdf::vocab::rdf;
 ///
 /// let file = br#"{
@@ -54,7 +54,7 @@ use tokio::io::AsyncRead;
 /// let mut count = 0;
 /// for quad in JsonLdParser::new().for_reader(file.as_ref()) {
 ///     let quad = quad?;
-///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+///     if quad.predicate == rdf::TYPE && quad.object == Term::from(schema_person) {
 ///         count += 1;
 ///     }
 /// }
@@ -95,7 +95,7 @@ impl JsonLdParser {
     ///
     /// ```
     /// use oxjsonld::{JsonLdParser, JsonLdProfile};
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::{NamedNodeRef, Term};
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
@@ -116,7 +116,7 @@ impl JsonLdParser {
     ///     .for_slice(file)
     /// {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == Term::from(schema_person) {
     ///         count += 1;
     ///     }
     /// }
@@ -151,7 +151,7 @@ impl JsonLdParser {
     /// Count the number of people:
     /// ```
     /// use oxjsonld::JsonLdParser;
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::{NamedNodeRef, Term};
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
@@ -173,7 +173,7 @@ impl JsonLdParser {
     /// let mut count = 0;
     /// for quad in JsonLdParser::new().for_reader(file.as_ref()) {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == Term::from(schema_person) {
     ///         count += 1;
     ///     }
     /// }
@@ -196,7 +196,7 @@ impl JsonLdParser {
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxjsonld::JsonLdParser;
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::{NamedNodeRef, Term};
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
@@ -219,7 +219,7 @@ impl JsonLdParser {
     /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(quad) = parser.next().await {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == Term::from(schema_person) {
     ///         count += 1;
     ///     }
     /// }
@@ -245,7 +245,7 @@ impl JsonLdParser {
     /// Count the number of people:
     /// ```
     /// use oxjsonld::JsonLdParser;
-    /// use oxrdf::NamedNodeRef;
+    /// use oxrdf::{NamedNodeRef, Term};
     /// use oxrdf::vocab::rdf;
     ///
     /// let file = br#"{
@@ -267,7 +267,7 @@ impl JsonLdParser {
     /// let mut count = 0;
     /// for quad in JsonLdParser::new().for_slice(file) {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate == rdf::TYPE && quad.object == Term::from(schema_person) {
     ///         count += 1;
     ///     }
     /// }

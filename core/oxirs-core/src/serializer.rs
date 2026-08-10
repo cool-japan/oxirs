@@ -581,12 +581,12 @@ impl Serializer {
     fn convert_triple_to_oxrdf(&self, triple: &crate::model::Triple) -> Result<oxrdf::Triple> {
         // Convert subject
         let subject = match triple.subject() {
-            crate::model::Subject::NamedNode(n) => {
-                oxrdf::NamedOrBlankNode::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
-            }
-            crate::model::Subject::BlankNode(b) => {
-                oxrdf::NamedOrBlankNode::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
-            }
+            crate::model::Subject::NamedNode(n) => oxrdf::NamedOrBlankNode::NamedNode(
+                oxrdf::NamedNode::new_unchecked(n.as_str().to_owned()),
+            ),
+            crate::model::Subject::BlankNode(b) => oxrdf::NamedOrBlankNode::BlankNode(
+                oxrdf::BlankNode::new_unchecked(b.as_str().to_owned()),
+            ),
             _ => {
                 return Err(crate::OxirsError::Serialize(
                     "Variables and quoted triples not supported in serialization".to_string(),
@@ -596,7 +596,9 @@ impl Serializer {
 
         // Convert predicate
         let predicate = match triple.predicate() {
-            crate::model::Predicate::NamedNode(n) => oxrdf::NamedNode::new_unchecked(n.as_str()),
+            crate::model::Predicate::NamedNode(n) => {
+                oxrdf::NamedNode::new_unchecked(n.as_str().to_owned())
+            }
             _ => {
                 return Err(crate::OxirsError::Serialize(
                     "Variable predicates not supported in serialization".to_string(),
@@ -607,17 +609,21 @@ impl Serializer {
         // Convert object
         let object = match triple.object() {
             crate::model::Object::NamedNode(n) => {
-                oxrdf::Term::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+                oxrdf::Term::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str().to_owned()))
             }
             crate::model::Object::BlankNode(b) => {
-                oxrdf::Term::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+                oxrdf::Term::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str().to_owned()))
             }
             crate::model::Object::Literal(l) => {
                 let literal = if let Some(lang) = l.language() {
-                    oxrdf::Literal::new_language_tagged_literal_unchecked(l.value(), lang)
+                    oxrdf::Literal::new_language_tagged_literal_unchecked(
+                        l.value().to_owned(),
+                        lang.to_owned(),
+                    )
                 } else {
-                    let datatype = oxrdf::NamedNode::new_unchecked(l.datatype().as_str());
-                    oxrdf::Literal::new_typed_literal(l.value(), datatype)
+                    let datatype =
+                        oxrdf::NamedNode::new_unchecked(l.datatype().as_str().to_owned());
+                    oxrdf::Literal::new_typed_literal(l.value().to_owned(), datatype)
                 };
                 oxrdf::Term::Literal(literal)
             }
@@ -654,12 +660,12 @@ impl Serializer {
     fn convert_quad_to_oxrdf(&self, quad: &Quad) -> Result<oxrdf::Quad> {
         // Convert subject
         let subject = match quad.subject() {
-            crate::model::Subject::NamedNode(n) => {
-                oxrdf::NamedOrBlankNode::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
-            }
-            crate::model::Subject::BlankNode(b) => {
-                oxrdf::NamedOrBlankNode::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
-            }
+            crate::model::Subject::NamedNode(n) => oxrdf::NamedOrBlankNode::NamedNode(
+                oxrdf::NamedNode::new_unchecked(n.as_str().to_owned()),
+            ),
+            crate::model::Subject::BlankNode(b) => oxrdf::NamedOrBlankNode::BlankNode(
+                oxrdf::BlankNode::new_unchecked(b.as_str().to_owned()),
+            ),
             _ => {
                 return Err(crate::OxirsError::Serialize(
                     "Variables and quoted triples not supported in serialization".to_string(),
@@ -669,7 +675,9 @@ impl Serializer {
 
         // Convert predicate
         let predicate = match quad.predicate() {
-            crate::model::Predicate::NamedNode(n) => oxrdf::NamedNode::new_unchecked(n.as_str()),
+            crate::model::Predicate::NamedNode(n) => {
+                oxrdf::NamedNode::new_unchecked(n.as_str().to_owned())
+            }
             _ => {
                 return Err(crate::OxirsError::Serialize(
                     "Variable predicates not supported in serialization".to_string(),
@@ -680,17 +688,21 @@ impl Serializer {
         // Convert object
         let object = match quad.object() {
             crate::model::Object::NamedNode(n) => {
-                oxrdf::Term::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+                oxrdf::Term::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str().to_owned()))
             }
             crate::model::Object::BlankNode(b) => {
-                oxrdf::Term::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+                oxrdf::Term::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str().to_owned()))
             }
             crate::model::Object::Literal(l) => {
                 let literal = if let Some(lang) = l.language() {
-                    oxrdf::Literal::new_language_tagged_literal_unchecked(l.value(), lang)
+                    oxrdf::Literal::new_language_tagged_literal_unchecked(
+                        l.value().to_owned(),
+                        lang.to_owned(),
+                    )
                 } else {
-                    let datatype = oxrdf::NamedNode::new_unchecked(l.datatype().as_str());
-                    oxrdf::Literal::new_typed_literal(l.value(), datatype)
+                    let datatype =
+                        oxrdf::NamedNode::new_unchecked(l.datatype().as_str().to_owned());
+                    oxrdf::Literal::new_typed_literal(l.value().to_owned(), datatype)
                 };
                 oxrdf::Term::Literal(literal)
             }
@@ -705,10 +717,10 @@ impl Serializer {
         // Convert graph name
         let graph_name = match quad.graph_name() {
             GraphName::NamedNode(n) => {
-                oxrdf::GraphName::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+                oxrdf::GraphName::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str().to_owned()))
             }
             GraphName::BlankNode(b) => {
-                oxrdf::GraphName::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+                oxrdf::GraphName::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str().to_owned()))
             }
             GraphName::DefaultGraph => oxrdf::GraphName::DefaultGraph,
             _ => {

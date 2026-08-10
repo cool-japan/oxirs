@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.2] - Unreleased
 
+### Changed
+- **workspace**: migrated the whole RDF/XML dependency stack onto the Pure-Rust OxiXML foundation. `oxttl`, `oxrdfxml`, `oxjsonld`, `oxrdf`, `oxiri`, `oxilangtag`, `oxsdatatypes`, `json-event-parser` and `quick-xml` now resolve to `oxixml-turtle`, `oxixml-rdfxml`, `oxixml-jsonld`, `oxixml-model`, `oxixml-iri`, `oxixml-langtag`, `oxixml-xsd`, `oxixml-json` and `oxixml-quickxml-compat` via Cargo's package-rename form, so every existing `use oxrdf::…` / `use quick_xml::…` path is unchanged. `cargo tree` confirms all eight oxigraph-lineage crates have left the dependency graph, and `deny.toml` now bans them by name.
+- **oxirs-core**: `oxiri` moved from 0.2 to the 0.3-shaped API — `Iri::resolve`/`resolve_unchecked` take a parsed `IriRef` rather than a string, so JSON-LD context processing and RDF/XML IRI resolution go through the new `model::iri::resolve_str{,_unchecked}` helpers.
+- **oxirs-core**: JSON-LD serialization output changed shape with the replacement serializer — a bare node array with `@type` compaction, where the previous one emitted a `{"@context":…,"@graph":[…]}` envelope with full-IRI predicate keys. Byte-level comparisons against previously serialized JSON-LD will not match. Note that `JsonLdSerializer::with_prefix` and `with_base_iri` are currently accepted but have no effect on the output.
+- **oxirs-core**: the JSON-LD reader parser is no longer `Send`, so `RdfParser::for_reader` drives it on a dedicated thread and streams quads back over a bounded channel. `ReaderQuadParser` keeps both its `Send` bound and its streaming behaviour.
+
+### Security
+- **oxirs-core**: dropped the RUSTSEC-2026-0194 / RUSTSEC-2026-0195 advisory ignores. Those covered a quick-xml 0.37.5 DoS reachable through `oxrdfxml`, and that crate is no longer in the graph.
+
 ## [0.4.1] - 2026-07-28
 
 A workspace-wide production-readiness hardening pass: a 38-scope multi-agent audit surfaced 308 verified findings (62 P0, 131 P1, 115 P2), of which roughly 300 were fixed across 38 work packages, plus 74 test regressions caught by the full-suite gate and a follow-up chain of SPARQL-parser, storage-durability, and CLI/DID data-integrity fixes.

@@ -12,6 +12,29 @@ use std::str::FromStr;
 // Import and re-export oxiri types for compatibility
 pub use oxiri::{Iri, IriParseError};
 
+use oxiri::IriRef;
+
+/// Resolves the relative IRI reference `reference` against `base`.
+///
+/// `Iri::resolve` takes an already-parsed `IriRef` rather than a raw string, so the
+/// reference is parsed first. Both steps report the same [`IriParseError`], which keeps
+/// this a drop-in for a plain string resolution.
+#[inline]
+pub(crate) fn resolve_str(
+    base: &Iri<String>,
+    reference: &str,
+) -> Result<Iri<String>, IriParseError> {
+    base.resolve(&IriRef::parse(reference)?)
+}
+
+/// Variant of [`resolve_str`] that skips validating both the reference and the result.
+///
+/// It is the caller's responsibility to ensure that `reference` is a valid IRI reference.
+#[inline]
+pub(crate) fn resolve_str_unchecked(base: &Iri<String>, reference: &str) -> Iri<String> {
+    base.resolve_unchecked(&IriRef::parse_unchecked(reference))
+}
+
 /// Convert IriParseError to OxirsError
 impl From<IriParseError> for OxirsError {
     fn from(err: IriParseError) -> Self {

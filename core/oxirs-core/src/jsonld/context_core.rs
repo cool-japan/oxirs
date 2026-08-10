@@ -11,6 +11,7 @@ use super::context_types::{
 };
 use super::error::{JsonLdErrorCode, JsonLdSyntaxError};
 use super::profile::{JsonLdProcessingMode, JsonLdProfile};
+use crate::model::iri::{resolve_str, resolve_str_unchecked};
 use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
 use oxiri::Iri;
 use std::borrow::Cow;
@@ -76,7 +77,7 @@ impl JsonLdContextProcessor {
                 JsonNode::String(context) => {
                     // 5.2.1)
                     let context = match if let Some(base_url) = base_url {
-                        base_url.resolve(&context)
+                        resolve_str(base_url, &context)
                     } else {
                         Iri::parse(context.clone())
                     } {
@@ -186,7 +187,7 @@ impl JsonLdContextProcessor {
                 };
                 // 5.6.3)
                 let import = match if let Some(base_url) = base_url {
-                    base_url.resolve(&import)
+                    resolve_str(base_url, &import)
                 } else {
                     Iri::parse(import.clone())
                 } {
@@ -243,14 +244,14 @@ impl JsonLdContextProcessor {
                             if self.lenient {
                                 result.base_iri = Some(if let Some(base_iri) = &result.base_iri {
                                     Iri::parse_unchecked(
-                                        base_iri.resolve_unchecked(&value).to_string(),
+                                        resolve_str_unchecked(base_iri, &value).to_string(),
                                     )
                                 } else {
                                     Iri::parse_unchecked(value.clone())
                                 })
                             } else {
                                 match if let Some(base_iri) = &result.base_iri {
-                                    base_iri.resolve(&value)
+                                    resolve_str(base_iri, &value)
                                 } else {
                                     Iri::parse(value.clone())
                                 } {
@@ -825,7 +826,7 @@ impl JsonLdContextProcessor {
         } else if term.contains('/') {
             // 16)
             let iri = match if let Some(base_url) = base_url {
-                base_url.resolve(term)
+                resolve_str(base_url, term)
             } else {
                 Iri::parse(term.to_owned())
             } {
@@ -1287,8 +1288,8 @@ impl JsonLdContextProcessor {
         if document_relative {
             if let Some(base_iri) = &active_context.base_iri {
                 if self.lenient {
-                    return Some(base_iri.resolve_unchecked(&value).into_inner().into());
-                } else if let Ok(value) = base_iri.resolve(&value) {
+                    return Some(resolve_str_unchecked(base_iri, &value).into_inner().into());
+                } else if let Ok(value) = resolve_str(base_iri, &value) {
                     return Some(value.into_inner().into());
                 }
             }

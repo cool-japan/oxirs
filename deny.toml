@@ -93,18 +93,6 @@ ignore = [
     # to RSA; removing it breaks real interop for no verify-side security benefit.
     "RUSTSEC-2023-0071",
 
-    # RUSTSEC-2026-0194 / RUSTSEC-2026-0195 (quick-xml 0.37.5 DoS, reached via oxrdfxml -> oxirs-core).
-    # Investigated 2026-07-22: reachable via SPARQL LOAD and file/GSP upload of RDF/XML, but bounded
-    # by oxirs' own independent mitigations (LOAD is SSRF-hardened with a 64MB MAX_LOAD_BYTES cap;
-    # upload is bounded by axum's DefaultBodyLimit). oxrdfxml 0.2.3 is the latest published version;
-    # upstream (oxigraph) already fixed this on their unreleased master (issues #1793/#1794) but that
-    # requires simultaneously pinning oxrdfxml+oxrdf+oxttl+oxjsonld+oxiri to unreleased git revs, which
-    # would NOT even help downstream consumers of the published oxirs-core crate (cargo [patch] isn't
-    # retained in an uploaded crates.io manifest). oxigraph's own maintainer downgraded severity,
-    # noting RDF/XML DoS has many other vectors regardless. Revisit when oxrdfxml ships 0.3.0.
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
-
     # RUSTSEC-2026-0098 / RUSTSEC-2026-0099 / RUSTSEC-2026-0104 / RUSTSEC-2026-0049
     # (rustls-webpki cert-validation bugs, reached via rumqttc 0.25.1 -> oxirs-stream's optional
     # "mqtt" feature, which is NOT enabled by default). Investigated 2026-07-22: rumqttc 0.25.1 is
@@ -295,6 +283,30 @@ deny = [
     # resolved graph today (verified via `cargo tree -i rusqlite`; the workspace
     # already resolves `oxisqlite` instead). Banned pre-emptively.
     { crate = "rusqlite", reason = "COOLJAPAN policy: use `oxisql-sqlite-compat` instead of rusqlite." },
+
+    # --- Upstream RDF/XML stack, replaced by the OxiXML foundation ---
+    # Each of these was swapped for its Pure-Rust OxiXML counterpart using Cargo's
+    # package-rename form, so the dependency KEY (and every `use oxrdf::...` path) is
+    # unchanged while the resolved crate is now an oxixml-* one. All eight of the
+    # oxigraph-lineage crates below are completely absent from the resolved graph
+    # (verified via `cargo tree -i <name> --workspace -e normal` -- "did not match any
+    # packages"), so these entries exist to catch a re-introduction.
+    { crate = "oxrdf", reason = "COOLJAPAN policy: use `oxixml-model` instead of oxrdf." },
+    { crate = "oxttl", reason = "COOLJAPAN policy: use `oxixml-turtle` instead of oxttl." },
+    { crate = "oxrdfxml", reason = "COOLJAPAN policy: use `oxixml-rdfxml` instead of oxrdfxml." },
+    { crate = "oxjsonld", reason = "COOLJAPAN policy: use `oxixml-jsonld` instead of oxjsonld." },
+    { crate = "oxiri", reason = "COOLJAPAN policy: use `oxixml-iri` instead of oxiri." },
+    { crate = "oxilangtag", reason = "COOLJAPAN policy: use `oxixml-langtag` instead of oxilangtag." },
+    { crate = "oxsdatatypes", reason = "COOLJAPAN policy: use `oxixml-xsd` instead of oxsdatatypes." },
+    { crate = "json-event-parser", reason = "COOLJAPAN policy: use `oxixml-json` instead of json-event-parser." },
+
+    # quick-xml: every oxirs-owned manifest now resolves `oxixml-quickxml-compat` (a
+    # drop-in for quick-xml 0.41) under the `quick-xml` key. Two transitive paths remain
+    # and are pre-existing, unrelated to RDF: `inferno` (flamegraph rendering, pulled in by
+    # tools/oxirs) and `plist` (Apple property lists, pulled in by tauri <- desktop/oxirs-tauri).
+    # Confirmed the complete parent set via `cargo tree -i quick-xml --workspace` (all edge
+    # kinds, so build-dependencies are covered too).
+    { crate = "quick-xml", reason = "COOLJAPAN policy: use `oxixml-quickxml-compat` (Pure Rust drop-in for quick-xml 0.41) instead. The remaining paths are pre-existing non-RDF transitive ones via inferno (tools/oxirs) and plist (tauri <- desktop/oxirs-tauri).", wrappers = ["inferno", "plist"] },
 
     # --- Pre-existing accepted transitive archive/compression dependencies ---
     # No COOLJAPAN direct replacement is required here since these are already

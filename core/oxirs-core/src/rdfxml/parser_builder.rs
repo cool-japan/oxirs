@@ -3,6 +3,7 @@
 //! Builds RDF triples from the XML token stream. Contains all methods on
 //! `InternalRdfXmlParser` plus helpers used by the semantic analysis.
 
+use crate::model::iri::{resolve_str, resolve_str_unchecked};
 use crate::model::literal::LanguageTag;
 use crate::model::term::{Object, Predicate, Subject};
 use crate::model::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Triple};
@@ -834,10 +835,9 @@ impl<R> InternalRdfXmlParser<R> {
     ) -> Result<NamedNode, RdfXmlSyntaxError> {
         if let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) {
             Ok(NamedNode::new_unchecked(if self.lenient {
-                base_iri.resolve_unchecked(&relative_iri).into_inner()
+                resolve_str_unchecked(base_iri, &relative_iri).into_inner()
             } else {
-                base_iri
-                    .resolve(&relative_iri)
+                resolve_str(base_iri, &relative_iri)
                     .map_err(|error| RdfXmlSyntaxError::invalid_iri(relative_iri, error))?
                     .into_inner()
             }))

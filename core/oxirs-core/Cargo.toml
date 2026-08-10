@@ -17,13 +17,13 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-# OxiGraph parser dependencies (upgraded to latest versions)
-oxttl.workspace = true         # Turtle, N-Triples, N-Quads, TriG, N3 parsers (v0.2.1)
-oxrdfxml.workspace = true      # RDF/XML parser (v0.2.1)
-oxjsonld.workspace = true      # JSON-LD parser (v0.2.1)
-oxrdf.workspace = true         # RDF data model (v0.3.1)
+# RDF parser dependencies (OxiXML, Pure Rust; renamed at the workspace level)
+oxttl.workspace = true         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
+oxrdfxml.workspace = true      # RDF/XML parser
+oxjsonld.workspace = true      # JSON-LD parser
+oxrdf.workspace = true         # RDF data model (required by parsers)
 
-json-event-parser = { version = "0.2", features = ["async-tokio"] }
+json-event-parser = { package = "oxixml-json", version = "0.1.1", features = ["async-tokio"] }
 quick-xml = { workspace = true, features = ["async-tokio"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
