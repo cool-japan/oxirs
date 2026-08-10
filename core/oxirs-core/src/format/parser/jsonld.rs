@@ -99,9 +99,10 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .expect("JSON-LD document should parse");
         assert_eq!(quads.len(), 4);
-        assert!(quads
-            .iter()
-            .any(|quad| quad.subject().to_string().contains("http://example.com/foo")));
+        assert!(quads.iter().any(|quad| quad
+            .subject()
+            .to_string()
+            .contains("http://example.com/foo")));
     }
 
     /// The reader and slice paths run different code, so they must agree.

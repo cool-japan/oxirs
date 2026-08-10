@@ -23,7 +23,7 @@ oxrdfxml.workspace = true      # RDF/XML parser
 oxjsonld.workspace = true      # JSON-LD parser
 oxrdf.workspace = true         # RDF data model (required by parsers)
 
-json-event-parser = { package = "oxixml-json", version = "0.1.1", features = ["async-tokio"] }
+json-event-parser = { package = "oxixml-json", version = "0.1.2", features = ["async-tokio"] }
 quick-xml = { workspace = true, features = ["async-tokio"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

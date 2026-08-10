@@ -5,7 +5,7 @@ use crate::metamodel::{
     Aspect, Characteristic, CharacteristicKind, ElementMetadata, Entity, Event, ModelElement,
     Operation, Property,
 };
-use oxrdf::{Graph, NamedNode, NamedOrBlankNode, Term};
+use oxrdf::{Graph, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, Term, TermRef};
 use oxttl::TurtleParser;
 use std::collections::HashMap;
 use std::path::Path;
@@ -99,7 +99,7 @@ impl SammTurtleParser {
                 let (line, col) = Self::extract_line_col_from_error(&error_msg);
                 self.create_parse_error(&error_msg, line, col)
             })?;
-            self.graph.insert(triple);
+            self.graph.insert(&triple);
         }
 
         tracing::debug!("Parsed {} triples", self.graph.len());
@@ -157,7 +157,7 @@ impl SammTurtleParser {
         let mut detected_version = None;
 
         for triple in self.graph.iter() {
-            if let NamedOrBlankNode::NamedNode(s) = &triple.subject {
+            if let NamedOrBlankNodeRef::NamedNode(s) = triple.subject {
                 let s_str = s.as_str();
                 for version in SAMM_VERSIONS {
                     if s_str.contains(&format!("{}{}#", SAMM_NS_BASE, version)) {
@@ -167,7 +167,7 @@ impl SammTurtleParser {
                 }
             }
             if detected_version.is_none() {
-                if let Term::NamedNode(o) = &triple.object {
+                if let TermRef::NamedNode(o) = triple.object {
                     let o_str = o.as_str();
                     for version in SAMM_VERSIONS {
                         if o_str.contains(&format!("{}{}#", SAMM_NS_BASE, version)) {
@@ -223,12 +223,13 @@ impl SammTurtleParser {
             .graph
             .triples_for_predicate(&rdf_type)
             .filter(|triple| {
-                if let Term::NamedNode(obj) = &triple.object {
-                    obj == &aspect_type
+                if let TermRef::NamedNode(obj) = triple.object {
+                    obj == aspect_type
                 } else {
                     false
                 }
             })
+            .map(|triple| triple.into_owned())
             .collect();
 
         if aspects.is_empty() {
@@ -733,13 +734,13 @@ impl SammTurtleParser {
         .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         for triple in self.graph.iter().filter(|t| {
-            if let NamedOrBlankNode::NamedNode(s) = &t.subject {
-                s == subject && t.predicate == pref_name_pred.as_ref()
+            if let NamedOrBlankNodeRef::NamedNode(s) = t.subject {
+                s == subject.as_ref() && t.predicate == pref_name_pred.as_ref()
             } else {
                 false
             }
         }) {
-            if let Term::Literal(lit) = &triple.object {
+            if let TermRef::Literal(lit) = triple.object {
                 let lang = lit.language().unwrap_or("en");
                 metadata.add_preferred_name(lang.to_string(), lit.value().to_string());
             }
@@ -755,13 +756,13 @@ impl SammTurtleParser {
         .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         for triple in self.graph.iter().filter(|t| {
-            if let NamedOrBlankNode::NamedNode(s) = &t.subject {
-                s == subject && t.predicate == desc_pred.as_ref()
+            if let NamedOrBlankNodeRef::NamedNode(s) = t.subject {
+                s == subject.as_ref() && t.predicate == desc_pred.as_ref()
             } else {
                 false
             }
         }) {
-            if let Term::Literal(lit) = &triple.object {
+            if let TermRef::Literal(lit) = triple.object {
                 let lang = lit.language().unwrap_or("en");
                 metadata.add_description(lang.to_string(), lit.value().to_string());
             }
@@ -777,13 +778,13 @@ impl SammTurtleParser {
         .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         for triple in self.graph.iter().filter(|t| {
-            if let NamedOrBlankNode::NamedNode(s) = &t.subject {
-                s == subject && t.predicate == see_pred.as_ref()
+            if let NamedOrBlankNodeRef::NamedNode(s) = t.subject {
+                s == subject.as_ref() && t.predicate == see_pred.as_ref()
             } else {
                 false
             }
         }) {
-            if let Term::NamedNode(node) = &triple.object {
+            if let TermRef::NamedNode(node) = triple.object {
                 metadata.add_see_ref(node.as_str().to_string());
             }
         }
@@ -796,13 +797,13 @@ impl SammTurtleParser {
         self.graph
             .iter()
             .find(|triple| {
-                if let NamedOrBlankNode::NamedNode(s) = &triple.subject {
-                    s == subject && triple.predicate == predicate.as_ref()
+                if let NamedOrBlankNodeRef::NamedNode(s) = triple.subject {
+                    s == subject.as_ref() && triple.predicate == predicate.as_ref()
                 } else {
                     false
                 }
             })
-            .map(|triple| triple.object)
+            .map(|triple| triple.object.into_owned())
     }
 
     /// Convert a Term to a String
@@ -834,14 +835,14 @@ impl SammTurtleParser {
                 Term::NamedNode(_) | Term::BlankNode(_) => {
                     // Find the rdf:first triple for this subject
                     let first_obj = self.graph.iter().find_map(|triple| {
-                        let subject_matches = match (&current, &triple.subject) {
-                            (Term::NamedNode(n), NamedOrBlankNode::NamedNode(s)) => n == s,
-                            (Term::BlankNode(b), NamedOrBlankNode::BlankNode(s)) => b == s,
+                        let subject_matches = match (&current, triple.subject) {
+                            (Term::NamedNode(n), NamedOrBlankNodeRef::NamedNode(s)) => n == &s,
+                            (Term::BlankNode(b), NamedOrBlankNodeRef::BlankNode(s)) => b == &s,
                             _ => false,
                         };
 
                         if subject_matches && triple.predicate == rdf_first.as_ref() {
-                            Some(triple.object)
+                            Some(triple.object.into_owned())
                         } else {
                             None
                         }
@@ -853,14 +854,14 @@ impl SammTurtleParser {
 
                     // Find the rdf:rest triple for this subject
                     let rest_obj = self.graph.iter().find_map(|triple| {
-                        let subject_matches = match (&current, &triple.subject) {
-                            (Term::NamedNode(n), NamedOrBlankNode::NamedNode(s)) => n == s,
-                            (Term::BlankNode(b), NamedOrBlankNode::BlankNode(s)) => b == s,
+                        let subject_matches = match (&current, triple.subject) {
+                            (Term::NamedNode(n), NamedOrBlankNodeRef::NamedNode(s)) => n == &s,
+                            (Term::BlankNode(b), NamedOrBlankNodeRef::BlankNode(s)) => b == &s,
                             _ => false,
                         };
 
                         if subject_matches && triple.predicate == rdf_rest.as_ref() {
-                            Some(triple.object)
+                            Some(triple.object.into_owned())
                         } else {
                             None
                         }

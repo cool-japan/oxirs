@@ -350,7 +350,7 @@ pub(crate) fn convert_quad(oxrdf_quad: oxrdf::Quad) -> ParseResult<crate::model:
             let lit = if let Some(lang) = l.language() {
                 Literal::new_language_tagged_literal(l.value(), lang)
                     .map_err(|e| RdfParseError::InvalidLanguageTag(format!("{}: {}", lang, e)))?
-            } else if *l.datatype()
+            } else if l.datatype()
                 != oxrdf::NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#string")
             {
                 Literal::new_typed_literal(

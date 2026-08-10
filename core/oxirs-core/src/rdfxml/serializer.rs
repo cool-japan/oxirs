@@ -175,21 +175,21 @@ impl RdfXmlSerializer {
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// use oxrdf::{NamedNodeRef, Triple, TripleRef, LiteralRef};
+    /// use oxrdf::{NamedNodeRef, TripleRef, LiteralRef};
     /// use oxrdf::vocab::rdf;
     /// use oxrdfxml::RdfXmlSerializer;
     ///
     /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
-    /// serializer.serialize_triple(&Triple::from(TripleRef::new(
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     &rdf::TYPE,
+    ///     rdf::TYPE,
     ///     NamedNodeRef::new("http://schema.org/Person")?,
-    /// ))).await?;
-    /// serializer.serialize_triple(&Triple::from(TripleRef::new(
+    /// )).await?;
+    /// serializer.serialize_triple(TripleRef::new(
     ///     NamedNodeRef::new("http://example.com#me")?,
     ///     NamedNodeRef::new("http://schema.org/name")?,
     ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
-    /// ))).await?;
+    /// )).await?;
     /// let output = String::from_utf8(serializer.finish().await?)?;
     /// assert!(output.contains("schema:Person"));
     /// assert!(output.contains("Foo Bar"));
@@ -311,21 +311,21 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 /// ```
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use oxrdf::{NamedNodeRef, Triple, TripleRef, LiteralRef};
+/// use oxrdf::{NamedNodeRef, TripleRef, LiteralRef};
 /// use oxrdf::vocab::rdf;
 /// use oxrdfxml::RdfXmlSerializer;
 ///
 /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_tokio_async_writer(Vec::new());
-/// serializer.serialize_triple(&Triple::from(TripleRef::new(
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
-///     &rdf::TYPE,
+///     rdf::TYPE,
 ///     NamedNodeRef::new("http://schema.org/Person")?,
-/// ))).await?;
-/// serializer.serialize_triple(&Triple::from(TripleRef::new(
+/// )).await?;
+/// serializer.serialize_triple(TripleRef::new(
 ///     NamedNodeRef::new("http://example.com#me")?,
 ///     NamedNodeRef::new("http://schema.org/name")?,
 ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
-/// ))).await?;
+/// )).await?;
 /// let output = String::from_utf8(serializer.finish().await?)?;
 /// assert!(output.contains("schema:Person"));
 /// assert!(output.contains("Foo Bar"));
