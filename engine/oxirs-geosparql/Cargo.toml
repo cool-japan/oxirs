@@ -33,7 +33,7 @@ shapefile = { version = "0.9", optional = true }
 # geometry type and the full OGC cap/join styles, which is what GEOS was there
 # for. The `geo-buffer` straight-skeleton crate (Polygon/MultiPolygon only) went
 # with it; both were replaced by that one dependency we already had.
-oxigeo-proj = { version = "0.2.3", optional = true }  # Pure Rust CRS transformation (COOLJAPAN)
+oxigeo-proj = { version = "0.2.4", optional = true }  # Pure Rust CRS transformation (COOLJAPAN)
 oxisql-core = { workspace = true, optional = true }
 oxisql-sqlite-compat = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
