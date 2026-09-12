@@ -329,7 +329,7 @@ oxisql-sqlite-compat = "0.4.1"
 oxicode = { version = "0.2.6", features = ["serde", "derive"] }
 
 # OxiArc - Pure Rust archive handling (replaces zip crate per COOLJAPAN Policy)
-oxiarc-archive = "0.4.1"
+oxiarc-archive = "0.4.2"
 
 # System utilities
 ctor = "1.0"  # Pre-main constructors (pure Rust) — used to install process-default rustls CryptoProvider
@@ -357,13 +357,13 @@ cranelift-module = { version = "0.133.1" }
 cranelift-native = { version = "0.133.1" }
 
 # Compression libraries
-oxiarc-zstd = "0.4.1"  # Zstandard compression (Pure Rust)
-oxiarc-lz4 = "0.4.1"  # LZ4 compression (Pure Rust)
-oxiarc-lzma = "0.4.1"  # LZMA/LZMA2 compression (Pure Rust, replaces xz2/lzma-sys)
-oxiarc-brotli  = "0.4.1"  # Brotli compression (Pure Rust)
-oxiarc-snappy  = "0.4.1"  # Snappy compression (Pure Rust)
-oxiarc-deflate = "0.4.1"  # DEFLATE compression (Pure Rust)
-oxiarc-bzip2 = "0.4.1"  # BZip2 compression (Pure Rust, replaces the `bzip2` C-FFI crate)
+oxiarc-zstd = "0.4.2"  # Zstandard compression (Pure Rust)
+oxiarc-lz4 = "0.4.2"  # LZ4 compression (Pure Rust)
+oxiarc-lzma = "0.4.2"  # LZMA/LZMA2 compression (Pure Rust, replaces xz2/lzma-sys)
+oxiarc-brotli  = "0.4.2"  # Brotli compression (Pure Rust)
+oxiarc-snappy  = "0.4.2"  # Snappy compression (Pure Rust)
+oxiarc-deflate = "0.4.2"  # DEFLATE compression (Pure Rust)
+oxiarc-bzip2 = "0.4.2"  # BZip2 compression (Pure Rust, replaces the `bzip2` C-FFI crate)
 
 # Memory and data structures
 memmap2 = "0.9"
