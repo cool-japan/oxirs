@@ -13,20 +13,34 @@ use super::regionmanager_type::RegionManager;
 
 impl RegionManager {
     /// Monitor and update inter-region latencies
+    ///
+    /// Only latencies that were actually measured are recorded; region pairs
+    /// that cannot be measured from this node keep their estimates.
     pub async fn monitor_latencies(&self) -> Result<()> {
-        let topology = self.topology.read().await;
-        let mut metrics = self.performance_metrics.write().await;
-        for (region_a, region_b) in topology.latency_matrix.keys() {
-            if region_a != region_b {
-                let latency = self
-                    .measure_inter_region_latency(region_a, region_b)
-                    .await?;
-                let stats = metrics
-                    .inter_region_latencies
-                    .entry((region_a.clone(), region_b.clone()))
-                    .or_default();
-                self.update_latency_stats(stats, latency);
+        // The measurements update the topology, so no lock may be held here.
+        let pairs: Vec<(String, String)> = {
+            let topology = self.topology.read().await;
+            topology
+                .latency_matrix
+                .keys()
+                .filter(|(region_a, region_b)| region_a != region_b)
+                .cloned()
+                .collect()
+        };
+        let mut measured = Vec::new();
+        for (region_a, region_b) in pairs {
+            if let Some(latency) = self
+                .measure_inter_region_latency(&region_a, &region_b)
+                .await?
+            {
+                measured.push(((region_a, region_b), latency));
             }
+        }
+
+        let mut metrics = self.performance_metrics.write().await;
+        for (pair, latency) in measured {
+            let stats = metrics.inter_region_latencies.entry(pair).or_default();
+            self.update_latency_stats(stats, latency);
         }
         metrics.last_updated = SystemTime::now();
         Ok(())

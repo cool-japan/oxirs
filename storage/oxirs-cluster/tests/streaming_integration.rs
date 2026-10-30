@@ -61,6 +61,7 @@ async fn make_three_node_cluster() -> (ClusterNode, ClusterNode, ClusterNode) {
             replication_strategy: None,
             use_bft: false,
             region_config: None,
+            tls_config: Default::default(),
         }
     };
 

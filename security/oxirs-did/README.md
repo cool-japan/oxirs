@@ -39,7 +39,7 @@ use oxirs_did::proof::ed25519::Ed25519Signer;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generate Ed25519 keypair
-    let signer = Ed25519Signer::generate();
+    let signer = Ed25519Signer::generate()?;
     let public_key = signer.public_key_bytes();
 
     // Create did:key from public key
@@ -129,7 +129,7 @@ use oxirs_did::{Did, DidResolver};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create signer
-    let signer = Ed25519Signer::generate();
+    let signer = Ed25519Signer::generate()?;
     let did = Did::new_key_ed25519(&signer.public_key_bytes())?;
 
     // Create RDF graph
@@ -196,7 +196,7 @@ did:web:example.com%3A8080
 
 ```toml
 [dependencies]
-oxirs-did = { version = "0.4.2", features = ["did-web", "signed-graphs"] }
+oxirs-did = { version = "0.5.0", features = ["did-web", "signed-graphs"] }
 ```
 
 Available features:

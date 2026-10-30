@@ -62,9 +62,11 @@ impl CronSchedule {
 
 /// Encryption settings for a backup policy.
 ///
-/// When `enabled` is `true`, the executor tags the backup artefact with
-/// `key_id` so the restore path knows which key to use.  Actual
-/// encryption is delegated to `oxirs_cluster::encryption`.
+/// When `enabled` is `true`, [`BackupExecutor`](super::BackupExecutor) seals
+/// every artefact with XChaCha20-Poly1305 under the key that `key_id` names in
+/// its keyring (see [`BackupExecutor::with_keyring`](super::BackupExecutor::with_keyring)).
+/// If that key is unavailable the backup fails; it is never written
+/// unencrypted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptionConfig {
     /// Whether encryption is required for this policy.

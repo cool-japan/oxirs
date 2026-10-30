@@ -23,16 +23,87 @@
 //! - SciRS2-optimized compression
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::fs;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
+use crate::at_rest::{self, AtRestKey};
 use crate::error::{ClusterError, Result};
 use crate::raft::OxirsNodeId;
+
+/// Suffix of the metadata file kept next to each backup file.
+const METADATA_SUFFIX: &str = ".meta.json";
+
+/// Context bound into an encrypted backup file (see [`crate::at_rest`]): the
+/// node, id, type and parent of the backup, so that a sealed file only opens
+/// as the backup it was created as.
+fn backup_context(
+    node_id: OxirsNodeId,
+    backup_id: &str,
+    backup_type: BackupType,
+    parent_backup_id: Option<&str>,
+) -> Vec<u8> {
+    let type_tag: &[u8] = match backup_type {
+        BackupType::Full => b"full",
+        BackupType::Incremental => b"incremental",
+        BackupType::Snapshot => b"snapshot",
+    };
+    let mut context = b"oxirs-cluster/backup".to_vec();
+    for field in [
+        node_id.to_be_bytes().as_slice(),
+        backup_id.as_bytes(),
+        type_tag,
+        parent_backup_id.unwrap_or_default().as_bytes(),
+    ] {
+        context.extend_from_slice(&(field.len() as u64).to_be_bytes());
+        context.extend_from_slice(field);
+    }
+    context
+}
+
+/// The file name this manager gives backup `backup_id` of `backup_type`
+/// created by `node_id`; `None` for types it never creates.
+fn backup_file_name(
+    backup_type: BackupType,
+    node_id: OxirsNodeId,
+    backup_id: &str,
+) -> Option<String> {
+    let kind = match backup_type {
+        BackupType::Full => "full",
+        BackupType::Incremental => "incr",
+        BackupType::Snapshot => return None,
+    };
+    Some(format!("backup_{kind}_{node_id}_{backup_id}.dat"))
+}
+
+/// Replace `path` with `contents` atomically (temporary file, flush, rename),
+/// so a crash never leaves a half-written file behind.
+async fn write_file_atomically(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    let mut temp_name = path.file_name().unwrap_or_default().to_os_string();
+    temp_name.push(format!(".{}.tmp", uuid::Uuid::new_v4().simple()));
+    let temp_path = path.with_file_name(temp_name);
+    let written = async {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .await?;
+        file.write_all(contents).await?;
+        file.sync_all().await?;
+        drop(file);
+        fs::rename(&temp_path, path).await
+    }
+    .await;
+    if written.is_err() {
+        let _ = fs::remove_file(&temp_path).await;
+    }
+    written
+}
 
 /// Backup format
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,13 +151,22 @@ pub struct BackupConfig {
     pub enable_compression: bool,
     /// Compression level (1-9)
     pub compression_level: i32,
-    /// Enable encryption
+    /// Encrypt backup files at rest with XChaCha20-Poly1305 (see
+    /// [`crate::at_rest`]). Requires `encryption_key_file`; without it the
+    /// manager refuses to start instead of writing unencrypted backups.
     pub enable_encryption: bool,
-    /// Verify backups after creation
+    /// File holding the 256-bit backup key, as 32 raw bytes or 64 hex digits.
+    /// Only valid together with `enable_encryption`.
+    #[serde(default)]
+    pub encryption_key_file: Option<PathBuf>,
+    /// Verify backups (full and incremental) after creation
     pub verify_after_backup: bool,
-    /// Maximum backup age (days)
+    /// Maximum backup age (days). An older backup is still kept while a
+    /// younger incremental backup that is kept is built on it.
     pub max_backup_age_days: u32,
-    /// Maximum number of backups to keep
+    /// Maximum number of backups to keep, counting the newest first. The
+    /// backups that a kept incremental backup is built on are kept as well,
+    /// so more backups than this can remain on disk.
     pub max_backups: u32,
 }
 
@@ -98,6 +178,7 @@ impl Default for BackupConfig {
             enable_compression: true,
             compression_level: 6,
             enable_encryption: false,
+            encryption_key_file: None,
             verify_after_backup: true,
             max_backup_age_days: 30,
             max_backups: 10,
@@ -134,6 +215,13 @@ pub struct BackupMetadata {
     pub completed_at: Option<SystemTime>,
     /// Error message (if failed)
     pub error: Option<String>,
+    /// Whether the backup file is encrypted; restore insists on it matching.
+    #[serde(default)]
+    pub encrypted: bool,
+    /// Whether the backup data was compressed. Restore follows this (and
+    /// `format`) rather than the current configuration.
+    #[serde(default)]
+    pub compressed: bool,
 }
 
 /// Restore options
@@ -181,11 +269,38 @@ pub struct BackupRestoreManager {
     stats: Arc<RwLock<BackupStatistics>>,
     /// Node ID
     node_id: OxirsNodeId,
+    /// Key that seals backup files when encryption is enabled
+    encryption_key: Option<AtRestKey>,
 }
 
 impl BackupRestoreManager {
     /// Create a new backup/restore manager
+    ///
+    /// # Errors
+    ///
+    /// Fails when the backup directory cannot be created, when
+    /// `enable_encryption` is set without `encryption_key_file` (or the other
+    /// way round), or when the key file cannot be loaded.
     pub async fn new(config: BackupConfig, node_id: OxirsNodeId) -> Result<Self> {
+        let encryption_key = match (config.enable_encryption, &config.encryption_key_file) {
+            (true, Some(path)) => Some(AtRestKey::from_file(path)?),
+            (true, None) => {
+                return Err(ClusterError::Encryption(
+                    "enable_encryption is set but encryption_key_file is not; \
+                     refusing to write unencrypted backups"
+                        .to_string(),
+                ))
+            }
+            (false, Some(_)) => {
+                return Err(ClusterError::Encryption(
+                    "encryption_key_file is set but enable_encryption is false; \
+                     enable encryption or remove the key file setting"
+                        .to_string(),
+                ))
+            }
+            (false, None) => None,
+        };
+
         // Create backup directory if it doesn't exist
         fs::create_dir_all(&config.backup_dir).await.map_err(|e| {
             ClusterError::Other(format!("Failed to create backup directory: {}", e))
@@ -196,6 +311,7 @@ impl BackupRestoreManager {
             backups: Arc::new(RwLock::new(HashMap::new())),
             stats: Arc::new(RwLock::new(BackupStatistics::default())),
             node_id,
+            encryption_key,
         };
 
         // Load existing backup metadata
@@ -211,23 +327,24 @@ impl BackupRestoreManager {
 
         info!("Creating full backup: {}", backup_id);
 
-        let file_name = format!("backup_full_{}_{}.dat", self.node_id, backup_id);
-        let file_path = self.config.backup_dir.join(&file_name);
+        let file_path = self.backup_path(BackupType::Full, &backup_id)?;
 
         let start_time = std::time::Instant::now();
 
         // Serialize data based on format
         let serialized_data = self.serialize_data(&data)?;
 
-        // Compress if enabled
-        let final_data = if self.config.enable_compression {
+        // Compress if enabled, then encrypt if enabled
+        let compressed_data = if self.config.enable_compression {
             self.compress_data(&serialized_data)?
         } else {
             serialized_data
         };
+        let context = backup_context(self.node_id, &backup_id, BackupType::Full, None);
+        let final_data = self.seal_backup(&context, compressed_data)?;
 
         // Write to file
-        fs::write(&file_path, &final_data)
+        write_file_atomically(&file_path, &final_data)
             .await
             .map_err(|e| ClusterError::Other(format!("Failed to write backup: {}", e)))?;
 
@@ -252,9 +369,12 @@ impl BackupRestoreManager {
             parent_backup_id: None,
             completed_at: Some(SystemTime::now()),
             error: None,
+            encrypted: self.encryption_key.is_some(),
+            compressed: self.config.enable_compression,
         };
 
-        // Register backup
+        // Record the metadata next to the file, then register the backup
+        self.persist_new_backup(&metadata).await?;
         {
             let mut backups = self.backups.write().await;
             backups.insert(backup_id.clone(), metadata.clone());
@@ -321,21 +441,27 @@ impl BackupRestoreManager {
             backup_id, parent_backup_id
         );
 
-        let file_name = format!("backup_incr_{}_{}.dat", self.node_id, backup_id);
-        let file_path = self.config.backup_dir.join(&file_name);
+        let file_path = self.backup_path(BackupType::Incremental, &backup_id)?;
 
         let start_time = std::time::Instant::now();
 
         // Serialize incremental data
         let serialized_data = self.serialize_data(&changed_data)?;
-        let final_data = if self.config.enable_compression {
+        let compressed_data = if self.config.enable_compression {
             self.compress_data(&serialized_data)?
         } else {
             serialized_data
         };
+        let context = backup_context(
+            self.node_id,
+            &backup_id,
+            BackupType::Incremental,
+            Some(parent_backup_id),
+        );
+        let final_data = self.seal_backup(&context, compressed_data)?;
 
         // Write to file
-        fs::write(&file_path, &final_data)
+        write_file_atomically(&file_path, &final_data)
             .await
             .map_err(|e| ClusterError::Other(format!("Failed to write backup: {}", e)))?;
 
@@ -360,9 +486,12 @@ impl BackupRestoreManager {
             parent_backup_id: Some(parent_backup_id.to_string()),
             completed_at: Some(SystemTime::now()),
             error: None,
+            encrypted: self.encryption_key.is_some(),
+            compressed: self.config.enable_compression,
         };
 
-        // Register backup
+        // Record the metadata next to the file, then register the backup
+        self.persist_new_backup(&metadata).await?;
         {
             let mut backups = self.backups.write().await;
             backups.insert(backup_id.clone(), metadata);
@@ -384,6 +513,11 @@ impl BackupRestoreManager {
             }
         }
 
+        if self.config.verify_after_backup {
+            self.verify_backup(&backup_id).await?;
+        }
+        self.cleanup_old_backups().await?;
+
         info!(
             "Incremental backup completed: {} ({} bytes, {} triples, {:.2}ms)",
             backup_id,
@@ -396,6 +530,15 @@ impl BackupRestoreManager {
     }
 
     /// Restore from backup
+    ///
+    /// An incremental backup is restored on top of its parents, oldest
+    /// first. Each file is decoded the way its metadata records (format,
+    /// compression, encryption), whatever the current configuration says.
+    ///
+    /// # Errors
+    ///
+    /// Fails when a backup in the chain is missing, does not verify, cannot
+    /// be decrypted, or when the parent chain loops.
     pub async fn restore_backup(
         &self,
         options: RestoreOptions,
@@ -404,51 +547,54 @@ impl BackupRestoreManager {
 
         info!("Restoring from backup: {}", backup_id);
 
-        // Get backup metadata
-        let metadata = {
+        // Collect the chain from the requested backup back to its full backup
+        let chain = {
             let backups = self.backups.read().await;
-            backups
-                .get(backup_id)
-                .cloned()
-                .ok_or_else(|| ClusterError::Other(format!("Backup not found: {}", backup_id)))?
+            let mut chain = Vec::new();
+            let mut seen = HashSet::new();
+            let mut next = Some(backup_id.clone());
+            while let Some(id) = next {
+                if !seen.insert(id.clone()) {
+                    return Err(ClusterError::Other(format!(
+                        "backup {backup_id} has a parent chain that loops back to {id}"
+                    )));
+                }
+                let metadata = backups
+                    .get(&id)
+                    .cloned()
+                    .ok_or_else(|| ClusterError::Other(format!("Backup not found: {}", id)))?;
+                next = match metadata.backup_type {
+                    BackupType::Incremental => metadata.parent_backup_id.clone(),
+                    BackupType::Full | BackupType::Snapshot => None,
+                };
+                chain.push(metadata);
+            }
+            chain
         };
 
         let start_time = std::time::Instant::now();
 
-        // Verify backup if not skipped
-        if !options.skip_verification {
-            self.verify_backup(backup_id).await?;
-        }
-
-        // Read backup file
-        let file_data = fs::read(&metadata.file_path)
-            .await
-            .map_err(|e| ClusterError::Other(format!("Failed to read backup file: {}", e)))?;
-
-        // Decompress if needed
-        let decompressed_data = if self.config.enable_compression {
-            self.decompress_data(&file_data)?
-        } else {
-            file_data
-        };
-
-        // Deserialize data
-        let mut restored_data = self.deserialize_data(&decompressed_data)?;
-
-        // If incremental backup, restore parent first
-        if metadata.backup_type == BackupType::Incremental {
-            if let Some(parent_id) = &metadata.parent_backup_id {
-                let parent_options = RestoreOptions {
-                    backup_id: parent_id.clone(),
-                    skip_verification: options.skip_verification,
-                    overwrite_existing: false,
-                    point_in_time: options.point_in_time,
-                };
-                // Use Box::pin for recursive async call
-                let mut parent_data = Box::pin(self.restore_backup(parent_options)).await?;
-                parent_data.extend(restored_data);
-                restored_data = parent_data;
+        let mut restored_data = Vec::new();
+        for metadata in chain.iter().rev() {
+            // Verify backup if not skipped
+            if !options.skip_verification {
+                self.verify_backup(&metadata.id).await?;
             }
+
+            // Read backup file
+            let file_data = fs::read(&metadata.file_path)
+                .await
+                .map_err(|e| ClusterError::Other(format!("Failed to read backup file: {}", e)))?;
+
+            // Decrypt, then decompress if needed
+            let file_data = self.open_backup(metadata, file_data)?;
+            let decompressed_data = if metadata.compressed {
+                self.decompress_data(&file_data)?
+            } else {
+                file_data
+            };
+
+            restored_data.extend(self.deserialize_data(metadata.format, &decompressed_data)?);
         }
 
         let elapsed = start_time.elapsed().as_millis() as f64;
@@ -506,12 +652,18 @@ impl BackupRestoreManager {
             }
         }
 
-        // Update status
-        {
+        // Update status, in memory and on disk
+        let verified = {
             let mut backups = self.backups.write().await;
-            if let Some(backup) = backups.get_mut(backup_id) {
-                backup.status = BackupStatus::Verified;
-            }
+            backups.get_mut(backup_id).and_then(|backup| {
+                (backup.status != BackupStatus::Verified).then(|| {
+                    backup.status = BackupStatus::Verified;
+                    backup.clone()
+                })
+            })
+        };
+        if let Some(metadata) = verified {
+            self.persist_metadata(&metadata).await?;
         }
 
         debug!("Backup verified successfully: {}", backup_id);
@@ -531,22 +683,36 @@ impl BackupRestoreManager {
     }
 
     /// Delete a backup
+    ///
+    /// # Errors
+    ///
+    /// Fails when the backup does not exist, or when an incremental backup is
+    /// built on it: that backup could no longer be restored, so it has to be
+    /// deleted first.
     pub async fn delete_backup(&self, backup_id: &str) -> Result<()> {
         info!("Deleting backup: {}", backup_id);
 
         let metadata = {
             let mut backups = self.backups.write().await;
+            let mut children: Vec<&str> = backups
+                .values()
+                .filter(|backup| backup.parent_backup_id.as_deref() == Some(backup_id))
+                .map(|backup| backup.id.as_str())
+                .collect();
+            if !children.is_empty() {
+                children.sort_unstable();
+                return Err(ClusterError::Other(format!(
+                    "backup {backup_id} is the parent of incremental backup(s) {}; delete them first",
+                    children.join(", ")
+                )));
+            }
             backups
                 .remove(backup_id)
                 .ok_or_else(|| ClusterError::Other(format!("Backup not found: {}", backup_id)))?
         };
 
-        // Delete backup file
-        if metadata.file_path.exists() {
-            fs::remove_file(&metadata.file_path)
-                .await
-                .map_err(|e| ClusterError::Other(format!("Failed to delete backup file: {}", e)))?;
-        }
+        // Delete the metadata first, so that no entry outlives its file
+        self.remove_backup_files(&metadata).await?;
 
         info!("Backup deleted: {}", backup_id);
         Ok(())
@@ -570,9 +736,13 @@ impl BackupRestoreManager {
         }
     }
 
-    /// Deserialize data based on format
-    fn deserialize_data(&self, data: &[u8]) -> Result<Vec<(String, String, String)>> {
-        match self.config.format {
+    /// Deserialize data written in `format`
+    fn deserialize_data(
+        &self,
+        format: BackupFormat,
+        data: &[u8],
+    ) -> Result<Vec<(String, String, String)>> {
+        match format {
             BackupFormat::Json => serde_json::from_slice(data).map_err(|e| {
                 ClusterError::Serialize(format!("JSON deserialization failed: {}", e))
             }),
@@ -598,6 +768,47 @@ impl BackupRestoreManager {
             .map_err(|e| ClusterError::Other(format!("Decompression failed: {}", e)))
     }
 
+    /// Encrypt backup bytes under `context` when encryption is enabled.
+    fn seal_backup(&self, context: &[u8], data: Vec<u8>) -> Result<Vec<u8>> {
+        match &self.encryption_key {
+            Some(key) => at_rest::seal(key, context, &data),
+            None => Ok(data),
+        }
+    }
+
+    /// Decrypt backup bytes according to how the backup was recorded. An
+    /// encrypted backup must authenticate under the configured key and its
+    /// own identity; with a key configured, an unencrypted backup (which
+    /// anyone with write access could have planted) is refused; and a backup
+    /// recorded as unencrypted must not be a sealed file.
+    fn open_backup(&self, metadata: &BackupMetadata, data: Vec<u8>) -> Result<Vec<u8>> {
+        match (metadata.encrypted, &self.encryption_key) {
+            (true, Some(key)) => {
+                let context = backup_context(
+                    metadata.node_id,
+                    &metadata.id,
+                    metadata.backup_type,
+                    metadata.parent_backup_id.as_deref(),
+                );
+                at_rest::open(key, &context, &data)
+            }
+            (true, None) => Err(ClusterError::Encryption(format!(
+                "backup {} is encrypted but no encryption key is configured",
+                metadata.id
+            ))),
+            (false, Some(_)) => Err(ClusterError::Encryption(format!(
+                "backup {} is not encrypted but encryption is enabled; refusing to restore \
+                 unauthenticated data",
+                metadata.id
+            ))),
+            (false, None) if at_rest::is_sealed(&data) => Err(ClusterError::Encryption(format!(
+                "backup {} is recorded as unencrypted but its file is encrypted",
+                metadata.id
+            ))),
+            (false, None) => Ok(data),
+        }
+    }
+
     /// Calculate checksum (SHA256)
     fn calculate_checksum(&self, data: &[u8]) -> String {
         use sha2::{Digest, Sha256};
@@ -606,58 +817,211 @@ impl BackupRestoreManager {
         hex::encode(hasher.finalize())
     }
 
-    /// Load backup metadata from disk
-    async fn load_backup_metadata(&self) -> Result<()> {
-        // Implementation would scan backup directory and load metadata
-        // For now, this is a placeholder
-        debug!(
-            "Loading backup metadata from {}",
-            self.config.backup_dir.display()
-        );
+    /// Path of the file this manager writes backup `backup_id` to.
+    fn backup_path(&self, backup_type: BackupType, backup_id: &str) -> Result<PathBuf> {
+        backup_file_name(backup_type, self.node_id, backup_id)
+            .map(|name| self.config.backup_dir.join(name))
+            .ok_or_else(|| {
+                ClusterError::Other(format!("{backup_type:?} backups are not created here"))
+            })
+    }
+
+    /// Path of the metadata file kept next to the file of `metadata`.
+    fn metadata_path(&self, metadata: &BackupMetadata) -> Result<PathBuf> {
+        let mut path = self
+            .backup_path(metadata.backup_type, &metadata.id)?
+            .into_os_string();
+        path.push(METADATA_SUFFIX);
+        Ok(PathBuf::from(path))
+    }
+
+    /// Write `metadata` next to its backup file, atomically. The file path is
+    /// stored relative to the backup directory and derived again on load.
+    async fn persist_metadata(&self, metadata: &BackupMetadata) -> Result<()> {
+        let mut stored = metadata.clone();
+        stored.file_path = backup_file_name(metadata.backup_type, self.node_id, &metadata.id)
+            .map(PathBuf::from)
+            .ok_or_else(|| ClusterError::Other("unsupported backup type".to_string()))?;
+        let json = serde_json::to_vec_pretty(&stored).map_err(|e| {
+            ClusterError::Serialize(format!("Failed to encode backup metadata: {e}"))
+        })?;
+        let path = self.metadata_path(metadata)?;
+        write_file_atomically(&path, &json).await.map_err(|e| {
+            ClusterError::Other(format!(
+                "Failed to write backup metadata {}: {e}",
+                path.display()
+            ))
+        })
+    }
+
+    /// Persist the metadata of a backup whose file was just written; on
+    /// failure the file is removed again, so no unlisted backup is left.
+    async fn persist_new_backup(&self, metadata: &BackupMetadata) -> Result<()> {
+        if let Err(e) = self.persist_metadata(metadata).await {
+            let _ = fs::remove_file(&metadata.file_path).await;
+            return Err(e);
+        }
         Ok(())
     }
 
-    /// Cleanup old backups based on retention policy
-    async fn cleanup_old_backups(&self) -> Result<()> {
-        let mut backups = self.backups.write().await;
-
-        // Sort backups by creation time
-        let mut backup_list: Vec<_> = backups.values().cloned().collect();
-        backup_list.sort_by_key(|b| std::cmp::Reverse(b.created_at));
-
-        // Remove backups exceeding max count
-        if backup_list.len() > self.config.max_backups as usize {
-            for backup in backup_list.iter().skip(self.config.max_backups as usize) {
-                info!("Removing old backup (max count exceeded): {}", backup.id);
-                backups.remove(&backup.id);
-
-                // Delete file
-                if backup.file_path.exists() {
-                    if let Err(e) = fs::remove_file(&backup.file_path).await {
-                        warn!("Failed to delete backup file: {}", e);
-                    }
+    /// Remove the metadata file, then the data file, of a backup.
+    async fn remove_backup_files(&self, metadata: &BackupMetadata) -> Result<()> {
+        for path in [self.metadata_path(metadata)?, metadata.file_path.clone()] {
+            match fs::remove_file(&path).await {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    return Err(ClusterError::Other(format!(
+                        "Failed to delete {}: {e}",
+                        path.display()
+                    )))
                 }
             }
         }
+        Ok(())
+    }
 
-        // Remove backups exceeding max age
-        let now = SystemTime::now();
-        let max_age =
-            std::time::Duration::from_secs(self.config.max_backup_age_days as u64 * 24 * 60 * 60);
+    /// Load the metadata of this node's backups from the backup directory.
+    ///
+    /// Metadata that cannot be parsed, names any file other than the one
+    /// this manager would have written, or whose backup file is missing is
+    /// skipped with a warning, and nothing it points at is ever touched.
+    async fn load_backup_metadata(&self) -> Result<()> {
+        let prefixes = [
+            format!("backup_full_{}_", self.node_id),
+            format!("backup_incr_{}_", self.node_id),
+        ];
+        let mut entries = fs::read_dir(&self.config.backup_dir).await.map_err(|e| {
+            ClusterError::Other(format!(
+                "Failed to list backup directory {}: {e}",
+                self.config.backup_dir.display()
+            ))
+        })?;
 
-        for backup in backup_list.iter() {
-            if let Ok(age) = now.duration_since(backup.created_at) {
-                if age > max_age {
-                    info!("Removing old backup (max age exceeded): {}", backup.id);
-                    backups.remove(&backup.id);
-
-                    // Delete file
-                    if backup.file_path.exists() {
-                        if let Err(e) = fs::remove_file(&backup.file_path).await {
-                            warn!("Failed to delete backup file: {}", e);
-                        }
-                    }
+        let mut loaded = HashMap::new();
+        loop {
+            let entry = match entries.next_entry().await {
+                Ok(Some(entry)) => entry,
+                Ok(None) => break,
+                Err(e) => {
+                    return Err(ClusterError::Other(format!(
+                        "Failed to list backup directory {}: {e}",
+                        self.config.backup_dir.display()
+                    )))
                 }
+            };
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Some(data_name) = name.strip_suffix(METADATA_SUFFIX) else {
+                continue;
+            };
+            if !prefixes.iter().any(|prefix| data_name.starts_with(prefix)) {
+                continue;
+            }
+            match self.read_metadata_file(&entry.path(), data_name).await {
+                Ok(metadata) => {
+                    loaded.insert(metadata.id.clone(), metadata);
+                }
+                Err(reason) => warn!(
+                    "Ignoring backup metadata {}: {reason}",
+                    entry.path().display()
+                ),
+            }
+        }
+
+        info!(
+            "Loaded {} backups from {}",
+            loaded.len(),
+            self.config.backup_dir.display()
+        );
+        self.backups.write().await.extend(loaded);
+        Ok(())
+    }
+
+    /// Read and check one metadata file, whose name says it describes
+    /// `data_name`.
+    async fn read_metadata_file(
+        &self,
+        path: &Path,
+        data_name: &str,
+    ) -> std::result::Result<BackupMetadata, String> {
+        let bytes = fs::read(path).await.map_err(|e| e.to_string())?;
+        let mut metadata: BackupMetadata =
+            serde_json::from_slice(&bytes).map_err(|e| format!("cannot parse it: {e}"))?;
+        if metadata.node_id != self.node_id {
+            return Err(format!("it belongs to node {}", metadata.node_id));
+        }
+        for id in std::iter::once(&metadata.id).chain(&metadata.parent_backup_id) {
+            uuid::Uuid::parse_str(id).map_err(|_| format!("backup id `{id}` is not a UUID"))?;
+        }
+        let expected = backup_file_name(metadata.backup_type, self.node_id, &metadata.id)
+            .ok_or_else(|| format!("{:?} backups are not created here", metadata.backup_type))?;
+        if expected != data_name || metadata.file_path != Path::new(&expected) {
+            return Err(format!(
+                "it describes `{}`, expected `{expected}`",
+                metadata.file_path.display()
+            ));
+        }
+        let file_path = self.config.backup_dir.join(&expected);
+        if !file_path.is_file() {
+            return Err(format!("backup file {} is missing", file_path.display()));
+        }
+        metadata.file_path = file_path;
+        Ok(metadata)
+    }
+
+    /// Apply the retention policy.
+    ///
+    /// The newest `max_backups` backups that are younger than
+    /// `max_backup_age_days` are kept, together with every backup they are
+    /// built on, so that each kept backup can still be restored. All other
+    /// backups are deleted.
+    async fn cleanup_old_backups(&self) -> Result<()> {
+        let removed = {
+            let mut backups = self.backups.write().await;
+
+            let mut newest_first: Vec<&BackupMetadata> = backups.values().collect();
+            newest_first.sort_by_key(|b| std::cmp::Reverse(b.created_at));
+
+            let now = SystemTime::now();
+            let max_age = std::time::Duration::from_secs(
+                u64::from(self.config.max_backup_age_days) * 24 * 60 * 60,
+            );
+            let mut keep = HashSet::new();
+            for backup in newest_first.iter().take(self.config.max_backups as usize) {
+                let expired = now
+                    .duration_since(backup.created_at)
+                    .is_ok_and(|age| age > max_age);
+                if expired {
+                    continue;
+                }
+                // Keep the backup and the chain it is restored on top of.
+                let mut next = Some(backup.id.clone());
+                while let Some(id) = next {
+                    if !keep.insert(id.clone()) {
+                        break;
+                    }
+                    next = backups
+                        .get(&id)
+                        .filter(|b| b.backup_type == BackupType::Incremental)
+                        .and_then(|b| b.parent_backup_id.clone());
+                }
+            }
+
+            let doomed: Vec<String> = backups
+                .keys()
+                .filter(|id| !keep.contains(*id))
+                .cloned()
+                .collect();
+            doomed
+                .iter()
+                .filter_map(|id| backups.remove(id))
+                .collect::<Vec<_>>()
+        };
+
+        for backup in &removed {
+            info!("Removing old backup (retention policy): {}", backup.id);
+            if let Err(e) = self.remove_backup_files(backup).await {
+                warn!("Failed to delete backup {}: {}", backup.id, e);
             }
         }
 
@@ -666,116 +1030,4 @@ impl BackupRestoreManager {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::env;
-
-    #[tokio::test]
-    async fn test_backup_restore_manager_creation() {
-        let temp_dir = env::temp_dir().join("oxirs_backup_test_1");
-        let config = BackupConfig {
-            backup_dir: temp_dir.clone(),
-            ..Default::default()
-        };
-
-        let manager = BackupRestoreManager::new(config, 1).await;
-        assert!(manager.is_ok());
-
-        // Cleanup
-        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-    }
-
-    #[tokio::test]
-    async fn test_full_backup_creation() {
-        let temp_dir = env::temp_dir().join("oxirs_backup_test_2");
-        let config = BackupConfig {
-            backup_dir: temp_dir.clone(),
-            verify_after_backup: false,
-            ..Default::default()
-        };
-
-        let manager = BackupRestoreManager::new(config, 1).await.unwrap();
-
-        let data = vec![
-            ("s1".to_string(), "p1".to_string(), "o1".to_string()),
-            ("s2".to_string(), "p2".to_string(), "o2".to_string()),
-        ];
-
-        let backup_id = manager.create_full_backup(data.clone()).await;
-        assert!(backup_id.is_ok());
-
-        let backup_id = backup_id.unwrap();
-        let metadata = manager.get_backup_metadata(&backup_id).await;
-        assert!(metadata.is_some());
-
-        let metadata = metadata.unwrap();
-        assert_eq!(metadata.backup_type, BackupType::Full);
-        assert_eq!(metadata.triple_count, 2);
-
-        // Cleanup
-        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-    }
-
-    #[tokio::test]
-    async fn test_backup_and_restore() {
-        let temp_dir = env::temp_dir().join("oxirs_backup_test_3");
-        let config = BackupConfig {
-            backup_dir: temp_dir.clone(),
-            verify_after_backup: false,
-            ..Default::default()
-        };
-
-        let manager = BackupRestoreManager::new(config, 1).await.unwrap();
-
-        let original_data = vec![
-            ("s1".to_string(), "p1".to_string(), "o1".to_string()),
-            ("s2".to_string(), "p2".to_string(), "o2".to_string()),
-        ];
-
-        // Create backup
-        let backup_id = manager
-            .create_full_backup(original_data.clone())
-            .await
-            .unwrap();
-
-        // Restore backup
-        let options = RestoreOptions {
-            backup_id,
-            skip_verification: true,
-            overwrite_existing: true,
-            point_in_time: None,
-        };
-
-        let restored_data = manager.restore_backup(options).await;
-        assert!(restored_data.is_ok());
-
-        let restored_data = restored_data.unwrap();
-        assert_eq!(restored_data.len(), original_data.len());
-
-        // Cleanup
-        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-    }
-
-    #[tokio::test]
-    async fn test_backup_statistics() {
-        let temp_dir = env::temp_dir().join("oxirs_backup_test_4");
-        let config = BackupConfig {
-            backup_dir: temp_dir.clone(),
-            verify_after_backup: false,
-            ..Default::default()
-        };
-
-        let manager = BackupRestoreManager::new(config, 1).await.unwrap();
-
-        let data = vec![("s1".to_string(), "p1".to_string(), "o1".to_string())];
-
-        let _ = manager.create_full_backup(data).await.unwrap();
-
-        let stats = manager.get_statistics().await;
-        assert_eq!(stats.total_backups, 1);
-        assert!(stats.total_bytes_backed_up > 0);
-
-        // Cleanup
-        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-    }
-}
+mod tests;

@@ -36,7 +36,7 @@ rayon.workspace = true  # Parallel processing for SIMD-accelerated operations
 # Byzantine fault tolerance dependencies
 sha2.workspace = true
 hex.workspace = true
-ed25519-dalek.workspace = true
+ed25519-dalek = { workspace = true, features = ["pkcs8"] }  # pkcs8: reload TLS node keys for renewal
 rand = "0.10"  # Required by ed25519-dalek for key generation
 # Note: For other random functionality, use scirs2_core::random
 
@@ -52,6 +52,8 @@ rustls-pemfile.workspace = true
 # Pure Rust TLS facade + certificate generation (replaces `rcgen`, which pulls `ring`).
 oxitls.workspace = true
 oxitls-rcgen.workspace = true
+x509-parser.workspace = true  # Read certificate fields (no `verify`, so no ring)
+time.workspace = true  # Certificate validity dates for oxitls-rcgen
 aes-gcm.workspace = true
 base64.workspace = true
 # Pure Rust cryptography (OxiCrypto) replaces ring for AEAD + CSPRNG.

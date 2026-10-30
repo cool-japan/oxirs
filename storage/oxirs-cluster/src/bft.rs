@@ -1391,4 +1391,108 @@ mod tests {
             primary.handle_message(commit, node_id).unwrap();
         }
     }
+
+    /// Drive one Insert request through a 2f+1 commit quorum on `storage` and
+    /// return the response that the commit callback received.
+    fn commit_insert_through_quorum(storage: Arc<dyn StorageBackend>) -> RdfResponse {
+        let config = BftConfig::new(4);
+        let primary = BftConsensus::with_storage("1".to_string(), config, storage).unwrap();
+
+        let mut remotes: Vec<(String, SigningKey)> = Vec::new();
+        for id in ["2", "3", "4"] {
+            let seed: [u8; 32] = rand::random();
+            let signing_key = SigningKey::from_bytes(&seed);
+            primary
+                .register_node(id.to_string(), signing_key.verifying_key())
+                .unwrap();
+            remotes.push((id.to_string(), signing_key));
+        }
+
+        let results: Arc<std::sync::Mutex<Vec<Vec<u8>>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = results.clone();
+        primary.set_commit_callback(move |_client_id, _timestamp, result| {
+            sink.lock().expect("test mutex poisoned").push(result);
+        });
+
+        let command = RdfCommand::Insert {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        };
+        let operation = serde_json::to_vec(&command).unwrap();
+        primary
+            .process_request(BftMessage::Request {
+                client_id: "client-1".to_string(),
+                operation: operation.clone(),
+                timestamp: 1,
+                signature: None,
+            })
+            .unwrap();
+
+        let view = primary.current_view().unwrap();
+        let digest = BftConsensus::create_digest(&operation);
+        for (node_id, signing_key) in &remotes {
+            let commit = BftMessage::Commit {
+                view,
+                sequence: 1,
+                digest: digest.clone(),
+                node_id: node_id.clone(),
+                signature: signing_key.sign(&digest).to_bytes().to_vec(),
+            };
+            primary.handle_message(commit, node_id).unwrap();
+        }
+
+        let recorded = results.lock().expect("test mutex poisoned");
+        assert_eq!(recorded.len(), 1, "the operation was not committed once");
+        serde_json::from_slice(&recorded[0]).unwrap()
+    }
+
+    /// BFT mode applies committed operations to `PersistentStorage`, whose
+    /// writes deadlocked, so the first commit hung the node for good. The
+    /// commit path runs with no runtime and inside a current-thread runtime.
+    #[test]
+    fn test_commit_over_persistent_storage_applies_the_operation() {
+        use crate::storage::{PersistentStorage, StorageConfig};
+
+        for flavor in ["no runtime", "current-thread runtime"] {
+            let dir = tempfile::TempDir::new().unwrap();
+            let config = StorageConfig {
+                data_dir: dir.path().to_string_lossy().into_owned(),
+                ..StorageConfig::default()
+            };
+            let storage = Arc::new(
+                futures::executor::block_on(PersistentStorage::new(1, config.clone())).unwrap(),
+            );
+
+            let (done, finished) = std::sync::mpsc::channel();
+            let backend: Arc<dyn StorageBackend> = storage.clone();
+            std::thread::spawn(move || {
+                let response = if flavor == "no runtime" {
+                    commit_insert_through_quorum(backend)
+                } else {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .unwrap();
+                    runtime.block_on(async move { commit_insert_through_quorum(backend) })
+                };
+                let _ = done.send(response);
+            });
+            let response = finished
+                .recv_timeout(std::time::Duration::from_secs(20))
+                .unwrap_or_else(|_| panic!("the commit never finished ({flavor})"));
+            assert_eq!(response, RdfResponse::Success);
+
+            drop(storage);
+            let reopened = futures::executor::block_on(PersistentStorage::new(1, config)).unwrap();
+            let triples =
+                futures::executor::block_on(reopened.get_shard_triples(BFT_DEFAULT_SHARD)).unwrap();
+            assert_eq!(
+                triples.len(),
+                1,
+                "the committed insert was not persisted ({flavor})"
+            );
+        }
+    }
 }

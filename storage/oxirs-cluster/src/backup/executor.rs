@@ -4,6 +4,7 @@
 //! the configured `DestinationConfig`.  Every operation (start, complete,
 //! fail, prune) is appended to an in-memory audit log that callers can query.
 
+use std::borrow::Cow;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, SystemTime};
@@ -11,6 +12,10 @@ use std::time::{Duration, SystemTime};
 use thiserror::Error;
 
 use super::policy::BackupPolicy;
+use crate::at_rest::{self, AtRestKey, AtRestKeyring};
+
+/// Context bound into every encrypted artefact written by [`BackupExecutor`].
+const BACKUP_CONTEXT: &[u8] = b"oxirs-cluster/backup-policy";
 
 // ---------------------------------------------------------------------------
 // Audit types
@@ -71,6 +76,10 @@ pub enum BackupError {
     /// The backup was written but post-write verification failed.
     #[error("Verification failed: {0}")]
     VerificationFailed(String),
+    /// The policy requires encryption but it could not be applied (no key,
+    /// unknown key id), or an artefact could not be decrypted.
+    #[error("Encryption error: {0}")]
+    Encryption(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -81,22 +90,45 @@ pub enum BackupError {
 pub struct BackupExecutor {
     /// Thread-safe append-only audit log.
     audit_log: Mutex<Vec<BackupAuditEntry>>,
+    /// Keys for policies with encryption enabled, looked up by the policy's
+    /// `key_id`.
+    keyring: AtRestKeyring,
 }
 
 impl BackupExecutor {
-    /// Create a new executor with an empty audit log.
+    /// Create a new executor with an empty audit log and no encryption keys.
+    ///
+    /// Policies that enable encryption fail with [`BackupError::Encryption`]
+    /// on such an executor; use [`BackupExecutor::with_keyring`] for them.
     pub fn new() -> Self {
+        Self::with_keyring(AtRestKeyring::new())
+    }
+
+    /// Create an executor that encrypts backups for every policy whose
+    /// `encryption.key_id` names a key in `keyring`.
+    pub fn with_keyring(keyring: AtRestKeyring) -> Self {
         BackupExecutor {
             audit_log: Mutex::new(Vec::new()),
+            keyring,
         }
     }
 
     /// Execute a backup according to `policy`.
     ///
     /// Writes `data` as a single flat file under `destination`.  The file
-    /// name embeds the current Unix timestamp to prevent collisions.
+    /// name embeds the current Unix timestamp to prevent collisions.  When
+    /// `policy.encryption.enabled` is set, the file holds `data` sealed with
+    /// XChaCha20-Poly1305 (see [`crate::at_rest`]) under the key named by
+    /// `policy.encryption.key_id`; read it back with
+    /// [`BackupExecutor::read_backup`].
     ///
     /// Returns the number of bytes written on success.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`BackupError::Encryption`] when encryption is enabled but
+    /// the policy names no key or the key is not in the executor's keyring;
+    /// nothing is written in that case.
     pub fn execute_backup(
         &self,
         policy: &BackupPolicy,
@@ -104,6 +136,19 @@ impl BackupExecutor {
         destination: &Path,
     ) -> Result<u64, BackupError> {
         self.append_audit(policy.name.clone(), AuditAction::BackupStarted, None, None);
+
+        let artefact = match self.encode_artefact(policy, data) {
+            Ok(artefact) => artefact,
+            Err(e) => {
+                self.append_audit(
+                    policy.name.clone(),
+                    AuditAction::BackupFailed,
+                    None,
+                    Some(e.to_string()),
+                );
+                return Err(e);
+            }
+        };
 
         // Build a unique file name based on current timestamp
         let ts_secs = SystemTime::now()
@@ -125,7 +170,7 @@ impl BackupExecutor {
         }
 
         // Write the backup artefact
-        if let Err(e) = std::fs::write(&dest_file, data) {
+        if let Err(e) = std::fs::write(&dest_file, &artefact) {
             let msg = format!("write failed: {e}");
             self.append_audit(
                 policy.name.clone(),
@@ -136,7 +181,7 @@ impl BackupExecutor {
             return Err(BackupError::IoError(msg));
         }
 
-        let size = data.len() as u64;
+        let size = artefact.len() as u64;
         self.append_audit(
             policy.name.clone(),
             AuditAction::BackupCompleted,
@@ -145,6 +190,42 @@ impl BackupExecutor {
         );
 
         Ok(size)
+    }
+
+    /// Read back a backup artefact written by [`BackupExecutor::execute_backup`]
+    /// under `policy`, decrypting it when the policy requires encryption.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`BackupError::IoError`] when the file cannot be read, and
+    /// with [`BackupError::Encryption`] when the policy requires encryption but
+    /// the file is not sealed, is sealed under another key, or does not
+    /// authenticate — or when the file is sealed but the policy has
+    /// encryption disabled.
+    pub fn read_backup(&self, policy: &BackupPolicy, path: &Path) -> Result<Vec<u8>, BackupError> {
+        let bytes =
+            std::fs::read(path).map_err(|e| BackupError::IoError(format!("read failed: {e}")))?;
+
+        if policy.encryption.enabled {
+            if !at_rest::is_sealed(&bytes) {
+                return Err(BackupError::Encryption(format!(
+                    "{} is not encrypted, but policy '{}' requires encryption",
+                    path.display(),
+                    policy.name
+                )));
+            }
+            let key = self.policy_key(policy)?;
+            at_rest::open(key, BACKUP_CONTEXT, &bytes)
+                .map_err(|e| BackupError::Encryption(e.to_string()))
+        } else if at_rest::is_sealed(&bytes) {
+            Err(BackupError::Encryption(format!(
+                "{} is encrypted, but policy '{}' has encryption disabled",
+                path.display(),
+                policy.name
+            )))
+        } else {
+            Ok(bytes)
+        }
     }
 
     /// Record that a backup artefact was pruned by retention enforcement.
@@ -186,6 +267,38 @@ impl BackupExecutor {
 
     // Internal helpers
 
+    /// The bytes to store for `data` under `policy`: sealed when the policy
+    /// requires encryption, unchanged otherwise.
+    fn encode_artefact<'a>(
+        &self,
+        policy: &BackupPolicy,
+        data: &'a [u8],
+    ) -> Result<Cow<'a, [u8]>, BackupError> {
+        if !policy.encryption.enabled {
+            return Ok(Cow::Borrowed(data));
+        }
+        let key = self.policy_key(policy)?;
+        at_rest::seal(key, BACKUP_CONTEXT, data)
+            .map(Cow::Owned)
+            .map_err(|e| BackupError::Encryption(e.to_string()))
+    }
+
+    /// The key named by an encrypting policy.
+    fn policy_key(&self, policy: &BackupPolicy) -> Result<&AtRestKey, BackupError> {
+        let key_id = policy.encryption.key_id.as_deref().ok_or_else(|| {
+            BackupError::Encryption(format!(
+                "policy '{}' enables encryption but names no key_id",
+                policy.name
+            ))
+        })?;
+        self.keyring.get(key_id).ok_or_else(|| {
+            BackupError::Encryption(format!(
+                "policy '{}' requires key '{key_id}', which is not in the executor's keyring",
+                policy.name
+            ))
+        })
+    }
+
     fn append_audit(
         &self,
         policy_name: String,
@@ -217,6 +330,7 @@ impl BackupExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::at_rest::{AtRestKey, AtRestKeyring};
     use crate::backup::{
         destination::DestinationConfig,
         gfs::GfsRotation,
@@ -359,5 +473,107 @@ mod tests {
         );
 
         let _ = std::fs::remove_file(&temp_file);
+    }
+
+    fn encrypted_policy(dir: &Path, key_id: &str) -> BackupPolicy {
+        BackupPolicy {
+            encryption: EncryptionConfig::with_key(key_id),
+            ..make_policy(dir)
+        }
+    }
+
+    fn keyring_with(id: &str, byte: u8) -> AtRestKeyring {
+        let mut keyring = AtRestKeyring::new();
+        keyring.insert(AtRestKey::new(id, [byte; 32]).expect("valid key id"));
+        keyring
+    }
+
+    fn only_artefact(dir: &Path) -> std::path::PathBuf {
+        let mut files: Vec<_> = std::fs::read_dir(dir)
+            .expect("failed to list backup dir")
+            .map(|entry| entry.expect("bad dir entry").path())
+            .collect();
+        assert_eq!(files.len(), 1, "expected exactly one artefact: {files:?}");
+        files.remove(0)
+    }
+
+    #[test]
+    fn encrypted_backup_round_trips_through_read_backup() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let policy = encrypted_policy(dir.path(), "k1");
+        let executor = BackupExecutor::with_keyring(keyring_with("k1", 1));
+
+        let written = executor
+            .execute_backup(&policy, b"secret payload", dir.path())
+            .expect("encrypted backup should succeed");
+
+        let artefact = only_artefact(dir.path());
+        let bytes = std::fs::read(&artefact).expect("read artefact");
+        assert_eq!(written, bytes.len() as u64);
+        assert!(at_rest::is_sealed(&bytes));
+        assert_eq!(
+            executor
+                .read_backup(&policy, &artefact)
+                .expect("read_backup"),
+            b"secret payload"
+        );
+    }
+
+    #[test]
+    fn encrypted_backup_without_key_fails_and_writes_nothing() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let policy = encrypted_policy(dir.path(), "missing");
+        let executor = BackupExecutor::with_keyring(keyring_with("k1", 1));
+
+        let result = executor.execute_backup(&policy, b"secret payload", dir.path());
+
+        assert!(matches!(result, Err(BackupError::Encryption(_))));
+        assert!(executor
+            .audit_entries()
+            .iter()
+            .any(|e| e.contains("Failed")));
+        assert_eq!(std::fs::read_dir(dir.path()).expect("list").count(), 0);
+
+        let no_key_id = BackupPolicy {
+            encryption: EncryptionConfig {
+                enabled: true,
+                key_id: None,
+            },
+            ..make_policy(dir.path())
+        };
+        assert!(matches!(
+            executor.execute_backup(&no_key_id, b"x", dir.path()),
+            Err(BackupError::Encryption(_))
+        ));
+    }
+
+    #[test]
+    fn read_backup_rejects_tampered_wrong_key_and_mixed_artefacts() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let policy = encrypted_policy(dir.path(), "k1");
+        let executor = BackupExecutor::with_keyring(keyring_with("k1", 1));
+        executor
+            .execute_backup(&policy, b"secret payload", dir.path())
+            .expect("encrypted backup should succeed");
+        let artefact = only_artefact(dir.path());
+
+        // Same key id, different key bytes.
+        let impostor = BackupExecutor::with_keyring(keyring_with("k1", 2));
+        assert!(impostor.read_backup(&policy, &artefact).is_err());
+
+        // A sealed artefact read under a policy without encryption.
+        let plain_policy = make_policy(dir.path());
+        assert!(executor.read_backup(&plain_policy, &artefact).is_err());
+
+        // Tampering with the ciphertext.
+        let mut bytes = std::fs::read(&artefact).expect("read artefact");
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0x01;
+        std::fs::write(&artefact, &bytes).expect("write tampered artefact");
+        assert!(executor.read_backup(&policy, &artefact).is_err());
+
+        // A plaintext file where an encrypted artefact is required.
+        std::fs::write(&artefact, b"secret payload").expect("write plaintext");
+        assert!(executor.read_backup(&policy, &artefact).is_err());
     }
 }

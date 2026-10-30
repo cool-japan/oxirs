@@ -1,48 +1,53 @@
 //! Integrity verification and crash recovery for PersistentStorage
 
 use super::config::StorageConfig;
+use super::persistent_files::{
+    read_checksummed, write_checksummed, APP_STATE_FILE, RAFT_STATE_FILE,
+};
+use super::persistent_snapshot::{self, SnapshotCheck};
+use super::persistent_wal::WalWriter;
 use super::recovery::*;
 use super::types::*;
 
 use anyhow::{anyhow, Result};
+use parking_lot::{Mutex, RwLock};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use crate::raft::{OxirsNodeId, RdfApp};
 
-/// Perform crash recovery check and repair if needed
-pub(super) async fn recover_from_crash(
+/// Perform crash recovery checks and repair what can be repaired.
+///
+/// The WAL itself is recovered before the store opens; `wal_recovered`
+/// reports whether that redid a journaled write.
+pub(super) fn recover_from_crash(
     config: &StorageConfig,
     data_dir: &Path,
     node_id: OxirsNodeId,
-    raft_state: &Arc<RwLock<RaftState>>,
+    raft_state: &RwLock<RaftState>,
+    wal_recovered: bool,
 ) -> Result<RecoveryReport> {
     if !config.enable_crash_recovery {
         return Ok(RecoveryReport::new());
     }
 
     let mut report = RecoveryReport::new();
-
-    if config.enable_wal {
-        report.wal_recovered = recover_from_wal(config, data_dir).await?;
-    }
+    report.wal_recovered = wal_recovered;
 
     if config.enable_corruption_detection {
-        let corruption_report = check_file_integrity(config, data_dir).await?;
+        let corruption_report = check_file_integrity(config, data_dir, node_id)?;
         report.corrupted_files = corruption_report.corrupted_files;
         report.recovered_files = corruption_report.recovered_files;
     }
 
-    let log_consistency = verify_log_consistency(raft_state).await?;
+    let log_consistency = verify_log_consistency(raft_state);
     if !log_consistency.is_consistent {
         report.log_inconsistencies = log_consistency.issues.len();
-        repair_log_inconsistencies(raft_state, log_consistency.issues, data_dir, config).await?;
+        repair_log_inconsistencies(raft_state, log_consistency.issues, data_dir, config)?;
     }
 
-    let state_consistency = verify_state_consistency(raft_state).await?;
+    let state_consistency = verify_state_consistency(raft_state);
     report.state_machine_repaired = state_consistency.repaired;
 
     tracing::info!(
@@ -53,65 +58,31 @@ pub(super) async fn recover_from_crash(
     Ok(report)
 }
 
-/// Recover from write-ahead log
-pub(super) async fn recover_from_wal(_config: &StorageConfig, data_dir: &Path) -> Result<bool> {
-    let wal_path = data_dir.join("wal.log");
-    if !wal_path.exists() {
-        return Ok(false);
-    }
-
-    tracing::info!("Recovering from write-ahead log");
-
-    let wal_data = fs::read(&wal_path)?;
-    if wal_data.is_empty() {
-        fs::remove_file(&wal_path)?;
-        return Ok(false);
-    }
-
-    if let Ok(operations) = serde_json::from_slice::<Vec<WalOperation>>(&wal_data) {
-        for operation in operations {
-            match operation {
-                WalOperation::WriteRaftState(state) => {
-                    let state_json = serde_json::to_string(&state)?;
-                    let state_path = data_dir.join("raft_state.json");
-                    fs::write(&state_path, state_json)?;
-                }
-                WalOperation::WriteAppState(app_state) => {
-                    let app_json = serde_json::to_string(&app_state)?;
-                    let app_state_path = data_dir.join("app_state.json");
-                    fs::write(&app_state_path, app_json)?;
-                }
-                WalOperation::CreateSnapshot(metadata) => {
-                    let metadata_json = serde_json::to_string(&metadata)?;
-                    let snapshot_path = data_dir.join("snapshot_metadata.json");
-                    fs::write(&snapshot_path, metadata_json)?;
-                }
-                WalOperation::TruncateLog(_index) => {}
-                WalOperation::Commit(_sequence) => {}
-            }
-        }
-
-        fs::remove_file(&wal_path)?;
-        tracing::info!("Successfully recovered from WAL");
-        return Ok(true);
-    }
-
-    fs::remove_file(&wal_path)?;
-    tracing::warn!("WAL file was corrupted and removed");
-    Ok(false)
-}
-
-/// Check file integrity using checksums
-pub(super) async fn check_file_integrity(
-    _config: &StorageConfig,
+/// Check the snapshot against its recorded checksum, and the state files of
+/// releases that wrote JSON against their checksum files.
+pub(super) fn check_file_integrity(
+    config: &StorageConfig,
     data_dir: &Path,
+    node_id: OxirsNodeId,
 ) -> Result<CorruptionReport> {
     let mut report = CorruptionReport::new();
 
-    let files_to_check = vec![
+    match persistent_snapshot::check_snapshot(data_dir) {
+        SnapshotCheck::Absent | SnapshotCheck::Intact => {}
+        SnapshotCheck::Damaged(reason) => {
+            tracing::warn!("Snapshot of node {node_id} is damaged: {reason}");
+            let name = persistent_snapshot::METADATA_FILE.to_string();
+            report.corrupted_files.push(name.clone());
+            if persistent_snapshot::restore_from_backup(data_dir, node_id, config)? {
+                report.recovered_files.push(name);
+            }
+        }
+    }
+
+    // Legacy JSON state files carry no checksum of their own.
+    let files_to_check = [
         ("raft_state.json", "raft_state.json.checksum"),
         ("app_state.json", "app_state.json.checksum"),
-        ("snapshot.json", "snapshot.json.checksum"),
     ];
 
     for (filename, checksum_filename) in files_to_check {
@@ -119,11 +90,11 @@ pub(super) async fn check_file_integrity(
         let checksum_path = data_dir.join(checksum_filename);
 
         if file_path.exists() {
-            let integrity_ok = verify_file_checksum(&file_path, &checksum_path).await?;
+            let integrity_ok = verify_file_checksum(&file_path, &checksum_path)?;
             if !integrity_ok {
                 report.corrupted_files.push(filename.to_string());
 
-                if recover_corrupted_file(data_dir, &file_path).await? {
+                if recover_corrupted_file(data_dir, node_id, &file_path)? {
                     report.recovered_files.push(filename.to_string());
                 }
             }
@@ -134,21 +105,21 @@ pub(super) async fn check_file_integrity(
 }
 
 /// Verify file checksum
-pub(super) async fn verify_file_checksum(file_path: &Path, checksum_path: &Path) -> Result<bool> {
+pub(super) fn verify_file_checksum(file_path: &Path, checksum_path: &Path) -> Result<bool> {
     if !checksum_path.exists() {
-        let checksum = calculate_file_checksum(file_path).await?;
+        let checksum = calculate_file_checksum(file_path)?;
         fs::write(checksum_path, checksum)?;
         return Ok(true);
     }
 
     let stored_checksum = fs::read_to_string(checksum_path)?;
-    let current_checksum = calculate_file_checksum(file_path).await?;
+    let current_checksum = calculate_file_checksum(file_path)?;
 
     Ok(stored_checksum.trim() == current_checksum)
 }
 
 /// Calculate SHA-256 checksum of a file
-pub(super) async fn calculate_file_checksum(file_path: &Path) -> Result<String> {
+pub(super) fn calculate_file_checksum(file_path: &Path) -> Result<String> {
     let data = fs::read(file_path)?;
     let mut hasher = Sha256::new();
     hasher.update(data);
@@ -156,24 +127,20 @@ pub(super) async fn calculate_file_checksum(file_path: &Path) -> Result<String> 
     Ok(hex::encode(result))
 }
 
-/// Recover corrupted file from backup
-pub(super) async fn recover_corrupted_file(data_dir: &Path, file_path: &Path) -> Result<bool> {
+/// Recover corrupted file from the newest backup of this node
+pub(super) fn recover_corrupted_file(
+    data_dir: &Path,
+    node_id: OxirsNodeId,
+    file_path: &Path,
+) -> Result<bool> {
     let filename = file_path
         .file_name()
-        .expect("file_path should have a file name")
+        .ok_or_else(|| anyhow!("{} has no file name", file_path.display()))?
         .to_string_lossy();
-
-    // We need node_id to find backups — derive it from data_dir name
-    let dir_name = data_dir
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let node_id_str = dir_name.strip_prefix("node-").unwrap_or(&dir_name);
-
     let parent_dir = data_dir
         .parent()
-        .expect("data_dir should have a parent directory");
-    let backup_prefix = format!("backup-{}-", node_id_str);
+        .ok_or_else(|| anyhow!("{} has no parent directory", data_dir.display()))?;
+    let backup_prefix = format!("backup-{node_id}-");
 
     let mut backups = Vec::new();
     for entry in fs::read_dir(parent_dir)? {
@@ -189,12 +156,10 @@ pub(super) async fn recover_corrupted_file(data_dir: &Path, file_path: &Path) ->
         }
     }
 
-    if backups.is_empty() {
-        return Ok(false);
-    }
-
     backups.sort_by(|a, b| b.1.cmp(&a.1));
-    let (backup_path, _) = &backups[0];
+    let Some((backup_path, _)) = backups.first() else {
+        return Ok(false);
+    };
 
     fs::copy(backup_path, file_path)?;
 
@@ -202,7 +167,7 @@ pub(super) async fn recover_corrupted_file(data_dir: &Path, file_path: &Path) ->
         "{}.checksum",
         file_path.extension().unwrap_or_default().to_string_lossy()
     ));
-    let checksum = calculate_file_checksum(file_path).await?;
+    let checksum = calculate_file_checksum(file_path)?;
     fs::write(&checksum_path, checksum)?;
 
     tracing::info!("Recovered corrupted file {} from backup", filename);
@@ -210,10 +175,8 @@ pub(super) async fn recover_corrupted_file(data_dir: &Path, file_path: &Path) ->
 }
 
 /// Verify log consistency
-pub(super) async fn verify_log_consistency(
-    raft_state: &Arc<RwLock<RaftState>>,
-) -> Result<LogConsistencyReport> {
-    let state = raft_state.read().await;
+pub(super) fn verify_log_consistency(raft_state: &RwLock<RaftState>) -> LogConsistencyReport {
+    let state = raft_state.read();
     let mut report = LogConsistencyReport::new();
 
     let mut expected_index = 1u64;
@@ -244,17 +207,17 @@ pub(super) async fn verify_log_consistency(
     }
 
     report.is_consistent = report.issues.is_empty();
-    Ok(report)
+    report
 }
 
 /// Repair log inconsistencies
-pub(super) async fn repair_log_inconsistencies(
-    raft_state: &Arc<RwLock<RaftState>>,
+pub(super) fn repair_log_inconsistencies(
+    raft_state: &RwLock<RaftState>,
     issues: Vec<LogInconsistency>,
     data_dir: &Path,
     config: &StorageConfig,
 ) -> Result<()> {
-    let mut state = raft_state.write().await;
+    let mut state = raft_state.write();
 
     for issue in issues {
         match issue {
@@ -298,72 +261,21 @@ pub(super) async fn repair_log_inconsistencies(
         }
     }
 
-    // Save repaired state using atomic write
-    let state_clone = state.clone();
-    drop(state);
-    save_raft_state_direct(&state_clone, data_dir, config).await
+    write_checksummed(data_dir, RAFT_STATE_FILE, &*state, config)
 }
 
-/// Direct raft state save (used during repair without full PersistentStorage context)
-async fn save_raft_state_direct(
-    state: &RaftState,
-    data_dir: &Path,
-    config: &StorageConfig,
-) -> Result<()> {
-    use std::fs::OpenOptions;
-    use std::io::{BufWriter, Write};
-
-    let filename = "raft_state.dat";
-    let path = data_dir.join(filename);
-    let temp_path = data_dir.join(format!("{filename}.tmp"));
-
-    let checksummed_data: ChecksummedData<RaftState> = if config.enable_corruption_detection {
-        ChecksummedData::new(state.clone())?
-    } else {
-        ChecksummedData {
-            data: state.clone(),
-            checksum: String::new(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("SystemTime should be after UNIX_EPOCH")
-                .as_secs(),
-        }
-    };
-
-    let serialized = oxicode::serde::encode_to_vec(&checksummed_data, oxicode::config::standard())?;
-
-    {
-        let temp_file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&temp_path)?;
-
-        let mut writer = BufWriter::new(temp_file);
-        writer.write_all(&serialized)?;
-        writer.flush()?;
-
-        if config.sync_writes {
-            writer.get_mut().sync_all()?;
-        }
-    }
-
-    std::fs::rename(&temp_path, &path)?;
-    Ok(())
-}
-
-/// Verify data integrity across all files
-pub(super) async fn verify_integrity(
+/// Verify data integrity across all files: the state files, the snapshot
+/// and the WAL.
+pub(super) fn verify_integrity(
     config: &StorageConfig,
     data_dir: &Path,
-    raft_state: &Arc<RwLock<RaftState>>,
-    app_state: &Arc<RwLock<RdfApp>>,
+    wal: &Mutex<Option<WalWriter>>,
 ) -> Result<bool> {
     let mut all_valid = true;
 
-    let raft_path = data_dir.join("raft_state.dat");
+    let raft_path = data_dir.join(RAFT_STATE_FILE);
     if raft_path.exists() {
-        match load_with_checksum_verify::<RaftState>(config, &raft_path).await {
+        match read_checksummed::<RaftState>(&raft_path, config) {
             Ok(_) => tracing::info!("Raft state integrity verified"),
             Err(e) => {
                 tracing::error!("Raft state integrity check failed: {}", e);
@@ -372,9 +284,9 @@ pub(super) async fn verify_integrity(
         }
     }
 
-    let app_path = data_dir.join("app_state.dat");
+    let app_path = data_dir.join(APP_STATE_FILE);
     if app_path.exists() {
-        match load_with_checksum_verify::<RdfApp>(config, &app_path).await {
+        match read_checksummed::<RdfApp>(&app_path, config) {
             Ok(_) => tracing::info!("Application state integrity verified"),
             Err(e) => {
                 tracing::error!("Application state integrity check failed: {}", e);
@@ -383,21 +295,19 @@ pub(super) async fn verify_integrity(
         }
     }
 
-    // Keep locks alive until done verifying to avoid dropping prematurely
-    let _ = raft_state.read().await;
-    let _ = app_state.read().await;
+    if let SnapshotCheck::Damaged(reason) = persistent_snapshot::check_snapshot(data_dir) {
+        tracing::error!("Snapshot integrity check failed: {reason}");
+        all_valid = false;
+    }
 
-    if config.enable_wal {
-        let wal_path = data_dir.join("wal.log");
-        if wal_path.exists() {
-            match super::persistent_wal::verify_wal_integrity(&wal_path).await {
-                Ok(valid_entries) => {
-                    tracing::info!("WAL integrity verified, {} valid entries", valid_entries)
-                }
-                Err(e) => {
-                    tracing::error!("WAL integrity check failed: {}", e);
-                    all_valid = false;
-                }
+    if let Some(writer) = wal.lock().as_ref() {
+        match writer.verify() {
+            Ok(valid_entries) => {
+                tracing::info!("WAL integrity verified, {} valid entries", valid_entries)
+            }
+            Err(e) => {
+                tracing::error!("WAL integrity check failed: {}", e);
+                all_valid = false;
             }
         }
     }
@@ -405,27 +315,9 @@ pub(super) async fn verify_integrity(
     Ok(all_valid)
 }
 
-/// Load and verify checksum for a typed value (shared helper)
-async fn load_with_checksum_verify<T>(config: &StorageConfig, path: &Path) -> Result<T>
-where
-    T: for<'de> serde::Deserialize<'de> + serde::Serialize,
-{
-    let data = std::fs::read(path)?;
-    let (checksummed_data, _): (ChecksummedData<T>, _) =
-        oxicode::serde::decode_from_slice(&data, oxicode::config::standard())?;
-
-    if config.enable_corruption_detection && !checksummed_data.verify()? {
-        return Err(anyhow!("Checksum verification failed for {:?}", path));
-    }
-
-    Ok(checksummed_data.data)
-}
-
 /// Verify state machine consistency
-pub(super) async fn verify_state_consistency(
-    raft_state: &Arc<RwLock<RaftState>>,
-) -> Result<StateConsistencyReport> {
-    let state = raft_state.read().await;
+pub(super) fn verify_state_consistency(raft_state: &RwLock<RaftState>) -> StateConsistencyReport {
+    let state = raft_state.read();
     let mut report = StateConsistencyReport::new();
 
     if state.last_applied < state.commit_index {
@@ -437,5 +329,5 @@ pub(super) async fn verify_state_consistency(
         );
     }
 
-    Ok(report)
+    report
 }

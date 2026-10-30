@@ -11,7 +11,9 @@ pub mod error;
 #[cfg(any(test, debug_assertions))]
 pub mod mock;
 pub mod persistent;
+pub(crate) mod persistent_files;
 pub(crate) mod persistent_integrity;
+pub(crate) mod persistent_snapshot;
 pub(crate) mod persistent_wal;
 pub mod recovery;
 pub mod stats;

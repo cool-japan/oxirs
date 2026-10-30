@@ -6,7 +6,6 @@
 use crate::error::{ClusterError, Result};
 use oxicrypto_core::Aead;
 use scirs2_core::metrics::{Counter, Histogram};
-use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -541,15 +540,18 @@ impl EncryptionManager {
         )))
     }
 
-    /// Generate key locally (not from HSM)
+    /// Generate key locally (not from HSM).
+    ///
+    /// The 256-bit key comes from the OS CSPRNG (oxicrypto-rand → getrandom).
+    /// There is deliberately no fallback: a key from any weaker source could
+    /// be reconstructed by an attacker.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ClusterError::Encryption`] if the OS entropy source fails.
     fn generate_key_internal(config: &EncryptionConfig) -> Result<EncryptionKey> {
-        let mut key_bytes = [0u8; 32]; // 256 bits
-                                       // Use SystemTime with nanosecond precision for better randomness
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos() as u64);
-        let mut rng = Random::seed(seed);
-        rng.fill_bytes(&mut key_bytes);
+        let key_bytes = oxicrypto_rand::random_nonce::<32>()
+            .map_err(|e| ClusterError::Encryption(format!("OS entropy source failed: {e}")))?;
 
         // AES-256 requires a 32-byte key; `key_bytes` is sized [u8; 32] so this
         // is statically guaranteed, but assert it explicitly for safety.
@@ -1231,5 +1233,60 @@ mod tests {
         let metrics = manager.get_metrics();
         assert_eq!(metrics.encryption_operations, 10);
         assert_eq!(metrics.decryption_operations, 10);
+    }
+
+    /// Regression test for the time-seeded key generation flaw (0.2.0–0.4.1).
+    ///
+    /// `generate_key_internal` used to seed a deterministic RNG with the current
+    /// UNIX time in nanoseconds, so anyone able to estimate when a key was
+    /// created could recover it by replaying the seeds around that moment.
+    /// Replay exactly that derivation over the window bracketing a call and
+    /// make sure none of the candidates is the generated key.
+    #[test]
+    fn test_generate_key_not_derived_from_time_seed() {
+        use scirs2_core::random::{Random, Rng};
+
+        // The old code read the clock before doing anything else, so its seed
+        // sat just after `before`; this window covers it with a wide margin
+        // while keeping the scan cheap.
+        const SCAN_WINDOW_NS: u64 = 200_000;
+
+        let now_nanos = || {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos() as u64)
+        };
+
+        let before = now_nanos();
+        let key = EncryptionManager::generate_key_internal(&EncryptionConfig::default())
+            .expect("Key generation failed");
+        let after = now_nanos();
+
+        let end = after.clamp(before, before.saturating_add(SCAN_WINDOW_NS));
+        for seed in before..=end {
+            let mut candidate = [0u8; 32];
+            let mut rng = Random::seed(seed);
+            rng.fill_bytes(&mut candidate);
+            assert_ne!(
+                candidate.as_slice(),
+                key.key_material.as_slice(),
+                "AES-256 key is reproducible from time seed {seed}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_generated_keys_are_distinct() {
+        let config = EncryptionConfig::default();
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..256 {
+            let key =
+                EncryptionManager::generate_key_internal(&config).expect("Key generation failed");
+            assert_eq!(key.key_material.len(), 32);
+            assert!(
+                seen.insert(key.key_material),
+                "generate_key_internal() produced a duplicate key"
+            );
+        }
     }
 }

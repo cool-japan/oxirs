@@ -23,6 +23,15 @@
 //! - `Ping`   → reply with `Pong`
 //! - `Replicate` → reply with `ReplicateAck { success: true }`
 //! - Others are silently ignored
+//!
+//! ## Transport security
+//!
+//! Without [`TcpNodeConfig::tls`], anyone who can connect can read the gossip
+//! and change the state, so such a node should only listen on loopback (a
+//! warning is logged otherwise). With it, every connection runs over mutually
+//! authenticated TLS: the listener accepts only clients with a trusted
+//! certificate, and gossip is sent only to peers that present a trusted
+//! certificate for the expected name.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -31,11 +40,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::RwLock;
+use rustls::pki_types::ServerName;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::time::interval;
+use tokio::time::{interval, timeout};
 use tokio_util::sync::CancellationToken;
 
 use crate::gossip::fanout::GossipFanout;
+use crate::tls::TlsManager;
 
 use super::codec::{ClusterMessage, MessageCodec};
 
@@ -89,18 +101,25 @@ impl GossipState {
 // Config
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// How long a TLS handshake with a peer may take.
+const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Configuration for a single `TcpClusterNode`.
 #[derive(Debug, Clone)]
 pub struct TcpNodeConfig {
     /// Human-readable node identifier (used in gossip messages).
     pub node_id: String,
-    /// Address to bind; use `0.0.0.0:0` (or `127.0.0.1:0`) to let the OS
-    /// assign a free port.
+    /// Address to bind; use `127.0.0.1:0` to let the OS assign a free port.
+    /// Without [`TcpNodeConfig::tls`], bind only to loopback.
     pub bind_addr: SocketAddr,
     /// Fanout policy for gossip peer selection.
     pub fanout: GossipFanout,
     /// How often to run a gossip round (milliseconds).
     pub gossip_interval_ms: u64,
+    /// Mutually authenticated TLS for every connection of this node. It is
+    /// initialized by [`TcpClusterNode::start`], which fails if it cannot be.
+    /// `None` runs plaintext and unauthenticated.
+    pub tls: Option<Arc<TlsManager>>,
 }
 
 impl TcpNodeConfig {
@@ -113,7 +132,14 @@ impl TcpNodeConfig {
             bind_addr: SocketAddr::from(([127, 0, 0, 1], port)),
             fanout: GossipFanout::Unbounded,
             gossip_interval_ms: 50,
+            tls: None,
         }
+    }
+
+    /// Run every connection of the node over mutually authenticated TLS.
+    pub fn with_tls(mut self, tls: Arc<TlsManager>) -> Self {
+        self.tls = Some(tls);
+        self
     }
 }
 
@@ -128,6 +154,8 @@ pub enum TcpNodeError {
     BindError(std::io::Error),
     /// Failed to send a message to a peer.
     SendError(String),
+    /// TLS was configured but could not be initialized.
+    Tls(String),
     /// Node has been shut down.
     Shutdown,
 }
@@ -137,6 +165,7 @@ impl std::fmt::Display for TcpNodeError {
         match self {
             TcpNodeError::BindError(e) => write!(f, "TCP bind failed: {e}"),
             TcpNodeError::SendError(s) => write!(f, "send error: {s}"),
+            TcpNodeError::Tls(s) => write!(f, "TLS could not be initialized: {s}"),
             TcpNodeError::Shutdown => write!(f, "node has been shut down"),
         }
     }
@@ -146,7 +175,7 @@ impl std::error::Error for TcpNodeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             TcpNodeError::BindError(e) => Some(e),
-            TcpNodeError::SendError(_) | TcpNodeError::Shutdown => None,
+            TcpNodeError::SendError(_) | TcpNodeError::Tls(_) | TcpNodeError::Shutdown => None,
         }
     }
 }
@@ -165,7 +194,7 @@ pub struct TcpClusterNode {
     /// Actual bound address (may differ from `config.bind_addr` when port was 0).
     bound_addr: SocketAddr,
     state: Arc<RwLock<GossipState>>,
-    peers: Arc<RwLock<Vec<SocketAddr>>>,
+    peers: Arc<RwLock<Vec<Peer>>>,
     cancel: CancellationToken,
     /// Global version counter: monotonically incremented on every local `set`.
     version: Arc<AtomicU64>,
@@ -178,15 +207,31 @@ impl TcpClusterNode {
     ///
     /// # Errors
     ///
-    /// Returns [`TcpNodeError::BindError`] if the port could not be acquired.
+    /// Returns [`TcpNodeError::Tls`] if TLS is configured but cannot be
+    /// initialized (nothing is bound then), and [`TcpNodeError::BindError`]
+    /// if the port could not be acquired.
     pub async fn start(config: TcpNodeConfig) -> Result<Self, TcpNodeError> {
+        match &config.tls {
+            Some(tls) => tls
+                .initialize()
+                .await
+                .map_err(|e| TcpNodeError::Tls(e.to_string()))?,
+            None if !config.bind_addr.ip().is_loopback() => tracing::warn!(
+                "TCP cluster node {} listens on {} without TLS: anyone who can connect can \
+                 read the gossip and change the state",
+                config.node_id,
+                config.bind_addr
+            ),
+            None => {}
+        }
+
         let listener = TcpListener::bind(config.bind_addr)
             .await
             .map_err(TcpNodeError::BindError)?;
         let bound_addr = listener.local_addr().map_err(TcpNodeError::BindError)?;
 
         let state: Arc<RwLock<GossipState>> = Arc::default();
-        let peers: Arc<RwLock<Vec<SocketAddr>>> = Arc::default();
+        let peers: Arc<RwLock<Vec<Peer>>> = Arc::default();
         let cancel = CancellationToken::new();
         let version = Arc::new(AtomicU64::new(1));
 
@@ -194,8 +239,16 @@ impl TcpClusterNode {
         let state_clone = Arc::clone(&state);
         let cancel_clone = cancel.clone();
         let node_id_clone = config.node_id.clone();
+        let tls_listener = config.tls.clone();
         tokio::spawn(async move {
-            run_listener(listener, state_clone, node_id_clone, cancel_clone).await;
+            run_listener(
+                listener,
+                state_clone,
+                node_id_clone,
+                cancel_clone,
+                tls_listener,
+            )
+            .await;
         });
 
         // Spawn gossip timer task.
@@ -205,6 +258,7 @@ impl TcpClusterNode {
         let gossip_interval = config.gossip_interval_ms;
         let fanout = config.fanout;
         let node_id_gossip = config.node_id.clone();
+        let tls_gossip = config.tls.clone();
         tokio::spawn(async move {
             run_gossip_loop(
                 node_id_gossip,
@@ -213,6 +267,7 @@ impl TcpClusterNode {
                 state_gossip,
                 peers_gossip,
                 cancel_gossip,
+                tls_gossip,
             )
             .await;
         });
@@ -227,9 +282,22 @@ impl TcpClusterNode {
         })
     }
 
-    /// Register a peer address to gossip with.
+    /// Register a peer address to gossip with. With TLS, the peer must
+    /// present a trusted certificate for the IP address of `addr`.
     pub fn add_peer(&self, addr: SocketAddr) {
-        self.peers.write().push(addr);
+        self.peers.write().push(Peer {
+            addr,
+            server_name: None,
+        });
+    }
+
+    /// Register a peer whose TLS certificate is issued to `server_name`
+    /// (for example `node-3`). Without TLS the name is not used.
+    pub fn add_peer_with_server_name(&self, addr: SocketAddr, server_name: impl Into<String>) {
+        self.peers.write().push(Peer {
+            addr,
+            server_name: Some(server_name.into()),
+        });
     }
 
     /// Store a key-value pair in the local gossip state.
@@ -307,12 +375,21 @@ impl TcpClusterNode {
 // Background tasks
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// A gossip peer: where to connect, and the name its TLS certificate must
+/// carry (its IP address when `None`).
+#[derive(Debug, Clone)]
+struct Peer {
+    addr: SocketAddr,
+    server_name: Option<String>,
+}
+
 /// Listener task: accept incoming connections and dispatch them to handler tasks.
 async fn run_listener(
     listener: TcpListener,
     state: Arc<RwLock<GossipState>>,
     node_id: String,
     cancel: CancellationToken,
+    tls: Option<Arc<TlsManager>>,
 ) {
     loop {
         tokio::select! {
@@ -320,12 +397,25 @@ async fn run_listener(
             _ = cancel.cancelled() => break,
             result = listener.accept() => {
                 match result {
-                    Ok((stream, _peer)) => {
+                    Ok((stream, peer)) => {
                         let state_clone = Arc::clone(&state);
                         let node_id_clone = node_id.clone();
                         let cancel_clone = cancel.clone();
+                        let tls = tls.clone();
                         tokio::spawn(async move {
-                            handle_connection(stream, state_clone, node_id_clone, cancel_clone).await;
+                            match tls {
+                                None => {
+                                    handle_connection(stream, state_clone, node_id_clone, cancel_clone).await;
+                                }
+                                Some(tls) => match accept_tls(&tls, stream).await {
+                                    Ok(stream) => {
+                                        handle_connection(stream, state_clone, node_id_clone, cancel_clone).await;
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!("refused TCP cluster connection from {peer}: {e}");
+                                    }
+                                },
+                            }
                         });
                     }
                     Err(_) => break,
@@ -335,16 +425,34 @@ async fn run_listener(
     }
 }
 
-/// Handle a single accepted TCP connection.
+/// Complete the server side of a TLS handshake; the client must present a
+/// trusted certificate.
+async fn accept_tls(
+    tls: &TlsManager,
+    stream: TcpStream,
+) -> Result<tokio_rustls::server::TlsStream<TcpStream>, String> {
+    let acceptor = tls.get_acceptor().await.map_err(|e| e.to_string())?;
+    match timeout(TLS_HANDSHAKE_TIMEOUT, acceptor.accept(stream)).await {
+        Ok(Ok(stream)) => Ok(stream),
+        Ok(Err(e)) => Err(format!("TLS handshake failed: {e}")),
+        Err(_) => Err(format!(
+            "TLS handshake timed out after {TLS_HANDSHAKE_TIMEOUT:?}"
+        )),
+    }
+}
+
+/// Handle a single accepted connection.
 ///
 /// Reads messages until EOF or cancellation, then closes the stream.
-async fn handle_connection(
-    mut stream: TcpStream,
+async fn handle_connection<S>(
+    stream: S,
     state: Arc<RwLock<GossipState>>,
     node_id: String,
     cancel: CancellationToken,
-) {
-    let (mut reader, mut writer) = stream.split();
+) where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let (mut reader, mut writer) = tokio::io::split(stream);
 
     loop {
         let msg = tokio::select! {
@@ -399,8 +507,9 @@ async fn run_gossip_loop(
     fanout: GossipFanout,
     interval_ms: u64,
     state: Arc<RwLock<GossipState>>,
-    peers: Arc<RwLock<Vec<SocketAddr>>>,
+    peers: Arc<RwLock<Vec<Peer>>>,
     cancel: CancellationToken,
+    tls: Option<Arc<TlsManager>>,
 ) {
     let mut ticker = interval(Duration::from_millis(interval_ms));
 
@@ -425,13 +534,13 @@ async fn run_gossip_loop(
         }
 
         let selected = {
-            let all_peers: Vec<SocketAddr> = peers.read().clone();
+            let all_peers: Vec<Peer> = peers.read().clone();
             let count = fanout.resolve(all_peers.len());
             select_random_peers(&all_peers, count)
         };
 
-        for peer_addr in selected {
-            gossip_to_peer(&node_id, peer_addr, &snapshot).await;
+        for peer in &selected {
+            gossip_to_peer(&node_id, peer, &snapshot, tls.as_deref()).await;
         }
     }
 }
@@ -440,7 +549,7 @@ async fn run_gossip_loop(
 ///
 /// Uses a simple Fisher-Yates partial shuffle without an external RNG crate.
 /// We seed from `std::time::SystemTime` to get variation across rounds.
-fn select_random_peers(peers: &[SocketAddr], count: usize) -> Vec<SocketAddr> {
+fn select_random_peers<T: Clone>(peers: &[T], count: usize) -> Vec<T> {
     if count == 0 || peers.is_empty() {
         return Vec::new();
     }
@@ -468,15 +577,62 @@ fn select_random_peers(peers: &[SocketAddr], count: usize) -> Vec<SocketAddr> {
         indices.swap(i, j);
     }
 
-    indices[..count].iter().map(|&i| peers[i]).collect()
+    indices[..count].iter().map(|&i| peers[i].clone()).collect()
 }
 
-/// Open a short-lived TCP connection to `peer_addr` and send all snapshot entries.
-async fn gossip_to_peer(node_id: &str, peer_addr: SocketAddr, snapshot: &[(String, u64, u64)]) {
-    let Ok(mut stream) = TcpStream::connect(peer_addr).await else {
+/// Open a short-lived connection to `peer` (over TLS when `tls` is set) and
+/// send all snapshot entries.
+async fn gossip_to_peer(
+    node_id: &str,
+    peer: &Peer,
+    snapshot: &[(String, u64, u64)],
+    tls: Option<&TlsManager>,
+) {
+    let Ok(stream) = TcpStream::connect(peer.addr).await else {
         return; // Peer might not be ready yet; skip this round.
     };
+    let Some(tls) = tls else {
+        send_snapshot(stream, node_id, snapshot).await;
+        return;
+    };
 
+    let server_name = match &peer.server_name {
+        Some(name) => match ServerName::try_from(name.clone()) {
+            Ok(name) => name,
+            Err(e) => {
+                tracing::warn!(
+                    "peer {} has an invalid server name {name:?}: {e}",
+                    peer.addr
+                );
+                return;
+            }
+        },
+        None => ServerName::from(peer.addr.ip()),
+    };
+    let connector = match tls.get_connector().await {
+        Ok(connector) => connector,
+        Err(e) => {
+            tracing::warn!("no TLS connector for gossip to {}: {e}", peer.addr);
+            return;
+        }
+    };
+    match timeout(
+        TLS_HANDSHAKE_TIMEOUT,
+        connector.connect(server_name, stream),
+    )
+    .await
+    {
+        Ok(Ok(stream)) => send_snapshot(stream, node_id, snapshot).await,
+        Ok(Err(e)) => tracing::debug!("TLS handshake with peer {} failed: {e}", peer.addr),
+        Err(_) => tracing::debug!("TLS handshake with peer {} timed out", peer.addr),
+    }
+}
+
+/// Write one `Gossip` message per snapshot entry, then close the stream.
+async fn send_snapshot<S>(mut stream: S, node_id: &str, snapshot: &[(String, u64, u64)])
+where
+    S: AsyncWrite + Unpin,
+{
     for (key, value, version) in snapshot {
         let msg = ClusterMessage::Gossip {
             sender_id: node_id.to_owned(),
@@ -485,9 +641,11 @@ async fn gossip_to_peer(node_id: &str, peer_addr: SocketAddr, snapshot: &[(Strin
             version: *version,
         };
         if MessageCodec::write(&mut stream, &msg).await.is_err() {
-            break; // Stream closed; abort this peer's batch.
+            return; // Stream closed; abort this peer's batch.
         }
     }
+    // An orderly close (TLS close_notify, TCP FIN) after the last message.
+    let _ = stream.shutdown().await;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -559,5 +717,142 @@ mod tests {
         node.set("foo", 42);
         assert_eq!(node.get("foo"), Some(42));
         node.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod tls_tests {
+    use super::*;
+    use crate::tcp_cluster::network::TcpClusterNetwork;
+    use crate::tls::test_support::{install_provider, node_config};
+    use crate::tls::TlsConfig;
+    use std::path::Path;
+
+    /// TLS identities for `ids`, each in its own directory under `dir`, that
+    /// all trust one bundle holding the certificates of `trusted`.
+    async fn identities(dir: &Path, ids: &[u64], trusted: &[u64]) -> Vec<Arc<TlsManager>> {
+        install_provider();
+        let bundle = dir.join("cluster.pem");
+        let mut pems = String::new();
+        let mut configs = Vec::new();
+        for &id in ids {
+            let node_dir = dir.join(format!("node-{id}"));
+            std::fs::create_dir_all(&node_dir).expect("cert dir");
+            let (config, pem) = node_config(&node_dir, id, &bundle, true).await;
+            if trusted.contains(&id) {
+                pems.push_str(&pem);
+            }
+            configs.push((id, config));
+        }
+        std::fs::write(&bundle, pems).expect("bundle");
+        configs
+            .into_iter()
+            .map(|(id, config)| Arc::new(TlsManager::new(config, id)))
+            .collect()
+    }
+
+    /// Send one gossip message in plaintext to `addr`.
+    async fn inject_plaintext_gossip(addr: SocketAddr, key: &str) {
+        let mut stream = TcpStream::connect(addr).await.expect("connect");
+        let message = ClusterMessage::Gossip {
+            sender_id: "intruder".into(),
+            key: key.into(),
+            value: 666,
+            version: u64::MAX / 2,
+        };
+        // The write may fail once a TLS node closes the connection.
+        let _ = MessageCodec::write(&mut stream, &message).await;
+    }
+
+    #[tokio::test]
+    async fn test_tls_mesh_converges() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let tls = identities(dir.path(), &[1, 2, 3], &[1, 2, 3]).await;
+        let net = TcpClusterNetwork::spawn_tls(tls, GossipFanout::Unbounded, 20)
+            .await
+            .expect("spawn over TLS");
+        net.set_on(0, "k", 9);
+        let stats = net.wait_converged("k", 9, Duration::from_secs(5)).await;
+        assert!(stats.converged, "the TLS mesh did not converge: {stats:?}");
+        net.shutdown_all();
+    }
+
+    /// A node with TLS does not apply gossip from a plaintext connection,
+    /// while a node without TLS does.
+    #[tokio::test]
+    async fn test_tls_node_ignores_plaintext_gossip() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let tls = identities(dir.path(), &[1], &[1]).await;
+        let secured = TcpClusterNode::start(
+            TcpNodeConfig::localhost("secured", 0).with_tls(Arc::clone(&tls[0])),
+        )
+        .await
+        .expect("start with TLS");
+        let open = TcpClusterNode::start(TcpNodeConfig::localhost("open", 0))
+            .await
+            .expect("start");
+
+        inject_plaintext_gossip(open.addr(), "injected").await;
+        inject_plaintext_gossip(secured.addr(), "injected").await;
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while open.get("injected").is_none() && tokio::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            open.get("injected"),
+            Some(666),
+            "the plaintext control saw nothing"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(
+            secured.get("injected"),
+            None,
+            "a TLS node applied plaintext gossip"
+        );
+        secured.shutdown();
+        open.shutdown();
+    }
+
+    /// A node whose certificate the receiver does not trust cannot gossip
+    /// into it, even over TLS.
+    #[tokio::test]
+    async fn test_untrusted_node_cannot_gossip() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        // Both trust node 1 only: node 2's certificate is refused by node 1.
+        let tls = identities(dir.path(), &[1, 2], &[1]).await;
+        let receiver = TcpClusterNode::start(
+            TcpNodeConfig::localhost("receiver", 0).with_tls(Arc::clone(&tls[0])),
+        )
+        .await
+        .expect("receiver");
+        let mut sender_config = TcpNodeConfig::localhost("sender", 0).with_tls(Arc::clone(&tls[1]));
+        sender_config.gossip_interval_ms = 20;
+        let sender = TcpClusterNode::start(sender_config).await.expect("sender");
+        sender.add_peer_with_server_name(receiver.addr(), "node-1");
+        sender.set("from-untrusted", 1);
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(receiver.get("from-untrusted"), None);
+        receiver.shutdown();
+        sender.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_tls_that_cannot_initialize_stops_start() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let broken = Arc::new(TlsManager::new(
+            TlsConfig {
+                enabled: true,
+                cert_dir: dir.path().to_path_buf(),
+                ca_file: None,
+                auto_rotate: false,
+                ..Default::default()
+            },
+            1,
+        ));
+        let outcome =
+            TcpClusterNode::start(TcpNodeConfig::localhost("broken", 0).with_tls(broken)).await;
+        assert!(matches!(outcome, Err(TcpNodeError::Tls(_))));
     }
 }

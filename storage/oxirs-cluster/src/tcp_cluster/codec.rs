@@ -76,9 +76,14 @@ pub enum ClusterMessage {
 // Codec
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Largest message body either side accepts. Cluster messages are tiny; the
+/// cap keeps a peer from making the reader allocate and wait for gigabytes.
+pub const MAX_FRAME_LEN: usize = 1024 * 1024;
+
 /// Zero-size type providing stateless read/write helpers for [`ClusterMessage`].
 ///
-/// Wire format: `[u32 big-endian byte count][serde_json UTF-8 body]`
+/// Wire format: `[u32 big-endian byte count][serde_json UTF-8 body]`, with
+/// bodies of at most [`MAX_FRAME_LEN`] bytes.
 pub struct MessageCodec;
 
 impl MessageCodec {
@@ -97,6 +102,15 @@ impl MessageCodec {
     {
         let body =
             serde_json::to_vec(msg).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        if body.len() > MAX_FRAME_LEN {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "message body of {} bytes exceeds the {MAX_FRAME_LEN}-byte limit",
+                    body.len()
+                ),
+            ));
+        }
 
         let len = u32::try_from(body.len()).map_err(|_| {
             io::Error::new(
@@ -118,7 +132,8 @@ impl MessageCodec {
     ///
     /// # Errors
     ///
-    /// Returns `Err` if the read fails or the body is not valid JSON.
+    /// Returns `Err` if the read fails, the length exceeds
+    /// [`MAX_FRAME_LEN`], or the body is not valid JSON.
     pub async fn read<R>(reader: &mut R) -> io::Result<ClusterMessage>
     where
         R: AsyncReadExt + Unpin,
@@ -126,6 +141,12 @@ impl MessageCodec {
         let mut len_buf = [0u8; 4];
         reader.read_exact(&mut len_buf).await?;
         let len = u32::from_be_bytes(len_buf) as usize;
+        if len > MAX_FRAME_LEN {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("message length {len} exceeds the {MAX_FRAME_LEN}-byte limit"),
+            ));
+        }
 
         let mut body = vec![0u8; len];
         reader.read_exact(&mut body).await?;
@@ -142,6 +163,29 @@ impl MessageCodec {
 mod tests {
     use super::*;
     use tokio::io::duplex;
+
+    /// The length header decides how much the reader allocates and waits
+    /// for. An absurd one made it allocate up to 4 GiB and wait for a body
+    /// that never comes.
+    #[tokio::test]
+    async fn test_oversize_length_header_is_refused_at_once() {
+        let (mut client, mut server) = duplex(64);
+        client
+            .write_all(&u32::MAX.to_be_bytes())
+            .await
+            .expect("write header");
+        let outcome = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            MessageCodec::read(&mut server),
+        )
+        .await;
+        match outcome {
+            Ok(Err(e)) => assert_eq!(e.kind(), io::ErrorKind::InvalidData),
+            Ok(Ok(message)) => panic!("decoded {message:?}"),
+            Err(_) => panic!("the reader waited for a 4 GiB body"),
+        }
+        drop(client);
+    }
 
     #[tokio::test]
     async fn test_roundtrip_gossip() {

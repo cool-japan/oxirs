@@ -237,4 +237,111 @@ mod tests {
         assert!(config.prefer_local_leader);
         assert!(config.enable_cross_region_backup);
     }
+
+    fn two_region_manager(cross_region: CrossRegionStrategy) -> RegionManager {
+        RegionManager::new(
+            "us-east-1".to_string(),
+            "us-east-1a".to_string(),
+            ConsensusStrategy::GlobalRaft,
+            MultiRegionReplicationStrategy {
+                intra_region: IntraRegionStrategy::Synchronous { min_replicas: 1 },
+                cross_region,
+                conflict_resolution: ConflictResolutionStrategy::LastWriterWins,
+            },
+        )
+    }
+
+    async fn with_regions(manager: &RegionManager, nodes: &[(u64, &str)]) {
+        manager
+            .initialize(vec![
+                create_test_region("us-east-1", "US East 1"),
+                create_test_region("eu-west-1", "EU West 1"),
+            ])
+            .await
+            .expect("initialize");
+        for &(node_id, region) in nodes {
+            manager
+                .register_node(
+                    node_id,
+                    region.to_string(),
+                    format!("{region}a"),
+                    None,
+                    None,
+                )
+                .await
+                .expect("register node");
+        }
+    }
+
+    /// Node addresses used to be made up as `127.0.0.1:{8080 + node_id}`.
+    #[tokio::test]
+    async fn test_unregistered_node_has_no_address() {
+        let manager = two_region_manager(CrossRegionStrategy::AsyncAll);
+        assert_eq!(manager.get_node_address(5).await.expect("lookup"), None);
+    }
+
+    /// Latency monitoring held the topology read lock while the measurement
+    /// took the write lock, so every successful measurement hung it.
+    #[tokio::test]
+    async fn test_latency_monitoring_finishes_and_records_real_samples() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                drop(stream);
+            }
+        });
+        let remote = u64::from(addr.port()) - 8080;
+        let manager = two_region_manager(CrossRegionStrategy::AsyncAll);
+        with_regions(&manager, &[(1, "us-east-1"), (remote, "eu-west-1")]).await;
+        manager.register_node_address(remote, addr).await;
+
+        tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            manager.monitor_latencies(),
+        )
+        .await
+        .expect("latency monitoring hung")
+        .expect("latency monitoring");
+        let metrics = manager.performance_metrics.read().await;
+        let measured = metrics
+            .inter_region_latencies
+            .get(&("us-east-1".to_string(), "eu-west-1".to_string()))
+            .expect("the reachable region was measured");
+        assert_eq!(measured.sample_count, 1);
+        // The other direction cannot be measured from this node, and no
+        // estimate is recorded as if it had been.
+        assert!(!metrics
+            .inter_region_latencies
+            .contains_key(&("eu-west-1".to_string(), "us-east-1".to_string())));
+    }
+
+    /// Cross-region replication reported success although nothing reached
+    /// the other region.
+    #[tokio::test]
+    async fn test_cross_region_replication_reports_failure() {
+        for strategy in [
+            CrossRegionStrategy::AsyncAll,
+            CrossRegionStrategy::EventualConsistency {
+                reconciliation_interval_ms: 1000,
+            },
+        ] {
+            let manager = two_region_manager(strategy.clone());
+            with_regions(&manager, &[(1, "us-east-1"), (2, "eu-west-1")]).await;
+            let replication = MultiRegionReplicationStrategy {
+                intra_region: IntraRegionStrategy::Synchronous { min_replicas: 1 },
+                cross_region: strategy.clone(),
+                conflict_resolution: ConflictResolutionStrategy::LastWriterWins,
+            };
+            let outcome = manager
+                .replicate_cross_region(b"data", "us-east-1", &replication)
+                .await;
+            assert!(
+                outcome.is_err(),
+                "{strategy:?} reported replication that did not happen"
+            );
+        }
+    }
 }

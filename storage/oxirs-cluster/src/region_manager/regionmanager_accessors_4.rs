@@ -12,43 +12,37 @@ use std::net::SocketAddr;
 use super::regionmanager_type::RegionManager;
 
 impl RegionManager {
-    /// Get the network address for a specific node
+    /// Record the network address of a node, used to measure the latency to
+    /// its region. `ClusterNode` registers its own address and those of its
+    /// configured peers.
+    pub async fn register_node_address(&self, node_id: OxirsNodeId, address: SocketAddr) {
+        self.node_addresses.write().await.insert(node_id, address);
+    }
+
+    /// Get the registered network address of a node, if any
     pub(crate) async fn get_node_address(
         &self,
         node_id: OxirsNodeId,
     ) -> Result<Option<SocketAddr>> {
-        let base_port = 8080;
-        let addr = format!("127.0.0.1:{}", base_port + node_id as u16)
-            .parse::<SocketAddr>()
-            .ok();
-        Ok(addr)
+        Ok(self.node_addresses.read().await.get(&node_id).copied())
     }
+
     /// Send data to a specific node
+    ///
+    /// There is no cross-region data transport: no node runs a receiver for
+    /// replicated data, so nothing is sent and an error is returned. Earlier
+    /// releases wrote the data in plaintext to a made-up local port and
+    /// counted any accepted connection as delivered.
     pub(super) async fn send_data_to_node(
         &self,
         data: &[u8],
         node_id: OxirsNodeId,
     ) -> Result<Option<Vec<u8>>> {
-        let node_addr = self
-            .get_node_address(node_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("No address found for node {}", node_id))?;
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        use tokio::net::TcpStream;
-        let mut stream = TcpStream::connect(node_addr).await?;
-        stream.write_u32(data.len() as u32).await?;
-        stream.write_all(data).await?;
-        stream.flush().await?;
-        let mut response_len = [0u8; 4];
-        if stream.read_exact(&mut response_len).await.is_ok() {
-            let len = u32::from_be_bytes(response_len) as usize;
-            if len > 0 && len < 1024 * 1024 {
-                let mut response = vec![0u8; len];
-                stream.read_exact(&mut response).await?;
-                return Ok(Some(response));
-            }
-        }
-        Ok(None)
+        Err(anyhow::anyhow!(
+            "cross-region data transport is not implemented: no receiver exists, so {} \
+             byte(s) were not sent to node {node_id}",
+            data.len()
+        ))
     }
     /// Ping a node by ID
     pub(super) async fn ping_node_by_id(&self, node_id: OxirsNodeId) -> ClusterResult<()> {

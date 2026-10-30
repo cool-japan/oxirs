@@ -39,12 +39,14 @@ async fn test_two_nodes_gossip_converge() {
         bind_addr: "127.0.0.1:0".parse().unwrap(),
         fanout: GossipFanout::Unbounded,
         gossip_interval_ms: 20,
+        tls: None,
     };
     let cfg_b = TcpNodeConfig {
         node_id: "b".into(),
         bind_addr: "127.0.0.1:0".parse().unwrap(),
         fanout: GossipFanout::Unbounded,
         gossip_interval_ms: 20,
+        tls: None,
     };
 
     let node_a = TcpClusterNode::start(cfg_a).await.expect("start a");
@@ -85,6 +87,7 @@ async fn test_three_nodes_chain_propagation() {
         bind_addr: "127.0.0.1:0".parse().unwrap(),
         fanout: GossipFanout::Bounded(1),
         gossip_interval_ms: 20,
+        tls: None,
     };
 
     let node_a = TcpClusterNode::start(make_cfg("a")).await.expect("a");

@@ -42,7 +42,7 @@ Time-series optimizations for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-tsdb = "0.4.2"
+oxirs-tsdb = "0.5.0"
 ```
 
 ### Basic Usage

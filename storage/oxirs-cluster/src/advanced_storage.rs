@@ -8,8 +8,11 @@
 //! - Parallel chunk processing for large snapshots
 //! - Profiling integration for performance analysis
 
+use crate::at_rest::{self, AtRestKey};
 use crate::raft::OxirsNodeId;
-use crate::serialization::{MessageSerializer, SerializationConfig};
+use crate::serialization::{
+    CompressionAlgorithm, MessageSerializer, SerializationConfig, SerializedMessage,
+};
 use crate::storage::{RaftState, SnapshotMetadata, WalEntry, WalOperation};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -18,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -30,8 +33,135 @@ use tokio::time::Instant;
 // SciRS2-Core imports for profiling
 use scirs2_core::profiling::Profiler;
 
+/// Context bound into every encrypted WAL record (see [`crate::at_rest`]).
+const WAL_CONTEXT: &[u8] = b"oxirs-cluster/wal";
+
+/// Context bound into an encrypted snapshot file, tying it to its position in
+/// the log so one snapshot file cannot be swapped in for another.
+fn snapshot_context(last_included_index: u64, last_included_term: u64) -> Vec<u8> {
+    format!("oxirs-cluster/snapshot/{last_included_index}/{last_included_term}").into_bytes()
+}
+
+/// Upper bound for one decompressed WAL record (matches the serializer).
+const MAX_WAL_RECORD_SIZE: usize = 100 * 1024 * 1024;
+
+/// Records whose encoding exceeded this many bytes were LZ4-compressed by
+/// releases up to 0.4.1, which also hashed the compressed bytes.
+const LEGACY_COMPRESSION_THRESHOLD: usize = 1024;
+
+/// SHA-256 over the uncompressed MessagePack encoding of `entry`, whose
+/// `checksum` field must be empty. Independent of compression, so a log
+/// stays verifiable when `enable_compression` changes.
+fn wal_entry_checksum(entry: &WalEntry) -> Result<String> {
+    let encoded =
+        rmp_serde::to_vec(entry).map_err(|e| anyhow!("failed to encode WAL entry: {e}"))?;
+    Ok(hex::encode(Sha256::digest(&encoded)))
+}
+
+/// LZ4 frame descriptor flag: the frame ends with an xxh32 checksum of its
+/// content, which decompression verifies. oxiarc-lz4 always sets it.
+const LZ4_FRAME_CONTENT_CHECKSUM_FLAG: u8 = 0x04;
+
+/// Decode one WAL payload: decompress it if it is an LZ4 frame (a
+/// MessagePack entry starts with an array marker, never with the frame
+/// magic), decode the entry and verify its checksum.
+///
+/// The outer error is fatal for the whole log; the inner one describes why
+/// this record is damaged.
+fn decode_wal_payload(payload: &[u8]) -> Result<std::result::Result<WalEntry, String>> {
+    if payload.starts_with(&oxiarc_lz4::LZ4_FRAME_MAGIC.to_le_bytes()) {
+        let content_checked = payload
+            .get(4)
+            .is_some_and(|flags| flags & LZ4_FRAME_CONTENT_CHECKSUM_FLAG != 0);
+        return Ok(match oxiarc_lz4::decompress(payload, MAX_WAL_RECORD_SIZE) {
+            Ok(encoded) => decode_wal_entry(&encoded, true, content_checked),
+            Err(e) => Err(format!("LZ4 decompression failed: {e}")),
+        });
+    }
+    match decode_wal_entry(payload, false, false) {
+        Ok(entry) => Ok(Ok(entry)),
+        Err(_) if is_legacy_lz4_block(payload) => Err(anyhow!(
+            "the record was compressed by oxirs-cluster 0.2.0 or earlier (lz4_flex), and its \
+             checksum can no longer be verified; move wal.log aside to start without it (this \
+             node then loses its local Raft state)"
+        )),
+        Err(reason) => Ok(Err(reason)),
+    }
+}
+
+/// Decode a MessagePack WAL entry and verify its checksum.
+///
+/// Entries from compressed records may carry the checksum that releases up
+/// to 0.4.1 computed over the compressed bytes. Older oxiarc-lz4 releases
+/// compressed differently, so that checksum cannot always be reproduced;
+/// `content_checked` (the LZ4 frame's own content checksum verified these
+/// bytes) then vouches for the record instead.
+fn decode_wal_entry(
+    encoded: &[u8],
+    compressed: bool,
+    content_checked: bool,
+) -> std::result::Result<WalEntry, String> {
+    let mut entry: WalEntry =
+        rmp_serde::from_slice(encoded).map_err(|e| format!("cannot decode entry: {e}"))?;
+
+    let checksum = std::mem::take(&mut entry.checksum);
+    let content = rmp_serde::to_vec(&entry).map_err(|e| format!("cannot re-encode entry: {e}"))?;
+    let legacy = compressed && content.len() > LEGACY_COMPRESSION_THRESHOLD;
+    let verified = checksum == hex::encode(Sha256::digest(&content))
+        || (legacy
+            && oxiarc_lz4::compress(&content)
+                .is_ok_and(|bytes| checksum == hex::encode(Sha256::digest(&bytes))));
+    let vouched = !verified
+        && legacy
+        && content_checked
+        && checksum.len() == 64
+        && checksum.bytes().all(|b| b.is_ascii_hexdigit());
+    if !verified && !vouched {
+        return Err(format!("checksum mismatch for entry {}", entry.sequence));
+    }
+    if vouched {
+        tracing::debug!(
+            "WAL entry {} predates the current checksum scheme; accepted on its LZ4 frame checksum",
+            entry.sequence
+        );
+    }
+    entry.checksum = checksum;
+    Ok(entry)
+}
+
+/// The payload to journal for a serialized WAL entry.
+///
+/// Recovery decompresses an entry into at most `limit` bytes, so a
+/// compressed entry larger than that could be written but never read back.
+/// Such an entry is journaled uncompressed instead, which recovery reads at
+/// any size.
+fn journal_payload(
+    serialized: SerializedMessage,
+    limit: usize,
+    uncompressed: impl FnOnce() -> Result<Vec<u8>>,
+) -> Result<Vec<u8>> {
+    if serialized.compression != CompressionAlgorithm::None && serialized.original_size > limit {
+        return uncompressed();
+    }
+    Ok(serialized.payload)
+}
+
+/// Whether `payload` is an LZ4 block behind a 4-byte size prefix that holds
+/// a WAL entry, as releases up to 0.2.0 wrote large records (lz4_flex).
+fn is_legacy_lz4_block(payload: &[u8]) -> bool {
+    let Some(Ok(prefix)) = payload.get(..4).map(<[u8; 4]>::try_from) else {
+        return false;
+    };
+    let (size, block) = (u32::from_le_bytes(prefix) as usize, &payload[4..]);
+    size > LEGACY_COMPRESSION_THRESHOLD
+        && size <= MAX_WAL_RECORD_SIZE
+        && oxiarc_lz4::decompress_block(block, size).is_ok_and(|decoded| {
+            decoded.len() == size && rmp_serde::from_slice::<WalEntry>(&decoded).is_ok()
+        })
+}
+
 /// Storage backend configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct StorageConfig {
     /// Directory for storing data files
     pub data_dir: PathBuf,
@@ -51,10 +181,52 @@ pub struct StorageConfig {
     pub enable_compression: bool,
     /// Maximum memory cache size in bytes
     pub cache_size: usize,
-    /// Enable encryption at rest
+    /// Encrypt WAL records and snapshot files at rest with XChaCha20-Poly1305
+    /// (see [`crate::at_rest`]). Requires `encryption_key`.
     pub enable_encryption: bool,
-    /// Encryption key (in production, load from secure store)
+    /// 256-bit key for `enable_encryption` (in production, load from a secure
+    /// store). Setting it without `enable_encryption`, or the reverse, is a
+    /// configuration error.
     pub encryption_key: Option<[u8; 32]>,
+}
+
+impl std::fmt::Debug for StorageConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StorageConfig")
+            .field("data_dir", &self.data_dir)
+            .field("max_wal_size", &self.max_wal_size)
+            .field("wal_sync_mode", &self.wal_sync_mode)
+            .field("enable_fsync", &self.enable_fsync)
+            .field("enable_mmap", &self.enable_mmap)
+            .field("checkpoint_interval", &self.checkpoint_interval)
+            .field("enable_compaction", &self.enable_compaction)
+            .field("enable_compression", &self.enable_compression)
+            .field("cache_size", &self.cache_size)
+            .field("enable_encryption", &self.enable_encryption)
+            .field("encryption_key", &self.encryption_key.map(|_| "<redacted>"))
+            .finish()
+    }
+}
+
+impl StorageConfig {
+    /// The at-rest key implied by the encryption settings.
+    ///
+    /// # Errors
+    ///
+    /// Fails when `enable_encryption` and `encryption_key` disagree, so that a
+    /// half-configured store never silently runs unencrypted.
+    fn at_rest_key(&self) -> Result<Option<AtRestKey>> {
+        match (self.enable_encryption, self.encryption_key) {
+            (true, Some(key)) => Ok(Some(AtRestKey::from_key(key))),
+            (true, None) => Err(anyhow!(
+                "enable_encryption is set but encryption_key is not; refusing to store data unencrypted"
+            )),
+            (false, Some(_)) => Err(anyhow!(
+                "encryption_key is set but enable_encryption is false; enable encryption or remove the key"
+            )),
+            (false, None) => Ok(None),
+        }
+    }
 }
 
 impl Default for StorageConfig {
@@ -173,11 +345,13 @@ struct WriteAheadLog {
     current_sequence: AtomicU64,
     wal_file: Arc<Mutex<File>>,
     serializer: Arc<Mutex<MessageSerializer>>,
+    /// Seals every record when encryption at rest is enabled
+    encryption_key: Option<AtRestKey>,
 }
 
 impl WriteAheadLog {
     /// Create a new Write-Ahead Log
-    async fn new(config: StorageConfig) -> Result<Self> {
+    async fn new(config: StorageConfig, encryption_key: Option<AtRestKey>) -> Result<Self> {
         let wal_path = config.data_dir.join("wal.log");
 
         // Create directory if it doesn't exist
@@ -215,6 +389,7 @@ impl WriteAheadLog {
             current_sequence,
             wal_file: Arc::new(Mutex::new(wal_file)),
             serializer,
+            encryption_key,
         })
     }
 
@@ -233,25 +408,38 @@ impl WriteAheadLog {
             checksum: String::new(), // Will be filled after serialization
         };
 
-        // Serialize the entry
-        let mut serializer = self.serializer.lock().await;
-        let serialized = serializer.serialize(&entry)?;
-        drop(serializer);
-
-        // Calculate checksum of serialized data
-        let checksum = hex::encode(Sha256::digest(&serialized.payload));
+        // The checksum covers the uncompressed encoding, so it does not
+        // depend on whether this record ends up compressed.
+        let checksum = wal_entry_checksum(&entry)?;
         let entry_with_checksum = WalEntry { checksum, ..entry };
 
         // Re-serialize with checksum
         let mut serializer = self.serializer.lock().await;
         let final_serialized = serializer.serialize(&entry_with_checksum)?;
         drop(serializer);
+        let payload = journal_payload(final_serialized, MAX_WAL_RECORD_SIZE, || {
+            Ok(rmp_serde::to_vec(&entry_with_checksum)?)
+        })?;
+
+        // Seal the record when encryption at rest is enabled
+        let record = match &self.encryption_key {
+            Some(key) => at_rest::seal(key, WAL_CONTEXT, &payload)?,
+            None => payload,
+        };
 
         // Write to WAL file
+        let entry_size = u32::try_from(record.len())
+            .map_err(|_| {
+                anyhow!(
+                    "WAL record of {} bytes exceeds the 4 GiB record limit; compact the Raft \
+                     log with a snapshot",
+                    record.len()
+                )
+            })?
+            .to_le_bytes();
         let mut wal_file = self.wal_file.lock().await;
-        let entry_size = (final_serialized.payload.len() as u32).to_le_bytes();
         wal_file.write_all(&entry_size)?;
-        wal_file.write_all(&final_serialized.payload)?;
+        wal_file.write_all(&record)?;
 
         match self.config.wal_sync_mode {
             WalSyncMode::NoSync => {}
@@ -264,87 +452,155 @@ impl WriteAheadLog {
     }
 
     /// Recover from WAL after crash
+    ///
+    /// Each record is opened (with encryption at rest), decompressed when it
+    /// is an LZ4 frame, decoded and checked against its checksum. A final
+    /// record that is incomplete or fails these checks is a torn write: its
+    /// bytes are moved to `wal.log.torn-<unix-ms>` and the log is truncated
+    /// after the last good record, so that later appends stay readable.
+    ///
+    /// # Errors
+    ///
+    /// Fails without modifying the log when a damaged record is followed by
+    /// further records (damage a torn write cannot explain), when the log was
+    /// written under a different key, or when it mixes plaintext and
+    /// encrypted records.
     async fn recover(&self) -> Result<Vec<WalEntry>> {
         let wal_path = self.config.data_dir.join("wal.log");
         if !wal_path.exists() {
             return Ok(Vec::new());
         }
 
-        let mut file = File::open(&wal_path)?;
+        let file = File::open(&wal_path)?;
+        let file_len = file.metadata()?.len();
+        let mut reader = std::io::BufReader::new(file);
         let mut recovered_entries = Vec::new();
-        let mut buffer = Vec::new();
+        let mut offset: u64 = 0;
 
-        let mut serializer = self.serializer.lock().await;
-
-        loop {
-            // Read entry size
-            let mut size_bytes = [0u8; 4];
-            match file.read_exact(&mut size_bytes) {
-                Ok(()) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                Err(e) => return Err(e.into()),
+        while offset < file_len {
+            let remaining = file_len - offset;
+            if remaining < 4 {
+                self.set_aside_torn_tail(&wal_path, offset, "incomplete record header")?;
+                break;
             }
+            let mut size_bytes = [0u8; 4];
+            reader.read_exact(&mut size_bytes)?;
+            let entry_size = u64::from(u32::from_le_bytes(size_bytes));
+            if entry_size > remaining - 4 {
+                self.set_aside_torn_tail(&wal_path, offset, "incomplete record")?;
+                break;
+            }
+            let mut record = vec![0u8; usize::try_from(entry_size)?];
+            reader.read_exact(&mut record)?;
+            let record_end = offset + 4 + entry_size;
 
-            let entry_size = u32::from_le_bytes(size_bytes) as usize;
-
-            // Read entry data
-            buffer.clear();
-            buffer.resize(entry_size, 0);
-            file.read_exact(&mut buffer)?;
-
-            // Deserialize entry
-            let serialized_message = crate::serialization::SerializedMessage {
-                schema_version: Default::default(),
-                compression: crate::serialization::CompressionAlgorithm::None,
-                format: crate::serialization::SerializationFormat::MessagePack,
-                payload: buffer.clone(),
-                checksum: None,
-                original_size: buffer.len(),
-                compression_ratio: 1.0,
-            };
-
-            match serializer.deserialize::<WalEntry>(&serialized_message) {
+            let decoded = self
+                .decode_record(&record)
+                .map_err(|e| anyhow!("WAL {} at byte {offset}: {e}", wal_path.display()))?;
+            match decoded {
                 Ok(entry) => {
-                    // Verify checksum. `append` computes the SHA-256 over the
-                    // serialization of the entry with an *empty* checksum field
-                    // (the content hash, before the checksum is embedded), so we
-                    // recompute it the same way here rather than hashing the
-                    // on-disk payload (which already carries the checksum).
-                    let content_entry = WalEntry {
-                        checksum: String::new(),
-                        ..entry.clone()
-                    };
-                    let computed_checksum = match serializer.serialize(&content_entry) {
-                        Ok(reserialized) => hex::encode(Sha256::digest(&reserialized.payload)),
-                        Err(_) => {
-                            tracing::warn!(
-                                "Failed to re-serialize WAL entry {} for checksum verification, \
-                                 stopping recovery",
-                                entry.sequence
-                            );
-                            break;
-                        }
-                    };
-                    if entry.checksum == computed_checksum {
-                        let sequence = entry.sequence;
-                        recovered_entries.push(entry);
-                        self.current_sequence.store(sequence + 1, Ordering::SeqCst);
-                    } else {
-                        tracing::warn!(
-                            "WAL entry {} has invalid checksum, stopping recovery",
-                            entry.sequence
-                        );
-                        break;
-                    }
+                    self.current_sequence
+                        .store(entry.sequence + 1, Ordering::SeqCst);
+                    recovered_entries.push(entry);
                 }
-                Err(_) => {
-                    tracing::warn!("Failed to deserialize WAL entry, stopping recovery");
+                Err(reason) if record_end == file_len => {
+                    self.set_aside_torn_tail(&wal_path, offset, &reason)?;
                     break;
                 }
+                Err(reason) => {
+                    return Err(anyhow!(
+                        "WAL record at byte {offset} of {} is damaged ({reason}) and is followed by \
+                         {} more bytes; refusing to discard them",
+                        wal_path.display(),
+                        file_len - record_end
+                    ));
+                }
             }
+            offset = record_end;
         }
 
         Ok(recovered_entries)
+    }
+
+    /// Decode one WAL record. The outer error is fatal for the whole log (a
+    /// different key, or plaintext and encrypted records mixed); the inner
+    /// one marks just this record as damaged.
+    fn decode_record(&self, record: &[u8]) -> Result<std::result::Result<WalEntry, String>> {
+        let payload = match &self.encryption_key {
+            Some(key) => match at_rest::envelope_key_id(record) {
+                Ok(key_id) if key_id != key.id() => {
+                    return Err(anyhow!(
+                        "WAL was encrypted with key '{key_id}', but key '{}' is configured",
+                        key.id()
+                    ));
+                }
+                Ok(_) => match at_rest::open(key, WAL_CONTEXT, record) {
+                    Ok(payload) => payload,
+                    Err(e) => return Ok(Err(format!("record failed authentication: {e}"))),
+                },
+                Err(e) if !at_rest::is_sealed(record) => {
+                    if matches!(decode_wal_payload(record), Ok(Ok(_))) {
+                        return Err(anyhow!(
+                            "WAL holds unencrypted records but encryption is enabled; \
+                             refusing to mix plaintext and encrypted records"
+                        ));
+                    }
+                    return Ok(Err(format!(
+                        "record is neither encrypted nor a valid entry: {e}"
+                    )));
+                }
+                Err(e) => return Ok(Err(format!("corrupt encrypted record: {e}"))),
+            },
+            None if at_rest::is_sealed(record) => {
+                return Err(anyhow!(
+                    "WAL holds encrypted records but encryption is disabled; configure the encryption key"
+                ));
+            }
+            None => record.to_vec(),
+        };
+        decode_wal_payload(&payload)
+    }
+
+    /// Move the bytes from `offset` to the end of the log into
+    /// `wal.log.torn-<unix-ms>`, then truncate the log at `offset`.
+    fn set_aside_torn_tail(&self, wal_path: &Path, offset: u64, reason: &str) -> Result<()> {
+        let mut wal = OpenOptions::new().read(true).write(true).open(wal_path)?;
+        wal.seek(SeekFrom::Start(offset))?;
+        let mut tail = Vec::new();
+        wal.read_to_end(&mut tail)?;
+
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis())
+            .unwrap_or_default();
+        let mut attempt = 0u32;
+        let (torn_path, mut torn_file) = loop {
+            let name = match attempt {
+                0 => format!("wal.log.torn-{millis}"),
+                n => format!("wal.log.torn-{millis}-{n}"),
+            };
+            let path = wal_path.with_file_name(name);
+            match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(file) => break (path, file),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && attempt < 100 => {
+                    attempt += 1;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        };
+        torn_file.write_all(&tail)?;
+        torn_file.sync_all()?;
+
+        wal.set_len(offset)?;
+        wal.sync_all()?;
+        tracing::warn!(
+            "WAL {} ended with a torn record at byte {offset} ({reason}); moved its {} bytes to {} \
+             and truncated the log",
+            wal_path.display(),
+            tail.len(),
+            torn_path.display()
+        );
+        Ok(())
     }
 
     /// Truncate WAL up to a given sequence number
@@ -462,6 +718,8 @@ impl<K: Clone + std::hash::Hash + Eq, V: Clone> LruCache<K, V> {
 pub struct AdvancedStorageBackend {
     config: StorageConfig,
     wal: WriteAheadLog,
+    /// Seals snapshot files when encryption at rest is enabled
+    encryption_key: Option<AtRestKey>,
     state_cache: Arc<RwLock<LruCache<String, RaftState>>>,
     snapshot_cache: Arc<RwLock<LruCache<String, SnapshotMetadata>>>,
     mmap_storage: Arc<RwLock<Option<MmapStorage>>>,
@@ -473,7 +731,15 @@ pub struct AdvancedStorageBackend {
 
 impl AdvancedStorageBackend {
     /// Create a new advanced storage backend
+    ///
+    /// # Errors
+    ///
+    /// Fails when `enable_encryption` and `encryption_key` disagree, when the
+    /// data directory cannot be created, or when WAL recovery fails (including
+    /// a WAL written under a different key or encryption mode).
     pub async fn new(config: StorageConfig) -> Result<Self> {
+        let encryption_key = config.at_rest_key()?;
+
         // Create data directory
         fs::create_dir_all(&config.data_dir).await?;
 
@@ -481,7 +747,7 @@ impl AdvancedStorageBackend {
         // provided by the write-ahead log plus the in-memory caches (which the
         // recovery path repopulates by replaying the WAL); snapshot payloads live
         // in atomic on-disk files.
-        let wal = WriteAheadLog::new(config.clone()).await?;
+        let wal = WriteAheadLog::new(config.clone(), encryption_key.clone()).await?;
 
         // Initialize caches
         let cache_entries = config.cache_size / 1024; // Estimate entries
@@ -504,6 +770,7 @@ impl AdvancedStorageBackend {
         let mut backend = Self {
             config,
             wal,
+            encryption_key,
             state_cache,
             snapshot_cache,
             mmap_storage: Arc::new(RwLock::new(None)),
@@ -534,9 +801,14 @@ impl AdvancedStorageBackend {
                     // In a full implementation, we would restore application state
                     tracing::debug!("Recovered application state");
                 }
-                WalOperation::CreateSnapshot(_metadata) => {
-                    // In a full implementation, we would restore snapshot metadata
-                    tracing::debug!("Recovered snapshot metadata");
+                WalOperation::CreateSnapshot(metadata) => {
+                    // The snapshot cache is where `load_snapshot` finds the
+                    // checksum of a snapshot file.
+                    let key = format!(
+                        "snapshot-{}-{}",
+                        metadata.last_included_index, metadata.last_included_term
+                    );
+                    self.snapshot_cache.write().await.put(key, metadata);
                 }
                 WalOperation::TruncateLog(index) => {
                     tracing::debug!("Recovered log truncation to index {}", index);
@@ -640,156 +912,6 @@ impl AdvancedStorageBackend {
         Ok(result)
     }
 
-    /// Optimized compression for large snapshots (v0.2.0)
-    ///
-    /// Uses chunk-based parallel compression for better performance on multi-core systems
-    ///
-    /// # Performance Characteristics
-    /// - Small data (<1MB): Sequential LZ4 compression
-    /// - Medium data (1-10MB): Parallel chunk compression with rayon
-    /// - Large data (>10MB): Parallel chunk compression with optimal chunk sizing
-    /// - Expected speedup: 2-6x on 8-core CPU for data >10MB
-    ///
-    /// # Algorithm
-    /// 1. Split data into optimal-sized chunks (256KB per chunk)
-    /// 2. Compress each chunk in parallel using LZ4
-    /// 3. Prepend metadata: [total_size: 8 bytes][num_chunks: 4 bytes][chunk_sizes: n*4 bytes][compressed_chunks]
-    fn parallel_compress(&self, data: &[u8]) -> Vec<u8> {
-        const PARALLEL_THRESHOLD: usize = 1024 * 1024; // 1MB threshold
-        const CHUNK_SIZE: usize = 256 * 1024; // 256KB chunks for optimal parallelism
-
-        // For small data, use regular compression
-        if data.len() < PARALLEL_THRESHOLD {
-            return oxiarc_lz4::compress(data).unwrap_or_else(|_| data.to_vec());
-        }
-
-        // Parallel chunk-based compression for large data
-        use rayon::prelude::*;
-
-        // Split into chunks
-        let chunks: Vec<&[u8]> = data.chunks(CHUNK_SIZE).collect();
-        let num_chunks = chunks.len();
-
-        // Compress each chunk in parallel
-        let compressed_chunks: Vec<Vec<u8>> = chunks
-            .par_iter()
-            .map(|chunk| oxiarc_lz4::compress_block(chunk).unwrap_or_else(|_| chunk.to_vec()))
-            .collect();
-
-        // Calculate total size and build metadata
-        let chunk_sizes: Vec<u32> = compressed_chunks.iter().map(|c| c.len() as u32).collect();
-        let total_compressed_size: usize = compressed_chunks.iter().map(|c| c.len()).sum();
-
-        // Build output: [original_size: 8][num_chunks: 4][chunk_sizes: n*4][compressed_data]
-        let metadata_size = 8 + 4 + (num_chunks * 4);
-        let mut result = Vec::with_capacity(metadata_size + total_compressed_size);
-
-        // Write original size
-        result.extend_from_slice(&(data.len() as u64).to_le_bytes());
-
-        // Write number of chunks
-        result.extend_from_slice(&(num_chunks as u32).to_le_bytes());
-
-        // Write chunk sizes
-        for size in &chunk_sizes {
-            result.extend_from_slice(&size.to_le_bytes());
-        }
-
-        // Write compressed chunks
-        for chunk in compressed_chunks {
-            result.extend_from_slice(&chunk);
-        }
-
-        result
-    }
-
-    /// Optimized decompression for large snapshots (v0.2.0)
-    ///
-    /// Uses parallel chunk-based decompression matching the compression format
-    ///
-    /// # Performance
-    /// - Sequential decompression for small data
-    /// - Parallel chunk decompression for large data
-    /// - Expected speedup: 2-6x on 8-core CPU for data >10MB
-    fn parallel_decompress(&self, data: &[u8]) -> Result<Vec<u8>> {
-        // Check if this is parallel-compressed format or regular format
-        if data.len() < 12 {
-            // Too small to be parallel format, try regular decompression
-            return oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
-                .map_err(|e| anyhow!("Decompression failed: {}", e));
-        }
-
-        // Try to parse as parallel format
-        let original_size = u64::from_le_bytes(
-            data[0..8]
-                .try_into()
-                .expect("slice should be exactly 8 bytes"),
-        ) as usize;
-        let num_chunks = u32::from_le_bytes(
-            data[8..12]
-                .try_into()
-                .expect("slice should be exactly 4 bytes"),
-        ) as usize;
-
-        // Sanity check: if num_chunks is unreasonably large, it's probably regular format
-        if num_chunks == 0 || num_chunks > 100000 {
-            // Fall back to regular decompression
-            return oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
-                .map_err(|e| anyhow!("Decompression failed: {}", e));
-        }
-
-        // Parse chunk sizes
-        let metadata_size = 12 + (num_chunks * 4);
-        if data.len() < metadata_size {
-            // Fall back to regular decompression
-            return oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
-                .map_err(|e| anyhow!("Decompression failed: {}", e));
-        }
-
-        let mut chunk_sizes = Vec::with_capacity(num_chunks);
-        for i in 0..num_chunks {
-            let offset = 12 + (i * 4);
-            let size = u32::from_le_bytes(
-                data[offset..offset + 4]
-                    .try_into()
-                    .expect("slice should be exactly 4 bytes"),
-            ) as usize;
-            chunk_sizes.push(size);
-        }
-
-        // Extract compressed chunks
-        let mut chunks = Vec::with_capacity(num_chunks);
-        let mut offset = metadata_size;
-        for &size in &chunk_sizes {
-            if offset + size > data.len() {
-                return Err(anyhow!("Invalid chunk data"));
-            }
-            chunks.push(&data[offset..offset + size]);
-            offset += size;
-        }
-
-        // Decompress chunks in parallel
-        use rayon::prelude::*;
-
-        let decompressed_chunks: Result<Vec<Vec<u8>>, _> = chunks
-            .par_iter()
-            .map(|chunk| {
-                oxiarc_lz4::decompress_block(chunk, original_size)
-                    .map_err(|e| anyhow!("Chunk decompression failed: {}", e))
-            })
-            .collect();
-
-        let decompressed_chunks = decompressed_chunks?;
-
-        // Concatenate all decompressed chunks
-        let mut result = Vec::with_capacity(original_size);
-        for chunk in decompressed_chunks {
-            result.extend_from_slice(&chunk);
-        }
-
-        Ok(result)
-    }
-
     /// Get profiling report (v0.2.0)
     pub fn get_profiling_report(&self) -> String {
         self.profiler.get_report()
@@ -808,12 +930,19 @@ impl AdvancedStorageBackend {
             .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
-        // Compress snapshot data with SIMD-accelerated parallel compression if enabled
-        let (final_data, compressed) = if self.config.enable_compression {
-            let compressed = self.parallel_compress(data);
-            (compressed, true)
-        } else {
-            (data.to_vec(), false)
+        // Encode (and compress, if enabled) with a header that records how,
+        // so that loading never has to guess
+        let payload = snapshot_codec::encode(data, self.config.enable_compression);
+        let encoded_len = payload.len();
+
+        // Encrypt after compressing; the checksum covers the bytes on disk
+        let final_data = match &self.encryption_key {
+            Some(key) => at_rest::seal(
+                key,
+                &snapshot_context(last_included_index, last_included_term),
+                &payload,
+            )?,
+            None => payload,
         };
 
         // Calculate checksum
@@ -858,9 +987,10 @@ impl AdvancedStorageBackend {
         stats.bytes_written += final_data.len() as u64;
 
         tracing::info!(
-            "Created snapshot {} (compressed: {}, size: {} bytes)",
+            "Created snapshot {} ({} bytes, {} encoded, {} on disk)",
             metadata.last_included_index,
-            compressed,
+            data.len(),
+            encoded_len,
             final_data.len()
         );
 
@@ -905,11 +1035,25 @@ impl AdvancedStorageBackend {
             return Err(anyhow!("Snapshot checksum verification failed"));
         }
 
-        // Decompress with SIMD-accelerated parallel decompression if needed
-        let final_data = match self.parallel_decompress(&data) {
-            Ok(decompressed) => decompressed,
-            Err(_) => data, // Not compressed or decompression failed, use raw data
+        // Decrypt when encryption at rest is enabled
+        let data = match &self.encryption_key {
+            Some(key) => at_rest::open(
+                key,
+                &snapshot_context(last_included_index, last_included_term),
+                &data,
+            )?,
+            None if at_rest::is_sealed(&data) => {
+                return Err(anyhow!(
+                    "snapshot {last_included_index}-{last_included_term} is encrypted but encryption is disabled"
+                ));
+            }
+            None => data,
         };
+
+        // Decode exactly as recorded in the payload header
+        let final_data = snapshot_codec::decode(&data).map_err(|e| {
+            anyhow!("snapshot {last_included_index}-{last_included_term} cannot be decoded: {e}")
+        })?;
 
         let mut stats = self.stats.write().await;
         stats.bytes_read += final_data.len() as u64;
@@ -1058,133 +1202,7 @@ impl StorageBackend for AdvancedStorageBackend {
     }
 }
 
+mod snapshot_codec;
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    async fn create_test_storage() -> (AdvancedStorageBackend, TempDir) {
-        let temp_dir = TempDir::new().unwrap();
-        let config = StorageConfig {
-            data_dir: temp_dir.path().to_path_buf(),
-            ..Default::default()
-        };
-        let storage = AdvancedStorageBackend::new(config).await.unwrap();
-        (storage, temp_dir)
-    }
-
-    #[tokio::test]
-    async fn test_raft_state_storage() {
-        let (storage, _temp_dir) = create_test_storage().await;
-
-        let state = RaftState {
-            current_term: 1,
-            voted_for: Some(1),
-            log: vec![],
-            commit_index: 0,
-            last_applied: 0,
-        };
-
-        // Store state
-        storage.store_raft_state(state.clone()).await.unwrap();
-
-        // Load state
-        let loaded_state = storage.load_raft_state().await.unwrap().unwrap();
-        assert_eq!(state.current_term, loaded_state.current_term);
-        assert_eq!(state.voted_for, loaded_state.voted_for);
-    }
-
-    #[tokio::test]
-    async fn test_snapshot_creation_and_loading() {
-        let (storage, _temp_dir) = create_test_storage().await;
-
-        let data = b"test snapshot data";
-        let metadata = storage
-            .create_snapshot(10, 1, vec![1, 2, 3], data)
-            .await
-            .unwrap();
-
-        assert_eq!(metadata.last_included_index, 10);
-        assert_eq!(metadata.last_included_term, 1);
-        assert_eq!(metadata.configuration, vec![1, 2, 3]);
-
-        // Load snapshot
-        let loaded_data = storage.load_snapshot(10, 1).await.unwrap().unwrap();
-        assert_eq!(&loaded_data, data);
-    }
-
-    #[tokio::test]
-    async fn test_cache_functionality() {
-        let (storage, _temp_dir) = create_test_storage().await;
-
-        let state = RaftState {
-            current_term: 1,
-            voted_for: Some(1),
-            log: vec![],
-            commit_index: 0,
-            last_applied: 0,
-        };
-
-        // Store and load multiple times to test caching
-        storage.store_raft_state(state.clone()).await.unwrap();
-
-        for _ in 0..5 {
-            let _loaded_state = storage.load_raft_state().await.unwrap().unwrap();
-        }
-
-        let stats = storage.stats().await;
-        assert!(stats.cache_hit_ratio > 0.0);
-    }
-
-    #[tokio::test]
-    async fn test_corruption_detection() {
-        let (storage, temp_dir) = create_test_storage().await;
-
-        let data = b"test data";
-        let _metadata = storage.create_snapshot(1, 1, vec![1], data).await.unwrap();
-
-        // Corrupt the snapshot file
-        let snapshot_path = temp_dir.path().join("snapshot-1-1.dat");
-        let mut corrupted_data = fs::read(&snapshot_path).await.unwrap();
-        corrupted_data[0] ^= 0xFF; // Flip bits to corrupt
-        fs::write(&snapshot_path, corrupted_data).await.unwrap();
-
-        // Loading should detect corruption
-        let result = storage.load_snapshot(1, 1).await;
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("checksum verification failed"));
-    }
-
-    #[tokio::test]
-    async fn test_wal_recovery() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = StorageConfig {
-            data_dir: temp_dir.path().to_path_buf(),
-            ..Default::default()
-        };
-
-        let state = RaftState {
-            current_term: 5,
-            voted_for: Some(2),
-            log: vec![],
-            commit_index: 0,
-            last_applied: 0,
-        };
-
-        // Create storage and store state
-        {
-            let storage = AdvancedStorageBackend::new(config.clone()).await.unwrap();
-            storage.store_raft_state(state.clone()).await.unwrap();
-        }
-
-        // Create new storage instance (simulates restart)
-        let storage = AdvancedStorageBackend::new(config).await.unwrap();
-        let recovered_state = storage.load_raft_state().await.unwrap().unwrap();
-
-        assert_eq!(state.current_term, recovered_state.current_term);
-        assert_eq!(state.voted_for, recovered_state.voted_for);
-    }
-}
+mod tests;

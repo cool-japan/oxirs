@@ -178,7 +178,7 @@ utoipa = { version = "5.5", features = ["chrono"] }
 hickory-resolver = "0.26.1"
 
 # X.509 certificate parsing for client authentication
-x509-parser = "0.18"
+x509-parser.workspace = true
 
 # Certificate generation for self-signed certs (optional)
 rcgen = { workspace = true, optional = true }

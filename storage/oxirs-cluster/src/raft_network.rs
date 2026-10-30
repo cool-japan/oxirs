@@ -21,6 +21,11 @@
 //! Wire format matches `network.rs`'s existing convention exactly: a
 //! big-endian `u32` length prefix followed by an oxicode-encoded body
 //! (COOLJAPAN policy: oxicode, never bincode).
+//!
+//! With a [`TlsManager`] (see `RaftNode::set_tls`), every connection runs over
+//! mutually authenticated TLS: the client verifies that the peer presents a
+//! trusted certificate for `node-{id}`, and the listener accepts only clients
+//! with a trusted certificate. There is no plaintext fallback.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -43,6 +48,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 
 use crate::raft::{OxirsNodeId, OxirsTypeConfig};
+use crate::tls::TlsManager;
 
 /// Maximum size of a single Raft RPC wire frame. Generous enough for
 /// reasonably large replication batches (`Config::max_payload_entries`
@@ -50,6 +56,13 @@ use crate::raft::{OxirsNodeId, OxirsTypeConfig};
 /// (`Config::snapshot_max_chunk_size`, default 3 MiB), while still bounding
 /// allocation on behalf of a corrupt or hostile peer.
 const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024; // 16MB
+
+/// How long an inbound connection may take to complete its TLS handshake.
+const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How long a client waits to deliver TLS `close_notify` after its response
+/// arrived; the response is never held back for it.
+const TLS_CLOSE_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Wire envelope for an outbound OpenRaft RPC request, concretely typed to
 /// [`OxirsTypeConfig`] — this crate only ever uses one type config, so there
@@ -122,6 +135,99 @@ enum RaftTransportError {
     MismatchedResponse { addr: SocketAddr },
     #[error("raft RPC to {addr} timed out after {timeout:?}")]
     Timeout { addr: SocketAddr, timeout: Duration },
+    #[error("TLS with {addr} failed: {message}")]
+    Tls { addr: SocketAddr, message: String },
+}
+
+/// Open a TCP connection to `addr`, with `TCP_NODELAY` set.
+async fn connect_tcp(addr: SocketAddr) -> Result<TcpStream, RaftTransportError> {
+    let stream = TcpStream::connect(addr)
+        .await
+        .map_err(|e| RaftTransportError::Connect { addr, source: e })?;
+    // Heartbeats and vote requests are small, latency-sensitive messages;
+    // Nagle's algorithm (on by default) can hold a small write for up to
+    // ~40ms waiting to coalesce it with more data that will never come on a
+    // fresh, single-request-then-close connection. That delay eats directly
+    // into the election-timeout budget, so disable it.
+    if let Err(e) = stream.set_nodelay(true) {
+        tracing::debug!("failed to set TCP_NODELAY on raft RPC connection to {addr}: {e}");
+    }
+    Ok(stream)
+}
+
+/// Send `request` on `stream` and read one response frame.
+async fn exchange<S>(
+    stream: &mut S,
+    request: &RaftWireRequest,
+    addr: SocketAddr,
+) -> Result<RaftWireResponse, RaftTransportError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    write_frame(stream, request, addr, MAX_MESSAGE_SIZE).await?;
+    read_frame(stream, addr, MAX_MESSAGE_SIZE).await
+}
+
+/// Send `request` to `target` at `addr` over `stream`, wrapped in TLS that
+/// authenticates the peer as `node-{target}` when `tls` is set.
+async fn exchange_with(
+    stream: TcpStream,
+    target: OxirsNodeId,
+    addr: SocketAddr,
+    tls: Option<&TlsManager>,
+    request: &RaftWireRequest,
+) -> Result<RaftWireResponse, RaftTransportError> {
+    let Some(tls) = tls else {
+        let mut stream = stream;
+        return exchange(&mut stream, request, addr).await;
+    };
+    let tls_error = |message: String| RaftTransportError::Tls { addr, message };
+    let connector = tls
+        .get_connector()
+        .await
+        .map_err(|e| tls_error(e.to_string()))?;
+    let server_name = rustls::pki_types::ServerName::try_from(format!("node-{target}"))
+        .map_err(|e| tls_error(e.to_string()))?;
+    let mut stream = connector
+        .connect(server_name, stream)
+        .await
+        .map_err(|e| tls_error(format!("handshake with node-{target} failed: {e}")))?;
+    let response = exchange(&mut stream, request, addr).await;
+    // Close the session cleanly so the peer sees an orderly end.
+    let _ = tokio::time::timeout(TLS_CLOSE_TIMEOUT, stream.shutdown()).await;
+    response
+}
+
+/// Complete the server side of a TLS handshake; the client must present a
+/// certificate the node trusts.
+async fn accept_tls(
+    tls: &TlsManager,
+    stream: TcpStream,
+    peer_addr: SocketAddr,
+) -> Result<tokio_rustls::server::TlsStream<TcpStream>, RaftTransportError> {
+    let handshake = async {
+        let acceptor = tls
+            .get_acceptor()
+            .await
+            .map_err(|e| RaftTransportError::Tls {
+                addr: peer_addr,
+                message: e.to_string(),
+            })?;
+        acceptor
+            .accept(stream)
+            .await
+            .map_err(|e| RaftTransportError::Tls {
+                addr: peer_addr,
+                message: format!("handshake failed: {e}"),
+            })
+    };
+    match tokio::time::timeout(TLS_HANDSHAKE_TIMEOUT, handshake).await {
+        Ok(outcome) => outcome,
+        Err(_) => Err(RaftTransportError::Timeout {
+            addr: peer_addr,
+            timeout: TLS_HANDSHAKE_TIMEOUT,
+        }),
+    }
 }
 
 /// Write `message` to `stream` as a length-prefixed oxicode frame: a
@@ -242,16 +348,21 @@ where
 pub(crate) struct OxirsRaftNetworkFactory {
     self_id: OxirsNodeId,
     peer_addresses: Arc<RwLock<HashMap<OxirsNodeId, SocketAddr>>>,
+    tls: Option<Arc<TlsManager>>,
 }
 
 impl OxirsRaftNetworkFactory {
+    /// `tls`, when set, must already be initialized; every RPC then runs over
+    /// mutually authenticated TLS.
     pub(crate) fn new(
         self_id: OxirsNodeId,
         peer_addresses: Arc<RwLock<HashMap<OxirsNodeId, SocketAddr>>>,
+        tls: Option<Arc<TlsManager>>,
     ) -> Self {
         Self {
             self_id,
             peer_addresses,
+            tls,
         }
     }
 }
@@ -271,6 +382,7 @@ impl RaftNetworkFactory<OxirsTypeConfig> for OxirsRaftNetworkFactory {
             target,
             addr,
             peer_addresses: Arc::clone(&self.peer_addresses),
+            tls: self.tls.clone(),
         }
     }
 }
@@ -286,6 +398,7 @@ pub(crate) struct OxirsRaftNetworkClient {
     target: OxirsNodeId,
     addr: Option<SocketAddr>,
     peer_addresses: Arc<RwLock<HashMap<OxirsNodeId, SocketAddr>>>,
+    tls: Option<Arc<TlsManager>>,
 }
 
 impl OxirsRaftNetworkClient {
@@ -311,19 +424,7 @@ impl OxirsRaftNetworkClient {
         hard_ttl: Duration,
     ) -> Result<RaftWireResponse, RaftTransportError> {
         let attempt = async {
-            let mut stream = TcpStream::connect(addr)
-                .await
-                .map_err(|e| RaftTransportError::Connect { addr, source: e })?;
-            // Heartbeats and vote requests are small, latency-sensitive
-            // messages; Nagle's algorithm (on by default) can hold a small
-            // write for up to ~40ms waiting to coalesce it with more data
-            // that will never come on a fresh, single-request-then-close
-            // connection. That delay eats directly into the election-timeout
-            // budget, so disable it. This is a one-line latency fix, not
-            // connection pooling.
-            if let Err(e) = stream.set_nodelay(true) {
-                tracing::debug!("failed to set TCP_NODELAY on raft RPC connection to {addr}: {e}");
-            }
+            let stream = connect_tcp(addr).await?;
             // This connection exists for exactly one request/response and is
             // then discarded (see this type's doc comment on why: fresh
             // connection per RPC, no pooling). A normal close leaves it in
@@ -346,8 +447,7 @@ impl OxirsRaftNetworkClient {
                     "failed to set zero SO_LINGER on raft RPC connection to {addr}: {e}"
                 );
             }
-            write_frame(&mut stream, &request, addr, MAX_MESSAGE_SIZE).await?;
-            read_frame(&mut stream, addr, MAX_MESSAGE_SIZE).await
+            exchange_with(stream, self.target, addr, self.tls.as_deref(), &request).await
         };
         let result = match tokio::time::timeout(hard_ttl, attempt).await {
             Ok(result) => result,
@@ -394,9 +494,9 @@ impl OxirsRaftNetworkClient {
                 target: self.target,
                 timeout: hard_ttl,
             }),
-            RaftTransportError::Connect { .. } | RaftTransportError::UnknownPeer { .. } => {
-                RPCError::Unreachable(Unreachable::new(&err))
-            }
+            RaftTransportError::Connect { .. }
+            | RaftTransportError::UnknownPeer { .. }
+            | RaftTransportError::Tls { .. } => RPCError::Unreachable(Unreachable::new(&err)),
             RaftTransportError::Io { .. }
             | RaftTransportError::FrameTooLarge { .. }
             | RaftTransportError::Encode { .. }
@@ -501,26 +601,16 @@ pub(crate) async fn send_timeout_now(
     self_id: OxirsNodeId,
     target: OxirsNodeId,
     addr: SocketAddr,
+    tls: Option<&TlsManager>,
 ) -> anyhow::Result<()> {
     // A generous fixed budget: the receiver only flips an internal flag and
     // returns, so this should be fast, but a loaded host can still add jitter.
     const TIMEOUT: Duration = Duration::from_secs(5);
 
     let attempt = async {
-        let mut stream = TcpStream::connect(addr)
-            .await
-            .map_err(|e| RaftTransportError::Connect { addr, source: e })?;
-        if let Err(e) = stream.set_nodelay(true) {
-            tracing::debug!("failed to set TCP_NODELAY on leadership-transfer connection: {e}");
-        }
-        write_frame(
-            &mut stream,
-            &RaftWireRequest::TimeoutNow,
-            addr,
-            MAX_MESSAGE_SIZE,
-        )
-        .await?;
-        let response: RaftWireResponse = read_frame(&mut stream, addr, MAX_MESSAGE_SIZE).await?;
+        let stream = connect_tcp(addr).await?;
+        let response =
+            exchange_with(stream, target, addr, tls, &RaftWireRequest::TimeoutNow).await?;
         match response {
             RaftWireResponse::TimeoutNow(Ok(())) => Ok(()),
             RaftWireResponse::TimeoutNow(Err(message)) => Err(RaftTransportError::Decode {
@@ -551,7 +641,11 @@ pub(crate) async fn send_timeout_now(
 /// methods above) and writing back the result. Never panics and never
 /// fabricates a response: a malformed frame or I/O error just ends that one
 /// connection's task; the accept loop itself keeps serving other peers.
-pub(crate) async fn serve_raft_rpc(listener: TcpListener, raft: Raft<OxirsTypeConfig>) {
+pub(crate) async fn serve_raft_rpc(
+    listener: TcpListener,
+    raft: Raft<OxirsTypeConfig>,
+    tls: Option<Arc<TlsManager>>,
+) {
     loop {
         let (stream, peer_addr) = match listener.accept().await {
             Ok(pair) => pair,
@@ -569,8 +663,19 @@ pub(crate) async fn serve_raft_rpc(listener: TcpListener, raft: Raft<OxirsTypeCo
             );
         }
         let raft = raft.clone();
+        let tls = tls.clone();
         tokio::spawn(async move {
-            if let Err(e) = serve_raft_connection(stream, peer_addr, raft).await {
+            let outcome = match tls {
+                None => serve_raft_connection(stream, peer_addr, raft).await,
+                Some(tls) => match accept_tls(&tls, stream, peer_addr).await {
+                    Ok(stream) => serve_raft_connection(stream, peer_addr, raft).await,
+                    Err(e) => {
+                        tracing::warn!("refused raft RPC connection from {peer_addr}: {e}");
+                        return;
+                    }
+                },
+            };
+            if let Err(e) = outcome {
                 tracing::debug!("raft RPC connection from {peer_addr} ended: {e}");
             }
         });
@@ -579,11 +684,14 @@ pub(crate) async fn serve_raft_rpc(listener: TcpListener, raft: Raft<OxirsTypeCo
 
 /// Serve requests on a single accepted connection until the peer closes it
 /// or a genuine I/O/codec error occurs.
-async fn serve_raft_connection(
-    mut stream: TcpStream,
+async fn serve_raft_connection<S>(
+    mut stream: S,
     peer_addr: SocketAddr,
     raft: Raft<OxirsTypeConfig>,
-) -> Result<(), RaftTransportError> {
+) -> Result<(), RaftTransportError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     loop {
         let request: RaftWireRequest =
             match try_read_frame(&mut stream, peer_addr, MAX_MESSAGE_SIZE).await? {
@@ -610,6 +718,21 @@ async fn serve_raft_connection(
 
         write_frame(&mut stream, &response, peer_addr, MAX_MESSAGE_SIZE).await?;
     }
+}
+
+/// Send a plaintext vote request to `addr` and report whether a valid Raft
+/// response came back.
+#[cfg(test)]
+pub(crate) async fn plaintext_vote_is_answered(addr: SocketAddr) -> bool {
+    let request = RaftWireRequest::Vote(VoteRequest::new(openraft::Vote::new(1, 99u64), None));
+    let attempt = async {
+        let stream = connect_tcp(addr).await?;
+        exchange_with(stream, 0, addr, None, &request).await
+    };
+    matches!(
+        tokio::time::timeout(Duration::from_secs(5), attempt).await,
+        Ok(Ok(RaftWireResponse::Vote(_)))
+    )
 }
 
 #[cfg(test)]
@@ -687,6 +810,7 @@ mod tests {
             target: 99,
             addr: None,
             peer_addresses: Arc::new(RwLock::new(HashMap::new())),
+            tls: None,
         };
         let err = client
             .resolve_address()

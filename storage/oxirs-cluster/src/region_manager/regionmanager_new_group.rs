@@ -40,6 +40,7 @@ impl RegionManager {
             consensus_strategy,
             replication_strategy,
             performance_metrics: RwLock::new(RegionPerformanceMetrics::default()),
+            node_addresses: RwLock::new(HashMap::new()),
         }
     }
     /// Calculate replication targets for a given region
@@ -85,57 +86,50 @@ impl RegionManager {
         }
         Ok(targets)
     }
-    /// Measure actual inter-region latency
+    /// Measure the latency from this node's region to `region_b` by timing
+    /// TCP connections to the registered addresses of nodes there.
+    ///
+    /// Returns `None` when nothing could be measured: `region_a` is not this
+    /// node's region (the latency between two other regions cannot be
+    /// measured from here), or no node of `region_b` has a registered,
+    /// reachable address. The latency matrix then keeps its estimate.
     pub(super) async fn measure_inter_region_latency(
         &self,
         region_a: &str,
         region_b: &str,
-    ) -> Result<f64> {
+    ) -> Result<Option<f64>> {
         use std::time::Instant;
         use tokio::time::timeout;
-        let nodes_a = self.get_nodes_in_region(region_a).await;
-        let nodes_b = self.get_nodes_in_region(region_b).await;
-        if nodes_a.is_empty() || nodes_b.is_empty() {
-            let topology = self.topology.read().await;
-            return Ok(topology
-                .latency_matrix
-                .get(&(region_a.to_string(), region_b.to_string()))
-                .copied()
-                .unwrap_or(1000.0));
+        if region_a != self.local_region {
+            return Ok(None);
         }
-        let node_addresses_a = self.get_node_addresses(&nodes_a).await?;
+        let nodes_b = self.get_nodes_in_region(region_b).await;
         let node_addresses_b = self.get_node_addresses(&nodes_b).await?;
         let mut measurements = Vec::new();
-        let samples_per_pair = 3;
+        let samples_per_node = 3;
         let measurement_timeout = Duration::from_secs(5);
-        for _addr_a in node_addresses_a.iter().take(3) {
-            for addr_b in node_addresses_b.iter().take(3) {
-                for _ in 0..samples_per_pair {
-                    let start = Instant::now();
-                    match timeout(measurement_timeout, self.ping_node(*addr_b)).await {
-                        Ok(Ok(_)) => {
-                            let latency = start.elapsed().as_secs_f64() * 1000.0;
-                            measurements.push(latency);
-                        }
-                        Ok(Err(_)) | Err(_) => {
-                            continue;
-                        }
+        for addr_b in node_addresses_b.iter().take(3) {
+            for _ in 0..samples_per_node {
+                let start = Instant::now();
+                match timeout(measurement_timeout, self.ping_node(*addr_b)).await {
+                    Ok(Ok(_)) => {
+                        let latency = start.elapsed().as_secs_f64() * 1000.0;
+                        measurements.push(latency);
                     }
-                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    Ok(Err(_)) | Err(_) => {
+                        continue;
+                    }
                 }
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
         }
         if measurements.is_empty() {
             warn!(
-                "All latency measurements failed between {} and {}, using estimated latency",
+                "No latency could be measured from {} to {}: no node there has a reachable \
+                 registered address; keeping the estimate",
                 region_a, region_b
             );
-            let topology = self.topology.read().await;
-            return Ok(topology
-                .latency_matrix
-                .get(&(region_a.to_string(), region_b.to_string()))
-                .copied()
-                .unwrap_or(1000.0));
+            return Ok(None);
         }
         measurements.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let avg_latency = measurements.iter().sum::<f64>() / measurements.len() as f64;
@@ -155,7 +149,7 @@ impl RegionManager {
             avg_latency,
             measurements.len()
         );
-        Ok(avg_latency)
+        Ok(Some(avg_latency))
     }
     /// Get network addresses for the given node IDs
     pub(super) async fn get_node_addresses(

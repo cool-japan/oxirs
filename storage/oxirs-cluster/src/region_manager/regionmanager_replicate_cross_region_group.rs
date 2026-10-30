@@ -48,7 +48,10 @@ impl RegionManager {
         }
     }
     /// Asynchronous replication to all target regions
+    ///
+    /// Every region is tried; the call fails if any of them was not reached.
     async fn replicate_async_all(&self, data: &[u8], targets: &[String]) -> Result<()> {
+        let mut failed = Vec::new();
         for target_region in targets {
             match self.send_data_to_region(data, target_region).await {
                 Ok(_) => {
@@ -59,10 +62,11 @@ impl RegionManager {
                         "Failed to replicate data to region {}: {}",
                         target_region, e
                     );
+                    failed.push(format!("{target_region}: {e}"));
                 }
             }
         }
-        Ok(())
+        replication_outcome(&failed)
     }
     /// Selective synchronization replication
     async fn replicate_selective_sync(&self, data: &[u8], targets: &[String]) -> Result<()> {
@@ -90,6 +94,7 @@ impl RegionManager {
                 _ => std::cmp::Ordering::Equal,
             }
         });
+        let mut failed = Vec::new();
         for (target_region, _) in prioritized_targets {
             match self.send_data_to_region(data, target_region).await {
                 Ok(_) => {
@@ -103,12 +108,17 @@ impl RegionManager {
                         "Failed to replicate data to region {} (selective sync): {}",
                         target_region, e
                     );
+                    failed.push(format!("{target_region}: {e}"));
                 }
             }
         }
-        Ok(())
+        replication_outcome(&failed)
     }
     /// Eventual consistency replication with reconciliation
+    ///
+    /// Not implemented: there is no transport that delivers the package to
+    /// the target regions. Earlier releases spawned tasks that only logged
+    /// and reported success.
     async fn replicate_eventual_consistency(
         &self,
         data: &[u8],
@@ -123,23 +133,17 @@ impl RegionManager {
             source_region: self.local_region.clone(),
             reconciliation_interval: Duration::from_millis(reconciliation_interval_ms),
         };
-        let replication_package = ReplicationPackage {
+        let package = ReplicationPackage {
             data: data.to_vec(),
             metadata,
         };
-        for target_region in targets {
-            let _package_clone = replication_package.clone();
-            let target_clone = target_region.clone();
-            tokio::spawn(async move {
-                debug!(
-                    "Eventual consistency replication to region {}",
-                    target_clone
-                );
-            });
-        }
-        self.schedule_reconciliation(reconciliation_interval_ms)
-            .await;
-        Ok(())
+        Err(anyhow::anyhow!(
+            "eventual-consistency cross-region replication is not implemented: a package of \
+             {} byte(s) from {} was not delivered to {}",
+            package.data.len(),
+            package.metadata.source_region,
+            targets.join(", ")
+        ))
     }
     /// Chain replication implementation
     async fn replicate_chain(&self, data: &[u8], targets: &[String]) -> Result<()> {
@@ -163,5 +167,19 @@ impl RegionManager {
             }
         }
         Ok(())
+    }
+}
+
+/// `Ok` when every target region was reached, else an error naming the
+/// regions that were not.
+fn replication_outcome(failed: &[String]) -> Result<()> {
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "cross-region replication failed for {} region(s): {}",
+            failed.len(),
+            failed.join("; ")
+        ))
     }
 }

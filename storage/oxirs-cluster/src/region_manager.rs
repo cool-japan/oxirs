@@ -29,7 +29,6 @@ pub mod regionmanager_queries;
 pub mod regionmanager_register_node_group;
 pub mod regionmanager_replicate_cross_region_group;
 pub mod regionmanager_route_read_group;
-pub mod regionmanager_schedule_reconciliation_group;
 pub mod regionmanager_type;
 pub mod regionperformancemetrics_traits;
 pub mod routingstrategy_traits;

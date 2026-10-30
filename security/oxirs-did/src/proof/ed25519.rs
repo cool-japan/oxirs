@@ -24,18 +24,20 @@ impl Ed25519Signer {
         Ok(Self { signing_key })
     }
 
-    /// Generate a new random keypair
-    pub fn generate() -> Self {
-        use scirs2_core::random::{Random, RngExt};
-        // Use system time as seed for cryptographic key generation
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64;
-        let mut rng = Random::seed(seed);
-        let bytes: [u8; 32] = rng.random();
-        let signing_key = SigningKey::from_bytes(&bytes);
-        Self { signing_key }
+    /// Generate a new random keypair.
+    ///
+    /// The 32-byte secret seed comes from the OS CSPRNG (oxicrypto-rand →
+    /// getrandom). Any 32-byte string is a valid Ed25519 seed, so no rejection
+    /// sampling is needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DidError::InternalError`] if the OS entropy source fails.
+    pub fn generate() -> DidResult<Self> {
+        let seed = oxicrypto_rand::random_nonce::<32>()
+            .map_err(|e| DidError::InternalError(format!("OS entropy source failed: {e}")))?;
+        let signing_key = SigningKey::from_bytes(&seed);
+        Ok(Self { signing_key })
     }
 
     /// Get the secret key bytes
@@ -121,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_sign_verify() {
-        let signer = Ed25519Signer::generate();
+        let signer = Ed25519Signer::generate().unwrap();
         let message = b"Hello, World!";
 
         let signature = signer.sign(message);
@@ -150,5 +152,55 @@ mod tests {
         let short_key = [0u8; 16];
         assert!(Ed25519Signer::from_bytes(&short_key).is_err());
         assert!(Ed25519Verifier::from_bytes(&short_key).is_err());
+    }
+
+    /// Regression test for the time-seeded key generation flaw (<= 0.4.1).
+    ///
+    /// `generate()` used to seed a deterministic RNG with the current UNIX time
+    /// in nanoseconds, so anyone able to estimate when a key was created could
+    /// recover the secret key by replaying the seeds around that moment. Replay
+    /// exactly that derivation over the window bracketing a `generate()` call
+    /// and make sure none of the candidates is the generated secret.
+    #[test]
+    fn test_generate_not_derived_from_time_seed() {
+        use scirs2_core::random::{Random, RngExt};
+
+        // The old code read the clock before doing anything else, so its seed
+        // sat just after `before`; this window covers it with a wide margin
+        // while keeping the scan cheap.
+        const SCAN_WINDOW_NS: u64 = 200_000;
+
+        let now_nanos = || {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64
+        };
+
+        let before = now_nanos();
+        let signer = Ed25519Signer::generate().unwrap();
+        let after = now_nanos();
+
+        let secret = signer.secret_key_bytes();
+        let end = after.clamp(before, before.saturating_add(SCAN_WINDOW_NS));
+        for seed in before..=end {
+            let candidate: [u8; 32] = Random::seed(seed).random();
+            assert_ne!(
+                candidate, secret,
+                "secret key is reproducible from time seed {seed}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_generate_keys_are_distinct() {
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..256 {
+            let signer = Ed25519Signer::generate().unwrap();
+            assert!(
+                seen.insert(signer.secret_key_bytes()),
+                "generate() produced a duplicate secret key"
+            );
+        }
     }
 }

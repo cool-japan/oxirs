@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn test_signed_graph() {
-        let signer = Ed25519Signer::generate();
+        let signer = Ed25519Signer::generate().unwrap();
         let public_key = signer.public_key_bytes();
         let issuer = Did::new_key_ed25519(&public_key).unwrap();
 

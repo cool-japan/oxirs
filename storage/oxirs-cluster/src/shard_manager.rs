@@ -1121,6 +1121,68 @@ mod tests {
         assert_eq!(ownership.len(), 2);
     }
 
+    /// Shard RPCs travel over the [`NetworkService`] they are given, so a
+    /// service configured for TLS must open every shard connection with a TLS
+    /// handshake, never with a plaintext frame.
+    #[tokio::test]
+    async fn test_shard_rpcs_use_tls_when_the_network_does() {
+        use crate::tls::test_support::{install_provider, node_config};
+
+        install_provider();
+        let dir = tempfile::TempDir::new().expect("failed to create temp dir");
+        let bundle = dir.path().join("cluster.pem");
+        let (tls_config, pem) = node_config(dir.path(), 1, &bundle, true).await;
+        std::fs::write(&bundle, pem).expect("failed to write bundle");
+
+        // A plain listener that records the first bytes a peer sends.
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind loopback listener");
+        let addr = listener.local_addr().expect("listener has no local addr");
+        let first_bytes = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("no connection arrived");
+            let mut header = [0u8; 2];
+            socket
+                .read_exact(&mut header)
+                .await
+                .expect("peer sent nothing");
+            header
+        });
+
+        let network = Arc::new(NetworkService::new(
+            1,
+            NetworkConfig {
+                tls_config,
+                ..Default::default()
+            },
+        ));
+        let manager = ShardManager::new(
+            1,
+            Arc::new(ShardRouter::new(ShardingStrategy::Hash { num_shards: 1 })),
+            ShardManagerConfig {
+                replication_factor: 1,
+                ..Default::default()
+            },
+            Arc::new(MockStorageBackend::new()),
+            network,
+        );
+        manager.register_peer(2, addr).await;
+
+        let outcome = manager
+            .initialize_shards(&ShardingStrategy::Hash { num_shards: 1 }, vec![2])
+            .await;
+        assert!(
+            outcome.is_err(),
+            "a shard was created on a peer that cannot speak TLS"
+        );
+        // 0x16 0x03 opens a TLS handshake record; a plaintext RPC frame would
+        // start with its big-endian length instead.
+        assert_eq!(
+            first_bytes.await.expect("listener task failed"),
+            [0x16, 0x03]
+        );
+    }
+
     /// Regression test for the honest fail-loud behavior: a peer that was
     /// never registered must surface as an explicit error from
     /// `initialize_shards`, never a silently-dropped RPC.

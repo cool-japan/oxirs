@@ -1,9 +1,9 @@
 //! # OxiRS Cluster
 //!
-//! [![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.5.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-cluster/badge.svg)](https://docs.rs/oxirs-cluster)
 //!
-//! **Status**: Production Release (v0.4.2)
+//! **Status**: Production Release (v0.5.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Raft-backed distributed dataset for high availability and horizontal scaling.
@@ -28,12 +28,9 @@
 //! use std::net::SocketAddr;
 //!
 //! async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//!     let config = NodeConfig {
-//!         node_id: 1,
-//!         address: "127.0.0.1:8080".parse()?,
-//!         data_dir: "./data".to_string(),
-//!         peers: vec![2, 3],
-//!     };
+//!     let mut config = NodeConfig::new(1, "127.0.0.1:8080".parse()?);
+//!     config.data_dir = "./data".to_string();
+//!     config.add_peer(2).add_peer(3);
 //!
 //!     let mut node = ClusterNode::new(config).await?;
 //!     node.start().await?;
@@ -73,6 +70,7 @@ pub mod adaptive_leader_election;
 pub mod advanced_partitioning;
 pub mod advanced_storage;
 pub mod alerting;
+pub mod at_rest;
 pub mod auto_scaling;
 pub mod backup_restore;
 pub mod circuit_breaker;
@@ -331,6 +329,7 @@ use region_manager::{
     RegionManager,
 };
 use replication::{ReplicationManager, ReplicationStats, ReplicationStrategy};
+use tls::TlsConfig;
 
 /// Multi-region deployment configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -405,6 +404,16 @@ pub struct NodeConfig {
     pub use_bft: bool,
     /// Multi-region deployment configuration
     pub region_config: Option<MultiRegionConfig>,
+    /// TLS for the traffic between cluster nodes: the Raft RPC transport,
+    /// or the BFT network when `use_bft` is set.
+    ///
+    /// Off by default. With `enabled: true`, every connection is mutually
+    /// authenticated against the trust bundle in `ca_file`, and a node whose
+    /// TLS cannot be initialized fails to start instead of running in
+    /// plaintext. Without it, multi-node traffic is neither encrypted nor
+    /// authenticated.
+    #[serde(default)]
+    pub tls_config: TlsConfig,
 }
 
 impl NodeConfig {
@@ -420,7 +429,15 @@ impl NodeConfig {
             replication_strategy: Some(ReplicationStrategy::default()),
             use_bft: false,
             region_config: None,
+            tls_config: TlsConfig::default(),
         }
+    }
+
+    /// Run the traffic between cluster nodes over mutually authenticated TLS
+    /// (see [`NodeConfig::tls_config`]).
+    pub fn with_tls(mut self, tls_config: TlsConfig) -> Self {
+        self.tls_config = tls_config;
+        self
     }
 
     /// Add a peer to the configuration
@@ -534,9 +551,19 @@ impl ClusterNode {
         // instance rather than failing with `NetworkNotConfigured` (only a
         // genuine single-node peer set works without it).
         #[cfg(feature = "raft")]
-        let consensus = ConsensusManager::new(config.node_id, config.peers.clone())
-            .with_raft_network(config.address, config.peer_addresses.clone())
-            .with_raft_storage_dir(std::path::PathBuf::from(&config.data_dir));
+        let consensus = {
+            let consensus = ConsensusManager::new(config.node_id, config.peers.clone())
+                .with_raft_network(config.address, config.peer_addresses.clone())
+                .with_raft_storage_dir(std::path::PathBuf::from(&config.data_dir));
+            if config.tls_config.enabled && !config.use_bft {
+                consensus.with_raft_tls(Arc::new(tls::TlsManager::new(
+                    config.tls_config.clone(),
+                    config.node_id,
+                )))
+            } else {
+                consensus
+            }
+        };
         #[cfg(not(feature = "raft"))]
         let consensus = ConsensusManager::new(config.node_id, config.peers.clone());
 
@@ -597,6 +624,15 @@ impl ClusterNode {
                 .map_err(|e| {
                     ClusterError::Other(format!("Failed to register node in region manager: {e}"))
                 })?;
+
+            // Register the real addresses of this node and its peers, which
+            // latency measurements connect to.
+            manager
+                .register_node_address(config.node_id, config.address)
+                .await;
+            for (&peer_id, &peer_address) in &config.peer_addresses {
+                manager.register_node_address(peer_id, peer_address).await;
+            }
 
             Some(manager)
         } else {
@@ -676,11 +712,15 @@ impl ClusterNode {
         );
 
         let peers: Vec<String> = self.config.peers.iter().map(|p| p.to_string()).collect();
+        let network_config = NetworkConfig {
+            tls_config: self.config.tls_config.clone(),
+            ..NetworkConfig::default()
+        };
         let manager = BftConsensusManager::new(
             self.config.node_id.to_string(),
             peers,
             storage,
-            NetworkConfig::default(),
+            network_config,
         )
         .await?;
         manager.start().await?;
@@ -690,6 +730,13 @@ impl ClusterNode {
     }
 
     /// Start the cluster node
+    ///
+    /// # Errors
+    ///
+    /// Fails when a service cannot start, for example when TLS is configured
+    /// but cannot be initialized. The node is then left stopped, so that a
+    /// later `start()` tries again instead of reporting a node that never
+    /// started as running.
     pub async fn start(&mut self) -> Result<()> {
         {
             let mut running = self.running.write().await;
@@ -699,6 +746,15 @@ impl ClusterNode {
             *running = true;
         }
 
+        let outcome = self.start_services().await;
+        if outcome.is_err() {
+            *self.running.write().await = false;
+        }
+        outcome
+    }
+
+    /// The body of [`Self::start`], run once the node is marked as running.
+    async fn start_services(&mut self) -> Result<()> {
         // Byzantine fault-tolerant consensus is opt-in via `NodeConfig::use_bft`
         // and replaces the Raft path. When requested but the crate was built
         // without the `bft` feature, fail loud rather than silently running Raft
@@ -715,8 +771,6 @@ impl ClusterNode {
             }
             #[cfg(not(feature = "bft"))]
             {
-                let mut running = self.running.write().await;
-                *running = false;
                 return Err(ClusterError::Config(format!(
                     "node {} requested Byzantine fault tolerance (use_bft = true) but this build \
                      was compiled without the 'bft' feature; refusing to silently fall back to \
@@ -739,6 +793,26 @@ impl ClusterNode {
             .await
             .map_err(|e| ClusterError::Other(format!("Failed to start discovery service: {e}")))?;
 
+        if let Err(e) = self.join_cluster().await {
+            if let Err(stop_error) = self.discovery.stop().await {
+                tracing::warn!(
+                    "failed to stop discovery after node {} failed to start: {stop_error}",
+                    self.config.node_id
+                );
+            }
+            return Err(e);
+        }
+
+        tracing::info!("Cluster node {} started successfully", self.config.node_id);
+
+        // Start background tasks
+        self.start_background_tasks().await;
+
+        Ok(())
+    }
+
+    /// Find the initial peers and initialize consensus.
+    async fn join_cluster(&mut self) -> Result<()> {
         // Discover initial nodes
         let discovered_nodes = self
             .discovery
@@ -762,11 +836,6 @@ impl ClusterNode {
             .init()
             .await
             .map_err(|e| ClusterError::Other(format!("Failed to initialize consensus: {e}")))?;
-
-        tracing::info!("Cluster node {} started successfully", self.config.node_id);
-
-        // Start background tasks
-        self.start_background_tasks().await;
 
         Ok(())
     }
@@ -1736,3 +1805,6 @@ mod tests {
         assert!(err.to_string().contains("Network error: connection failed"));
     }
 }
+
+#[cfg(all(test, feature = "raft"))]
+mod node_start_tests;

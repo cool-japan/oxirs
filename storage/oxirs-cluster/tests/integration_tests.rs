@@ -134,6 +134,7 @@ impl TestCluster {
                 replication_strategy: None,
                 use_bft: false,
                 region_config: None,
+                tls_config: Default::default(),
             };
 
             let node = ClusterNode::new(node_config).await?;

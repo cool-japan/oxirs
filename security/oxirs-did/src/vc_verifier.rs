@@ -842,7 +842,7 @@ mod tests {
     fn signed_test_vc() -> VerifiableCredential {
         use crate::proof::ed25519::Ed25519Signer;
 
-        let signer = Ed25519Signer::generate();
+        let signer = Ed25519Signer::generate().unwrap();
         let pk = signer.public_key_bytes();
         // did:key multicodec: 0xed01 || pubkey, multibase base58btc ('z').
         let mut mc = vec![0xed, 0x01];

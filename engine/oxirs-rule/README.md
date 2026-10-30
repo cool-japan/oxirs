@@ -1,6 +1,6 @@
 # OxiRS Rule Engine
 
-[![Version](https://img.shields.io/badge/version-0.4.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Status**: v0.4.1 - Released 2026-07-26
 
@@ -36,7 +36,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-rule = "0.4.2"
+oxirs-rule = "0.5.0"
 ```
 
 ## Quick Start

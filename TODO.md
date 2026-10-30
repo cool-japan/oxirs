@@ -1,8 +1,8 @@
 # OxiRS Development Roadmap
 
-*Version: 0.4.2 | Last Updated: July 29, 2026*
+*Version: 0.5.0 | Last Updated: October 17, 2026*
 
-## Current Status: v0.4.2 - In Development (started July 29, 2026)
+## Current Status: v0.5.0 - In Development (started July 29, 2026)
 
 **OxiRS** is an advanced AI-augmented semantic web platform built in Rust, delivering a production-ready alternative to Apache Jena + Fuseki with cutting-edge AI/ML capabilities.
 

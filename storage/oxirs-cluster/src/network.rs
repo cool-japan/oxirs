@@ -3,6 +3,7 @@
 //! Network communication layer for Raft consensus protocol.
 //! Provides RPC mechanisms for node-to-node communication.
 
+use crate::at_rest::{self, AtRestKey};
 use crate::raft::{OxirsNodeId, RdfCommand, RdfResponse};
 use crate::tls::{TlsConfig, TlsManager};
 use anyhow::Result;
@@ -16,6 +17,9 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tokio::time::timeout;
+
+/// Context bound into data sealed by [`NetworkManager::encrypt_data`].
+const NETWORK_DATA_CONTEXT: &[u8] = b"oxirs-cluster/network-data";
 
 /// RPC message types for Raft protocol
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,6 +198,8 @@ pub struct NetworkManager {
     accept_task: Option<Arc<tokio::task::JoinHandle<()>>>,
     running: Arc<RwLock<bool>>,
     tls_manager: Option<Arc<TlsManager>>,
+    /// Key for [`NetworkManager::encrypt_data`], shared by all clones.
+    data_key: Arc<RwLock<Option<AtRestKey>>>,
     message_stats: Arc<RwLock<MessageStats>>,
 }
 
@@ -305,7 +311,17 @@ where
 
 impl NetworkManager {
     /// Create a new network manager
+    ///
+    /// With `config.tls_config.enabled` set, the manager speaks nothing but
+    /// mutually authenticated TLS. TLS is initialized by
+    /// [`NetworkManager::start`] or the first outgoing RPC, whichever comes
+    /// first; if that fails, the call fails instead of falling back to
+    /// plaintext. [`NetworkManager::with_tls`] initializes it up front.
     pub fn new(node_id: OxirsNodeId, config: NetworkConfig) -> Self {
+        let tls_manager = config
+            .tls_config
+            .enabled
+            .then(|| Arc::new(TlsManager::new(config.tls_config.clone(), node_id)));
         Self {
             config,
             node_id,
@@ -314,35 +330,38 @@ impl NetworkManager {
             listener: None,
             accept_task: None,
             running: Arc::new(RwLock::new(false)),
-            tls_manager: None,
+            tls_manager,
+            data_key: Arc::new(RwLock::new(None)),
             message_stats: Arc::new(RwLock::new(MessageStats::default())),
         }
     }
 
-    /// Create a new network manager with TLS support
+    /// Create a new network manager and initialize TLS right away
+    ///
+    /// Same as [`NetworkManager::new`], except that when
+    /// `config.tls_config.enabled` is set TLS is initialized here, so a
+    /// configuration problem surfaces before the manager is used. Every
+    /// inbound connection and every outgoing RPC then runs over mutually
+    /// authenticated TLS against the trust anchors in [`TlsConfig::ca_file`].
+    ///
+    /// # Errors
+    ///
+    /// Fails when TLS cannot be initialized, for example because `ca_file` is
+    /// not set (see [`TlsManager::initialize`]).
     pub async fn with_tls(node_id: OxirsNodeId, config: NetworkConfig) -> Result<Self> {
-        let tls_manager = if config.tls_config.enabled {
-            let tls_mgr = TlsManager::new(config.tls_config.clone(), node_id);
-            tls_mgr.initialize().await?;
-            Some(Arc::new(tls_mgr))
-        } else {
-            None
-        };
-
-        Ok(Self {
-            config,
-            node_id,
-            connections: Arc::new(RwLock::new(HashMap::new())),
-            peer_addresses: Arc::new(RwLock::new(HashMap::new())),
-            listener: None,
-            accept_task: None,
-            running: Arc::new(RwLock::new(false)),
-            tls_manager,
-            message_stats: Arc::new(RwLock::new(MessageStats::default())),
-        })
+        let manager = Self::new(node_id, config);
+        if let Some(tls_manager) = &manager.tls_manager {
+            tls_manager.initialize().await?;
+        }
+        Ok(manager)
     }
 
     /// Start the network manager
+    ///
+    /// # Errors
+    ///
+    /// Fails when TLS is enabled but cannot be initialized, or when the
+    /// listening address cannot be bound; the manager is left stopped.
     pub async fn start(&mut self) -> Result<()> {
         {
             let mut running = self.running.write().await;
@@ -352,13 +371,13 @@ impl NetworkManager {
             *running = true;
         }
 
-        // Start listening for incoming connections
-        let listener = TcpListener::bind(self.config.local_address).await?;
-        tracing::info!(
-            "Network manager for node {} listening on {}",
-            self.node_id,
-            self.config.local_address
-        );
+        let listener = match self.prepare_listener().await {
+            Ok(listener) => listener,
+            Err(e) => {
+                *self.running.write().await = false;
+                return Err(e);
+            }
+        };
 
         // Spawn the inbound accept loop. Previously this was skipped ("for now,
         // we'll skip the listener task"), so the bound listener never accepted
@@ -383,6 +402,31 @@ impl NetworkManager {
         Ok(())
     }
 
+    /// Initialize TLS when it is enabled (refusing to listen without it), then
+    /// bind the listening socket.
+    async fn prepare_listener(&self) -> Result<TcpListener> {
+        match &self.tls_manager {
+            Some(tls_manager) => tls_manager.initialize().await.map_err(|e| {
+                anyhow::anyhow!(
+                    "TLS is enabled for node {} but could not be initialized: {e}",
+                    self.node_id
+                )
+            })?,
+            None => tracing::warn!(
+                "TLS is disabled for node {}: cluster RPC traffic is neither encrypted nor authenticated",
+                self.node_id
+            ),
+        }
+
+        let listener = TcpListener::bind(self.config.local_address).await?;
+        tracing::info!(
+            "Network manager for node {} listening on {}",
+            self.node_id,
+            self.config.local_address
+        );
+        Ok(listener)
+    }
+
     /// Inbound accept loop: answer real RpcMessage frames on the bound
     /// listener. Each accepted connection is served by its own task that reads
     /// length-prefixed frames, dispatches them through
@@ -399,7 +443,7 @@ impl NetworkManager {
             if !*running.read().await {
                 return;
             }
-            let (mut stream, peer_addr) = match listener.accept().await {
+            let (stream, peer_addr) = match listener.accept().await {
                 Ok(pair) => pair,
                 Err(e) => {
                     tracing::warn!("network accept() failed: {e}; continuing to listen");
@@ -411,29 +455,100 @@ impl NetworkManager {
             }
             let manager = self.clone();
             tokio::spawn(async move {
-                loop {
-                    let request = match read_frame(&mut stream, max_message_size).await {
-                        Ok(msg) => msg,
-                        Err(_) => return, // peer closed or sent a bad/partial frame
-                    };
-                    match manager.handle_inbound(request).await {
-                        Ok(response) => {
-                            if write_frame(&mut stream, &response, max_message_size)
-                                .await
-                                .is_err()
-                            {
-                                return;
-                            }
+                // With TLS configured, every inbound connection must complete an
+                // authenticated handshake before a single frame is read.
+                match manager.tls_manager.clone() {
+                    Some(tls_manager) => {
+                        if let Some(tls_stream) =
+                            manager.accept_tls(&tls_manager, stream, peer_addr).await
+                        {
+                            manager
+                                .serve_connection(tls_stream, max_message_size, peer_addr)
+                                .await;
                         }
-                        Err(e) => {
-                            tracing::debug!(
-                                "no response produced for inbound message from {peer_addr}: {e}"
-                            );
-                            return;
-                        }
+                    }
+                    None => {
+                        manager
+                            .serve_connection(stream, max_message_size, peer_addr)
+                            .await
                     }
                 }
             });
+        }
+    }
+
+    /// Complete the server side of a TLS handshake on an inbound connection.
+    /// Returns `None` (after recording the failure) when the handshake fails or
+    /// times out, for example because the peer's certificate is not trusted.
+    async fn accept_tls(
+        &self,
+        tls_manager: &TlsManager,
+        stream: TcpStream,
+        peer_addr: SocketAddr,
+    ) -> Option<tokio_rustls::server::TlsStream<TcpStream>> {
+        let handshake = async {
+            let acceptor = tls_manager.get_acceptor().await?;
+            Ok::<_, anyhow::Error>(acceptor.accept(stream).await?)
+        };
+        let outcome = match timeout(self.config.connection_timeout, handshake).await {
+            Ok(Ok(tls_stream)) => Some(tls_stream),
+            Ok(Err(e)) => {
+                tracing::warn!("TLS handshake with {peer_addr} failed: {e}");
+                None
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "TLS handshake with {peer_addr} timed out after {:?}",
+                    self.config.connection_timeout
+                );
+                None
+            }
+        };
+        self.record_tls_handshake(outcome.is_some()).await;
+        outcome
+    }
+
+    /// Serve length-prefixed RPC frames on one inbound connection until the
+    /// peer closes it or sends something that cannot be answered.
+    async fn serve_connection<S>(
+        &self,
+        mut stream: S,
+        max_message_size: usize,
+        peer_addr: SocketAddr,
+    ) where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        loop {
+            let request = match read_frame(&mut stream, max_message_size).await {
+                Ok(msg) => msg,
+                Err(_) => return, // peer closed or sent a bad/partial frame
+            };
+            match self.handle_inbound(request).await {
+                Ok(response) => {
+                    if write_frame(&mut stream, &response, max_message_size)
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        "no response produced for inbound message from {peer_addr}: {e}"
+                    );
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Count a completed or failed TLS handshake in the message statistics.
+    async fn record_tls_handshake(&self, completed: bool) {
+        let mut stats = self.message_stats.write().await;
+        if completed {
+            stats.tls_handshakes_completed += 1;
+        } else {
+            stats.tls_handshakes_failed += 1;
         }
     }
 
@@ -642,16 +757,75 @@ impl NetworkManager {
     /// Perform a full request/response RPC over a freshly opened TCP stream:
     /// connect, write the length-prefixed request frame, then read and
     /// deserialize the peer's actual response frame. No fabricated responses.
+    /// When TLS is configured the exchange runs over a TLS session that
+    /// authenticates the peer as `node-{peer_id}`; there is no plaintext
+    /// fallback.
     async fn exchange_rpc(
         &self,
         peer_id: OxirsNodeId,
         peer_address: SocketAddr,
         message: RpcMessage,
     ) -> Result<RpcMessage> {
-        let mut stream = self.connect_to_peer(peer_id, peer_address).await?;
+        if let Some(tls_manager) = &self.tls_manager {
+            tls_manager.initialize().await.map_err(|e| {
+                anyhow::anyhow!(
+                    "TLS is enabled for node {} but could not be initialized, so nothing was \
+                     sent to peer {peer_id}: {e}",
+                    self.node_id
+                )
+            })?;
+        }
+        let stream = self.connect_to_peer(peer_id, peer_address).await?;
 
-        let sent = write_frame(&mut stream, &message, self.config.max_message_size).await?;
-        let response = read_frame(&mut stream, self.config.max_message_size).await?;
+        match &self.tls_manager {
+            Some(tls_manager) => {
+                let mut tls_stream = self
+                    .connect_tls(tls_manager, peer_id, peer_address, stream)
+                    .await?;
+                self.exchange_frames(&mut tls_stream, &message).await
+            }
+            None => {
+                let mut stream = stream;
+                self.exchange_frames(&mut stream, &message).await
+            }
+        }
+    }
+
+    /// Complete the client side of a TLS handshake, verifying that the peer
+    /// presents a trusted certificate issued to `node-{peer_id}`.
+    async fn connect_tls(
+        &self,
+        tls_manager: &TlsManager,
+        peer_id: OxirsNodeId,
+        peer_address: SocketAddr,
+        stream: TcpStream,
+    ) -> Result<tokio_rustls::client::TlsStream<TcpStream>> {
+        let server_name = rustls::pki_types::ServerName::try_from(format!("node-{peer_id}"))?;
+        let handshake = async {
+            let connector = tls_manager.get_connector().await?;
+            Ok::<_, anyhow::Error>(connector.connect(server_name, stream).await?)
+        };
+        let outcome = match timeout(self.config.connection_timeout, handshake).await {
+            Ok(Ok(tls_stream)) => Ok(tls_stream),
+            Ok(Err(e)) => Err(anyhow::anyhow!(
+                "TLS handshake with peer {peer_id} at {peer_address} failed: {e}"
+            )),
+            Err(_) => Err(anyhow::anyhow!(
+                "TLS handshake with peer {peer_id} at {peer_address} timed out after {:?}",
+                self.config.connection_timeout
+            )),
+        };
+        self.record_tls_handshake(outcome.is_ok()).await;
+        outcome
+    }
+
+    /// Write one request frame and read the peer's response frame.
+    async fn exchange_frames<S>(&self, stream: &mut S, message: &RpcMessage) -> Result<RpcMessage>
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        let sent = write_frame(stream, message, self.config.max_message_size).await?;
+        let response = read_frame(stream, self.config.max_message_size).await?;
 
         {
             let mut stats = self.message_stats.write().await;
@@ -792,60 +966,28 @@ impl NetworkManager {
         }
     }
 
-    /// Send encrypted RPC message to a peer using TLS
+    /// Send an RPC message to a peer over mutually authenticated TLS.
+    ///
+    /// Unlike [`NetworkManager::send_rpc`], this never runs in plaintext: it is
+    /// an error to call it on a manager whose `tls_config.enabled` is off.
+    ///
+    /// # Errors
+    ///
+    /// Fails when TLS is not configured, when the peer cannot be authenticated
+    /// as `node-{peer_id}`, or when the exchange itself fails.
     pub async fn send_secure_rpc(
         &self,
         peer_id: OxirsNodeId,
         peer_address: SocketAddr,
         message: RpcMessage,
     ) -> Result<RpcMessage> {
-        if let Some(tls_manager) = &self.tls_manager {
-            let connector = tls_manager.get_connector().await?;
-            let tcp_stream = timeout(
-                self.config.connection_timeout,
-                TcpStream::connect(peer_address),
-            )
-            .await??;
-
-            // Perform TLS handshake
-            let server_name = rustls::pki_types::ServerName::try_from(format!("node-{peer_id}"))?;
-
-            let mut tls_stream = connector.connect(server_name, tcp_stream).await?;
-
-            // Update TLS statistics
-            {
-                let mut stats = self.message_stats.write().await;
-                stats.tls_handshakes_completed += 1;
-                stats.connections_established += 1;
-            }
-
-            // Real length-prefixed framing over the established TLS stream:
-            // write the request, then read and return the peer's actual response.
-            let sent = write_frame(&mut tls_stream, &message, self.config.max_message_size).await?;
-            let response = timeout(
-                self.config.request_timeout,
-                read_frame(&mut tls_stream, self.config.max_message_size),
-            )
-            .await
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "secure RPC to peer {peer_id} at {peer_address} timed out after {:?}",
-                    self.config.request_timeout
-                )
-            })??;
-
-            {
-                let mut stats = self.message_stats.write().await;
-                stats.messages_sent += 1;
-                stats.bytes_sent += sent;
-                stats.messages_received += 1;
-            }
-
-            Ok(response)
-        } else {
-            // Fall back to non-TLS communication
-            self.send_rpc(peer_id, peer_address, message).await
+        if self.tls_manager.is_none() {
+            return Err(anyhow::anyhow!(
+                "secure RPC to peer {peer_id} refused: TLS is not configured on this node \
+                 and plaintext fallback is not allowed"
+            ));
         }
+        self.send_rpc(peer_id, peer_address, message).await
     }
 
     /// Get message statistics
@@ -883,36 +1025,39 @@ impl NetworkManager {
         }
     }
 
-    /// Encrypt data at rest using the TLS manager's encryption
-    pub async fn encrypt_data(&self, data: &[u8]) -> Result<Vec<u8>> {
-        if let Some(_tls_manager) = &self.tls_manager {
-            // Use the TLS manager's encryption capabilities
-            // In a real implementation, we might extract the encryption manager
-            // For now, we'll simulate encryption
-            let mut encrypted = Vec::with_capacity(data.len() + 32);
-            encrypted.extend_from_slice(b"ENCRYPTED:");
-            encrypted.extend_from_slice(data);
-            Ok(encrypted)
-        } else {
-            // No encryption available
-            Ok(data.to_vec())
-        }
+    /// Set the key used by [`NetworkManager::encrypt_data`] and
+    /// [`NetworkManager::decrypt_data`]; it is shared by all clones.
+    pub async fn set_data_encryption_key(&self, key: AtRestKey) {
+        *self.data_key.write().await = Some(key);
     }
 
-    /// Decrypt data at rest
+    /// Encrypt data at rest with XChaCha20-Poly1305 under the key set by
+    /// [`NetworkManager::set_data_encryption_key`] (see [`crate::at_rest`]).
+    ///
+    /// # Errors
+    ///
+    /// Fails when no data key has been set; data is never passed through
+    /// unencrypted.
+    pub async fn encrypt_data(&self, data: &[u8]) -> Result<Vec<u8>> {
+        let key = self.data_key.read().await;
+        let key = key.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("no data encryption key is set; call set_data_encryption_key first")
+        })?;
+        Ok(at_rest::seal(key, NETWORK_DATA_CONTEXT, data)?)
+    }
+
+    /// Decrypt data produced by [`NetworkManager::encrypt_data`].
+    ///
+    /// # Errors
+    ///
+    /// Fails when no data key has been set, or when `encrypted_data` was not
+    /// sealed under that key or has been modified.
     pub async fn decrypt_data(&self, encrypted_data: &[u8]) -> Result<Vec<u8>> {
-        if let Some(_tls_manager) = &self.tls_manager {
-            // Use the TLS manager's decryption capabilities
-            // For now, we'll simulate decryption
-            if encrypted_data.starts_with(b"ENCRYPTED:") {
-                Ok(encrypted_data[10..].to_vec())
-            } else {
-                Err(anyhow::anyhow!("Invalid encrypted data format"))
-            }
-        } else {
-            // No decryption available
-            Ok(encrypted_data.to_vec())
-        }
+        let key = self.data_key.read().await;
+        let key = key.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("no data encryption key is set; call set_data_encryption_key first")
+        })?;
+        Ok(at_rest::open(key, NETWORK_DATA_CONTEXT, encrypted_data)?)
     }
 }
 
@@ -928,6 +1073,7 @@ impl Clone for NetworkManager {
             accept_task: None, // Don't clone the server task handle
             running: Arc::clone(&self.running),
             tls_manager: self.tls_manager.clone(),
+            data_key: Arc::clone(&self.data_key),
             message_stats: Arc::clone(&self.message_stats),
         }
     }
@@ -959,11 +1105,24 @@ pub struct NetworkService {
 }
 
 impl NetworkService {
-    /// Create a new network service
+    /// Create a new network service (see [`NetworkManager::new`] for how
+    /// `config.tls_config` is applied)
     pub fn new(node_id: OxirsNodeId, config: NetworkConfig) -> Self {
         Self {
             manager: NetworkManager::new(node_id, config),
         }
+    }
+
+    /// Create a new network service and initialize TLS right away (see
+    /// [`NetworkManager::with_tls`])
+    ///
+    /// # Errors
+    ///
+    /// Fails when TLS is enabled but cannot be initialized.
+    pub async fn with_tls(node_id: OxirsNodeId, config: NetworkConfig) -> Result<Self> {
+        Ok(Self {
+            manager: NetworkManager::with_tls(node_id, config).await?,
+        })
     }
 
     /// Start the network service
@@ -1057,642 +1216,4 @@ pub enum NetworkError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::net::{IpAddr, Ipv4Addr};
-
-    #[test]
-    fn test_network_config_default() {
-        let config = NetworkConfig::default();
-        assert_eq!(config.connection_timeout, Duration::from_secs(5));
-        assert_eq!(config.request_timeout, Duration::from_secs(10));
-        assert_eq!(config.max_connections, 100);
-        assert_eq!(config.keep_alive_interval, Duration::from_secs(30));
-    }
-
-    #[test]
-    fn test_log_entry_creation() {
-        let command = RdfCommand::Insert {
-            subject: "s".to_string(),
-            predicate: "p".to_string(),
-            object: "o".to_string(),
-        };
-        let entry = LogEntry::new(1, 1, command.clone());
-
-        assert_eq!(entry.index, 1);
-        assert_eq!(entry.term, 1);
-        assert_eq!(entry.command, command);
-    }
-
-    #[test]
-    fn test_connection_creation() {
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        let connection = Connection::new(1, addr);
-
-        assert_eq!(connection.peer_id, 1);
-        assert_eq!(connection.address, addr);
-        assert!(!connection.is_connected);
-    }
-
-    #[test]
-    fn test_connection_staleness() {
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        let connection = Connection::new(1, addr);
-
-        // Fresh connection should not be stale
-        assert!(!connection.is_stale(Duration::from_secs(10)));
-
-        // Connection should be stale with very short timeout after some time passes
-        std::thread::sleep(Duration::from_millis(1));
-        assert!(connection.is_stale(Duration::from_nanos(1)));
-    }
-
-    #[test]
-    fn test_connection_activity_update() {
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        let mut connection = Connection::new(1, addr);
-
-        let old_activity = connection.last_activity;
-        std::thread::sleep(Duration::from_millis(1));
-        connection.update_activity();
-
-        assert!(connection.last_activity > old_activity);
-    }
-
-    #[tokio::test]
-    async fn test_network_manager_creation() {
-        let config = NetworkConfig::default();
-        let manager = NetworkManager::new(1, config);
-
-        assert_eq!(manager.node_id, 1);
-        assert!(!*manager.running.read().await);
-
-        let stats = manager.get_stats().await;
-        assert_eq!(stats.node_id, 1);
-        assert_eq!(stats.total_connections, 0);
-        assert_eq!(stats.active_connections, 0);
-    }
-
-    #[tokio::test]
-    async fn test_rpc_message_serialization() {
-        let message = RpcMessage::RequestVote {
-            term: 1,
-            candidate_id: 1,
-            last_log_index: 0,
-            last_log_term: 0,
-        };
-
-        let serialized = serde_json::to_string(&message).unwrap();
-        let deserialized: RpcMessage = serde_json::from_str(&serialized).unwrap();
-
-        match deserialized {
-            RpcMessage::RequestVote {
-                term,
-                candidate_id,
-                last_log_index,
-                last_log_term,
-            } => {
-                assert_eq!(term, 1);
-                assert_eq!(candidate_id, 1);
-                assert_eq!(last_log_index, 0);
-                assert_eq!(last_log_term, 0);
-            }
-            _ => panic!("Unexpected message type"),
-        }
-    }
-
-    #[test]
-    fn test_network_error_display() {
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        let err = NetworkError::ConnectionFailed {
-            peer_id: 1,
-            address: addr,
-            message: "refused".to_string(),
-        };
-        assert!(err
-            .to_string()
-            .contains("Connection failed to 1 at 127.0.0.1:8080: refused"));
-
-        let err = NetworkError::Timeout {
-            operation: "connect".to_string(),
-            duration: Duration::from_secs(5),
-        };
-        assert!(err
-            .to_string()
-            .contains("Timeout: connect timed out after 5s"));
-
-        let err = NetworkError::Serialization {
-            message: "invalid json".to_string(),
-        };
-        assert!(err
-            .to_string()
-            .contains("Serialization error: invalid json"));
-
-        let err = NetworkError::Protocol {
-            message: "unknown message".to_string(),
-        };
-        assert!(err.to_string().contains("Protocol error: unknown message"));
-    }
-
-    // --- handle_message dispatch tests ---
-
-    #[tokio::test]
-    async fn test_handle_request_vote_returns_vote_response() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let msg = RpcMessage::RequestVote {
-            term: 5,
-            candidate_id: 2,
-            last_log_index: 10,
-            last_log_term: 4,
-        };
-
-        let resp = svc
-            .handle_message(msg)
-            .await
-            .expect("handle_message failed");
-        match resp {
-            RpcMessage::VoteResponse { term, vote_granted } => {
-                assert_eq!(term, 5);
-                assert!(!vote_granted, "conservative default should deny vote");
-            }
-            other => panic!("unexpected response: {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_append_entries_returns_success() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let msg = RpcMessage::AppendEntries {
-            term: 3,
-            leader_id: 2,
-            prev_log_index: 0,
-            prev_log_term: 0,
-            entries: Vec::new(),
-            leader_commit: 0,
-        };
-
-        let resp = svc
-            .handle_message(msg)
-            .await
-            .expect("handle_message failed");
-        match resp {
-            RpcMessage::AppendEntriesResponse { term, success, .. } => {
-                assert_eq!(term, 3);
-                assert!(success);
-            }
-            other => panic!("unexpected response: {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_heartbeat_returns_heartbeat_response() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let msg = RpcMessage::Heartbeat {
-            term: 7,
-            leader_id: 2,
-        };
-        let resp = svc
-            .handle_message(msg)
-            .await
-            .expect("handle_message failed");
-        match resp {
-            RpcMessage::HeartbeatResponse { term } => assert_eq!(term, 7),
-            other => panic!("unexpected response: {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_client_request_returns_success() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let cmd = crate::raft::RdfCommand::Clear;
-        let msg = RpcMessage::ClientRequest { command: cmd };
-        let resp = svc
-            .handle_message(msg)
-            .await
-            .expect("handle_message failed");
-        match resp {
-            RpcMessage::ClientResponse {
-                response: crate::raft::RdfResponse::Success,
-            } => {}
-            other => panic!("unexpected response: {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_query_shard_returns_empty_results() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let msg = RpcMessage::QueryShard {
-            shard_id: 42,
-            subject: None,
-            predicate: None,
-            object: None,
-        };
-        let resp = svc
-            .handle_message(msg)
-            .await
-            .expect("handle_message failed");
-        match resp {
-            RpcMessage::QueryShardResponse { shard_id, results } => {
-                assert_eq!(shard_id, 42);
-                assert!(results.is_empty());
-            }
-            other => panic!("unexpected response: {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_transaction_prepare_votes_no() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let msg = RpcMessage::TransactionPrepare {
-            tx_id: "tx-001".to_string(),
-            shard_id: 1,
-            operations: Vec::new(),
-        };
-        let resp = svc
-            .handle_message(msg)
-            .await
-            .expect("handle_message failed");
-        match resp {
-            RpcMessage::TransactionVote {
-                tx_id,
-                shard_id,
-                vote,
-            } => {
-                assert_eq!(tx_id, "tx-001");
-                assert_eq!(shard_id, 1);
-                assert!(!vote, "conservative default should vote no");
-            }
-            other => panic!("unexpected response: {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_transaction_commit_returns_ack() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let msg = RpcMessage::TransactionCommit {
-            tx_id: "tx-002".to_string(),
-            shard_id: 5,
-        };
-        let resp = svc
-            .handle_message(msg)
-            .await
-            .expect("handle_message failed");
-        match resp {
-            RpcMessage::TransactionAck { tx_id, shard_id } => {
-                assert_eq!(tx_id, "tx-002");
-                assert_eq!(shard_id, 5);
-            }
-            other => panic!("unexpected response: {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_transaction_abort_returns_ack() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let msg = RpcMessage::TransactionAbort {
-            tx_id: "tx-003".to_string(),
-            shard_id: 9,
-        };
-        let resp = svc
-            .handle_message(msg)
-            .await
-            .expect("handle_message failed");
-        match resp {
-            RpcMessage::TransactionAck { tx_id, shard_id } => {
-                assert_eq!(tx_id, "tx-003");
-                assert_eq!(shard_id, 9);
-            }
-            other => panic!("unexpected response: {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_handle_store_triple_returns_descriptive_error() {
-        use oxirs_core::model::{Literal, NamedNode, Triple};
-
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let triple = Triple::new(
-            NamedNode::new("http://example.org/s").expect("valid IRI"),
-            NamedNode::new("http://example.org/p").expect("valid IRI"),
-            Literal::new("object-value"),
-        );
-        let msg = RpcMessage::StoreTriple {
-            shard_id: 3,
-            triple,
-        };
-        let err = svc
-            .handle_message(msg)
-            .await
-            .expect_err("should return Err");
-        let msg_str = err.to_string();
-        assert!(
-            msg_str.contains("StoreTriple") || msg_str.contains("shard"),
-            "error should mention StoreTriple or shard, got: {}",
-            msg_str
-        );
-        assert!(
-            !msg_str.contains("not yet implemented"),
-            "stub message should be gone, got: {}",
-            msg_str
-        );
-    }
-
-    #[tokio::test]
-    async fn test_handle_shard_transfer_returns_descriptive_error() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        let msg = RpcMessage::ShardTransfer {
-            shard_id: 7,
-            triples: Vec::new(),
-            source_node: 2,
-        };
-        let err = svc
-            .handle_message(msg)
-            .await
-            .expect_err("should return Err");
-        let msg_str = err.to_string();
-        assert!(
-            !msg_str.contains("not yet implemented"),
-            "stub message should be gone, got: {}",
-            msg_str
-        );
-    }
-
-    #[tokio::test]
-    async fn test_handle_terminal_responses_echo_back() {
-        let config = NetworkConfig::default();
-        let svc = NetworkService::new(1, config);
-
-        // VoteResponse echoed back
-        let msg = RpcMessage::VoteResponse {
-            term: 2,
-            vote_granted: true,
-        };
-        let resp = svc.handle_message(msg).await.expect("should succeed");
-        match resp {
-            RpcMessage::VoteResponse {
-                term: 2,
-                vote_granted: true,
-            } => {}
-            other => panic!("unexpected: {:?}", other),
-        }
-
-        // HeartbeatResponse echoed back
-        let msg = RpcMessage::HeartbeatResponse { term: 8 };
-        let resp = svc.handle_message(msg).await.expect("should succeed");
-        match resp {
-            RpcMessage::HeartbeatResponse { term: 8 } => {}
-            other => panic!("unexpected: {:?}", other),
-        }
-    }
-
-    // --- length-prefixed framing tests ---
-
-    #[tokio::test]
-    async fn test_frame_round_trip_identity() {
-        // encode -> decode must yield an identical RpcMessage, proving real
-        // oxicode (not bincode) serialization over the wire framing.
-        let original = RpcMessage::AppendEntries {
-            term: 42,
-            leader_id: 7,
-            prev_log_index: 3,
-            prev_log_term: 2,
-            entries: vec![LogEntry::new(
-                4,
-                42,
-                RdfCommand::Insert {
-                    subject: "s".to_string(),
-                    predicate: "p".to_string(),
-                    object: "o".to_string(),
-                },
-            )],
-            leader_commit: 3,
-        };
-
-        let (mut a, mut b) = tokio::io::duplex(64 * 1024);
-        let to_send = original.clone();
-        let writer = tokio::spawn(async move {
-            write_frame(&mut a, &to_send, 16 * 1024 * 1024)
-                .await
-                .expect("write_frame failed");
-        });
-
-        let decoded = read_frame(&mut b, 16 * 1024 * 1024)
-            .await
-            .expect("read_frame failed");
-        writer.await.expect("writer task panicked");
-
-        match decoded {
-            RpcMessage::AppendEntries {
-                term,
-                leader_id,
-                prev_log_index,
-                prev_log_term,
-                entries,
-                leader_commit,
-            } => {
-                assert_eq!(term, 42);
-                assert_eq!(leader_id, 7);
-                assert_eq!(prev_log_index, 3);
-                assert_eq!(prev_log_term, 2);
-                assert_eq!(leader_commit, 3);
-                assert_eq!(entries.len(), 1);
-                assert_eq!(entries[0].index, 4);
-                assert_eq!(entries[0].term, 42);
-            }
-            other => panic!("frame round trip changed the message: {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_frame_rejects_oversize_message() {
-        let msg = RpcMessage::Heartbeat {
-            term: 1,
-            leader_id: 1,
-        };
-        let (mut a, _b) = tokio::io::duplex(1024);
-        // max_size of 1 byte forces the oversize guard to trip.
-        let err = write_frame(&mut a, &msg, 1)
-            .await
-            .expect_err("oversize frame must be rejected");
-        assert!(
-            err.to_string().contains("exceeds max_message_size"),
-            "unexpected error: {}",
-            err
-        );
-    }
-
-    #[tokio::test]
-    async fn test_send_rpc_round_trip_returns_peer_response() {
-        // Stand up a loopback server that reads the request frame and replies
-        // with a distinctive VoteResponse. The old fabricating transport always
-        // returned vote_granted:false regardless of the peer; a real transport
-        // must surface the peer's actual (vote_granted:true) response.
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("failed to bind loopback listener");
-        let addr = listener.local_addr().expect("no local addr");
-
-        let server = tokio::spawn(async move {
-            let (mut socket, _peer) = listener.accept().await.expect("accept failed");
-            let request = read_frame(&mut socket, 16 * 1024 * 1024)
-                .await
-                .expect("server read_frame failed");
-            let term = match request {
-                RpcMessage::RequestVote { term, .. } => term,
-                other => panic!("server got unexpected request: {:?}", other),
-            };
-            let response = RpcMessage::VoteResponse {
-                term,
-                vote_granted: true,
-            };
-            write_frame(&mut socket, &response, 16 * 1024 * 1024)
-                .await
-                .expect("server write_frame failed");
-        });
-
-        let manager = NetworkManager::new(1, NetworkConfig::default());
-        let (term, granted) = manager
-            .send_request_vote(2, addr, 99, 5, 4)
-            .await
-            .expect("send_request_vote failed");
-
-        assert_eq!(term, 99, "response term must echo the request term");
-        assert!(
-            granted,
-            "must return the peer's actual vote (true), not a fabricated default"
-        );
-
-        server.await.expect("server task panicked");
-
-        // Connection metadata + byte counters must reflect a real exchange.
-        let stats = manager.get_message_stats().await;
-        assert_eq!(stats.messages_sent, 1);
-        assert_eq!(stats.messages_received, 1);
-        assert!(stats.bytes_sent > 0);
-    }
-
-    #[tokio::test]
-    async fn test_send_message_errors_without_known_address() {
-        // With no registered address and no live connection, delivery must fail
-        // loudly rather than silently reporting success.
-        let svc = NetworkService::new(1, NetworkConfig::default());
-        let err = svc
-            .send_message(
-                99,
-                RpcMessage::Heartbeat {
-                    term: 1,
-                    leader_id: 1,
-                },
-            )
-            .await
-            .expect_err("send_message must error when the peer address is unknown");
-        assert!(
-            err.to_string().contains("no known network address"),
-            "unexpected error: {}",
-            err
-        );
-    }
-
-    #[tokio::test]
-    async fn test_send_message_delivers_to_registered_peer() {
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("failed to bind loopback listener");
-        let addr = listener.local_addr().expect("no local addr");
-
-        let server = tokio::spawn(async move {
-            let (mut socket, _peer) = listener.accept().await.expect("accept failed");
-            let request = read_frame(&mut socket, 16 * 1024 * 1024)
-                .await
-                .expect("server read_frame failed");
-            let term = match request {
-                RpcMessage::Heartbeat { term, .. } => term,
-                other => panic!("server got unexpected request: {:?}", other),
-            };
-            write_frame(
-                &mut socket,
-                &RpcMessage::HeartbeatResponse { term },
-                16 * 1024 * 1024,
-            )
-            .await
-            .expect("server write_frame failed");
-        });
-
-        let svc = NetworkService::new(1, NetworkConfig::default());
-        svc.register_peer(2, addr).await;
-        svc.send_message(
-            2,
-            RpcMessage::Heartbeat {
-                term: 11,
-                leader_id: 1,
-            },
-        )
-        .await
-        .expect("send_message to a registered, reachable peer must succeed");
-
-        server.await.expect("server task panicked");
-    }
-
-    /// Regression: a *started* NetworkManager must actually accept inbound
-    /// connections and answer a `Heartbeat` with a `HeartbeatResponse`.
-    /// Previously `start_background_tasks` skipped spawning any accept loop
-    /// ("for now, we'll skip the listener task"), so the bound listener never
-    /// answered and health probes reported every peer unreachable even for a
-    /// healthy cluster.
-    #[tokio::test]
-    async fn regression_network_accept_loop_answers_heartbeat() {
-        // Reserve a free port, then release it so the manager can bind it.
-        let probe = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("failed to reserve a port");
-        let addr = probe.local_addr().expect("no local addr");
-        drop(probe);
-
-        let mut cfg = NetworkConfig::default();
-        cfg.local_address = addr;
-
-        let mut server = NetworkManager::new(1, cfg.clone());
-        server.start().await.expect("server start failed");
-
-        // A separate manager acts as the client and issues a real heartbeat RPC.
-        let client = NetworkManager::new(2, cfg);
-        let response = client
-            .send_rpc(
-                1,
-                addr,
-                RpcMessage::Heartbeat {
-                    term: 5,
-                    leader_id: 2,
-                },
-            )
-            .await
-            .expect("heartbeat RPC to a started server must get a real answer");
-
-        match response {
-            RpcMessage::HeartbeatResponse { term } => assert_eq!(term, 5),
-            other => panic!("expected HeartbeatResponse, got {other:?}"),
-        }
-
-        server.stop().await.expect("server stop failed");
-    }
-}
+mod tests;

@@ -591,7 +591,7 @@ mod tests {
     use crate::proof::ed25519::Ed25519Signer;
 
     fn generate_test_keypair() -> (Vec<u8>, Vec<u8>) {
-        let signer = Ed25519Signer::generate();
+        let signer = Ed25519Signer::generate().unwrap();
         (
             signer.secret_key_bytes().to_vec(),
             signer.public_key_bytes().to_vec(),

@@ -77,6 +77,14 @@ impl ConsensusManager {
         self
     }
 
+    /// Run this node's Raft RPC traffic over mutually authenticated TLS (see
+    /// `RaftNode::set_tls`). Must be set before `init()`.
+    #[cfg(feature = "raft")]
+    pub fn with_raft_tls(mut self, tls: Arc<crate::tls::TlsManager>) -> Self {
+        self.raft_node.set_tls(tls);
+        self
+    }
+
     /// Initialize the consensus system
     #[cfg(feature = "raft")]
     pub async fn init(&mut self) -> Result<()> {

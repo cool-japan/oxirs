@@ -8,11 +8,13 @@
 //! After construction, tests call `set_on`, `get_on`, and `wait_converged`
 //! to drive and observe the gossip protocol.
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::time::sleep;
 
 use crate::gossip::fanout::GossipFanout;
+use crate::tls::TlsManager;
 
 use super::node::{TcpClusterNode, TcpNodeConfig, TcpNodeError};
 
@@ -72,26 +74,67 @@ impl TcpClusterNetwork {
                 bind_addr: "127.0.0.1:0".parse()?,
                 fanout,
                 gossip_interval_ms,
+                tls: None,
             };
-            let node = TcpClusterNode::start(cfg)
-                .await
-                .map_err(|e: TcpNodeError| Box::new(e) as Box<dyn std::error::Error>)?;
-            nodes.push(node);
+            nodes.push(Self::start_node(cfg).await?);
         }
+        let names = vec![None; nodes.len()];
+        Ok(Self::mesh(nodes, &names))
+    }
 
-        // Collect all bound addresses.
+    /// Spawn a full mesh like [`TcpClusterNetwork::spawn`], with one node per
+    /// TLS identity in `identities`. Every connection is mutually
+    /// authenticated, and each peer must present the certificate of its
+    /// identity, `node-{id}`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a node's TLS cannot be initialized or its listener
+    /// cannot be bound.
+    pub async fn spawn_tls(
+        identities: Vec<Arc<TlsManager>>,
+        fanout: GossipFanout,
+        gossip_interval_ms: u64,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut nodes = Vec::with_capacity(identities.len());
+        let mut names = Vec::with_capacity(identities.len());
+        for tls in identities {
+            let name = format!("node-{}", tls.node_id());
+            let cfg = TcpNodeConfig {
+                node_id: name.clone(),
+                bind_addr: "127.0.0.1:0".parse()?,
+                fanout,
+                gossip_interval_ms,
+                tls: Some(tls),
+            };
+            nodes.push(Self::start_node(cfg).await?);
+            names.push(Some(name));
+        }
+        Ok(Self::mesh(nodes, &names))
+    }
+
+    async fn start_node(cfg: TcpNodeConfig) -> Result<TcpClusterNode, Box<dyn std::error::Error>> {
+        TcpClusterNode::start(cfg)
+            .await
+            .map_err(|e: TcpNodeError| Box::new(e) as Box<dyn std::error::Error>)
+    }
+
+    /// Wire every node as a peer of every other, by the TLS server name in
+    /// `names` where there is one.
+    fn mesh(nodes: Vec<TcpClusterNode>, names: &[Option<String>]) -> Self {
         let addrs: Vec<_> = nodes.iter().map(|n| n.addr()).collect();
-
-        // Wire full-mesh peers: each node gets every other node as a peer.
         for (i, node) in nodes.iter().enumerate() {
             for (j, &addr) in addrs.iter().enumerate() {
-                if i != j {
-                    node.add_peer(addr);
+                if i == j {
+                    continue;
+                }
+                match &names[j] {
+                    Some(name) => node.add_peer_with_server_name(addr, name.clone()),
+                    None => node.add_peer(addr),
                 }
             }
         }
-
-        Ok(Self { nodes })
+        Self { nodes }
     }
 
     /// Write `key = value` on the node at position `idx`.

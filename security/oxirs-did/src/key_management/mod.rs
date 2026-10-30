@@ -54,7 +54,7 @@ impl Keystore {
 
     /// Generate a new Ed25519 keypair and store it
     pub async fn generate_ed25519(&self) -> DidResult<Did> {
-        let signer = Ed25519Signer::generate();
+        let signer = Ed25519Signer::generate()?;
         let public_key = signer.public_key_bytes();
         let secret_key = signer.secret_key_bytes();
         let did = Did::new_key_ed25519(&public_key)?;

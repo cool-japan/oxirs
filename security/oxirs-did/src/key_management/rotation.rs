@@ -354,7 +354,7 @@ pub fn generate_rotation_key(
     did: &Did,
     key_fragment: &str,
 ) -> DidResult<(VerificationMethod, Vec<u8>)> {
-    let signer = Ed25519Signer::generate();
+    let signer = Ed25519Signer::generate()?;
     let secret_key = signer.secret_key_bytes().to_vec();
     let public_key = signer.public_key_bytes();
 
@@ -390,7 +390,7 @@ mod tests {
     use crate::did::DidDocument;
 
     fn create_test_did_doc() -> (DidDocument, Vec<u8>) {
-        let signer = Ed25519Signer::generate();
+        let signer = Ed25519Signer::generate().unwrap();
         let secret_key = signer.secret_key_bytes().to_vec();
         let public_key = signer.public_key_bytes();
 
