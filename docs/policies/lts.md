@@ -1,6 +1,6 @@
 # OxiRS Long-Term Support Policy
 
-*RFC-001 | Effective: 2026-05-01 | Owner: COOLJAPAN OU (Team Kitasan)*
+*RFC-001 | Effective: 2026-05-01 | Owner: COOLJAPAN OU (Team KitaSan)*
 
 ---
 
@@ -163,4 +163,4 @@ Each crate's TODO.md references this document for LTS items.
 
 ---
 
-*OxiRS LTS Policy RFC-001 — COOLJAPAN OU (Team Kitasan)*
+*OxiRS LTS Policy RFC-001 — COOLJAPAN OU (Team KitaSan)*

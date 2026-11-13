@@ -255,4 +255,4 @@ while let Some(chunk) = rx.recv().await {
 
 Apache-2.0 — see [LICENSE-APACHE](../../LICENSE-APACHE).
 
-*OxiRS Chat v0.5.0 — AI-powered conversational RDF interface by COOLJAPAN OU (Team Kitasan)*
+*OxiRS Chat v0.5.0 — AI-powered conversational RDF interface by COOLJAPAN OU (Team KitaSan)*

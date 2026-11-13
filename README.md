@@ -740,7 +740,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ## Sponsorship
 
-OxiRS is developed and maintained by **COOLJAPAN OU (Team Kitasan)**.
+OxiRS is developed and maintained by **COOLJAPAN OU (Team KitaSan)**.
 
 If you find OxiRS useful, please consider sponsoring the project to support continued development of the Pure Rust ecosystem.
 

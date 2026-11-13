@@ -1,6 +1,6 @@
 # OxiRS Enterprise Features Policy
 
-*RFC-002 | Effective: 2026-05-01 | Owner: COOLJAPAN OU (Team Kitasan)*
+*RFC-002 | Effective: 2026-05-01 | Owner: COOLJAPAN OU (Team KitaSan)*
 
 ---
 
@@ -185,4 +185,4 @@ This decomposition applies to all 26 OxiRS crates. Each crate's TODO.md previous
 
 ---
 
-*OxiRS Enterprise Features Policy RFC-002 — COOLJAPAN OU (Team Kitasan)*
+*OxiRS Enterprise Features Policy RFC-002 — COOLJAPAN OU (Team KitaSan)*

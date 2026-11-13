@@ -617,7 +617,7 @@ cargo build --workspace --all-features
 
 ## スポンサーシップ
 
-OxiRSは **COOLJAPAN OU (Team Kitasan)** によって開発・保守されています。
+OxiRSは **COOLJAPAN OU (Team KitaSan)** によって開発・保守されています。
 
 OxiRSが役立つと感じたら、Pure Rustエコシステムの継続的な開発を支援するためにスポンサーをご検討ください。
 

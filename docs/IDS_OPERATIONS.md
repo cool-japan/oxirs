@@ -1252,5 +1252,5 @@ Complete API documentation: See `IDS_CERTIFICATION_GUIDE.md`
 ---
 
 **Document Version:** 1.0
-**Approved By:** COOLJAPAN OU (Team Kitasan)
+**Approved By:** COOLJAPAN OU (Team KitaSan)
 **Next Review:** Q2 2026

@@ -2,7 +2,7 @@
 
 **対象**: ODS-RAM V2 / Open Data Spaces Protocols (ODP) — L4 セマンティクスレイヤ
 **評価対象実装**: OxiRS v0.3.1 (2026-06-06, Apache-2.0, Pure Rust, 26 crates)
-**作成**: COOLJAPAN OÜ (Team Kitasan)
+**作成**: COOLJAPAN OÜ (Team KitaSan)
 **版**: 0.1 (draft)
 
 ---

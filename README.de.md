@@ -620,7 +620,7 @@ Produktionsauswirkung (100K QPS):
 
 ## Sponsoring
 
-OxiRS wird entwickelt und gepflegt von **COOLJAPAN OU (Team Kitasan)**.
+OxiRS wird entwickelt und gepflegt von **COOLJAPAN OU (Team KitaSan)**.
 
 Wenn Sie OxiRS nützlich finden, erwägen Sie bitte, das Projekt zu sponsern, um die weitere Entwicklung des reinen Rust-Ökosystems zu unterstützen.
 

@@ -765,5 +765,5 @@ For technical questions about the IDS Connector architecture:
 ---
 
 **Document Version:** 1.0
-**Approved By:** COOLJAPAN OU (Team Kitasan)
+**Approved By:** COOLJAPAN OU (Team KitaSan)
 **Next Review:** Q2 2026

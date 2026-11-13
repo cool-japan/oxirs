@@ -519,7 +519,7 @@ Fonctionnalités optionnelles pour minimiser les dépendances:
 
 ## Parrainage
 
-OxiRS est développé et maintenu par **COOLJAPAN OU (Team Kitasan)**.
+OxiRS est développé et maintenu par **COOLJAPAN OU (Team KitaSan)**.
 
 Si vous trouvez OxiRS utile, envisagez de parrainer le projet pour soutenir le développement continu de l'écosystème Pure Rust.
 
