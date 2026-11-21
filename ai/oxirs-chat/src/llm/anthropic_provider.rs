@@ -216,14 +216,10 @@ impl LLMProvider for AnthropicProvider {
     }
 
     fn get_available_models(&self) -> Vec<String> {
-        vec![
-            "claude-3-opus-20240229".to_string(),
-            "claude-3-sonnet-20240229".to_string(),
-            "claude-3-haiku-20240307".to_string(),
-            "claude-2.1".to_string(),
-            "claude-2.0".to_string(),
-            "claude-instant-1.2".to_string(),
-        ]
+        llm_prices::iter()
+            .filter(|p| p.provider == "anthropic" && p.status == "listed")
+            .map(|p| p.model.to_string())
+            .collect()
     }
 
     fn supports_streaming(&self) -> bool {
@@ -235,6 +231,12 @@ impl LLMProvider for AnthropicProvider {
     }
 
     fn estimate_cost(&self, model: &str, input_tokens: usize, output_tokens: usize) -> f64 {
+        if let Some(cost) = llm_prices::lookup_provider("anthropic", model)
+            .and_then(|p| p.cost(input_tokens as u64, output_tokens as u64))
+        {
+            return cost;
+        }
+
         // Pricing as of 2024 (per 1K tokens)
         let (input_price, output_price) = match model {
             "claude-3-opus-20240229" => (0.015, 0.075),
@@ -435,5 +437,43 @@ fn parse_anthropic_sse_event(
             Some("message_stop") => *done = true,
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod pricing_tests {
+    use super::*;
+
+    fn provider() -> AnthropicProvider {
+        AnthropicProvider::new(ProviderConfig {
+            api_key: Some("k".to_string()),
+            base_url: None,
+            models: vec![],
+            timeout: Duration::from_secs(30),
+            max_retries: 3,
+            enabled: true,
+        })
+        .expect("construct")
+    }
+
+    #[test]
+    fn current_models_get_list_prices() {
+        let p = provider();
+        // claude-sonnet-4-6: $3 in / $15 out per 1M tokens.
+        assert!((p.estimate_cost("claude-sonnet-4-6", 1_000_000, 1_000_000) - 18.0).abs() < 1e-9);
+        // claude-haiku-4-5 dated id: $1 / $5 per 1M tokens.
+        assert!(
+            (p.estimate_cost("claude-haiku-4-5-20251001", 1_000_000, 1_000_000) - 6.0).abs() < 1e-9
+        );
+        // Ids missing from the table keep the existing fallback.
+        assert!((p.estimate_cost("claude-2.1", 1000, 1000) - 0.032).abs() < 1e-9);
+    }
+
+    #[test]
+    fn available_models_are_current() {
+        let models = provider().get_available_models();
+        assert!(models.contains(&"claude-sonnet-4-6".to_string()));
+        assert!(models.contains(&"claude-haiku-4-5".to_string()));
+        assert!(!models.iter().any(|m| m.starts_with("claude-instant")));
     }
 }
